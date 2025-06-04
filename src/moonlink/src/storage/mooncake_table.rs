@@ -583,7 +583,7 @@ impl MooncakeTable {
             return false;
         }
         self.create_snapshot_impl(/*force_create=*/ false);
-        return true;
+        true
     }
 
     pub fn force_create_snapshot(&mut self) {
