@@ -235,8 +235,8 @@ async fn check_prev_and_new_data_files(
 async fn test_state_1_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, _) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, _) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -264,8 +264,8 @@ async fn test_state_1_1() -> IcebergResult<()> {
 async fn test_state_1_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, _) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, _) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -295,8 +295,8 @@ async fn test_state_1_2() -> IcebergResult<()> {
 async fn test_state_1_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -313,7 +313,7 @@ async fn test_state_1_3() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -332,8 +332,8 @@ async fn test_state_1_3() -> IcebergResult<()> {
 async fn test_state_1_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -352,7 +352,7 @@ async fn test_state_1_4() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -371,8 +371,8 @@ async fn test_state_1_4() -> IcebergResult<()> {
 async fn test_state_1_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -390,7 +390,7 @@ async fn test_state_1_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -409,8 +409,8 @@ async fn test_state_1_5() -> IcebergResult<()> {
 async fn test_state_1_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -430,7 +430,7 @@ async fn test_state_1_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -449,8 +449,8 @@ async fn test_state_1_6() -> IcebergResult<()> {
 async fn test_state_2_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -463,7 +463,7 @@ async fn test_state_2_1() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -482,8 +482,8 @@ async fn test_state_2_1() -> IcebergResult<()> {
 async fn test_state_2_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -498,7 +498,7 @@ async fn test_state_2_2() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -517,8 +517,8 @@ async fn test_state_2_2() -> IcebergResult<()> {
 async fn test_state_2_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -536,7 +536,7 @@ async fn test_state_2_3() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -555,8 +555,8 @@ async fn test_state_2_3() -> IcebergResult<()> {
 async fn test_state_2_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -576,7 +576,7 @@ async fn test_state_2_4() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -595,8 +595,8 @@ async fn test_state_2_4() -> IcebergResult<()> {
 async fn test_state_2_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -615,7 +615,7 @@ async fn test_state_2_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -634,8 +634,8 @@ async fn test_state_2_5() -> IcebergResult<()> {
 async fn test_state_2_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -656,7 +656,7 @@ async fn test_state_2_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -675,8 +675,8 @@ async fn test_state_2_6() -> IcebergResult<()> {
 async fn test_state_3_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -690,7 +690,7 @@ async fn test_state_3_1() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -709,8 +709,8 @@ async fn test_state_3_1() -> IcebergResult<()> {
 async fn test_state_3_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -726,7 +726,7 @@ async fn test_state_3_2() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -745,8 +745,8 @@ async fn test_state_3_2() -> IcebergResult<()> {
 async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -765,7 +765,7 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -789,8 +789,8 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
 async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -809,7 +809,7 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -833,8 +833,8 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
 async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -855,7 +855,7 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -879,8 +879,8 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
 async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -901,7 +901,7 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -925,8 +925,8 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
 async fn test_state_3_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -946,7 +946,7 @@ async fn test_state_3_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -970,8 +970,8 @@ async fn test_state_3_5() -> IcebergResult<()> {
 async fn test_state_3_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -993,7 +993,7 @@ async fn test_state_3_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1017,8 +1017,8 @@ async fn test_state_3_6() -> IcebergResult<()> {
 async fn test_state_4_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite (committed record batch).
     let row = MoonlinkRow::new(vec![
@@ -1038,7 +1038,7 @@ async fn test_state_4_1() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1057,8 +1057,8 @@ async fn test_state_4_1() -> IcebergResult<()> {
 async fn test_state_4_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite (committed record batch).
     let row = MoonlinkRow::new(vec![
@@ -1080,7 +1080,7 @@ async fn test_state_4_2() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1099,8 +1099,8 @@ async fn test_state_4_2() -> IcebergResult<()> {
 async fn test_state_4_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1125,7 +1125,7 @@ async fn test_state_4_3() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1144,8 +1144,8 @@ async fn test_state_4_3() -> IcebergResult<()> {
 async fn test_state_4_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1172,7 +1172,7 @@ async fn test_state_4_4() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1191,8 +1191,8 @@ async fn test_state_4_4() -> IcebergResult<()> {
 async fn test_state_4_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1218,7 +1218,7 @@ async fn test_state_4_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1237,8 +1237,8 @@ async fn test_state_4_5() -> IcebergResult<()> {
 async fn test_state_4_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1266,7 +1266,7 @@ async fn test_state_4_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1285,8 +1285,8 @@ async fn test_state_4_6() -> IcebergResult<()> {
 async fn test_state_5_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -1308,7 +1308,7 @@ async fn test_state_5_1() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1327,8 +1327,8 @@ async fn test_state_5_1() -> IcebergResult<()> {
 async fn test_state_5_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -1352,7 +1352,7 @@ async fn test_state_5_2() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1371,8 +1371,8 @@ async fn test_state_5_2() -> IcebergResult<()> {
 async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1399,7 +1399,7 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1423,8 +1423,8 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
 async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1451,7 +1451,7 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1475,8 +1475,8 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
 async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1505,7 +1505,7 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1529,8 +1529,8 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
 async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1559,7 +1559,7 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1583,8 +1583,8 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
 async fn test_state_5_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1612,7 +1612,7 @@ async fn test_state_5_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1636,8 +1636,8 @@ async fn test_state_5_5() -> IcebergResult<()> {
 async fn test_state_5_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1667,7 +1667,7 @@ async fn test_state_5_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1691,8 +1691,8 @@ async fn test_state_5_6() -> IcebergResult<()> {
 async fn test_state_6_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -1721,7 +1721,7 @@ async fn test_state_6_1() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1740,8 +1740,8 @@ async fn test_state_6_1() -> IcebergResult<()> {
 async fn test_state_6_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare data file pre-requisite.
     let row = MoonlinkRow::new(vec![
@@ -1772,7 +1772,7 @@ async fn test_state_6_2() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1791,8 +1791,8 @@ async fn test_state_6_2() -> IcebergResult<()> {
 async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1826,7 +1826,7 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1850,8 +1850,8 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
 async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1885,7 +1885,7 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1909,8 +1909,8 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
 async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -1946,7 +1946,7 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -1970,8 +1970,8 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
 async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -2007,7 +2007,7 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2031,8 +2031,8 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
 async fn test_state_6_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -2067,7 +2067,7 @@ async fn test_state_6_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2091,8 +2091,8 @@ async fn test_state_6_5() -> IcebergResult<()> {
 async fn test_state_6_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -2129,7 +2129,7 @@ async fn test_state_6_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2153,12 +2153,12 @@ async fn test_state_6_6() -> IcebergResult<()> {
 async fn test_state_7_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2177,8 +2177,8 @@ async fn test_state_7_1() -> IcebergResult<()> {
 async fn test_state_7_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -2187,7 +2187,7 @@ async fn test_state_7_2() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2206,8 +2206,8 @@ async fn test_state_7_2() -> IcebergResult<()> {
 async fn test_state_7_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -2217,7 +2217,7 @@ async fn test_state_7_3() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2236,8 +2236,8 @@ async fn test_state_7_3() -> IcebergResult<()> {
 async fn test_state_7_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row_1, old_row_2) =
@@ -2250,7 +2250,7 @@ async fn test_state_7_4() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2269,8 +2269,8 @@ async fn test_state_7_4() -> IcebergResult<()> {
 async fn test_state_7_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row, _) = prepare_committed_and_flushed_data_files(&mut table, /*lsn=*/ 100).await;
@@ -2281,7 +2281,7 @@ async fn test_state_7_5() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -2300,8 +2300,8 @@ async fn test_state_7_5() -> IcebergResult<()> {
 async fn test_state_7_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
 
     // Prepare environment setup.
     let (old_row_1, old_row_2) =
@@ -2315,7 +2315,7 @@ async fn test_state_7_6() -> IcebergResult<()> {
 
     // Request to create snapshot.
     table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 

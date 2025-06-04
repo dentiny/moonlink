@@ -10,7 +10,6 @@ mod transaction_stream;
 use super::iceberg::puffin_utils::PuffinBlobRef;
 use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
-use crate::completion_notification::TableCompletionNotification;
 use crate::error::{Error, Result};
 use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::iceberg::iceberg_table_manager::{
@@ -21,6 +20,7 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::FileId;
+use crate::table_notify::TableNotify;
 use std::collections::HashMap;
 use std::mem::take;
 use std::path::PathBuf;
@@ -338,7 +338,7 @@ pub struct MooncakeTable {
     last_iceberg_snapshot_lsn: Option<u64>,
 
     /// Table event completion notification.s
-    event_completion_notification: Option<Arc<Sender<TableCompletionNotification>>>,
+    event_table_notify: Option<Arc<Sender<TableNotify>>>,
 }
 
 impl MooncakeTable {
@@ -391,7 +391,7 @@ impl MooncakeTable {
             next_file_id: 0,
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn: None,
-            event_completion_notification: None,
+            event_table_notify: None,
         })
     }
 
@@ -399,10 +399,10 @@ impl MooncakeTable {
     /// Notice it should be registered only once, which could be used to notify multiple events.
     pub(crate) fn register_event_completion_notifier(
         &mut self,
-        event_completion_notifier: Sender<TableCompletionNotification>,
+        event_completion_notifier: Sender<TableNotify>,
     ) {
-        assert!(self.event_completion_notification.is_none());
-        self.event_completion_notification = Some(Arc::new(event_completion_notifier));
+        assert!(self.event_table_notify.is_none());
+        self.event_table_notify = Some(Arc::new(event_completion_notifier));
     }
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
@@ -573,7 +573,7 @@ impl MooncakeTable {
             cur_snapshot,
             next_snapshot_task,
             force_create,
-            self.event_completion_notification.as_ref().unwrap().clone(),
+            self.event_table_notify.as_ref().unwrap().clone(),
         ));
     }
 
@@ -598,7 +598,7 @@ impl MooncakeTable {
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
-        event_notifier: Arc<Sender<TableCompletionNotification>>,
+        event_notifier: Arc<Sender<TableNotify>>,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
         let new_data_files = snapshot_payload.data_files.clone();
@@ -609,7 +609,7 @@ impl MooncakeTable {
         // Notify on event error.
         if puffin_blob_ref.is_err() {
             event_notifier
-                .send(TableCompletionNotification::IcebergSnapshot {
+                .send(TableNotify::IcebergSnapshot {
                     iceberg_snapshot_result: Err(puffin_blob_ref.unwrap_err().into()),
                 })
                 .await
@@ -627,7 +627,7 @@ impl MooncakeTable {
             puffin_blob_ref: puffin_blob_ref.unwrap(),
         };
         event_notifier
-            .send(TableCompletionNotification::IcebergSnapshot {
+            .send(TableNotify::IcebergSnapshot {
                 iceberg_snapshot_result: Ok(snapshot_result),
             })
             .await
@@ -639,7 +639,7 @@ impl MooncakeTable {
         tokio::task::spawn(Self::persist_iceberg_snapshot_impl(
             iceberg_table_manager,
             snapshot_payload,
-            self.event_completion_notification.as_ref().unwrap().clone(),
+            self.event_table_notify.as_ref().unwrap().clone(),
         ));
     }
 
@@ -658,7 +658,7 @@ impl MooncakeTable {
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
         force_create: bool,
-        event_completion_notifier: Arc<Sender<TableCompletionNotification>>,
+        event_completion_notifier: Arc<Sender<TableNotify>>,
     ) {
         let (lsn, iceberg_snapshot_payload) = snapshot
             .write()
@@ -666,7 +666,7 @@ impl MooncakeTable {
             .update_snapshot(next_snapshot_task, force_create)
             .await;
         event_completion_notifier
-            .send(TableCompletionNotification::MooncakeTableSnapshot {
+            .send(TableNotify::MooncakeTableSnapshot {
                 lsn,
                 iceberg_snapshot_payload,
             })
@@ -682,7 +682,7 @@ impl MooncakeTable {
     #[cfg(test)]
     pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
         &mut self,
-        receiver: &mut Receiver<TableCompletionNotification>,
+        receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
         // Create mooncake snapshot.
         let mooncake_snapshot_created = self.create_snapshot();
@@ -690,22 +690,23 @@ impl MooncakeTable {
             return Ok(());
         }
         let notification = receiver.recv().await.unwrap();
-        let (_, iceberg_snapshot_payload) =
-            if let TableCompletionNotification::MooncakeTableSnapshot {
-                lsn,
-                iceberg_snapshot_payload,
-            } = notification
-            {
-                (lsn, iceberg_snapshot_payload)
-            } else {
-                panic!("Expected mooncake snapshot completion notification, but get iceberg snapshot one.");
-            };
+        let (_, iceberg_snapshot_payload) = if let TableNotify::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } = notification
+        {
+            (lsn, iceberg_snapshot_payload)
+        } else {
+            panic!(
+                "Expected mooncake snapshot completion notification, but get iceberg snapshot one."
+            );
+        };
 
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
             // Create iceberg snapshot.
             self.persist_iceberg_snapshot(iceberg_snapshot_payload);
             let notification = receiver.recv().await.unwrap();
-            let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
+            let iceberg_snapshot_result = if let TableNotify::IcebergSnapshot {
                 iceberg_snapshot_result,
             } = notification
             {

@@ -1,6 +1,6 @@
-use crate::completion_notification::TableCompletionNotification;
 use crate::row::MoonlinkRow;
 use crate::storage::MooncakeTable;
+use crate::table_notify::TableNotify;
 use crate::{Error, Result};
 use more_asserts as ma;
 use std::collections::BTreeMap;
@@ -93,7 +93,7 @@ impl TableHandler {
     async fn event_loop(
         iceberg_event_sync_sender: IcebergEventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
-        mut control_event_receiver: Receiver<TableCompletionNotification>,
+        mut control_event_receiver: Receiver<TableNotify>,
         mut table: MooncakeTable,
     ) {
         let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
@@ -261,7 +261,7 @@ impl TableHandler {
                 // Wait for the mooncake table internal control events.
                 Some(event) = control_event_receiver.recv() => {
                     match event {
-                        TableCompletionNotification::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload } => {
+                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload } => {
                             // Notify read the mooncake table commit of LSN.
                             table.notify_snapshot_reader(lsn);
 
@@ -278,7 +278,7 @@ impl TableHandler {
 
                             mooncake_snapshot_ongoing = false;
                         }
-                        TableCompletionNotification::IcebergSnapshot { iceberg_snapshot_result } => {
+                        TableNotify::IcebergSnapshot { iceberg_snapshot_result } => {
                             iceberg_snapshot_ongoing = false;
 
                             match iceberg_snapshot_result {
