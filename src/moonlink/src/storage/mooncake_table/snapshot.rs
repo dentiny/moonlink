@@ -323,21 +323,21 @@ impl SnapshotTableState {
         old_merged_file_indices: &[FileIndex],
         new_merged_file_indices: &[FileIndex],
     ) {
-        assert!(
+        ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .merged_file_indices_to_remove
-                .len()
-                >= old_merged_file_indices.len()
+                .len(),
+            old_merged_file_indices.len()
         );
         self.unpersisted_iceberg_records
             .merged_file_indices_to_remove
             .drain(0..old_merged_file_indices.len());
 
-        assert!(
+        ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .merged_file_indices_to_add
-                .len()
-                >= new_merged_file_indices.len()
+                .len(),
+            new_merged_file_indices.len()
         );
         self.unpersisted_iceberg_records
             .merged_file_indices_to_add
@@ -435,8 +435,6 @@ impl SnapshotTableState {
             .merged_file_indices_to_remove
             .extend(task.old_merged_file_indices.to_owned());
 
-        // TODO(hjiang): for both iceberg snapshot and index merge operation, we don't need to check if there's already an ongoing operation.
-        //
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
         // To reduce iceberg persistence overhead, we only snapshot when (1) there're persisted data files, or (2) accumulated unflushed deletion vector exceeds threshold.
         let mut iceberg_snapshot_payload: Option<IcebergSnapshotPayload> = None;

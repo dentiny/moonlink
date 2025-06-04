@@ -291,8 +291,6 @@ impl TableHandler {
                             // Process file indices merge.
                             // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
-                            //
-                            // TODO(hjiang): Unify with test code.
                             if !index_merge_ongoing {
                                 if let Some(file_indice_merge_payload) = file_indice_merge_payload {
                                     let table_directory_copy = table_directory.clone();
