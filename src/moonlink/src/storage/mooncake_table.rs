@@ -892,64 +892,6 @@ impl MooncakeTable {
             Self::sync_mooncake_snapshot(receiver).await;
         assert!(iceberg_snapshot_payload.is_none());
         let file_indice_merge_payload = file_indice_merge_payload.unwrap();
-
-        ///////////////////
-        /// 
-        /// 
-        /// Check rows found before merge.
-        let row_1 = MoonlinkRow::new(vec![
-            RowValue::Int32(1),
-            RowValue::ByteArray("Alice".as_bytes().to_vec()),
-            RowValue::Int32(10),
-        ]);
-        let record_1 = RawDeletionRecord {
-            lookup_key: self.metadata.identity.get_lookup_key(&row_1),
-            lsn: 1,
-            pos: None,
-            row_identity: self.metadata.identity.extract_identity_columns(row_1.clone()),
-        };
-        let row_2 = MoonlinkRow::new(vec![
-            RowValue::Int32(2),
-            RowValue::ByteArray("Bob".as_bytes().to_vec()),
-            RowValue::Int32(20),
-        ]);
-        let record_2 = RawDeletionRecord {
-            lookup_key: self.metadata.identity.get_lookup_key(&row_2),
-            lsn: 1,
-            pos: None,
-            row_identity: self.metadata.identity.extract_identity_columns(row_2.clone()),
-        };
-
-
-        let index = MooncakeIndex {
-            in_memory_index: HashSet::new(),
-            file_indices: file_indice_merge_payload.file_indices.clone(),
-        };
-        println!("before merge");
-        println!("{:?}", index.find_record(&record_1).await);
-        println!("{:?}", index.find_record(&record_2).await);
-        // println!("file index 1 {:?}", file_indice_merge_payload.file_indices[0]);
-        // println!("file index 2 {:?}", file_indice_merge_payload.file_indices[1]);
-
-        /// Check rows after merge.
-        
-        let mut builder = GlobalIndexBuilder::new();
-        builder.set_directory(std::path::PathBuf::from(self.get_table_directory()));
-        let merged = builder
-            .build_from_merge(file_indice_merge_payload.file_indices.clone())
-            .await;
-
-        println!("\n\nafter merge\n\n");
-        let index = MooncakeIndex {
-            in_memory_index: HashSet::new(),
-            file_indices: vec![merged.clone()],
-        };
-        println!("{:?}", index.find_record(&record_1).await);
-        println!("{:?}", index.find_record(&record_2).await);
-        // println!("merged file index {:?}", merged);
-
-        ///////////////////
-
         let file_indices_merge_result = FileIndiceMergeResult {
             old_file_indices: file_indice_merge_payload.file_indices,
             merged_file_indices: merged,

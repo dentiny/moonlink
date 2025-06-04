@@ -186,9 +186,6 @@ impl IndexBlock {
             for _ in entry_start..entry_end {
                 let (hash, seg_idx, row_idx) = self.read_entry(&mut entry_reader, metadata).await;
                 if hash == target_lower_hash {
-
-                    // println!("find seg index {}, get file id {:?}, all file {:?}", seg_idx, metadata.files[seg_idx].file_id(), metadata.files);
-
                     results.push(RecordLocation::DiskFile(
                         metadata.files[seg_idx].file_id(),
                         row_idx,
@@ -212,10 +209,6 @@ impl GlobalIndex {
 
         for block in self.index_blocks.iter() {
             if bucket_idx >= block.bucket_start_idx && bucket_idx < block.bucket_end_idx {
-
-                // println!("value = {}, target hash {}, lower hash {}, bucker index {}, start bucket index {}, end bucket index {}", 
-                //     value, target_hash, lower_hash, bucket_idx, block.bucket_start_idx, block.bucket_end_idx);
-
                 return block.read(lower_hash, bucket_idx, self).await;
             }
         }
@@ -384,8 +377,6 @@ impl GlobalIndexBuilder {
     // Build from flush
     // ================================
     pub async fn build_from_flush(mut self, mut entries: Vec<(u64, usize, usize)>) -> GlobalIndex {
-        println!("build from flush: {:?}", entries);
-
         self.num_rows = entries.len() as u32;
         for entry in &mut entries {
             entry.0 = splitmix64(entry.0);
@@ -428,9 +419,6 @@ impl GlobalIndexBuilder {
             }
             file_id_remaps.push(file_id_remap);
         }
-
-        println!("at merge files = {:?}, file id after remap = {:?}", self.files, file_id_remaps);
-
         let mut iters = Vec::with_capacity(indices.len());
         for (idx, index) in indices.iter().enumerate() {
             iters.push(index._create_iterator(&file_id_remaps[idx]).await);
@@ -448,9 +436,6 @@ impl GlobalIndexBuilder {
         let mut index_block_builder =
             IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
         while let Some(entry) = iter.next().await {
-
-            println!("when merge, hash {}, seg idx {}, row {}", entry.0, entry.1, entry.2);
-
             index_block_builder
                 .write_entry(entry.0, entry.1, entry.2, &global_index)
                 .await;
@@ -739,7 +724,6 @@ mod tests {
         for block in index.index_blocks.iter() {
             let mut index_block_iter = block._create_iterator(&index, &file_id_remap).await;
             while let Some((hash, seg_idx, row_idx)) = index_block_iter.next().await {
-                println!("{} {} {}", hash, seg_idx, row_idx);
                 hash_entry_num += 1;
             }
         }
