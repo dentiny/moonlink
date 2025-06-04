@@ -354,17 +354,16 @@ impl SnapshotTableState {
             return;
         }
 
-        let file_indices = &mut self.current_snapshot.indices.file_indices;
+        let file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
         assert!(old_merged_file_indices.len() <= file_indices.len());
         let updated_file_indices_len = file_indices.len() - old_merged_file_indices.len() + 1 /*merged file indice*/;
         let mut updated_file_indices = Vec::with_capacity(updated_file_indices_len);
 
-        for cur_file_indice in file_indices.iter_mut() {
-            if old_merged_file_indices.contains(cur_file_indice) {
+        for cur_file_indice in file_indices.into_iter() {
+            if old_merged_file_indices.contains(&cur_file_indice) {
                 continue;
             }
-            // TODO(hjiang): Should be able to save the copy via ownership transfer.
-            updated_file_indices.push(cur_file_indice.clone());
+            updated_file_indices.push(cur_file_indice);
         }
         updated_file_indices.extend(new_merged_file_indices);
         self.current_snapshot.indices.file_indices = updated_file_indices;
