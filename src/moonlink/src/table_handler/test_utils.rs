@@ -320,7 +320,6 @@ pub(crate) async fn check_deletion_vector_consistency(disk_dv_entry: &DiskFileDe
     .await
     .unwrap();
     let iceberg_deletion_vector = DeletionVector::deserialize(blob).unwrap();
-    let batch_deletion_vector = iceberg_deletion_vector
-        .take_as_batch_delete_vector(MooncakeTableConfig::default().batch_size());
+    let batch_deletion_vector = iceberg_deletion_vector.take_as_batch_delete_vector();
     assert_eq!(batch_deletion_vector, disk_dv_entry.batch_deletion_vector);
 }

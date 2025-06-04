@@ -239,7 +239,7 @@ pub async fn verify_files_and_deletions(
     for (idx, cur_load_blob_res) in load_blob_results.into_iter().enumerate() {
         let blob = cur_load_blob_res.unwrap();
         let dv = DeletionVector::deserialize(blob).unwrap();
-        let batch_deletion_vector = dv.take_as_batch_delete_vector(TableConfig::DEFAULT_BATCH_SIZE);
+        let batch_deletion_vector = dv.take_as_batch_delete_vector();
         let deleted_rows = batch_deletion_vector.collect_deleted_rows();
         assert!(!deleted_rows.is_empty());
         position_deletes.append(

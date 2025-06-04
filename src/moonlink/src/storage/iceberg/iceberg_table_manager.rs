@@ -1,6 +1,7 @@
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
+    MOONCAKE_DELETION_VECTOR_NUM_ROWS,
 };
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
@@ -262,8 +263,7 @@ impl IcebergTableManager {
 
         IcebergValidation::validate_puffin_manifest_entry(entry)?;
         let deletion_vector = DeletionVector::load_from_dv_blob(file_io.clone(), data_file).await?;
-        let batch_deletion_vector = deletion_vector
-            .take_as_batch_delete_vector(self.mooncake_table_metadata.config.batch_size());
+        let batch_deletion_vector = deletion_vector.take_as_batch_delete_vector();
         data_file_entry.as_mut().unwrap().deletion_vector = batch_deletion_vector;
         data_file_entry.as_mut().unwrap().persisted_deletion_vector = Some(PuffinBlobRef {
             puffin_filepath: data_file.file_path().to_string(),
@@ -342,6 +342,10 @@ impl IcebergTableManager {
             (
                 DELETION_VECTOR_CADINALITY.to_string(),
                 deleted_row_count.to_string(),
+            ),
+            (
+                MOONCAKE_DELETION_VECTOR_NUM_ROWS.to_string(),
+                deletion_vector.get_max_rows().to_string(),
             ),
         ]);
         let blob = iceberg_deletion_vector.serialize(blob_properties);

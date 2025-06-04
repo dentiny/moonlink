@@ -18,10 +18,14 @@ const MIN_SERIALIZED_DELETION_VECTOR_BLOB: usize = 12;
 // Deletion vector puffin blob properties which must be contained.
 pub(crate) const DELETION_VECTOR_CADINALITY: &str = "cardinality";
 pub(crate) const DELETION_VECTOR_REFERENCED_DATA_FILE: &str = "referenced-data-file";
+/// Used to bookkeep max number of rows for batch deletion vector.
+pub(crate) const MOONCAKE_DELETION_VECTOR_NUM_ROWS: &str = "mooncake-deletion-vector-max-num-rows";
 
 pub(crate) struct DeletionVector {
     /// Roaring bitmap representing deleted rows.
     pub(crate) bitmap: RoaringTreemap,
+    /// Max number of rows correspond to mooncake batch deletion vector.
+    pub(crate) max_num_rows: Option<usize>,
 }
 
 impl DeletionVector {
@@ -29,6 +33,7 @@ impl DeletionVector {
     pub fn new() -> Self {
         Self {
             bitmap: RoaringTreemap::new(),
+            max_num_rows: None,
         }
     }
 
@@ -41,9 +46,12 @@ impl DeletionVector {
     }
 
     /// Deserializes a byte vector into a DeletionVector.
-    fn deserialize_roaring_map(data: &[u8]) -> IcebergResult<Self> {
+    fn deserialize_roaring_map(data: &[u8], max_num_rows: usize) -> IcebergResult<Self> {
         RoaringTreemap::deserialize_from(data)
-            .map(|bitmap| Self { bitmap })
+            .map(|bitmap| Self {
+                bitmap,
+                max_num_rows: Some(max_num_rows),
+            })
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::DataInvalid,
@@ -203,8 +211,16 @@ impl DeletionVector {
             ));
         }
 
+        // Get max number of rows for corresponding mooncake deletion vector.
+        let max_num_rows: usize = blob
+            .properties()
+            .get(MOONCAKE_DELETION_VECTOR_NUM_ROWS)
+            .unwrap()
+            .parse()
+            .unwrap();
+
         // Deserialize the bitmap.
-        DeletionVector::deserialize_roaring_map(bitmap_data)
+        DeletionVector::deserialize_roaring_map(bitmap_data, max_num_rows)
     }
 
     /// Load deletion vector from puffin file blob.
@@ -217,8 +233,9 @@ impl DeletionVector {
     }
 
     /// Convert self to `BatchDeletionVector`, after which self ownership is terminated.
-    pub fn take_as_batch_delete_vector(self, batch_size: usize) -> BatchDeletionVector {
-        let mut batch_delete_vector = BatchDeletionVector::new(batch_size);
+    pub fn take_as_batch_delete_vector(self) -> BatchDeletionVector {
+        let max_rows = self.max_num_rows.unwrap();
+        let mut batch_delete_vector = BatchDeletionVector::new(max_rows);
         for row_idx in self.bitmap.iter() {
             batch_delete_vector.delete_row(row_idx as usize);
         }
@@ -239,6 +256,10 @@ mod tests {
         properties.insert(
             DELETION_VECTOR_REFERENCED_DATA_FILE.to_string(),
             "/tmp/iceberg/data/filename".to_string(),
+        );
+        properties.insert(
+            MOONCAKE_DELETION_VECTOR_NUM_ROWS.to_string(),
+            "2000".to_string(),
         );
         properties
     }
@@ -267,7 +288,7 @@ mod tests {
         assert_eq!(dv.bitmap, deserialized_dv.bitmap);
 
         // Check conversion into BatchDeletionVector.
-        let batch_deletion_vector = dv.take_as_batch_delete_vector(1024);
+        let batch_deletion_vector = deserialized_dv.take_as_batch_delete_vector();
         assert_eq!(batch_deletion_vector.collect_deleted_rows(), deleted_rows);
     }
 }
