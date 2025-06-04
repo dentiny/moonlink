@@ -16,7 +16,6 @@ use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::iceberg::iceberg_table_manager::{
     IcebergTableConfig, IcebergTableManager, TableManager,
 };
-use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, FileIndiceMergeResult, IcebergSnapshotImportPayload,
@@ -225,7 +224,7 @@ pub struct SnapshotTask {
     ///
     /// Old file indices which have been merged.
     old_merged_file_indices: HashSet<FileIndex>,
-    /// New merged file indices,
+    /// New merged file indices, which should be imported to iceberg tables.
     new_merged_file_indices: Vec<FileIndex>,
 
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
@@ -476,7 +475,7 @@ impl MooncakeTable {
             true
         };
 
-        // If only index merge files contained in the iceberg snapshot, we don't have flush LSN advanced.
+        // Merged indices are safe to import to iceberg at any time, so if only index merge files contained in the iceberg snapshot, we don't have flush LSN advanced.
         if only_index_merge(&iceberg_snapshot_res) {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
@@ -541,11 +540,7 @@ impl MooncakeTable {
     pub(crate) fn set_file_indices_merge_res(&mut self, file_indices_res: FileIndiceMergeResult) {
         // TODO(hjiang): Should be able to use HashSet at beginning so no need to convert.
         assert!(self.next_snapshot_task.old_merged_file_indices.is_empty());
-        self.next_snapshot_task.old_merged_file_indices = file_indices_res
-            .old_file_indices
-            .iter()
-            .cloned()
-            .collect::<HashSet<GlobalIndex>>();
+        self.next_snapshot_task.old_merged_file_indices = file_indices_res.old_file_indices;
 
         assert!(self.next_snapshot_task.new_merged_file_indices.is_empty());
         self.next_snapshot_task

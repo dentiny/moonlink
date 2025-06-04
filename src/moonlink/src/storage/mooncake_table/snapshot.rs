@@ -282,9 +282,9 @@ impl SnapshotTableState {
 
     /// Util function to decide whether to merge index.
     /// To simplify states (aka, avoid merging file indices already in iceberg with those not), only merge those already persisted.
-    fn get_file_indices_to_merge(&self) -> Vec<FileIndex> {
+    fn get_file_indices_to_merge(&self) -> HashSet<FileIndex> {
         // Fast-path: not enough file indices to trigger index merge.
-        let mut file_indices_to_merge = vec![];
+        let mut file_indices_to_merge = HashSet::new();
         let all_file_indices = &self.current_snapshot.indices.file_indices;
         if all_file_indices.len()
             < self
@@ -304,7 +304,7 @@ impl SnapshotTableState {
             {
                 continue;
             }
-            file_indices_to_merge.push(cur_file_index.clone());
+            assert!(file_indices_to_merge.insert(cur_file_index.clone()));
         }
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
         if file_indices_to_merge.len()
@@ -315,7 +315,7 @@ impl SnapshotTableState {
         {
             return file_indices_to_merge;
         }
-        vec![]
+        HashSet::new()
     }
 
     fn prune_persisted_merged_indices(

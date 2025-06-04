@@ -2,14 +2,14 @@ use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use futures::executor::block_on;
 use memmap2::Mmap;
 use more_asserts as ma;
-use std::collections::BinaryHeap;
-use std::fmt;
+use std::collections::{BinaryHeap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
 use std::io::SeekFrom;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::{fmt, vec};
 use tokio::fs::File as AsyncFile;
 use tokio::io::BufWriter as AsyncBufWriter;
 use tokio_bitstream_io::{
@@ -98,7 +98,7 @@ pub(crate) struct IndexBlock {
     pub(crate) bucket_end_idx: u32,
     pub(crate) bucket_start_offset: u64,
     pub(crate) file_path: String,
-    /// File size for the index block file, used to decide whether to continue merge index blocks.
+    /// File size for the index block file, used to decide whether to trigger merge index blocks merge.
     pub(crate) file_size: u64,
     data: Arc<Option<Mmap>>,
 }
@@ -123,7 +123,7 @@ impl IndexBlock {
         }
     }
 
-    async fn _create_iterator<'a>(
+    async fn create_iterator<'a>(
         &'a self,
         metadata: &'a GlobalIndex,
         file_id_remap: &'a Vec<u32>,
@@ -221,7 +221,7 @@ impl GlobalIndex {
             .sum()
     }
 
-    pub async fn _create_iterator<'a>(
+    pub async fn create_iterator<'a>(
         &'a self,
         file_id_remap: &'a Vec<u32>,
     ) -> GlobalIndexIterator<'a> {
@@ -401,15 +401,15 @@ impl GlobalIndexBuilder {
     // ================================
     // Build from merge
     // ================================
-    pub async fn build_from_merge(mut self, indices: Vec<GlobalIndex>) -> GlobalIndex {
+    pub async fn build_from_merge(mut self, indices: HashSet<GlobalIndex>) -> GlobalIndex {
         self.num_rows = indices.iter().map(|index| index.num_rows).sum();
         self.files = indices
             .iter()
             .flat_map(|index| index.files.clone())
             .collect();
-        let mut file_id_remaps = vec![];
+        let mut file_id_remaps = Vec::with_capacity(indices.len());
         let mut file_id_after_remap = 0;
-        for index in &indices {
+        for index in indices.iter() {
             let mut file_id_remap = vec![INVALID_FILE_ID; index.files.len()];
             for (_, item) in file_id_remap.iter_mut().enumerate().take(index.files.len()) {
                 *item = file_id_after_remap;
@@ -419,7 +419,7 @@ impl GlobalIndexBuilder {
         }
         let mut iters = Vec::with_capacity(indices.len());
         for (idx, index) in indices.iter().enumerate() {
-            iters.push(index._create_iterator(&file_id_remaps[idx]).await);
+            iters.push(index.create_iterator(&file_id_remaps[idx]).await);
         }
         let merge_iter = GlobalIndexMergingIterator::new(iters).await;
         self.build_from_merging_iterator(merge_iter).await
@@ -447,7 +447,6 @@ impl GlobalIndexBuilder {
 // ================================
 // Iterators for merging indices
 // ================================
-#[allow(dead_code)]
 struct IndexBlockIterator<'a> {
     collection: &'a IndexBlock,
     metadata: &'a GlobalIndex,
@@ -536,7 +535,6 @@ impl<'a> IndexBlockIterator<'a> {
     }
 }
 
-#[allow(dead_code)]
 pub struct GlobalIndexIterator<'a> {
     index: &'a GlobalIndex,
     block_idx: usize,
@@ -551,7 +549,7 @@ impl<'a> GlobalIndexIterator<'a> {
         if !index.index_blocks.is_empty() {
             block_iter = Some(
                 index.index_blocks[0]
-                    ._create_iterator(index, file_id_remap)
+                    .create_iterator(index, file_id_remap)
                     .await,
             );
         }
@@ -582,19 +580,17 @@ impl<'a> GlobalIndexIterator<'a> {
             }
             self.block_iter = Some(
                 self.index.index_blocks[self.block_idx]
-                    ._create_iterator(self.index, self.file_id_remap)
+                    .create_iterator(self.index, self.file_id_remap)
                     .await,
             );
         }
     }
 }
 
-#[allow(dead_code)]
 pub struct GlobalIndexMergingIterator<'a> {
     heap: BinaryHeap<HeapItem<'a>>,
 }
 
-#[allow(dead_code)]
 struct HeapItem<'a> {
     value: (
         u64,   /*hash*/
@@ -736,7 +732,7 @@ mod tests {
         let mut hash_entry_num = 0;
         let file_id_remap = vec![0; index.files.len()];
         for block in index.index_blocks.iter() {
-            let mut index_block_iter = block._create_iterator(&index, &file_id_remap).await;
+            let mut index_block_iter = block.create_iterator(&index, &file_id_remap).await;
             while let Some((hash, seg_idx, row_idx)) = index_block_iter.next().await {
                 println!("{} {} {}", hash, seg_idx, row_idx);
                 hash_entry_num += 1;
@@ -773,7 +769,9 @@ mod tests {
 
         let mut builder = GlobalIndexBuilder::new();
         builder.set_directory(tempfile::tempdir().unwrap().keep());
-        let merged = builder.build_from_merge(vec![index1, index2]).await;
+        let merged = builder
+            .build_from_merge(HashSet::<GlobalIndex>::from([index1, index2]))
+            .await;
 
         for idx in 0u64..200u64 {
             let ret = merged.search(&idx).await;

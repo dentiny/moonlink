@@ -6,7 +6,7 @@ use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::TableManager;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 ////////////////////////////
 /// Iceberg snapshot payload
@@ -76,21 +76,20 @@ pub(crate) struct IcebergSnapshotResult {
     pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
 }
 
-/// TODO(hjiang): Migrate indice merge structs to other files.
-///
 ////////////////////////////
 /// Index merge
 ////////////////////////////
+///
 #[derive(Clone, Debug)]
 pub struct FileIndiceMergePayload {
     /// File indices to merge.
-    pub(crate) file_indices: Vec<GlobalIndex>,
+    pub(crate) file_indices: HashSet<GlobalIndex>,
 }
 
 #[derive(Clone, Debug)]
 pub struct FileIndiceMergeResult {
     /// File indices merged.
-    pub(crate) old_file_indices: Vec<GlobalIndex>,
+    pub(crate) old_file_indices: HashSet<GlobalIndex>,
     /// Merged file indices.
     pub(crate) merged_file_indices: GlobalIndex,
 }
