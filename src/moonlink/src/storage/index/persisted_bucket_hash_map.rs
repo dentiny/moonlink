@@ -183,9 +183,12 @@ impl IndexBlock {
                 ))
                 .await
                 .unwrap();
-            for _i in entry_start..entry_end {
+            for _ in entry_start..entry_end {
                 let (hash, seg_idx, row_idx) = self.read_entry(&mut entry_reader, metadata).await;
                 if hash == target_lower_hash {
+
+                    // println!("find seg index {}, get file id {:?}, all file {:?}", seg_idx, metadata.files[seg_idx].file_id(), metadata.files);
+
                     results.push(RecordLocation::DiskFile(
                         metadata.files[seg_idx].file_id(),
                         row_idx,
@@ -204,8 +207,15 @@ impl GlobalIndex {
         let target_hash = splitmix64(*value);
         let lower_hash = target_hash & ((1 << self.hash_lower_bits) - 1);
         let bucket_idx = (target_hash >> self.hash_lower_bits) as u32;
+
+        
+
         for block in self.index_blocks.iter() {
             if bucket_idx >= block.bucket_start_idx && bucket_idx < block.bucket_end_idx {
+
+                // println!("value = {}, target hash {}, lower hash {}, bucker index {}, start bucket index {}, end bucket index {}", 
+                //     value, target_hash, lower_hash, bucket_idx, block.bucket_start_idx, block.bucket_end_idx);
+
                 return block.read(lower_hash, bucket_idx, self).await;
             }
         }
@@ -418,6 +428,9 @@ impl GlobalIndexBuilder {
             }
             file_id_remaps.push(file_id_remap);
         }
+
+        println!("at merge files = {:?}, file id after remap = {:?}", self.files, file_id_remaps);
+
         let mut iters = Vec::with_capacity(indices.len());
         for (idx, index) in indices.iter().enumerate() {
             iters.push(index._create_iterator(&file_id_remaps[idx]).await);
@@ -435,6 +448,9 @@ impl GlobalIndexBuilder {
         let mut index_block_builder =
             IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
         while let Some(entry) = iter.next().await {
+
+            println!("when merge, hash {}, seg idx {}, row {}", entry.0, entry.1, entry.2);
+
             index_block_builder
                 .write_entry(entry.0, entry.1, entry.2, &global_index)
                 .await;
@@ -497,7 +513,7 @@ impl<'a> IndexBlockIterator<'a> {
         }
     }
 
-    async fn next(&mut self) -> Option<(u64, usize, usize)> {
+    async fn next(&mut self) -> Option<(u64 /*hash*/, usize /*seg_idx*/, usize /*row_idx*/)> {
         loop {
             if self.current_bucket == self.collection.bucket_end_idx - 1 {
                 return None;
@@ -519,8 +535,9 @@ impl<'a> IndexBlockIterator<'a> {
                 .read_entry(&mut self.entry_reader, self.metadata)
                 .await;
             self.current_entry += 1;
+            let remapped_file_id = self.file_id_remap.get(seg_idx).unwrap();
             if *self.file_id_remap.get(seg_idx).unwrap() != INVALID_FILE_ID {
-                return Some((lower_hash + self.current_upper_hash, seg_idx, row_idx));
+                return Some((lower_hash + self.current_upper_hash, *remapped_file_id as usize, row_idx));
             }
         }
     }
@@ -553,7 +570,7 @@ impl<'a> GlobalIndexIterator<'a> {
         }
     }
 
-    pub async fn next(&mut self) -> Option<(u64, usize, usize)> {
+    pub async fn next(&mut self) -> Option<(u64 /*hash*/, usize /*seg_idx*/, usize /*row_idx*/)> {
         loop {
             if let Some(ref mut iter) = self.block_iter {
                 if let Some(item) = iter.next().await {
@@ -580,7 +597,7 @@ pub struct GlobalIndexMergingIterator<'a> {
 
 #[allow(dead_code)]
 struct HeapItem<'a> {
-    value: (u64, usize, usize),
+    value: (u64 /*hash*/, usize /*seg_idx*/, usize /*row_idx*/),
     iter: GlobalIndexIterator<'a>,
 }
 
