@@ -203,12 +203,10 @@ pub(crate) async fn create_table_and_iceberg_manager(
     (table, iceberg_table_manager, notify_rx)
 }
 
-/// Test util function to perform a mooncake snapshot, block wait its completion and get its result.
-pub(crate) async fn create_mooncake_snapshot(
-    table: &mut MooncakeTable,
+/// Test util function to block wait a mooncake snapshot and get its result.
+pub(crate) async fn get_mooncake_snapshot_result(
     notify_rx: &mut Receiver<TableNotify>,
 ) -> (u64, Option<IcebergSnapshotPayload>) {
-    assert!(table.create_snapshot(SnapshotOption::default()));
     let notification = notify_rx.recv().await.unwrap();
     match notification {
         TableNotify::MooncakeTableSnapshot {
@@ -219,6 +217,15 @@ pub(crate) async fn create_mooncake_snapshot(
             panic!("Expects to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
         }
     }
+}
+
+/// Test util function to perform a mooncake snapshot, block wait its completion and get its result.
+pub(crate) async fn create_mooncake_snapshot(
+    table: &mut MooncakeTable,
+    notify_rx: &mut Receiver<TableNotify>,
+) -> (u64, Option<IcebergSnapshotPayload>) {
+    assert!(table.create_snapshot(SnapshotOption::default()));
+    get_mooncake_snapshot_result(notify_rx).await
 }
 
 /// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.

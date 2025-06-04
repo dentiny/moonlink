@@ -5,17 +5,14 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::iceberg_table_manager::TableManager;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
-use crate::storage::iceberg::test_utils::{
-    check_deletion_vector_consistency_for_snapshot, create_iceberg_snapshot,
-    create_mooncake_snapshot, create_table_and_iceberg_manager, create_test_arrow_schema,
-    create_test_table_metadata, load_arrow_batch, validate_recovered_snapshot,
-};
+use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::Index;
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot;
+use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     TableConfig as MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
 };
@@ -455,6 +452,47 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     table.commit(/*lsn=*/ 30);
 
     let (_, iceberg_snapshot_payload) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    assert!(iceberg_snapshot_payload.is_none());
+}
+
+/// Test scenario: iceberg snapshot is requested to skip when creating mooncake snapshot.
+#[tokio::test]
+async fn test_skip_iceberg_snapshot() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().to_path_buf();
+    let warehouse_uri = path.clone().to_str().unwrap().to_string();
+    let mooncake_table_metadata =
+        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    let schema = create_test_arrow_schema();
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*version=*/ 1,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        MooncakeTableConfig::default(),
+    )
+    .await
+    .unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx);
+
+    // Persist data file to local filesystem, so iceberg snapshot should be created, if skip iceberg not specified.
+    let row = test_row_1();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 10);
+    table.flush(/*lsn=*/ 10).await.unwrap();
+
+    // Create mooncake snapshot.
+    assert!(table.create_snapshot(SnapshotOption {
+        force_create: false,
+        skip_iceberg_snapshot: true
+    }));
+    let (_, iceberg_snapshot_payload) = get_mooncake_snapshot_result(&mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
 
