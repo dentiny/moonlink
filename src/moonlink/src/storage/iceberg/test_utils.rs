@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tempfile::TempDir;
+use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
 /// Test util function to check consistency for snapshot batch deletion vector and deletion puffin blob.
@@ -158,7 +159,7 @@ pub(crate) async fn load_arrow_batch(
 /// Iceberg snapshot will be created whenever `create_snapshot` is called.
 pub(crate) async fn create_table_and_iceberg_manager(
     temp_dir: &TempDir,
-) -> (MooncakeTable, IcebergTableManager) {
+) -> (MooncakeTable, IcebergTableManager, Receiver<TableNotify>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
@@ -177,7 +178,7 @@ pub(crate) async fn create_table_and_iceberg_manager(
         iceberg_snapshot_new_data_file_count: 0,
         ..Default::default()
     };
-    let table = MooncakeTable::new(
+    let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
         /*version=*/ 1,
@@ -195,7 +196,10 @@ pub(crate) async fn create_table_and_iceberg_manager(
     )
     .unwrap();
 
-    (table, iceberg_table_manager)
+    let (notify_tx, notify_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(notify_tx);
+
+    (table, iceberg_table_manager, notify_rx)
 }
 
 /// Test util function to perform a mooncake snapshot, block wait its completion and get its result.

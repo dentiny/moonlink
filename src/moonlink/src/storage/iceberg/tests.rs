@@ -572,9 +572,8 @@ async fn test_async_iceberg_snapshot() {
     let file_io = FileIOBuilder::new_fs_io().build().unwrap();
 
     let temp_dir = tempfile::tempdir().unwrap();
-    let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(notify_tx);
+    let (mut table, mut iceberg_table_manager, mut notify_rx) =
+        create_table_and_iceberg_manager(&temp_dir).await;
 
     // Operation group 1: Append new rows and create mooncake snapshot.
     let row_1 = test_row_1();
@@ -631,7 +630,7 @@ async fn test_async_iceberg_snapshot() {
     table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
-    let (_, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
+    let (_, mut iceberg_table_manager, _) = create_table_and_iceberg_manager(&temp_dir).await;
     let mut snapshot = iceberg_table_manager
         .load_snapshot_from_table()
         .await
