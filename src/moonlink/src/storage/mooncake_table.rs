@@ -839,6 +839,43 @@ impl MooncakeTable {
     // Test util functions
     // ================================
     //
+    //
+    // Test util function to block wait and get iceberg / file indices merge payload.
+    #[cfg(test)]
+    async fn sync_mooncake_snapshot(
+        receiver: &mut Receiver<TableNotify>,
+    ) -> (
+        Option<IcebergSnapshotPayload>,
+        Option<FileIndiceMergePayload>,
+    ) {
+        let notification = receiver.recv().await.unwrap();
+        if let TableNotify::MooncakeTableSnapshot {
+            iceberg_snapshot_payload,
+            file_indice_merge_payload,
+            ..
+        } = notification
+        {
+            (iceberg_snapshot_payload, file_indice_merge_payload)
+        } else {
+            panic!("Expected mooncake snapshot completion notification, but get others.");
+        }
+    }
+
+    #[cfg(test)]
+    async fn sync_iceberg_snapshot(
+        receiver: &mut Receiver<TableNotify>,
+    ) -> Result<IcebergSnapshotResult> {
+        let notification = receiver.recv().await.unwrap();
+        if let TableNotify::IcebergSnapshot {
+            iceberg_snapshot_result,
+        } = notification
+        {
+            iceberg_snapshot_result
+        } else {
+            panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
+        }
+    }
+
     // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
     #[cfg(test)]
     pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
@@ -850,30 +887,13 @@ impl MooncakeTable {
         if !mooncake_snapshot_created {
             return Ok(());
         }
-        let notification = receiver.recv().await.unwrap();
-        let iceberg_snapshot_payload = if let TableNotify::MooncakeTableSnapshot {
-            iceberg_snapshot_payload,
-            ..
-        } = notification
-        {
-            iceberg_snapshot_payload
-        } else {
-            panic!("Expected mooncake snapshot completion notification, but get others.");
-        };
+        let (iceberg_snapshot_payload, _) = Self::sync_mooncake_snapshot(receiver).await;
 
         // Create iceberg snapshot if possible.
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
             // Create iceberg snapshot.
             self.persist_iceberg_snapshot(iceberg_snapshot_payload);
-            let notification = receiver.recv().await.unwrap();
-            let iceberg_snapshot_result = if let TableNotify::IcebergSnapshot {
-                iceberg_snapshot_result,
-            } = notification
-            {
-                iceberg_snapshot_result
-            } else {
-                panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
-            };
+            let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
             self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
         }
 
@@ -897,50 +917,17 @@ impl MooncakeTable {
         };
         assert!(self.create_snapshot(force_snapshot_option.clone()));
 
-        // Get iceberg snapshot and index merge payload.
-        let notification = receiver.recv().await.unwrap();
-        let iceberg_snapshot_payload = if let TableNotify::MooncakeTableSnapshot {
-            iceberg_snapshot_payload,
-            ..
-        } = notification
-        {
-            iceberg_snapshot_payload
-        } else {
-            panic!("Expected mooncake snapshot completion notification, but get others.");
-        };
-
-        // Create mooncake snapshot and iceberg snapshot.
-        // Create iceberg snapshot if possible.
+        let (iceberg_snapshot_payload, _) = Self::sync_mooncake_snapshot(receiver).await;
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
-            // Create iceberg snapshot.
             self.persist_iceberg_snapshot(iceberg_snapshot_payload);
-            let notification = receiver.recv().await.unwrap();
-            let iceberg_snapshot_result = if let TableNotify::IcebergSnapshot {
-                iceberg_snapshot_result,
-            } = notification
-            {
-                iceberg_snapshot_result
-            } else {
-                panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
-            };
+            let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
             self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
         }
 
         // Perform index merge.
         assert!(self.create_snapshot(force_snapshot_option.clone()));
-        let notification = receiver.recv().await.unwrap();
         let (iceberg_snapshot_payload, file_indice_merge_payload) =
-            if let TableNotify::MooncakeTableSnapshot {
-                iceberg_snapshot_payload,
-                file_indice_merge_payload,
-                ..
-            } = notification
-            {
-                (iceberg_snapshot_payload, file_indice_merge_payload)
-            } else {
-                panic!("Expected mooncake snapshot completion notification, but get others.");
-            };
-
+            Self::sync_mooncake_snapshot(receiver).await;
         assert!(iceberg_snapshot_payload.is_none());
         let file_indice_merge_payload = file_indice_merge_payload.unwrap();
         let mut builder = GlobalIndexBuilder::new();
