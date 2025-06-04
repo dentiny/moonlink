@@ -617,7 +617,7 @@ async fn test_skip_iceberg_snapshot() {
     // Create mooncake snapshot.
     assert!(table.create_snapshot(SnapshotOption {
         force_create: false,
-        skip_iceberg_snapshot: false,
+        skip_iceberg_snapshot: true,
         skip_file_indices_merge: false,
     }));
     let (_, iceberg_snapshot_payload, _) = get_mooncake_snapshot_result(&mut notify_rx).await;
