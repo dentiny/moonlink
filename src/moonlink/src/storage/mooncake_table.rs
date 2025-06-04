@@ -698,22 +698,23 @@ impl MooncakeTable {
             {
                 (lsn, iceberg_snapshot_payload)
             } else {
-                panic!("Expected MooncakeTableSnapshot");
+                panic!("Expected mooncake snapshot completion notification, but get iceberg snapshot one.");
             };
-        let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
 
-        // Create iceberg snapshot.
-        self.persist_iceberg_snapshot(iceberg_snapshot_payload);
-        let notification = receiver.recv().await.unwrap();
-        let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
-            iceberg_snapshot_result,
-        } = notification
-        {
-            iceberg_snapshot_result
-        } else {
-            panic!("Expected IcebergSnapshot");
-        };
-        self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+        if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+            // Create iceberg snapshot.
+            self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+            let notification = receiver.recv().await.unwrap();
+            let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
+                iceberg_snapshot_result,
+            } = notification
+            {
+                iceberg_snapshot_result
+            } else {
+                panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
+            };
+            self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+        }
 
         Ok(())
     }
