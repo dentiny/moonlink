@@ -535,9 +535,13 @@ impl<'a> IndexBlockIterator<'a> {
                 .read_entry(&mut self.entry_reader, self.metadata)
                 .await;
             self.current_entry += 1;
-            let remapped_file_id = self.file_id_remap.get(seg_idx).unwrap();
-            if *self.file_id_remap.get(seg_idx).unwrap() != INVALID_FILE_ID {
-                return Some((lower_hash + self.current_upper_hash, *remapped_file_id as usize, row_idx));
+            let seg_idx = self.file_id_remap.get(seg_idx).unwrap();
+            if *seg_idx != _INVALID_FILE_ID {
+                return Some((
+                    lower_hash + self.current_upper_hash,
+                    *seg_idx as usize,
+                    row_idx,
+                ));
             }
         }
     }
@@ -772,13 +776,21 @@ mod tests {
         builder.set_directory(tempfile::tempdir().unwrap().keep());
         let merged = builder.build_from_merge(vec![index1, index2]).await;
 
-        for i in 0u64..100u64 {
-            let ret = merged.search(&i).await;
+        for idx in 0u64..200u64 {
+            let ret = merged.search(&idx).await;
             let record_location = ret.first().unwrap();
             let RecordLocation::DiskFile(FileId(file_id), _) = record_location else {
-                panic!("No record location found for {}", i);
+                panic!("No record location found for {}", idx);
             };
-            assert_eq!(*file_id, i % 3 + 1);
+
+            // Check for the first file indice.
+            if idx < 100 {
+                assert_eq!(*file_id, idx % 3 + 1);
+            }
+            // Check for the second file indice.
+            else {
+                assert_eq!(*file_id, (idx - 100) % 2 + 4);
+            }
         }
     }
 }
