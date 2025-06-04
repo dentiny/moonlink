@@ -474,7 +474,10 @@ impl SnapshotTableState {
                 self.aggregate_committed_deletion_logs(flush_lsn);
 
             // Only create iceberg snapshot when there's something to import.
-            if !aggregated_committed_deletion_logs.is_empty() || flush_by_data_files {
+            if !aggregated_committed_deletion_logs.is_empty()
+                || flush_by_data_files
+                || flush_by_merge_file_indices
+            {
                 iceberg_snapshot_payload = Some(IcebergSnapshotPayload {
                     flush_lsn,
                     import_payload: IcebergSnapshotImportPayload {
@@ -616,11 +619,6 @@ impl SnapshotTableState {
                 !self.is_deleted(loc) && self.is_visible(loc, file_id_to_lsn, deletion.lsn)
             })
             .collect();
-
-        println!(
-            "when delete, file indices count = {}",
-            self.current_snapshot.indices.file_indices.len()
-        );
 
         match candidates.len() {
             0 => panic!("can't find deletion record {:?}", deletion),
