@@ -1,3 +1,6 @@
+/// Iceberg deletion vector is the persistent format of in-memory BatchDeletionVector.
+/// On persistence stage, batch deletion vector is converted to iceberg one, by serializing corresponding roaring bitmap and its properties;
+/// at recovery, batch deletion vector is constructed back by loading and deserializing the puffin blob binary.
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 
