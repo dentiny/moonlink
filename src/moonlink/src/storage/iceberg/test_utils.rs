@@ -4,6 +4,7 @@ use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::puffin_utils;
+use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::Snapshot;
@@ -206,15 +207,20 @@ pub(crate) async fn create_table_and_iceberg_manager(
 /// Test util function to block wait a mooncake snapshot and get its result.
 pub(crate) async fn get_mooncake_snapshot_result(
     notify_rx: &mut Receiver<TableNotify>,
-) -> (u64, Option<IcebergSnapshotPayload>) {
+) -> (
+    u64,
+    Option<IcebergSnapshotPayload>,
+    Option<FileIndiceMergePayload>,
+) {
     let notification = notify_rx.recv().await.unwrap();
     match notification {
         TableNotify::MooncakeTableSnapshot {
             lsn,
             iceberg_snapshot_payload,
-        } => (lsn, iceberg_snapshot_payload),
-        TableNotify::IcebergSnapshot { .. } => {
-            panic!("Expects to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
+            file_indice_merge_payload,
+        } => (lsn, iceberg_snapshot_payload, file_indice_merge_payload),
+        _ => {
+            panic!("Expects to receive mooncake snapshot completion notification, but receives others.");
         }
     }
 }
@@ -223,7 +229,11 @@ pub(crate) async fn get_mooncake_snapshot_result(
 pub(crate) async fn create_mooncake_snapshot(
     table: &mut MooncakeTable,
     notify_rx: &mut Receiver<TableNotify>,
-) -> (u64, Option<IcebergSnapshotPayload>) {
+) -> (
+    u64,
+    Option<IcebergSnapshotPayload>,
+    Option<FileIndiceMergePayload>,
+) {
     assert!(table.create_snapshot(SnapshotOption::default()));
     get_mooncake_snapshot_result(notify_rx).await
 }
@@ -237,11 +247,13 @@ pub(crate) async fn create_iceberg_snapshot(
     table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
     let notification = notify_rx.recv().await.unwrap();
     match notification {
-        TableNotify::MooncakeTableSnapshot { .. } => {
-            panic!("Expects to receive iceberg snapshot completion notification, but receives mooncake one.")
-        }
         TableNotify::IcebergSnapshot {
             iceberg_snapshot_result,
         } => iceberg_snapshot_result,
+        _ => {
+            panic!(
+                "Expects to receive iceberg snapshot completion notification, but receives others."
+            )
+        }
     }
 }

@@ -25,12 +25,14 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::FileId;
+use crate::table_notify::TableNotify;
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
-use crate::table_notify::TableNotify;
+#[cfg(test)]
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
@@ -325,12 +327,15 @@ impl SnapshotTask {
 }
 
 /// Options to create mooncake snapshot.
+#[derive(Clone, Debug)]
 pub struct SnapshotOption {
     /// Whether to force create snapshot.
     /// When specified, mooncake snapshot will be created with snapshot threshold ignored.
     pub(crate) force_create: bool,
     /// Whether to skip iceberg snapshot creation.
     pub(crate) skip_iceberg_snapshot: bool,
+    /// Whether to skip file indices merge payload creation.
+    pub(crate) skip_file_indices_merge: bool,
 }
 
 impl SnapshotOption {
@@ -338,6 +343,7 @@ impl SnapshotOption {
         Self {
             force_create: false,
             skip_iceberg_snapshot: false,
+            skip_file_indices_merge: false,
         }
     }
 }
@@ -751,9 +757,7 @@ impl MooncakeTable {
             .old_file_indices_to_remove
             .clone();
 
-        let puffin_blob_ref = iceberg_table_manager
-            .sync_snapshot(snapshot_payload)
-            .await;
+        let puffin_blob_ref = iceberg_table_manager.sync_snapshot(snapshot_payload).await;
 
         // Notify on event error.
         if puffin_blob_ref.is_err() {
@@ -847,16 +851,14 @@ impl MooncakeTable {
             return Ok(());
         }
         let notification = receiver.recv().await.unwrap();
-        let (_, iceberg_snapshot_payload) = if let TableNotify::MooncakeTableSnapshot {
-            lsn,
+        let iceberg_snapshot_payload = if let TableNotify::MooncakeTableSnapshot {
             iceberg_snapshot_payload,
+            ..
         } = notification
         {
-            (lsn, iceberg_snapshot_payload)
+            iceberg_snapshot_payload
         } else {
-            panic!(
-                "Expected mooncake snapshot completion notification, but get iceberg snapshot one."
-            );
+            panic!("Expected mooncake snapshot completion notification, but get others.");
         };
 
         // Create iceberg snapshot if possible.
@@ -883,24 +885,64 @@ impl MooncakeTable {
     #[cfg(test)]
     pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(
         &mut self,
+        receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
         use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
         use futures::executor::block_on;
 
-        let (_, snapshot_payload, _) = self.force_create_snapshot().unwrap().await.unwrap();
+        let force_snapshot_option = SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: false,
+            skip_file_indices_merge: false,
+        };
+        assert!(self.create_snapshot(force_snapshot_option.clone()));
+
+        // Get iceberg snapshot and index merge payload.
+        let notification = receiver.recv().await.unwrap();
+        let iceberg_snapshot_payload = if let TableNotify::MooncakeTableSnapshot {
+            iceberg_snapshot_payload,
+            ..
+        } = notification
+        {
+            iceberg_snapshot_payload
+        } else {
+            panic!("Expected mooncake snapshot completion notification, but get others.");
+        };
 
         // Create mooncake snapshot and iceberg snapshot.
-        if let Some(snapshot_payload) = snapshot_payload {
-            let iceberg_join_handle = self.persist_iceberg_snapshot(snapshot_payload);
-            let iceberg_snapshot_res = iceberg_join_handle.await.unwrap().unwrap();
-            self.set_iceberg_snapshot_res(iceberg_snapshot_res);
+        // Create iceberg snapshot if possible.
+        if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+            // Create iceberg snapshot.
+            self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+            let notification = receiver.recv().await.unwrap();
+            let iceberg_snapshot_result = if let TableNotify::IcebergSnapshot {
+                iceberg_snapshot_result,
+            } = notification
+            {
+                iceberg_snapshot_result
+            } else {
+                panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
+            };
+            self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
         }
 
         // Perform index merge.
-        let (_, snapshot_payload, index_merge_payload) =
-            self.force_create_snapshot().unwrap().await.unwrap();
-        assert!(snapshot_payload.is_none());
-        let index_merge_payload = index_merge_payload.unwrap();
+        assert!(self.create_snapshot(force_snapshot_option.clone()));
+        let notification = receiver.recv().await.unwrap();
+        let (iceberg_snapshot_payload, file_indice_merge_payload) =
+            if let TableNotify::MooncakeTableSnapshot {
+                iceberg_snapshot_payload,
+                file_indice_merge_payload,
+                ..
+            } = notification
+            {
+                (iceberg_snapshot_payload, file_indice_merge_payload)
+            } else {
+                panic!("Expected mooncake snapshot completion notification, but get others.");
+            };
+
+        assert!(iceberg_snapshot_payload.is_none());
+        let file_indice_merge_payload = file_indice_merge_payload.unwrap();
         let mut builder = GlobalIndexBuilder::new();
         builder.set_directory(std::path::PathBuf::from(self.get_table_directory()));
 
@@ -918,11 +960,11 @@ impl MooncakeTable {
         };
         println!(
             "file indice count = {}",
-            index_merge_payload.file_indices.len()
+            file_indice_merge_payload.file_indices.len()
         );
         let mut mooncake_index = MooncakeIndex::new();
-        mooncake_index.insert_file_index(index_merge_payload.file_indices[0].clone());
-        mooncake_index.insert_file_index(index_merge_payload.file_indices[1].clone());
+        mooncake_index.insert_file_index(file_indice_merge_payload.file_indices[0].clone());
+        mooncake_index.insert_file_index(file_indice_merge_payload.file_indices[1].clone());
         let locs = block_on(mooncake_index.find_record(&record1));
         println!("before merge, locs = {:?}", locs);
 
@@ -942,7 +984,7 @@ impl MooncakeTable {
         println!("before merge, locs = {:?}", locs);
 
         let merged = builder
-            .build_from_merge(index_merge_payload.file_indices.clone())
+            .build_from_merge(file_indice_merge_payload.file_indices.clone())
             .await;
 
         let mut mooncake_index = MooncakeIndex::new();
@@ -953,13 +995,14 @@ impl MooncakeTable {
         println!("right after merge, locs = {:?}", locs);
 
         let file_indices_merge_result = FileIndiceMergeResult {
-            old_file_indices: index_merge_payload.file_indices,
+            old_file_indices: file_indice_merge_payload.file_indices,
             merged_file_indices: merged,
         };
 
         // Set index merge result and trigger another iceberg snapshot.
         self.set_file_indices_merge_res(file_indices_merge_result);
-        return self.create_mooncake_and_iceberg_snapshot_for_test().await;
+        self.create_mooncake_and_iceberg_snapshot_for_test(receiver)
+            .await
     }
 }
 

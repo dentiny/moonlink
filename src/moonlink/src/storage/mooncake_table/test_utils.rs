@@ -143,16 +143,21 @@ pub fn batch_rows(start_id: i32, count: i32) -> Vec<MoonlinkRow> {
 pub async fn snapshot(
     table: &mut MooncakeTable,
     notify_rx: &mut Receiver<TableNotify>,
-) -> (u64, Option<IcebergSnapshotPayload>, Option<IcebergSnapshotIndexMergePayload>) {
+) -> (
+    u64,
+    Option<IcebergSnapshotPayload>,
+    Option<FileIndiceMergePayload>,
+) {
     assert!(table.create_snapshot(SnapshotOption::default()));
     let table_notify = notify_rx.recv().await.unwrap();
     match table_notify {
         TableNotify::MooncakeTableSnapshot {
             lsn,
             iceberg_snapshot_payload,
-        } => (lsn, iceberg_snapshot_payload),
-        TableNotify::IcebergSnapshot { .. } => {
-            panic!("Expected to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
+            file_indice_merge_payload,
+        } => (lsn, iceberg_snapshot_payload, file_indice_merge_payload),
+        _ => {
+            panic!("Expected to receive mooncake snapshot completion notification, but receives others");
         }
     }
 }
@@ -166,12 +171,14 @@ pub async fn create_iceberg_snapshot(
     table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
     let notification = completion_rx.recv().await.unwrap();
     match notification {
-        TableNotify::MooncakeTableSnapshot { .. } => {
-            panic!("Expects to receive iceberg snapshot completion notification, but receives mooncake one.")
-        }
         TableNotify::IcebergSnapshot {
             iceberg_snapshot_result,
         } => iceberg_snapshot_result,
+        _ => {
+            panic!(
+                "Expects to receive iceberg snapshot completion notification, but receives others."
+            )
+        }
     }
 }
 

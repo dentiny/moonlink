@@ -226,6 +226,7 @@ impl TableHandler {
                                 table.create_snapshot(SnapshotOption {
                                     force_create: true,
                                     skip_iceberg_snapshot: iceberg_snapshot_ongoing,
+                                    skip_file_indices_merge: index_merge_ongoing,
                                 });
                                 mooncake_snapshot_ongoing = true;
                             }
@@ -288,7 +289,7 @@ impl TableHandler {
                             }
 
                             // Process file indices merge.
-                            // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently, 
+                            // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
                             //
                             // TODO(hjiang): Unify with test code.
@@ -365,6 +366,7 @@ impl TableHandler {
                                 table.create_snapshot(SnapshotOption {
                                     force_create: true,
                                     skip_iceberg_snapshot: iceberg_snapshot_ongoing,
+                                    skip_file_indices_merge: index_merge_ongoing,
                                 });
                                 mooncake_snapshot_ongoing = true;
                                 continue;
@@ -377,6 +379,7 @@ impl TableHandler {
                     mooncake_snapshot_ongoing = table.create_snapshot(SnapshotOption {
                         force_create: false,
                         skip_iceberg_snapshot: iceberg_snapshot_ongoing,
+                        skip_file_indices_merge: index_merge_ongoing,
                     });
                 }
                 // If all senders have been dropped, exit the loop

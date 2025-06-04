@@ -7,6 +7,7 @@ use crate::storage::iceberg::iceberg_table_manager::TableManager;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
 use crate::storage::iceberg::test_utils::*;
+use crate::storage::index::persisted_bucket_hash_map::FileIndexMergeConfig;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::Index;
 use crate::storage::index::MooncakeIndex;
@@ -403,6 +404,7 @@ async fn test_snapshot_load_for_multiple_times() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_index_merge_and_create_snapshot() {
     let tmp_dir = tempdir().unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
 
     // File indices merge is triggered as long as there's not only one file indice.
     let file_index_config = FileIndexMergeConfig {
@@ -447,6 +449,7 @@ async fn test_index_merge_and_create_snapshot() {
     )
     .await
     .unwrap();
+    mooncake_table.register_table_notify(notify_tx);
 
     // Append one row and commit/flush, so we have one file indice persisted.
     let row_1 = MoonlinkRow::new(vec![
@@ -470,7 +473,7 @@ async fn test_index_merge_and_create_snapshot() {
 
     // Attempt index merge and flush to iceberg table.
     mooncake_table
-        .create_mooncake_and_iceberg_snapshot_for_index_merge_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(&mut notify_rx)
         .await
         .unwrap();
 
@@ -493,7 +496,7 @@ async fn test_index_merge_and_create_snapshot() {
     mooncake_table.commit(/*lsn=*/ 5);
     mooncake_table.flush(/*lsn=*/ 5).await.unwrap();
     mooncake_table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 }
@@ -574,7 +577,8 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     table.delete(row.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
 
-    let (_, iceberg_snapshot_payload) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    let (_, iceberg_snapshot_payload, _) =
+        create_mooncake_snapshot(&mut table, &mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
 
@@ -613,9 +617,10 @@ async fn test_skip_iceberg_snapshot() {
     // Create mooncake snapshot.
     assert!(table.create_snapshot(SnapshotOption {
         force_create: false,
-        skip_iceberg_snapshot: true
+        skip_iceberg_snapshot: false,
+        skip_file_indices_merge: false,
     }));
-    let (_, iceberg_snapshot_payload) = get_mooncake_snapshot_result(&mut notify_rx).await;
+    let (_, iceberg_snapshot_payload, _) = get_mooncake_snapshot_result(&mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
 
@@ -741,7 +746,8 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_1.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    let (_, iceberg_snapshot_payload) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    let (_, iceberg_snapshot_payload, _) =
+        create_mooncake_snapshot(&mut table, &mut notify_rx).await;
 
     // Operation group 2: Append new rows and create mooncake snapshot.
     let row_2 = test_row_2();
@@ -749,7 +755,7 @@ async fn test_async_iceberg_snapshot() {
     table.delete(row_1.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
     table.flush(/*lsn=*/ 30).await.unwrap();
-    let (_, _) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    let (_, _, _) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the first mooncake snapshot.
     let iceberg_snapshot_result =
@@ -783,7 +789,8 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_3.clone()).unwrap();
     table.commit(/*lsn=*/ 40);
     table.flush(/*lsn=*/ 40).await.unwrap();
-    let (_, iceberg_snapshot_payload) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    let (_, iceberg_snapshot_payload, _) =
+        create_mooncake_snapshot(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the mooncake snapshot.
     let iceberg_snapshot_result =

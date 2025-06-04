@@ -13,7 +13,7 @@ pub(crate) enum TableNotify {
         /// Payload used to create an iceberg snapshot.
         iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
         /// Payload used to trigger an index merge.
-        file_indice_merge_payload: Option<FileIndiceMergePayload>,  
+        file_indice_merge_payload: Option<FileIndiceMergePayload>,
     },
     /// Iceberg snapshot completes.
     IcebergSnapshot {

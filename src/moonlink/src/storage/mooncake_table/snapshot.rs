@@ -10,10 +10,10 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::{FileIndex, Index};
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::table_snapshot::FileIndiceMergePayload;
+use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
 };
-use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::{
     MooncakeDataFile, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord,
@@ -374,7 +374,11 @@ impl SnapshotTableState {
         &mut self,
         mut task: SnapshotTask,
         opt: SnapshotOption,
-    ) -> (u64, Option<IcebergSnapshotPayload>, Option<FileIndiceMergePayload>) {
+    ) -> (
+        u64,
+        Option<IcebergSnapshotPayload>,
+        Option<FileIndiceMergePayload>,
+    ) {
         // Reflect iceberg snapshot to mooncake snapshot.
         self.prune_committed_deletion_logs(&task);
         self.prune_persisted_data_files(std::mem::take(&mut task.iceberg_persisted_data_files));
@@ -442,20 +446,25 @@ impl SnapshotTableState {
                 .as_slice(),
             opt.force_create,
         );
-        let flush_by_deletion_logs = self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
-        let flush_by_merge_file_indices = self.create_iceberg_snapshot_by_index_merge(opt.force_create);
+        let flush_by_deletion_logs =
+            self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
+        let flush_by_merge_file_indices =
+            self.create_iceberg_snapshot_by_index_merge(opt.force_create);
 
         // Decide whether to merge an index merge.
         let mut file_indices_merge_payload: Option<FileIndiceMergePayload> = None;
-        let file_indices_to_merge = self.get_file_indices_to_merge();
-        if !file_indices_to_merge.is_empty() {
-            file_indices_merge_payload = Some(FileIndiceMergePayload {
-                file_indices: file_indices_to_merge,
-            });
+        if !opt.skip_file_indices_merge {
+            let file_indices_to_merge = self.get_file_indices_to_merge();
+            if !file_indices_to_merge.is_empty() {
+                file_indices_merge_payload = Some(FileIndiceMergePayload {
+                    file_indices: file_indices_to_merge,
+                });
+            }
         }
 
         // TODO(hjiang): Add whether to flush based on merged file indices.
-        if !opt.skip_iceberg_snapshot && self.current_snapshot.data_file_flush_lsn.is_some()
+        if !opt.skip_iceberg_snapshot
+            && self.current_snapshot.data_file_flush_lsn.is_some()
             && (flush_by_data_files || flush_by_deletion_logs || flush_by_merge_file_indices)
         {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
