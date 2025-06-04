@@ -337,8 +337,8 @@ pub struct MooncakeTable {
     /// LSN of the latest iceberg snapshot.
     last_iceberg_snapshot_lsn: Option<u64>,
 
-    /// Table event completion notification.s
-    event_table_notify: Option<Arc<Sender<TableNotify>>>,
+    /// Table notifier, which is used to sent multiple types of event completion information.
+    table_notify: Option<Sender<TableNotify>>,
 }
 
 impl MooncakeTable {
@@ -391,18 +391,15 @@ impl MooncakeTable {
             next_file_id: 0,
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn: None,
-            event_table_notify: None,
+            table_notify: None,
         })
     }
 
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
-    pub(crate) fn register_event_completion_notifier(
-        &mut self,
-        event_completion_notifier: Sender<TableNotify>,
-    ) {
-        assert!(self.event_table_notify.is_none());
-        self.event_table_notify = Some(Arc::new(event_completion_notifier));
+    pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+        assert!(self.table_notify.is_none());
+        self.table_notify = Some(table_notify);
     }
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
@@ -418,7 +415,7 @@ impl MooncakeTable {
         assert!(self.iceberg_table_manager.is_none());
         self.iceberg_table_manager = Some(iceberg_snapshot_res.table_manager);
 
-        // ---- Update next snapshot task fields ---
+        // ---- Buffer iceberg persisted content to next snapshot task ---
         assert!(self.next_snapshot_task.iceberg_flush_lsn.is_none());
         self.next_snapshot_task.iceberg_flush_lsn = Some(iceberg_flush_lsn);
 
@@ -573,7 +570,7 @@ impl MooncakeTable {
             cur_snapshot,
             next_snapshot_task,
             force_create,
-            self.event_table_notify.as_ref().unwrap().clone(),
+            self.table_notify.as_ref().unwrap().clone(),
         ));
     }
 
@@ -598,7 +595,7 @@ impl MooncakeTable {
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
-        event_notifier: Arc<Sender<TableNotify>>,
+        table_notify: Sender<TableNotify>,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
         let new_data_files = snapshot_payload.data_files.clone();
@@ -608,7 +605,7 @@ impl MooncakeTable {
 
         // Notify on event error.
         if puffin_blob_ref.is_err() {
-            event_notifier
+            table_notify
                 .send(TableNotify::IcebergSnapshot {
                     iceberg_snapshot_result: Err(puffin_blob_ref.unwrap_err().into()),
                 })
@@ -626,7 +623,7 @@ impl MooncakeTable {
             removed_file_indices,
             puffin_blob_ref: puffin_blob_ref.unwrap(),
         };
-        event_notifier
+        table_notify
             .send(TableNotify::IcebergSnapshot {
                 iceberg_snapshot_result: Ok(snapshot_result),
             })
@@ -639,7 +636,7 @@ impl MooncakeTable {
         tokio::task::spawn(Self::persist_iceberg_snapshot_impl(
             iceberg_table_manager,
             snapshot_payload,
-            self.event_table_notify.as_ref().unwrap().clone(),
+            self.table_notify.as_ref().unwrap().clone(),
         ));
     }
 
@@ -658,14 +655,14 @@ impl MooncakeTable {
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
         force_create: bool,
-        event_completion_notifier: Arc<Sender<TableNotify>>,
+        table_notify: Sender<TableNotify>,
     ) {
         let (lsn, iceberg_snapshot_payload) = snapshot
             .write()
             .await
             .update_snapshot(next_snapshot_task, force_create)
             .await;
-        event_completion_notifier
+        table_notify
             .send(TableNotify::MooncakeTableSnapshot {
                 lsn,
                 iceberg_snapshot_payload,

@@ -439,7 +439,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     .await
     .unwrap();
     let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(notify_tx);
+    table.register_table_notify(notify_tx);
 
     let row = test_row_1();
     table.append(row.clone()).unwrap();
@@ -492,7 +492,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
     .await
     .unwrap();
     let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(notify_tx);
+    table.register_table_notify(notify_tx);
 
     // Append first row.
     let row_1 = test_row_1();
@@ -765,7 +765,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     )
     .await
     .unwrap();
-    table.register_event_completion_notifier(notify_tx);
+    table.register_table_notify(notify_tx);
 
     // Perform a few table write operations.
     //

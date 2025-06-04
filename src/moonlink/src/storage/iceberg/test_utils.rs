@@ -197,7 +197,7 @@ pub(crate) async fn create_table_and_iceberg_manager(
     .unwrap();
 
     let (notify_tx, notify_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(notify_tx);
+    table.register_table_notify(notify_tx);
 
     (table, iceberg_table_manager, notify_rx)
 }

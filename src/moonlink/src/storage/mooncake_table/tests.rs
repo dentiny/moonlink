@@ -22,7 +22,7 @@ async fn test_append_commit_snapshot(#[case] identity: IdentityProp) -> Result<(
     let context = TestContext::new("append_commit");
     let mut table = test_table(&context, "append_table", identity).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     append_rows(&mut table, vec![test_row(1, "A", 20), test_row(2, "B", 21)])?;
     table.commit(1);
@@ -41,7 +41,7 @@ async fn test_flush_basic(#[case] identity: IdentityProp) -> Result<()> {
     let context = TestContext::new("flush_basic");
     let mut table = test_table(&context, "flush_table", identity).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     let rows = vec![test_row(1, "Alice", 30), test_row(2, "Bob", 25)];
     append_commit_flush_snapshot(&mut table, &mut event_completion_rx, rows, 1).await?;
@@ -59,7 +59,7 @@ async fn test_delete_and_append(#[case] identity: IdentityProp) -> Result<()> {
     let context = TestContext::new("delete_append");
     let mut table = test_table(&context, "del_table", identity).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     let initial_rows = vec![
         test_row(1, "Row 1", 31),
@@ -101,7 +101,7 @@ async fn test_deletion_before_flush(#[case] identity: IdentityProp) -> Result<()
     let context = TestContext::new("delete_pre_flush");
     let mut table = test_table(&context, "table", identity).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     append_rows(&mut table, batch_rows(1, 4))?;
     table.commit(1);
@@ -126,7 +126,7 @@ async fn test_deletion_after_flush(#[case] identity: IdentityProp) -> Result<()>
     let context = TestContext::new("delete_post_flush");
     let mut table = test_table(&context, "table", identity).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
     append_commit_flush_snapshot(&mut table, &mut event_completion_rx, batch_rows(1, 4), 1).await?;
 
     table.delete(test_row(2, "Row 2", 32), 2).await;
@@ -167,7 +167,7 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
     let context = TestContext::new("update_rows");
     let mut table = test_table(&context, "update_table", identity).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     // Perform and check initial append operation.
     table.append(row1.clone())?;
@@ -258,7 +258,7 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
     )
     .await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     // Insert duplicate rows (same identity, different values)
     let row1 = test_row(1, "A", 20);
@@ -371,7 +371,7 @@ async fn test_duplicate_deletion() -> Result<()> {
     let context = TestContext::new("duplicate_deletion");
     let mut table = test_table(&context, "duplicate_deletion", IdentityProp::Keys(vec![0])).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     let old_row = test_row(1, "John", 30);
     table.append(old_row.clone()).unwrap();
@@ -446,7 +446,7 @@ async fn test_snapshot_store_failure() {
     .await
     .unwrap();
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
-    table.register_event_completion_notifier(event_completion_tx);
+    table.register_table_notify(event_completion_tx);
 
     let row = test_row(1, "A", 20);
     table.append(row).unwrap();

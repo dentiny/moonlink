@@ -64,7 +64,7 @@ impl TableHandler {
 
         // Create channel for internal control events.
         let (event_completion_tx, event_completion_rx) = mpsc::channel(100);
-        table.register_event_completion_notifier(event_completion_tx);
+        table.register_table_notify(event_completion_tx);
 
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(async move {
