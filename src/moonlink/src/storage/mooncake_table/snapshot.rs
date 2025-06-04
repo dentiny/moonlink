@@ -369,6 +369,27 @@ impl SnapshotTableState {
         self.current_snapshot.indices.file_indices = updated_file_indices;
     }
 
+    fn buffer_unpersisted_iceberg_new_data_files(&mut self, task: &SnapshotTask) {
+        let new_data_files = task.get_new_data_files();
+        self.unpersisted_iceberg_records
+            .unpersisted_data_files
+            .extend(new_data_files);
+    }
+    fn buffer_unpersisted_iceberg_new_file_indices(&mut self, task: &SnapshotTask) {
+        let new_file_indices = task.get_new_file_indices();
+        self.unpersisted_iceberg_records
+            .unpersisted_file_indices
+            .extend(new_file_indices);
+    }
+    fn buffer_unpersisted_iceberg_merged_file_indices(&mut self, task: &SnapshotTask) {
+        self.unpersisted_iceberg_records
+            .merged_file_indices_to_add
+            .extend(task.new_merged_file_indices.to_owned());
+        self.unpersisted_iceberg_records
+            .merged_file_indices_to_remove
+            .extend(task.old_merged_file_indices.to_owned());
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
@@ -390,12 +411,12 @@ impl SnapshotTableState {
             &task.iceberg_persisted_new_merged_file_indices,
         );
 
-        // Sync buffer snapshot states into current mooncake snapshot.
-        //
-        // To reduce iceberg write frequency, only create new iceberg snapshot when there're new data files.
-        let new_data_files = task.get_new_data_files();
-        let new_file_indices = task.get_new_file_indices();
+        // Sync buffer snapshot states into unpersisted iceberg content.
+        self.buffer_unpersisted_iceberg_new_data_files(&task);
+        self.buffer_unpersisted_iceberg_new_file_indices(&task);
+        self.buffer_unpersisted_iceberg_merged_file_indices(&task);
 
+        // Apply buffered change to current mooncake snapshot.
         self.apply_transaction_stream(&mut task);
         self.merge_mem_indices(&mut task);
         self.finalize_batches(&mut task);
@@ -417,22 +438,6 @@ impl SnapshotTableState {
         if let Some(cp) = task.new_commit_point {
             self.last_commit = cp;
         }
-
-        // TODO(hjiang): Extract into a separate util function.
-        //
-        // Batch new data files, whether we decide to create an iceberg snapshot.
-        self.unpersisted_iceberg_records
-            .unpersisted_data_files
-            .extend(new_data_files);
-        self.unpersisted_iceberg_records
-            .unpersisted_file_indices
-            .extend(new_file_indices);
-        self.unpersisted_iceberg_records
-            .merged_file_indices_to_add
-            .extend(task.new_merged_file_indices.to_owned());
-        self.unpersisted_iceberg_records
-            .merged_file_indices_to_remove
-            .extend(task.old_merged_file_indices.to_owned());
 
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
         // To reduce iceberg persistence overhead, we only snapshot when (1) there're persisted data files, or (2) accumulated unflushed deletion vector exceeds threshold.
