@@ -270,9 +270,6 @@ impl TableHandler {
                             table.notify_snapshot_reader(lsn);
 
                             // Process iceberg snapshot and trigger iceberg snapshot if necessary.
-                            //
-                            // TODO(hjiang): same as mooncake snapshot, there should be at most one iceberg snapshot ongoing; for simplicity, we skip iceberg snapshot if there's already one.
-                            // An optimization is skip generating iceberg snapshot payload at mooncake snapshot if we know it's already taking place, but the risk is missing iceberg snapshot.
                             if can_initiate_iceberg_snapshot(iceberg_snapshot_result_consumed, iceberg_snapshot_ongoing) {
                                 if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
                                     table.persist_iceberg_snapshot(iceberg_snapshot_payload);
