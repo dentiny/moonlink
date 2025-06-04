@@ -63,15 +63,15 @@ impl TableHandler {
         let (event_sender, event_receiver) = mpsc::channel(100);
 
         // Create channel for internal control events.
-        let (event_completion_tx, event_completion_rx) = mpsc::channel(100);
-        table.register_table_notify(event_completion_tx);
+        let (table_notifier_tx, table_notify_rx) = mpsc::channel(100);
+        table.register_table_notify(table_notifier_tx);
 
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(async move {
             Self::event_loop(
                 iceberg_event_sync_sender,
                 event_receiver,
-                event_completion_rx,
+                table_notify_rx,
                 table,
             )
             .await;
@@ -93,7 +93,7 @@ impl TableHandler {
     async fn event_loop(
         iceberg_event_sync_sender: IcebergEventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
-        mut control_event_receiver: Receiver<TableNotify>,
+        mut table_notify_rx: Receiver<TableNotify>,
         mut table: MooncakeTable,
     ) {
         let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
@@ -120,11 +120,11 @@ impl TableHandler {
         // - snapshot ongoing = true, result consumed = true: iceberg snapshot is ongoing
         // - snapshot ongoing = false, result consumed = false: iceberg snapshot completes, but wait for mooncake snapshot to consume the result
         //
-        // Invariant of impossible state: handle is none, result consumed = false
+        // Invariant of impossible state: snapshot ongoing = true, result consumed = false
         let mut iceberg_snapshot_result_consumed = true;
 
         // Invoked before mooncake snapshot creation, this function checks and resets iceberg snapshot state.
-        let check_and_reset_iceberg_snapshot_state =
+        let reset_iceberg_state_at_mooncake_snapshot =
             |iceberg_consumed: &mut bool, iceberg_ongoing: &mut bool| {
                 // Validate iceberg snapshot state before mooncake snapshot creation.
                 //
@@ -211,7 +211,7 @@ impl TableHandler {
                             }
 
                             if force_snapshot {
-                                check_and_reset_iceberg_snapshot_state(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
+                                reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
                                 table.force_create_snapshot();
                                 mooncake_snapshot_ongoing = true;
                             }
@@ -258,8 +258,8 @@ impl TableHandler {
                         }
                     }
                 }
-                // Wait for the mooncake table internal control events.
-                Some(event) = control_event_receiver.recv() => {
+                // Wait for the mooncake table event notification.
+                Some(event) = table_notify_rx.recv() => {
                     match event {
                         TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload } => {
                             // Notify read the mooncake table commit of LSN.
@@ -300,7 +300,7 @@ impl TableHandler {
                                 Err(e) => {
                                     for (_, tx) in force_snapshot_lsns.iter() {
                                         for cur_tx in tx {
-                                            let err = Error::IcebergMessage(format!("Iceberg failure: {}", e));
+                                            let err = Error::IcebergMessage(format!("Failed to create iceberg snapshot: {:?}", e));
                                             cur_tx.send(Err(err)).await.unwrap();
                                         }
                                     }
@@ -322,7 +322,7 @@ impl TableHandler {
                         if let Some(commit_lsn) = table_consistent_view_lsn {
                             if *force_snapshot_lsns.iter().next().as_ref().unwrap().0 <= commit_lsn {
                                 table.flush(/*lsn=*/ commit_lsn).await.unwrap();
-                                check_and_reset_iceberg_snapshot_state(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
+                                reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
                                 table.force_create_snapshot();
                                 mooncake_snapshot_ongoing = true;
                                 continue;
@@ -331,7 +331,7 @@ impl TableHandler {
                     }
 
                     // Fallback to normal periodic snapshot.
-                    check_and_reset_iceberg_snapshot_state(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
+                    reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
                     mooncake_snapshot_ongoing = table.create_snapshot();
                 }
                 // If all senders have been dropped, exit the loop
