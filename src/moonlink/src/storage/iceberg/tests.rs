@@ -582,7 +582,7 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_1.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    let (_, _) = create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
+    let (_, iceberg_snapshot_payload) = create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
 
     // Operation group 2: Append new rows and create mooncake snapshot.
     let row_2 = test_row_2();
@@ -590,8 +590,7 @@ async fn test_async_iceberg_snapshot() {
     table.delete(row_1.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
     table.flush(/*lsn=*/ 30).await.unwrap();
-    let (_, iceberg_snapshot_payload) =
-        create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
+    let (_, _) = create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
 
     // Create iceberg snapshot for the first mooncake snapshot.
     let iceberg_snapshot_result = create_iceberg_snapshot(

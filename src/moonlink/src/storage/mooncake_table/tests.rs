@@ -452,7 +452,6 @@ async fn test_snapshot_store_failure() {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
     table.flush(/*lsn=*/ 100).await.unwrap();
-    snapshot(&mut table, &mut event_completion_rx).await;
 
     let (_, iceberg_snapshot_payload) =
         create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
