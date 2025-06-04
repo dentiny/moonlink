@@ -452,29 +452,15 @@ async fn test_snapshot_store_failure() {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
     table.flush(/*lsn=*/ 100).await.unwrap();
+    snapshot(&mut table, &mut event_completion_rx).await;
 
-    assert!(table.create_snapshot());
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
     let (_, iceberg_snapshot_payload) =
-        if let TableCompletionNotification::MooncakeTableSnapshot {
-            lsn,
-            iceberg_snapshot_payload,
-        } = table_completion_notification
-        {
-            (lsn, iceberg_snapshot_payload)
-        } else {
-            panic!("Expected MooncakeTableSnapshot");
-        };
-
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
-    let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
-        iceberg_snapshot_result,
-    } = table_completion_notification
-    {
-        iceberg_snapshot_result
-    } else {
-        panic!("Expected IcebergSnapshot");
-    };
+        create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
+    let iceberg_snapshot_result = create_iceberg_snapshot(
+        &mut table,
+        iceberg_snapshot_payload,
+        &mut event_completion_rx,
+    )
+    .await;
     assert!(iceberg_snapshot_result.is_err());
 }

@@ -156,6 +156,42 @@ pub async fn snapshot(
     };
 }
 
+/// Test util function to perform a mooncake snapshot, block wait its completion and get its result.
+pub async fn create_mooncake_snapshot(
+    table: &mut MooncakeTable,
+    completion_rx: &mut Receiver<TableCompletionNotification>,
+) -> (u64, Option<IcebergSnapshotPayload>) {
+    assert!(table.create_snapshot());
+    let notification = completion_rx.recv().await.unwrap();
+    match notification {
+        TableCompletionNotification::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } => (lsn, iceberg_snapshot_payload),
+        TableCompletionNotification::IcebergSnapshot { .. } => {
+            panic!("Expects to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
+        }
+    }
+}
+
+/// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.
+pub async fn create_iceberg_snapshot(
+    table: &mut MooncakeTable,
+    iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
+    completion_rx: &mut Receiver<TableCompletionNotification>,
+) -> Result<IcebergSnapshotResult> {
+    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
+    let notification = completion_rx.recv().await.unwrap();
+    match notification {
+        TableCompletionNotification::MooncakeTableSnapshot { .. } => {
+            panic!("Expects to receive iceberg snapshot completion notification, but receives mooncake one.")
+        }
+        TableCompletionNotification::IcebergSnapshot {
+            iceberg_snapshot_result,
+        } => iceberg_snapshot_result,
+    }
+}
+
 pub async fn append_commit_flush_snapshot(
     table: &mut MooncakeTable,
     completion_rx: &mut Receiver<TableCompletionNotification>,
