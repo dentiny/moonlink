@@ -1,4 +1,3 @@
-use crate::completion_notification::TableCompletionNotification;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
@@ -7,9 +6,9 @@ use crate::storage::iceberg::iceberg_table_manager::TableManager;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
 use crate::storage::iceberg::test_utils::{
-    check_deletion_vector_consistency_for_snapshot, create_table_and_iceberg_manager,
-    create_test_arrow_schema, create_test_table_metadata, load_arrow_batch,
-    validate_recovered_snapshot,
+    check_deletion_vector_consistency_for_snapshot, create_iceberg_snapshot,
+    create_mooncake_snapshot, create_table_and_iceberg_manager, create_test_arrow_schema,
+    create_test_table_metadata, load_arrow_batch, validate_recovered_snapshot,
 };
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::Index;
@@ -454,19 +453,9 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     // Second time snapshot check, committed deletion logs haven't reached flush LSN.
     table.delete(row.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
-    assert!(table.create_snapshot());
 
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
     let (_, iceberg_snapshot_payload) =
-        if let TableCompletionNotification::MooncakeTableSnapshot {
-            lsn,
-            iceberg_snapshot_payload,
-        } = table_completion_notification
-        {
-            (lsn, iceberg_snapshot_payload)
-        } else {
-            panic!("Expected MooncakeTableSnapshot");
-        };
+        create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
 
@@ -593,18 +582,7 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_1.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    assert!(table.create_snapshot());
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
-    let (_, iceberg_snapshot_payload) =
-        if let TableCompletionNotification::MooncakeTableSnapshot {
-            lsn,
-            iceberg_snapshot_payload,
-        } = table_completion_notification
-        {
-            (lsn, iceberg_snapshot_payload)
-        } else {
-            panic!("Expected MooncakeTableSnapshot");
-        };
+    let (_, _) = create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
 
     // Operation group 2: Append new rows and create mooncake snapshot.
     let row_2 = test_row_2();
@@ -612,28 +590,16 @@ async fn test_async_iceberg_snapshot() {
     table.delete(row_1.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
     table.flush(/*lsn=*/ 30).await.unwrap();
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
-    let (_, _) = if let TableCompletionNotification::MooncakeTableSnapshot {
-        lsn,
-        iceberg_snapshot_payload,
-    } = table_completion_notification
-    {
-        (lsn, iceberg_snapshot_payload)
-    } else {
-        panic!("Expected MooncakeTableSnapshot");
-    };
+    let (_, iceberg_snapshot_payload) =
+        create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
 
     // Create iceberg snapshot for the first mooncake snapshot.
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
-    let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
-        iceberg_snapshot_result,
-    } = table_completion_notification
-    {
-        iceberg_snapshot_result
-    } else {
-        panic!("Expected IcebergSnapshot");
-    };
+    let iceberg_snapshot_result = create_iceberg_snapshot(
+        &mut table,
+        iceberg_snapshot_payload,
+        &mut event_completion_rx,
+    )
+    .await;
     table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
@@ -663,29 +629,16 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_3.clone()).unwrap();
     table.commit(/*lsn=*/ 40);
     table.flush(/*lsn=*/ 40).await.unwrap();
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
     let (_, iceberg_snapshot_payload) =
-        if let TableCompletionNotification::MooncakeTableSnapshot {
-            lsn,
-            iceberg_snapshot_payload,
-        } = table_completion_notification
-        {
-            (lsn, iceberg_snapshot_payload)
-        } else {
-            panic!("Expected MooncakeTableSnapshot");
-        };
+        create_mooncake_snapshot(&mut table, &mut event_completion_rx).await;
 
     // Create iceberg snapshot for the mooncake snapshot.
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
-    let table_completion_notification = event_completion_rx.recv().await.unwrap();
-    let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
-        iceberg_snapshot_result,
-    } = table_completion_notification
-    {
-        iceberg_snapshot_result
-    } else {
-        panic!("Expected IcebergSnapshot");
-    };
+    let iceberg_snapshot_result = create_iceberg_snapshot(
+        &mut table,
+        iceberg_snapshot_payload,
+        &mut event_completion_rx,
+    )
+    .await;
     table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.

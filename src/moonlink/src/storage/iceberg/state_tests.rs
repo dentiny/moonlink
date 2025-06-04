@@ -235,7 +235,7 @@ async fn check_prev_and_new_data_files(
 async fn test_state_1_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    let (event_completion_tx, _) = mpsc::channel(100);
     table.register_event_completion_notifier(event_completion_tx);
 
     // Prepare data file pre-requisite.
@@ -264,7 +264,7 @@ async fn test_state_1_1() -> IcebergResult<()> {
 async fn test_state_1_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
-    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    let (event_completion_tx, _) = mpsc::channel(100);
     table.register_event_completion_notifier(event_completion_tx);
 
     // Prepare data file pre-requisite.

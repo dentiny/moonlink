@@ -1,15 +1,20 @@
+use crate::completion_notification::TableCompletionNotification;
 /// This module provides a few test util functions.
 use crate::row::IdentityProp as RowIdentity;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::puffin_utils;
+use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::{
     DiskFileDeletionVector, TableConfig as MooncakeTableConfig,
     TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::MooncakeTable;
+use crate::Result;
+
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow::datatypes::{DataType, Field};
 use arrow_array::RecordBatch;
@@ -22,6 +27,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tempfile::TempDir;
+use tokio::sync::mpsc::Receiver;
 
 /// Test util function to check consistency for snapshot batch deletion vector and deletion puffin blob.
 async fn check_deletion_vector_consistency(disk_dv_entry: &DiskFileDeletionVector) {
@@ -190,4 +196,40 @@ pub(crate) async fn create_table_and_iceberg_manager(
     .unwrap();
 
     (table, iceberg_table_manager)
+}
+
+/// Test util function to perform a mooncake snapshot, block wait its completion and get its result.
+pub(crate) async fn create_mooncake_snapshot(
+    table: &mut MooncakeTable,
+    completion_rx: &mut Receiver<TableCompletionNotification>,
+) -> (u64, Option<IcebergSnapshotPayload>) {
+    assert!(table.create_snapshot());
+    let notification = completion_rx.recv().await.unwrap();
+    match notification {
+        TableCompletionNotification::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } => (lsn, iceberg_snapshot_payload),
+        TableCompletionNotification::IcebergSnapshot { .. } => {
+            panic!("Expects to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
+        }
+    }
+}
+
+/// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.
+pub(crate) async fn create_iceberg_snapshot(
+    table: &mut MooncakeTable,
+    iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
+    completion_rx: &mut Receiver<TableCompletionNotification>,
+) -> Result<IcebergSnapshotResult> {
+    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
+    let notification = completion_rx.recv().await.unwrap();
+    match notification {
+        TableCompletionNotification::MooncakeTableSnapshot { .. } => {
+            panic!("Expects to receive iceberg snapshot completion notification, but receives mooncake one.")
+        }
+        TableCompletionNotification::IcebergSnapshot {
+            iceberg_snapshot_result,
+        } => iceberg_snapshot_result,
+    }
 }
