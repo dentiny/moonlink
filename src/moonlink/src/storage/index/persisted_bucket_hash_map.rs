@@ -205,8 +205,6 @@ impl GlobalIndex {
         let lower_hash = target_hash & ((1 << self.hash_lower_bits) - 1);
         let bucket_idx = (target_hash >> self.hash_lower_bits) as u32;
 
-        
-
         for block in self.index_blocks.iter() {
             if bucket_idx >= block.bucket_start_idx && bucket_idx < block.bucket_end_idx {
                 return block.read(lower_hash, bucket_idx, self).await;
@@ -498,7 +496,13 @@ impl<'a> IndexBlockIterator<'a> {
         }
     }
 
-    async fn next(&mut self) -> Option<(u64 /*hash*/, usize /*seg_idx*/, usize /*row_idx*/)> {
+    async fn next(
+        &mut self,
+    ) -> Option<(
+        u64,   /*hash*/
+        usize, /*seg_idx*/
+        usize, /*row_idx*/
+    )> {
         loop {
             if self.current_bucket == self.collection.bucket_end_idx - 1 {
                 return None;
@@ -521,7 +525,7 @@ impl<'a> IndexBlockIterator<'a> {
                 .await;
             self.current_entry += 1;
             let seg_idx = self.file_id_remap.get(seg_idx).unwrap();
-            if *seg_idx != _INVALID_FILE_ID {
+            if *seg_idx != INVALID_FILE_ID {
                 return Some((
                     lower_hash + self.current_upper_hash,
                     *seg_idx as usize,
@@ -559,7 +563,13 @@ impl<'a> GlobalIndexIterator<'a> {
         }
     }
 
-    pub async fn next(&mut self) -> Option<(u64 /*hash*/, usize /*seg_idx*/, usize /*row_idx*/)> {
+    pub async fn next(
+        &mut self,
+    ) -> Option<(
+        u64,   /*hash*/
+        usize, /*seg_idx*/
+        usize, /*row_idx*/
+    )> {
         loop {
             if let Some(ref mut iter) = self.block_iter {
                 if let Some(item) = iter.next().await {
@@ -586,7 +596,11 @@ pub struct GlobalIndexMergingIterator<'a> {
 
 #[allow(dead_code)]
 struct HeapItem<'a> {
-    value: (u64 /*hash*/, usize /*seg_idx*/, usize /*row_idx*/),
+    value: (
+        u64,   /*hash*/
+        usize, /*seg_idx*/
+        usize, /*row_idx*/
+    ),
     iter: GlobalIndexIterator<'a>,
 }
 
@@ -724,6 +738,7 @@ mod tests {
         for block in index.index_blocks.iter() {
             let mut index_block_iter = block._create_iterator(&index, &file_id_remap).await;
             while let Some((hash, seg_idx, row_idx)) = index_block_iter.next().await {
+                println!("{} {} {}", hash, seg_idx, row_idx);
                 hash_entry_num += 1;
             }
         }

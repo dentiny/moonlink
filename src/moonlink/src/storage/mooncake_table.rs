@@ -868,7 +868,7 @@ impl MooncakeTable {
         &mut self,
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
-        use crate::{row::RowValue, storage::index::{persisted_bucket_hash_map::GlobalIndexBuilder, Index}};
+        use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 
         // Create mooncake snapshot.
         let force_snapshot_option = SnapshotOption {
@@ -892,6 +892,13 @@ impl MooncakeTable {
             Self::sync_mooncake_snapshot(receiver).await;
         assert!(iceberg_snapshot_payload.is_none());
         let file_indice_merge_payload = file_indice_merge_payload.unwrap();
+
+        let mut builder = GlobalIndexBuilder::new();
+        builder.set_directory(std::path::PathBuf::from(self.get_table_directory()));
+        let merged = builder
+            .build_from_merge(file_indice_merge_payload.file_indices.clone())
+            .await;
+
         let file_indices_merge_result = FileIndiceMergeResult {
             old_file_indices: file_indice_merge_payload.file_indices,
             merged_file_indices: merged,
