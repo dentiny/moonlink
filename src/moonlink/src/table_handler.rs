@@ -2,6 +2,7 @@ use crate::completion_notification::TableCompletionNotification;
 use crate::row::MoonlinkRow;
 use crate::storage::MooncakeTable;
 use crate::{Error, Result};
+use more_asserts as ma;
 use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
@@ -289,7 +290,7 @@ impl TableHandler {
                                     // Notify all waiters with LSN satisfied.
                                     let new_map = force_snapshot_lsns.split_off(&(iceberg_flush_lsn + 1));
                                     for (requested_lsn, tx) in force_snapshot_lsns.iter() {
-                                        assert!(*requested_lsn <= iceberg_flush_lsn);
+                                        ma::assert_le!(*requested_lsn, iceberg_flush_lsn);
                                         for cur_tx in tx {
                                             cur_tx.send(Ok(())).await.unwrap();
                                         }

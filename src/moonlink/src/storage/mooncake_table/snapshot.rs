@@ -15,6 +15,7 @@ use crate::storage::storage_utils::{
     MooncakeDataFile, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord,
     RecordLocation,
 };
+use more_asserts as ma;
 use parquet::arrow::AsyncArrowWriter;
 use parquet::basic::{Compression, Encoding};
 use parquet::file::properties::WriterProperties;
@@ -204,11 +205,12 @@ impl SnapshotTableState {
 
     /// Update unpersisted data files from successful iceberg snapshot operation.
     fn prune_persisted_data_files(&mut self, persisted_new_data_files: Vec<MooncakeDataFileRef>) {
-        assert!(self.unpersisted_iceberg_records.unpersisted_data_files.len() >= persisted_new_data_files.len(),
-            "There're in total {} unpersisted data files, but successful iceberg snapshot shows {} data file persisted.",
-            self.unpersisted_iceberg_records.unpersisted_data_files.len(),
-            persisted_new_data_files.len());
-
+        ma::assert_ge!(
+            self.unpersisted_iceberg_records
+                .unpersisted_data_files
+                .len(),
+            persisted_new_data_files.len()
+        );
         self.unpersisted_iceberg_records
             .unpersisted_data_files
             .drain(0..persisted_new_data_files.len());
@@ -216,11 +218,12 @@ impl SnapshotTableState {
 
     /// Update unpersisted file indices from successful iceberg snapshot operation.
     fn prune_persisted_file_indices(&mut self, persisted_new_file_indices: Vec<FileIndex>) {
-        assert!(self.unpersisted_iceberg_records.unpersisted_file_indices.len() >= persisted_new_file_indices.len(),
-            "There're in total {} unpersisted file indices, but successful iceberg snapshot shows {} file indices persisted.",
-            self.unpersisted_iceberg_records.unpersisted_file_indices.len(),
-            persisted_new_file_indices.len());
-
+        ma::assert_ge!(
+            self.unpersisted_iceberg_records
+                .unpersisted_file_indices
+                .len(),
+            persisted_new_file_indices.len()
+        );
         self.unpersisted_iceberg_records
             .unpersisted_file_indices
             .drain(0..persisted_new_file_indices.len());
