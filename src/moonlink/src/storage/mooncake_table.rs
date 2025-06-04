@@ -699,6 +699,7 @@ impl MooncakeTable {
             );
         };
 
+        // Create iceberg snapshot if possible.
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
             // Create iceberg snapshot.
             self.persist_iceberg_snapshot(iceberg_snapshot_payload);

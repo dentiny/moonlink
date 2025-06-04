@@ -139,34 +139,20 @@ pub fn batch_rows(start_id: i32, count: i32) -> Vec<MoonlinkRow> {
         .collect()
 }
 
-pub async fn snapshot(table: &mut MooncakeTable, completion_rx: &mut Receiver<TableNotify>) {
-    assert!(table.create_snapshot());
-    let table_table_notify = completion_rx.recv().await.unwrap();
-    let (_, _) = if let TableNotify::MooncakeTableSnapshot {
-        lsn,
-        iceberg_snapshot_payload,
-    } = table_table_notify
-    {
-        (lsn, iceberg_snapshot_payload)
-    } else {
-        panic!("Expected MooncakeTableSnapshot");
-    };
-}
-
-/// Test util function to perform a mooncake snapshot, block wait its completion and get its result.
-pub async fn create_mooncake_snapshot(
+/// Test util function to perform a mooncake snapshot, block waits its completion and gets result.
+pub async fn snapshot(
     table: &mut MooncakeTable,
-    completion_rx: &mut Receiver<TableNotify>,
+    notify_rx: &mut Receiver<TableNotify>,
 ) -> (u64, Option<IcebergSnapshotPayload>) {
     assert!(table.create_snapshot());
-    let notification = completion_rx.recv().await.unwrap();
-    match notification {
+    let table_notify = notify_rx.recv().await.unwrap();
+    match table_notify {
         TableNotify::MooncakeTableSnapshot {
             lsn,
             iceberg_snapshot_payload,
         } => (lsn, iceberg_snapshot_payload),
         TableNotify::IcebergSnapshot { .. } => {
-            panic!("Expects to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
+            panic!("Expected to receive mooncake snapshot completion notification, but receives iceberg snapshot one.");
         }
     }
 }
