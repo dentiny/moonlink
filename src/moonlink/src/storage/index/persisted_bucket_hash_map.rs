@@ -1,6 +1,7 @@
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use futures::executor::block_on;
 use memmap2::Mmap;
+use more_asserts as ma;
 use std::collections::BinaryHeap;
 use std::fmt;
 use std::fmt::Debug;
@@ -166,7 +167,8 @@ impl IndexBlock {
         bucket_idx: u32,
         metadata: &GlobalIndex,
     ) -> Vec<RecordLocation> {
-        assert!(bucket_idx >= self.bucket_start_idx && bucket_idx < self.bucket_end_idx);
+        ma::assert_ge!(bucket_idx, self.bucket_start_idx);
+        ma::assert_lt!(bucket_idx, self.bucket_end_idx);
         let cursor = Cursor::new(self.data.as_ref().as_ref().unwrap().as_ref());
         let mut reader = AsyncBitReader::endian(cursor, AsyncBigEndian);
         let mut entry_reader = reader.clone();

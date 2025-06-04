@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
-use tokio_postgres::{connect, Client, NoTls};
+use tokio_postgres::{connect, Client, Config, NoTls};
 
 pub enum Command {
     AddTable {
@@ -65,9 +65,20 @@ impl ReplicationConnection {
             .await
             .unwrap();
 
+        let db_name = uri
+            .parse::<Config>()
+            .ok()
+            .and_then(|c| c.get_dbname().map(|s| s.to_string()))
+            .unwrap_or_else(|| "".to_string());
+        let slot_name = if db_name.is_empty() {
+            "moonlink_slot".to_string()
+        } else {
+            format!("moonlink_slot_{}", db_name)
+        };
+
         let postgres_source = PostgresSource::new(
             &uri,
-            Some("moonlink_slot".to_string()),
+            Some(slot_name),
             TableNamesFrom::Publication("moonlink_pub".to_string()),
         )
         .await

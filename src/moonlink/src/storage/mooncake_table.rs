@@ -30,6 +30,8 @@ use std::mem::take;
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
+use crate::table_notify::TableNotify;
+use tokio::sync::mpsc::Sender;
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
 use arrow::record_batch::RecordBatch;
@@ -39,7 +41,6 @@ pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
 pub(crate) use snapshot::{PuffinDeletionBlobAtRead, SnapshotTableState};
 use tokio::sync::{watch, RwLock};
-use tokio::task::JoinHandle;
 
 // TODO(hjiang): Add another threshold for merged file indices to trigger iceberg snapshot.
 #[derive(Clone, Debug)]
@@ -323,6 +324,24 @@ impl SnapshotTask {
     }
 }
 
+/// Options to create mooncake snapshot.
+pub struct SnapshotOption {
+    /// Whether to force create snapshot.
+    /// When specified, mooncake snapshot will be created with snapshot threshold ignored.
+    pub(crate) force_create: bool,
+    /// Whether to skip iceberg snapshot creation.
+    pub(crate) skip_iceberg_snapshot: bool,
+}
+
+impl SnapshotOption {
+    pub fn default() -> SnapshotOption {
+        Self {
+            force_create: false,
+            skip_iceberg_snapshot: false,
+        }
+    }
+}
+
 /// MooncakeTable is a disk table + mem slice.
 /// Transactions will append data to the mem slice.
 ///
@@ -359,6 +378,9 @@ pub struct MooncakeTable {
 
     /// LSN of the latest iceberg snapshot.
     last_iceberg_snapshot_lsn: Option<u64>,
+
+    /// Table notifier, which is used to sent multiple types of event completion information.
+    table_notify: Option<Sender<TableNotify>>,
 }
 
 impl MooncakeTable {
@@ -411,12 +433,20 @@ impl MooncakeTable {
             next_file_id: 0,
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn: None,
+            table_notify: None,
         })
     }
 
-    // Get mooncake table directory.
+    /// Get mooncake table directory.
     pub(crate) fn get_table_directory(&self) -> String {
         self.metadata.path.to_str().unwrap().to_string()
+    }
+
+    /// Register event completion notifier.
+    /// Notice it should be registered only once, which could be used to notify multiple events.
+    pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+        assert!(self.table_notify.is_none());
+        self.table_notify = Some(table_notify);
     }
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
@@ -459,7 +489,7 @@ impl MooncakeTable {
         assert!(self.iceberg_table_manager.is_none());
         self.iceberg_table_manager = Some(iceberg_snapshot_res.table_manager);
 
-        // ---- Update next snapshot task fields ---
+        // ---- Buffer iceberg persisted content to next snapshot task ---
         assert!(self.next_snapshot_task.iceberg_flush_lsn.is_none());
         self.next_snapshot_task.iceberg_flush_lsn = Some(iceberg_flush_lsn);
 
@@ -675,55 +705,27 @@ impl MooncakeTable {
     }
 
     // Create a snapshot of the last committed version, return current snapshot's version and payload to perform iceberg snapshot.
-    #[allow(clippy::type_complexity)]
-    fn create_snapshot_impl(
-        &mut self,
-        force_create: bool,
-    ) -> Option<
-        JoinHandle<(
-            u64,
-            Option<IcebergSnapshotPayload>,
-            Option<FileIndiceMergePayload>,
-        )>,
-    > {
+    fn create_snapshot_impl(&mut self, opt: SnapshotOption) {
         self.next_snapshot_task.new_rows = Some(self.mem_slice.get_latest_rows());
         let next_snapshot_task = take(&mut self.next_snapshot_task);
         self.next_snapshot_task = SnapshotTask::new(self.metadata.config.clone());
         let cur_snapshot = self.snapshot.clone();
-        Some(tokio::task::spawn(Self::create_snapshot_async(
+        // Create a detached task, whose completion will be notified separately.
+        tokio::task::spawn(Self::create_snapshot_async(
             cur_snapshot,
             next_snapshot_task,
-            force_create,
-        )))
+            opt,
+            self.table_notify.as_ref().unwrap().clone(),
+        ));
     }
 
-    #[allow(clippy::type_complexity)]
-    pub fn create_snapshot(
-        &mut self,
-    ) -> Option<
-        JoinHandle<(
-            u64,
-            Option<IcebergSnapshotPayload>,
-            Option<FileIndiceMergePayload>,
-        )>,
-    > {
-        if !self.next_snapshot_task.should_create_snapshot() {
-            return None;
+    /// If a mooncake snapshot is not going to be created, return false immediately.
+    pub fn create_snapshot(&mut self, opt: SnapshotOption) -> bool {
+        if !self.next_snapshot_task.should_create_snapshot() && !opt.force_create {
+            return false;
         }
-        self.create_snapshot_impl(/*force_create=*/ false)
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub fn force_create_snapshot(
-        &mut self,
-    ) -> Option<
-        JoinHandle<(
-            u64,
-            Option<IcebergSnapshotPayload>,
-            Option<FileIndiceMergePayload>,
-        )>,
-    > {
-        self.create_snapshot_impl(/*force_snapshot=*/ true)
+        self.create_snapshot_impl(opt);
+        true
     }
 
     pub(crate) fn notify_snapshot_reader(&self, lsn: u64) {
@@ -734,7 +736,8 @@ impl MooncakeTable {
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
-    ) -> Result<IcebergSnapshotResult> {
+        table_notify: Sender<TableNotify>,
+    ) {
         let flush_lsn = snapshot_payload.flush_lsn;
         let new_data_files = snapshot_payload.import_payload.data_files.clone();
         let imported_file_indices = snapshot_payload.import_payload.file_indices.clone();
@@ -750,30 +753,50 @@ impl MooncakeTable {
 
         let puffin_blob_ref = iceberg_table_manager
             .sync_snapshot(snapshot_payload)
-            .await?;
-        Ok(IcebergSnapshotResult {
+            .await;
+
+        // Notify on event error.
+        if puffin_blob_ref.is_err() {
+            table_notify
+                .send(TableNotify::IcebergSnapshot {
+                    iceberg_snapshot_result: Err(puffin_blob_ref.unwrap_err().into()),
+                })
+                .await
+                .unwrap();
+            return;
+        }
+
+        // Notify on event success.
+        let snapshot_result = IcebergSnapshotResult {
             table_manager: iceberg_table_manager,
             flush_lsn,
             import_result: IcebergSnapshotImportResult {
                 new_data_files,
-                puffin_blob_ref,
+                puffin_blob_ref: puffin_blob_ref.unwrap(),
                 imported_file_indices,
             },
             index_merge_result: IcebergSnapshotIndexMergeResult {
                 new_file_indices_to_import,
                 old_file_indices_to_remove,
             },
-        })
+        };
+        table_notify
+            .send(TableNotify::IcebergSnapshot {
+                iceberg_snapshot_result: Ok(snapshot_result),
+            })
+            .await
+            .unwrap();
     }
-    pub(crate) fn persist_iceberg_snapshot(
-        &mut self,
-        snapshot_payload: IcebergSnapshotPayload,
-    ) -> JoinHandle<Result<IcebergSnapshotResult>> {
+
+    /// Create an iceberg snapshot.
+    pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
+        // Create a detached task, whose completion will be notified separately.
         tokio::task::spawn(Self::persist_iceberg_snapshot_impl(
             iceberg_table_manager,
             snapshot_payload,
-        ))
+            self.table_notify.as_ref().unwrap().clone(),
+        ));
     }
 
     /// Drop an iceberg table.
@@ -790,17 +813,22 @@ impl MooncakeTable {
     async fn create_snapshot_async(
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
-        force_create: bool,
-    ) -> (
-        u64,
-        Option<IcebergSnapshotPayload>,
-        Option<FileIndiceMergePayload>,
+        opt: SnapshotOption,
+        table_notify: Sender<TableNotify>,
     ) {
-        snapshot
+        let (lsn, iceberg_snapshot_payload, file_indice_merge_payload) = snapshot
             .write()
             .await
-            .update_snapshot(next_snapshot_task, force_create)
+            .update_snapshot(next_snapshot_task, opt)
+            .await;
+        table_notify
+            .send(TableNotify::MooncakeTableSnapshot {
+                lsn,
+                iceberg_snapshot_payload,
+                file_indice_merge_payload,
+            })
             .await
+            .unwrap();
     }
 
     // ================================
@@ -809,32 +837,44 @@ impl MooncakeTable {
     //
     // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
     #[cfg(test)]
-    pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(&mut self) -> Result<()> {
-        if let Some(mooncake_join_handle) = self.force_create_snapshot() {
-            // Wait for the snapshot async task to complete.
-            match mooncake_join_handle.await {
-                Ok((lsn, payload, _)) => {
-                    // Notify readers that the mooncake snapshot has been created.
-                    self.notify_snapshot_reader(lsn);
-
-                    // Create iceberg snapshot if possible
-                    if let Some(payload) = payload {
-                        let iceberg_join_handle = self.persist_iceberg_snapshot(payload);
-                        match iceberg_join_handle.await {
-                            Ok(iceberg_snapshot_res) => {
-                                self.set_iceberg_snapshot_res(iceberg_snapshot_res?);
-                            }
-                            Err(e) => {
-                                panic!("Iceberg snapshot task gets cancelled: {:?}", e);
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    panic!("failed to join snapshot handle: {:?}", e);
-                }
-            }
+    pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
+        &mut self,
+        receiver: &mut Receiver<TableNotify>,
+    ) -> Result<()> {
+        // Create mooncake snapshot.
+        let mooncake_snapshot_created = self.create_snapshot(SnapshotOption::default());
+        if !mooncake_snapshot_created {
+            return Ok(());
         }
+        let notification = receiver.recv().await.unwrap();
+        let (_, iceberg_snapshot_payload) = if let TableNotify::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } = notification
+        {
+            (lsn, iceberg_snapshot_payload)
+        } else {
+            panic!(
+                "Expected mooncake snapshot completion notification, but get iceberg snapshot one."
+            );
+        };
+
+        // Create iceberg snapshot if possible.
+        if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+            // Create iceberg snapshot.
+            self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+            let notification = receiver.recv().await.unwrap();
+            let iceberg_snapshot_result = if let TableNotify::IcebergSnapshot {
+                iceberg_snapshot_result,
+            } = notification
+            {
+                iceberg_snapshot_result
+            } else {
+                panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
+            };
+            self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+        }
+
         Ok(())
     }
 
