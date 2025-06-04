@@ -1,3 +1,4 @@
+use crate::completion_notification::TableCompletionNotification;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
@@ -37,6 +38,7 @@ use iceberg::Error as IcebergError;
 use iceberg::Result as IcebergResult;
 use parquet::arrow::AsyncArrowWriter;
 use tempfile::tempdir;
+use tokio::sync::mpsc;
 
 /// Create test batch deletion vector.
 fn test_committed_deletion_log_1(
@@ -437,21 +439,34 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     )
     .await
     .unwrap();
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(event_completion_tx);
 
     let row = test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 
     // Second time snapshot check, committed deletion logs haven't reached flush LSN.
     table.delete(row.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
-    let handle = table.create_snapshot().unwrap();
-    let (_, iceberg_snapshot_payload) = handle.await.unwrap();
+    assert!(table.create_snapshot());
+
+    let table_completion_notification = event_completion_rx.recv().await.unwrap();
+    let (_, iceberg_snapshot_payload) =
+        if let TableCompletionNotification::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } = table_completion_notification
+        {
+            (lsn, iceberg_snapshot_payload)
+        } else {
+            panic!("Expected MooncakeTableSnapshot");
+        };
     assert!(iceberg_snapshot_payload.is_none());
 }
 
@@ -488,6 +503,8 @@ async fn test_small_batch_size_and_large_parquet_size() {
     )
     .await
     .unwrap();
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(event_completion_tx);
 
     // Append first row.
     let row_1 = test_row_1();
@@ -501,7 +518,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
     table.commit(/*lsn=*/ 1);
     table.flush(/*lsn=*/ 1).await.unwrap();
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 
@@ -510,7 +527,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
     table.commit(/*lsn=*/ 3);
     table.flush(/*lsn=*/ 3).await.unwrap();
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 
@@ -568,14 +585,26 @@ async fn test_async_iceberg_snapshot() {
 
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    table.register_event_completion_notifier(event_completion_tx);
 
     // Operation group 1: Append new rows and create mooncake snapshot.
     let row_1 = test_row_1();
     table.append(row_1.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    let mooncake_snapshot_handle = table.create_snapshot().unwrap();
-    let (_, iceberg_snapshot_payload) = mooncake_snapshot_handle.await.unwrap();
+    assert!(table.create_snapshot());
+    let table_completion_notification = event_completion_rx.recv().await.unwrap();
+    let (_, iceberg_snapshot_payload) =
+        if let TableCompletionNotification::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } = table_completion_notification
+        {
+            (lsn, iceberg_snapshot_payload)
+        } else {
+            panic!("Expected MooncakeTableSnapshot");
+        };
 
     // Operation group 2: Append new rows and create mooncake snapshot.
     let row_2 = test_row_2();
@@ -583,13 +612,29 @@ async fn test_async_iceberg_snapshot() {
     table.delete(row_1.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
     table.flush(/*lsn=*/ 30).await.unwrap();
-    let mooncake_snapshot_handle = table.create_snapshot().unwrap();
-    let (_, _) = mooncake_snapshot_handle.await.unwrap();
+    let table_completion_notification = event_completion_rx.recv().await.unwrap();
+    let (_, _) = if let TableCompletionNotification::MooncakeTableSnapshot {
+        lsn,
+        iceberg_snapshot_payload,
+    } = table_completion_notification
+    {
+        (lsn, iceberg_snapshot_payload)
+    } else {
+        panic!("Expected MooncakeTableSnapshot");
+    };
 
     // Create iceberg snapshot for the first mooncake snapshot.
-    let iceberg_snapshot_handle = table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
-    let iceberg_snapshot_res = iceberg_snapshot_handle.await.unwrap().unwrap();
-    table.set_iceberg_snapshot_res(iceberg_snapshot_res);
+    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
+    let table_completion_notification = event_completion_rx.recv().await.unwrap();
+    let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
+        iceberg_snapshot_result,
+    } = table_completion_notification
+    {
+        iceberg_snapshot_result
+    } else {
+        panic!("Expected IcebergSnapshot");
+    };
+    table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
     let snapshot = iceberg_table_manager
@@ -618,13 +663,30 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_3.clone()).unwrap();
     table.commit(/*lsn=*/ 40);
     table.flush(/*lsn=*/ 40).await.unwrap();
-    let mooncake_snapshot_handle = table.create_snapshot().unwrap();
-    let (_, iceberg_snapshot_payload) = mooncake_snapshot_handle.await.unwrap();
+    let table_completion_notification = event_completion_rx.recv().await.unwrap();
+    let (_, iceberg_snapshot_payload) =
+        if let TableCompletionNotification::MooncakeTableSnapshot {
+            lsn,
+            iceberg_snapshot_payload,
+        } = table_completion_notification
+        {
+            (lsn, iceberg_snapshot_payload)
+        } else {
+            panic!("Expected MooncakeTableSnapshot");
+        };
 
     // Create iceberg snapshot for the mooncake snapshot.
-    let iceberg_snapshot_handle = table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
-    let iceberg_snapshot_res = iceberg_snapshot_handle.await.unwrap().unwrap();
-    table.set_iceberg_snapshot_res(iceberg_snapshot_res);
+    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
+    let table_completion_notification = event_completion_rx.recv().await.unwrap();
+    let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
+        iceberg_snapshot_result,
+    } = table_completion_notification
+    {
+        iceberg_snapshot_result
+    } else {
+        panic!("Expected IcebergSnapshot");
+    };
+    table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
     let (_, mut iceberg_table_manager) = create_table_and_iceberg_manager(&temp_dir).await;
@@ -750,6 +812,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         iceberg_snapshot_new_data_file_count: 0,
         ..Default::default()
     };
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
@@ -761,6 +824,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     )
     .await
     .unwrap();
+    table.register_event_completion_notifier(event_completion_tx);
 
     // Perform a few table write operations.
     //
@@ -819,7 +883,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     })?;
     table.commit(/*flush_lsn=*/ 200);
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 
@@ -893,7 +957,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     })?;
     table.commit(/*flush_lsn=*/ 300);
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 
@@ -958,7 +1022,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     })?;
     table.commit(/*flush_lsn=*/ 400);
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 
@@ -1040,7 +1104,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     })?;
     table.commit(/*flush_lsn=*/ 500);
     table
-        .create_mooncake_and_iceberg_snapshot_for_test()
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut event_completion_rx)
         .await
         .unwrap();
 

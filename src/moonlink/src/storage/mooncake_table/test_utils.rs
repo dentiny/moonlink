@@ -139,20 +139,33 @@ pub fn batch_rows(start_id: i32, count: i32) -> Vec<MoonlinkRow> {
         .collect()
 }
 
-pub async fn snapshot(table: &mut MooncakeTable) {
-    let snapshot_handle = table.create_snapshot().unwrap();
-    assert!(snapshot_handle.await.is_ok(), "Snapshot creation failed");
+pub async fn snapshot(
+    table: &mut MooncakeTable,
+    completion_rx: &mut Receiver<TableCompletionNotification>,
+) {
+    assert!(table.create_snapshot());
+    let table_completion_notification = completion_rx.recv().await.unwrap();
+    let (_, _) = if let TableCompletionNotification::MooncakeTableSnapshot {
+        lsn,
+        iceberg_snapshot_payload,
+    } = table_completion_notification
+    {
+        (lsn, iceberg_snapshot_payload)
+    } else {
+        panic!("Expected MooncakeTableSnapshot");
+    };
 }
 
 pub async fn append_commit_flush_snapshot(
     table: &mut MooncakeTable,
+    completion_rx: &mut Receiver<TableCompletionNotification>,
     rows: Vec<MoonlinkRow>,
     lsn: u64,
 ) -> Result<()> {
     append_rows(table, rows)?;
     table.commit(lsn);
     table.flush(lsn).await?;
-    snapshot(table).await;
+    snapshot(table, completion_rx).await;
     Ok(())
 }
 

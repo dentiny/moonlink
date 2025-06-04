@@ -25,6 +25,8 @@ use std::collections::HashMap;
 use std::mem::take;
 use std::path::PathBuf;
 use std::sync::Arc;
+#[cfg(test)]
+use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
@@ -678,35 +680,41 @@ impl MooncakeTable {
     //
     // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
     #[cfg(test)]
-    pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(&mut self) -> Result<()> {
+    pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
+        &mut self,
+        receiver: &mut Receiver<TableCompletionNotification>,
+    ) -> Result<()> {
+        // Create mooncake snapshot.
         let mooncake_snapshot_created = self.create_snapshot();
         if !mooncake_snapshot_created {
             return Ok(());
         }
+        let notification = receiver.recv().await.unwrap();
+        let (_, iceberg_snapshot_payload) =
+            if let TableCompletionNotification::MooncakeTableSnapshot {
+                lsn,
+                iceberg_snapshot_payload,
+            } = notification
+            {
+                (lsn, iceberg_snapshot_payload)
+            } else {
+                panic!("Expected MooncakeTableSnapshot");
+            };
+        let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
 
-        
+        // Create iceberg snapshot.
+        self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+        let notification = receiver.recv().await.unwrap();
+        let iceberg_snapshot_result = if let TableCompletionNotification::IcebergSnapshot {
+            iceberg_snapshot_result,
+        } = notification
+        {
+            iceberg_snapshot_result
+        } else {
+            panic!("Expected IcebergSnapshot");
+        };
+        self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
-            // Wait for the snapshot async task to complete.
-            match mooncake_join_handle.await {
-                Ok((lsn, payload)) => {
-                    // Create iceberg snapshot if possible
-                    if let Some(payload) = payload {
-                        let iceberg_join_handle = self.persist_iceberg_snapshot(payload);
-                        match iceberg_join_handle.await {
-                            Ok(iceberg_snapshot_res) => {
-                                self.set_iceberg_snapshot_res(iceberg_snapshot_res?);
-                            }
-                            Err(e) => {
-                                panic!("Iceberg snapshot task gets cancelled: {:?}", e);
-                            }
-                        }
-                    }
-                }
-                Err(e) => {
-                    panic!("failed to join snapshot handle: {:?}", e);
-                }
-            }
-        }
         Ok(())
     }
 }
