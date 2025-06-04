@@ -300,6 +300,24 @@ impl SnapshotTask {
     }
 }
 
+/// Options to create mooncake snapshot.
+pub struct SnapshotOption {
+    /// Whether to force create snapshot.
+    /// When specified, mooncake snapshot will be created with snapshot threshold ignored.
+    pub(crate) force_create: bool,
+    /// Whether to skip iceberg snapshot creation.
+    pub(crate) skip_iceberg_snapshot: bool,
+}
+
+impl SnapshotOption {
+    pub fn default() -> SnapshotOption {
+        Self {
+            force_create: false,
+            skip_iceberg_snapshot: false,
+        }
+    }
+}
+
 /// MooncakeTable is a disk table + mem slice.
 /// Transactions will append data to the mem slice.
 ///
@@ -560,7 +578,7 @@ impl MooncakeTable {
     }
 
     // Create a snapshot of the last committed version, return current snapshot's version and payload to perform iceberg snapshot.
-    fn create_snapshot_impl(&mut self, force_create: bool) {
+    fn create_snapshot_impl(&mut self, opt: SnapshotOption) {
         self.next_snapshot_task.new_rows = Some(self.mem_slice.get_latest_rows());
         let next_snapshot_task = take(&mut self.next_snapshot_task);
         self.next_snapshot_task = SnapshotTask::new(self.metadata.config.clone());
@@ -569,22 +587,18 @@ impl MooncakeTable {
         tokio::task::spawn(Self::create_snapshot_async(
             cur_snapshot,
             next_snapshot_task,
-            force_create,
+            opt,
             self.table_notify.as_ref().unwrap().clone(),
         ));
     }
 
     /// If a mooncake snapshot is not going to be created, return false immediately.
-    pub fn create_snapshot(&mut self) -> bool {
-        if !self.next_snapshot_task.should_create_snapshot() {
+    pub fn create_snapshot(&mut self, opt: SnapshotOption) -> bool {
+        if !self.next_snapshot_task.should_create_snapshot() && !opt.force_create {
             return false;
         }
-        self.create_snapshot_impl(/*force_create=*/ false);
+        self.create_snapshot_impl(opt);
         true
-    }
-
-    pub fn force_create_snapshot(&mut self) {
-        self.create_snapshot_impl(/*force_snapshot=*/ true)
     }
 
     pub(crate) fn notify_snapshot_reader(&self, lsn: u64) {
@@ -654,13 +668,13 @@ impl MooncakeTable {
     async fn create_snapshot_async(
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
-        force_create: bool,
+        opt: SnapshotOption,
         table_notify: Sender<TableNotify>,
     ) {
         let (lsn, iceberg_snapshot_payload) = snapshot
             .write()
             .await
-            .update_snapshot(next_snapshot_task, force_create)
+            .update_snapshot(next_snapshot_task, opt)
             .await;
         table_notify
             .send(TableNotify::MooncakeTableSnapshot {
@@ -682,7 +696,7 @@ impl MooncakeTable {
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
         // Create mooncake snapshot.
-        let mooncake_snapshot_created = self.create_snapshot();
+        let mooncake_snapshot_created = self.create_snapshot(SnapshotOption::default());
         if !mooncake_snapshot_created {
             return Ok(());
         }

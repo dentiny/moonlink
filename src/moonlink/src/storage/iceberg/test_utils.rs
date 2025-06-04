@@ -7,6 +7,7 @@ use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::Snapshot;
+use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     DiskFileDeletionVector, TableConfig as MooncakeTableConfig,
     TableMetadata as MooncakeTableMetadata,
@@ -207,7 +208,7 @@ pub(crate) async fn create_mooncake_snapshot(
     table: &mut MooncakeTable,
     notify_rx: &mut Receiver<TableNotify>,
 ) -> (u64, Option<IcebergSnapshotPayload>) {
-    assert!(table.create_snapshot());
+    assert!(table.create_snapshot(SnapshotOption::default()));
     let notification = notify_rx.recv().await.unwrap();
     match notification {
         TableNotify::MooncakeTableSnapshot {

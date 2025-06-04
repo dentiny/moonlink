@@ -144,7 +144,7 @@ pub async fn snapshot(
     table: &mut MooncakeTable,
     notify_rx: &mut Receiver<TableNotify>,
 ) -> (u64, Option<IcebergSnapshotPayload>) {
-    assert!(table.create_snapshot());
+    assert!(table.create_snapshot(SnapshotOption::default()));
     let table_notify = notify_rx.recv().await.unwrap();
     match table_notify {
         TableNotify::MooncakeTableSnapshot {

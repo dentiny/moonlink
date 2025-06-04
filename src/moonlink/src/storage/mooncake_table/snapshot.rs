@@ -9,7 +9,7 @@ use crate::storage::iceberg::iceberg_table_manager::TableManager;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::{FileIndex, Index};
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
-use crate::storage::mooncake_table::MoonlinkRow;
+use crate::storage::mooncake_table::{MoonlinkRow, SnapshotOption};
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::{
     MooncakeDataFile, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord,
@@ -257,7 +257,7 @@ impl SnapshotTableState {
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
-        force_create: bool,
+        opt: SnapshotOption,
     ) -> (u64, Option<IcebergSnapshotPayload>) {
         // Reflect iceberg snapshot to mooncake snapshot.
         self.prune_committed_deletion_logs(&task);
@@ -308,11 +308,13 @@ impl SnapshotTableState {
             self.unpersisted_iceberg_records
                 .unpersisted_data_files
                 .as_slice(),
-            force_create,
+            opt.force_create,
         );
-        let flush_by_deletion_logs = self.create_iceberg_snapshot_by_committed_logs(force_create);
+        let flush_by_deletion_logs =
+            self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
 
-        if self.current_snapshot.data_file_flush_lsn.is_some()
+        if !opt.skip_iceberg_snapshot
+            && self.current_snapshot.data_file_flush_lsn.is_some()
             && (flush_by_data_files || flush_by_deletion_logs)
         {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,

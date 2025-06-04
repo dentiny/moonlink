@@ -38,6 +38,7 @@ use crate::storage::iceberg::test_utils::{
 };
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::Snapshot;
+use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::MooncakeTable;
 
 // Test util function to prepare for committed and persisted data file,
@@ -245,7 +246,7 @@ async fn test_state_1_1() -> IcebergResult<()> {
     table.append(row).unwrap();
 
     // Request to create snapshot.
-    assert!(!table.create_snapshot());
+    assert!(!table.create_snapshot(SnapshotOption::default()));
 
     // Check iceberg snapshot status.
     let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
@@ -275,7 +276,7 @@ async fn test_state_1_2() -> IcebergResult<()> {
     table.delete(row.clone(), /*lsn=*/ 1).await;
 
     // Request to create snapshot.
-    assert!(!table.create_snapshot());
+    assert!(!table.create_snapshot(SnapshotOption::default()));
 
     // Check iceberg snapshot status.
     let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
