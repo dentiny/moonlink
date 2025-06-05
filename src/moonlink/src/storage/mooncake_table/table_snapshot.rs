@@ -1,9 +1,9 @@
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+use crate::storage::{iceberg::puffin_utils::PuffinBlobRef, mooncake_table::DiskFileDeletionVector};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::storage_utils::{MooncakeDataFile, MooncakeDataFileRef};
 use crate::storage::TableManager;
 
 use std::collections::{HashMap, HashSet};
@@ -92,4 +92,22 @@ pub struct FileIndiceMergeResult {
     pub(crate) old_file_indices: HashSet<GlobalIndex>,
     /// Merged file indices.
     pub(crate) merged_file_indices: GlobalIndex,
+}
+
+////////////////////////////
+/// Data file compaction
+////////////////////////////
+///
+#[derive(Clone, Debug)]
+pub struct DataFileCompactionPayload {
+    /// Data filepath and their deletion vector.
+    pub(crate) disk_files: HashMap<MooncakeDataFileRef, DiskFileDeletionVector>,
+}
+
+#[derive(Clone, Debug)]
+pub struct DataFileCompactionResult {
+    /// Old data files and their deletion vector, which gets merged and should not appear in later snapshots.
+    pub(crate) old_disk_files: HashMap<MooncakeDataFileRef, DiskFileDeletionVector>,
+    /// New data files and their deletion vector after compaction.
+    pub(crate) new_disk_files: HashMap<MooncakeDataFileRef, DiskFileDeletionVector>,
 }
