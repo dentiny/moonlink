@@ -60,7 +60,7 @@ pub fn create_data_file(file_id: u64, file_path: String) -> MooncakeDataFileRef 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub struct FileId(pub(crate) u64);
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub enum RecordLocation {
     /// Record is in a memory batch
     /// (batch_id, row_offset)
@@ -69,6 +69,23 @@ pub enum RecordLocation {
     /// Record is in a disk file
     /// (file_id, row_offset)
     DiskFile(FileId, usize),
+}
+
+impl Hash for RecordLocation {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Hash the variant discriminant
+        std::mem::discriminant(self).hash(state);
+        match self {
+            RecordLocation::MemoryBatch(batch_id, offset) => {
+                batch_id.hash(state);
+                offset.hash(state);
+            }
+            RecordLocation::DiskFile(file_id, offset) => {
+                file_id.hash(state);
+                offset.hash(state);
+            }
+        }
+    }
 }
 
 #[derive(Debug)]

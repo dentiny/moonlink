@@ -22,6 +22,15 @@ impl BatchDeletionVector {
         }
     }
 
+    /// Whether the current deletion vector is empty.
+    #[allow(dead_code)]
+    pub fn is_empty(&self) -> bool {
+        if self.deletion_vector.is_none() {
+            return false;
+        }
+        self.collect_deleted_rows().is_empty()
+    }
+
     /// Get max rows of deletion vector.
     pub fn get_max_rows(&self) -> usize {
         self.max_rows
@@ -67,12 +76,28 @@ impl BatchDeletionVector {
     }
 
     /// Apply the deletion vector to filter a record batch
-    pub(super) fn apply_to_batch(&self, batch: &RecordBatch) -> Result<RecordBatch> {
+    pub(crate) fn apply_to_batch(&self, batch: &RecordBatch) -> Result<RecordBatch> {
         if self.deletion_vector.is_none() {
             return Ok(batch.clone());
         }
         let filter = BooleanArray::new_from_u8(self.deletion_vector.as_ref().unwrap())
             .slice(0, batch.num_rows());
+        // Apply the filter to the batch
+        let filtered_batch = compute::filter_record_batch(batch, &filter)?;
+        Ok(filtered_batch)
+    }
+
+    /// Similar to [`apply_to_batch`], this function also takes a slice indiciated by the [`start_row_idx`].
+    pub(crate) fn apply_to_batch_with_slice(
+        &self,
+        batch: &RecordBatch,
+        start_row_idx: usize,
+    ) -> Result<RecordBatch> {
+        if self.deletion_vector.is_none() {
+            return Ok(batch.clone());
+        }
+        let filter = BooleanArray::new_from_u8(self.deletion_vector.as_ref().unwrap())
+            .slice(start_row_idx, batch.num_rows());
         // Apply the filter to the batch
         let filtered_batch = compute::filter_record_batch(batch, &filter)?;
         Ok(filtered_batch)
@@ -236,8 +261,10 @@ mod tests {
     #[test]
     fn test_deletion_vector_merge() {
         let mut dv1 = BatchDeletionVector::new(10);
+        assert!(dv1.is_empty());
         dv1.delete_row(0);
         dv1.delete_row(2);
+        assert!(!dv1.is_empty());
 
         let mut dv2 = BatchDeletionVector::new(10);
         dv2.delete_row(6);
@@ -245,5 +272,6 @@ mod tests {
 
         dv1.merge_with(&dv2);
         assert_eq!(dv1.collect_deleted_rows(), vec![0, 2, 6, 8]);
+        assert!(!dv1.is_empty());
     }
 }

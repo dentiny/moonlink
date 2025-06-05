@@ -6,6 +6,9 @@ use iceberg::puffin::PuffinWriter;
 use iceberg::puffin::{Blob, PuffinReader};
 use iceberg::{Error as IcebergError, Result as IcebergResult};
 
+use crate::storage::iceberg::deletion_vector::DeletionVector;
+use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+
 /// Reference to puffin blob.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PuffinBlobRef {
@@ -55,4 +58,15 @@ pub(crate) async fn load_blob_from_puffin_file(
 
     let blob_metadata = &puffin_file_metadata.blobs()[0];
     puffin_reader.blob(blob_metadata).await
+}
+
+/// Util function to load batch deletion vector from puffin blob.
+/// Precondition: there's only one deletion vector blob in the puffin file.
+pub(crate) async fn load_deletion_vector_from_blob(
+    puffin_blob_ref: &PuffinBlobRef,
+) -> IcebergResult<BatchDeletionVector> {
+    let file_io = FileIO::from_path(&puffin_blob_ref.puffin_filepath)?.build()?;
+    let puffin_blob = load_blob_from_puffin_file(file_io, &puffin_blob_ref.puffin_filepath).await?;
+    let deletion_vector = DeletionVector::deserialize(puffin_blob)?;
+    Ok(deletion_vector.take_as_batch_delete_vector())
 }

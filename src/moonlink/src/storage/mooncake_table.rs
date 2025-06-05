@@ -160,7 +160,10 @@ pub struct Snapshot {
     /// table metadata
     pub(crate) metadata: Arc<TableMetadata>,
     /// datafile and their deletion vector.
-    /// TODO(hjiang): For the initial release and before we figure out a cache design, disk files are always local ones.
+    ///
+    /// TODO(hjiang):
+    /// 1. For the initial release and before we figure out a cache design, disk files are always local ones.
+    /// 2. Add corresponding file indices into the value part, so when data file gets compacted, we make sure file indices get rewritten and compacted as well.
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, DiskFileDeletionVector>,
     /// Current snapshot version, which is the mooncake table commit point.
     pub(crate) snapshot_version: u64,
