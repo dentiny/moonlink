@@ -32,6 +32,19 @@ pub struct IcebergSnapshotIndexMergePayload {
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
 }
 
+/// Iceberg snapshot payload by data file compaction operations.
+#[derive(Clone, Debug)]
+pub struct IcebergSnapshotDataCompactionPayload {
+    /// New data files to import to the iceberg table.
+    pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,
+    /// Old data files to remove from the iceberg table.
+    pub(crate) old_data_files_to_remove: Vec<MooncakeDataFileRef>,
+    /// New file indices to import to the iceberg table.
+    pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
+    /// Old file indices to remove from the iceberg table.
+    pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+}
+
 #[derive(Debug)]
 pub struct IcebergSnapshotPayload {
     /// Flush LSN.
@@ -40,6 +53,8 @@ pub struct IcebergSnapshotPayload {
     pub(crate) import_payload: IcebergSnapshotImportPayload,
     /// Payload by index merge operations.
     pub(crate) index_merge_payload: IcebergSnapshotIndexMergePayload,
+    /// Payload by data file compaction operations.
+    pub(crate) data_compaction_payload: IcebergSnapshotDataCompactionPayload,
 }
 
 ////////////////////////////
@@ -64,6 +79,19 @@ pub struct IcebergSnapshotIndexMergeResult {
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
 }
 
+/// Iceberg snapshot data file compaction result.
+#[allow(dead_code)]
+pub struct IcebergSnapshotDataCompactionResult {
+    /// New data files to import to the iceberg table.
+    pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,
+    /// Old data files to remove from the iceberg table.
+    pub(crate) old_data_files_to_remove: Vec<MooncakeDataFileRef>,
+    /// New file indices to import to the iceberg table.
+    pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
+    /// Old data files to remove from the iceberg table.
+    pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+}
+
 pub(crate) struct IcebergSnapshotResult {
     /// Table manager is (1) not `Sync` safe; (2) only used at iceberg snapshot creation, so we `move` it around every snapshot.
     pub(crate) table_manager: Box<dyn TableManager>,
@@ -72,8 +100,10 @@ pub(crate) struct IcebergSnapshotResult {
     /// Iceberg import result.
     pub(crate) import_result: IcebergSnapshotImportResult,
     /// Iceberg index merge result.
-    #[allow(dead_code)]
     pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
+    /// Iceberg data file compaction result.
+    #[allow(dead_code)]
+    pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
 }
 
 ////////////////////////////
@@ -92,4 +122,65 @@ pub struct FileIndiceMergeResult {
     pub(crate) old_file_indices: HashSet<GlobalIndex>,
     /// Merged file indices.
     pub(crate) merged_file_indices: GlobalIndex,
+}
+
+/// Util functions to take all data files to import.
+pub fn take_data_files_to_import(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeDataFileRef> {
+    let mut new_data_files = std::mem::take(&mut snapshot_payload.import_payload.data_files);
+    new_data_files.extend(std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .new_data_files_to_import,
+    ));
+    new_data_files
+}
+
+/// Util functions to take all data files to remove.
+pub fn take_data_files_to_remove(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeDataFileRef> {
+    std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .old_data_files_to_remove,
+    )
+}
+
+/// Util functions to take all file indices to import.
+pub fn take_file_indices_to_import(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeFileIndex> {
+    let mut new_file_indices = std::mem::take(
+        &mut snapshot_payload
+            .index_merge_payload
+            .new_file_indices_to_import,
+    );
+    new_file_indices.extend(std::mem::take(
+        &mut snapshot_payload.import_payload.file_indices,
+    ));
+    new_file_indices.extend(std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .new_file_indices_to_import,
+    ));
+    new_file_indices
+}
+
+/// Util function to take all file indices to remove.
+pub fn take_file_indices_to_remove(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeFileIndex> {
+    let mut old_file_indices = std::mem::take(
+        &mut snapshot_payload
+            .index_merge_payload
+            .old_file_indices_to_remove,
+    );
+    old_file_indices.extend(std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .old_file_indices_to_remove,
+    ));
+    old_file_indices
 }

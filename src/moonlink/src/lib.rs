@@ -14,7 +14,7 @@ pub use storage::{
 pub use table_handler::{IcebergEventSyncSender, TableEvent, TableHandler};
 pub use union_read::{ReadState, ReadStateManager};
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 pub use union_read::decode_read_state_for_testing;
 
 #[cfg(feature = "bench")]

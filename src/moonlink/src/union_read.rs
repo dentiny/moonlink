@@ -5,5 +5,5 @@ mod table_metadata;
 pub use read_state::ReadState;
 pub use read_state_manager::ReadStateManager;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 pub use read_state::decode_read_state_for_testing;

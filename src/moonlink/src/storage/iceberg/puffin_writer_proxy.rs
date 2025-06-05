@@ -17,7 +17,6 @@ use crate::storage::iceberg::deletion_vector::{
 use crate::storage::iceberg::index::{MOONCAKE_HASH_INDEX_V1, MOONCAKE_HASH_INDEX_V1_CARDINALITY};
 
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 
 use iceberg::io::FileIO;
 use iceberg::puffin::{CompressionCodec, PuffinWriter, DELETION_VECTOR_V1};
@@ -26,6 +25,7 @@ use iceberg::spec::{
     ManifestListWriter, ManifestWriter, ManifestWriterBuilder, Snapshot, Struct, TableMetadata,
 };
 use iceberg::Result as IcebergResult;
+use uuid::Uuid;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[allow(dead_code)]
@@ -324,7 +324,7 @@ fn create_manifest_writer_builder(
         file_io.new_output(format!(
             "{}/metadata/{}-m0.avro",
             table_metadata.location(),
-            Uuid::new_v4()
+            Uuid::now_v7()
         ))?,
         table_metadata.current_snapshot_id(),
         /*key_metadata=*/ vec![],
@@ -334,19 +334,29 @@ fn create_manifest_writer_builder(
     Ok(manifest_writer_builder)
 }
 
-/// Get all manifest files, keep data files unchanged, and merge existing deletion vectors with puffion deletion vector blob and rewrite it.
+/// Get all manifest files and entries,
+/// - Data file entries: retain all entries except those marked for removal due to compaction.
+/// - Deletion vector entries: remove entries referencing data files to be removed, and merge retained deletion vectors with the provided puffin deletion vector blob.
+/// - File indices entries: retain all entries except those marked for removal due to index merging or data file compaction.
+///
 /// For more details, please refer to https://docs.google.com/document/d/1fIvrRfEHWBephsX0Br2G-Ils_30JIkmGkcdbFbovQjI/edit?usp=sharing
 ///
 /// Note: this function should be called before catalog transaction commit.
 ///
-/// TODO(hjiang): There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
+/// TODO(hjiang):
+/// 1. There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
+/// 2. Could optimize to avoid file indices manifest file to rewrite.
 pub(crate) async fn append_puffin_metadata_and_rewrite(
     table_metadata: &TableMetadata,
     file_io: &FileIO,
+    data_files_to_remove: &HashSet<String>,
     puffin_blobs_to_add: &HashMap<String, Vec<PuffinBlobMetadataProxy>>,
     puffin_blobs_to_remove: &HashSet<String>,
 ) -> IcebergResult<()> {
-    if puffin_blobs_to_add.is_empty() {
+    if data_files_to_remove.is_empty()
+        && puffin_blobs_to_add.is_empty()
+        && puffin_blobs_to_remove.is_empty()
+    {
         return Ok(());
     }
 
@@ -361,8 +371,23 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
 
     // Rewrite the deletion vector manifest files.
     // TODO(hjiang): Double confirm for deletion vector manifest filename.
+    let mut data_file_manifest_writer: Option<ManifestWriter> = None;
     let mut deletion_vector_manifest_writer: Option<ManifestWriter> = None;
     let mut file_index_manifest_writer: Option<ManifestWriter> = None;
+
+    // Initialize manifest writer for data file entries.
+    let init_data_file_manifest_writer_for_once =
+        |writer: &mut Option<ManifestWriter>| -> IcebergResult<()> {
+            if writer.is_some() {
+                return Ok(());
+            }
+            let new_writer_builder = create_manifest_writer_builder(table_metadata, file_io)?;
+            let new_writer = new_writer_builder.build_v2_data();
+            *writer = Some(new_writer);
+            Ok(())
+        };
+
+    // Initialize manifest writer for deletion vector entries.
     let init_deletion_vector_manifest_writer_for_once =
         |writer: &mut Option<ManifestWriter>| -> IcebergResult<()> {
             if writer.is_some() {
@@ -374,7 +399,7 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
             Ok(())
         };
 
-    // Write new file index manifest files.
+    // Initialize manifest writer for file indices.
     let init_file_index_manifest_writer =
         |writer: &mut Option<ManifestWriter>| -> IcebergResult<()> {
             if writer.is_some() {
@@ -389,16 +414,21 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
     // Map from referenced data file to deletion vector manifest entry.
     let mut existing_deletion_vector_entries = HashMap::new();
 
-    // Iterate through all manifest files, keep data manifest files, process hash index files, and merge all deletion vectors.
+    // How to tell different manifest entry types:
+    // - Data file: manifest content type `Data`, manifest entry file format `Parquet`
+    // - Deletion vector: manifest content type `Deletes`, manifest entry file format `Puffin`
+    // - File indices: manifest content type `Data`, manifest entry file format `Puffin`
     for cur_manifest_file in manifest_list.entries() {
         let manifest = cur_manifest_file.load_manifest(file_io).await?;
         let (manifest_entries, manifest_metadata) = manifest.into_parts();
 
-        // Keep data files unchanged.
         // Assumption: we store all data file manifest entries in one manifest file.
         assert!(!manifest_entries.is_empty());
+
+        // For data file manifest entries, if nothing to remove we simply append the manifest file and do nothing.
         if *manifest_metadata.content() == ManifestContentType::Data
-            && manifest_entries.first().unwrap().file_format() == DataFileFormat::Parquet
+            && manifest_entries.first().as_ref().unwrap().file_format() == DataFileFormat::Parquet
+            && data_files_to_remove.is_empty()
         {
             manifest_list_writer.add_manifests([cur_manifest_file.clone()].into_iter())?;
             continue;
@@ -406,11 +436,32 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
 
         // Process deletion vector puffin files.
         for cur_manifest_entry in manifest_entries.into_iter() {
-            assert_eq!(cur_manifest_entry.file_format(), DataFileFormat::Puffin,);
+            // ============================
+            // Data file entries
+            // ============================
+            //
+            // Process data files, remove those been merged; and compact all data file entries into one manifest file.
+            if cur_manifest_entry.file_format() == DataFileFormat::Parquet {
+                assert_eq!(*manifest_metadata.content(), ManifestContentType::Data);
+                if data_files_to_remove.contains(cur_manifest_entry.data_file().file_path()) {
+                    continue;
+                }
+                init_data_file_manifest_writer_for_once(&mut data_file_manifest_writer)?;
+                data_file_manifest_writer.as_mut().unwrap().add_file(
+                    cur_manifest_entry.data_file().clone(),
+                    cur_manifest_entry.sequence_number().unwrap(),
+                )?;
+                continue;
+            }
 
+            // ============================
+            // File indices entries
+            // ============================
+            //
             // Process file indices: skip those requested to remove, and keep those un-mentioned.
+            assert_eq!(cur_manifest_entry.file_format(), DataFileFormat::Puffin);
             if *manifest_metadata.content() == ManifestContentType::Data {
-                // Skip file indices which are requested to remove.
+                // Skip file indices which are requested to remove (due to index merge and data file compaction).
                 if puffin_blobs_to_remove.contains(cur_manifest_entry.data_file().file_path()) {
                     continue;
                 }
@@ -424,8 +475,22 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
                 continue;
             }
 
+            // ============================
+            // Deletion vector entries
+            // ============================
+            //
             // Process deletion vectors.
             assert_eq!(*manifest_metadata.content(), ManifestContentType::Deletes);
+
+            // Skip deletion vectors which are requested to remove (due to compaction).
+            let referenced_data_file = cur_manifest_entry
+                .data_file()
+                .referenced_data_file()
+                .unwrap();
+            if data_files_to_remove.contains(&referenced_data_file) {
+                continue;
+            }
+
             let old_entry = existing_deletion_vector_entries.insert(
                 cur_manifest_entry
                     .data_file()
@@ -476,7 +541,16 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
         )?;
     }
 
-    // Flush manifest file.
+    // Flush data file manifest entries.
+    if data_file_manifest_writer.is_some() {
+        let data_file_manifest = data_file_manifest_writer
+            .take()
+            .unwrap()
+            .write_manifest_file()
+            .await?;
+        manifest_list_writer.add_manifests(std::iter::once(data_file_manifest))?;
+    }
+    // Flush file index manifest entries.
     if file_index_manifest_writer.is_some() {
         let index_file_manifest = file_index_manifest_writer
             .take()
@@ -485,6 +559,7 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
             .await?;
         manifest_list_writer.add_manifests(std::iter::once(index_file_manifest))?;
     }
+    // Flush deletion vector manifest entries.
     if deletion_vector_manifest_writer.is_some() {
         let deletion_vector_manifest = deletion_vector_manifest_writer
             .take()

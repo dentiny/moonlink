@@ -5,11 +5,14 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
-moonlink = { path = "../moonlink" }
+arrow-array.workspace = true
+moonlink = { path = "../moonlink", features = ["test-utils"] }
 moonlink_connectors = { path = "../moonlink_connectors" }
+parquet = { workspace = true, features = ["arrow"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 
 [dev-dependencies]
+serial_test = "3.0"
 tempfile = { workspace = true }
 tokio-postgres = { workspace = true }

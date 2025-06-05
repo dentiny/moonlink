@@ -16,8 +16,11 @@ pub trait PuffinWrite {
         puffin_writer: PuffinWriter,
     ) -> IcebergResult<()>;
 
+    /// Set data files to remove, their corresponding deletion vectors will be removed alongside.
+    fn set_data_files_to_remove(&mut self, data_files: HashSet<String>);
+
     /// Set puffin file to remove.
-    fn set_puffin_file_to_remove(&mut self, puffin_filepaths: HashSet<String>);
+    fn set_puffin_files_to_remove(&mut self, puffin_filepaths: HashSet<String>);
 
     /// After transaction commits, puffin metadata should be cleared for next puffin write.
     fn clear_puffin_metadata(&mut self);

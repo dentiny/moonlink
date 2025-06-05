@@ -75,8 +75,8 @@ Today, Moonlink can be used as a library. We have two sample examples of Moonlin
    - Manages tables and CDC ingestion
    - Processes union read requests
 
-2. **[moonlink-backend test](https://github.com/Mooncake-Labs/moonlink/blob/main/src/moonlink_backend/tests/test_backend.rs)**  
-A demo of `moonlink-backend` running as a server, replicating Postgres tables to Iceberg.
+2. **[moonlink-backend integration tests](https://github.com/Mooncake-Labs/moonlink/blob/main/src/moonlink_backend/tests)**
+   Demonstrates running `moonlink-backend` as a server, replicating Postgres tables to Iceberg.
 
 ## Roadmap
 

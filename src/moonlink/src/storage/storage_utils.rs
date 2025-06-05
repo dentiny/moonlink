@@ -44,7 +44,7 @@ pub fn get_unique_file_id_for_flush(table_auto_incr_id: u64, file_idx: u64) -> u
 
 pub fn get_random_file_name_in_dir(dir_path: &Path) -> String {
     dir_path
-        .join(format!("data-{}.parquet", uuid::Uuid::new_v4()))
+        .join(format!("data-{}.parquet", uuid::Uuid::now_v7()))
         .to_string_lossy()
         .to_string()
 }

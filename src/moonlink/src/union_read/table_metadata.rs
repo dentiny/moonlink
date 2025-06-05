@@ -86,7 +86,7 @@ fn write_usize<W: Writer>(writer: &mut W, value: usize) -> Result<(), EncodeErro
     write_u32(writer, value)
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-utils"))]
 impl TableMetadata {
     pub fn decode(data: &[u8]) -> Self {
         use crate::storage::mooncake_table::PuffinDeletionBlobAtRead;
