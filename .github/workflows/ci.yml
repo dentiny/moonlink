@@ -39,9 +39,9 @@ jobs:
         with:
           tool: cargo-deny
 
-      # - uses: swatinem/rust-cache@v2
-      #   with:
-      #     shared-key: ${{ steps.toolchain.outputs.cachekey }}
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
 
       - name: rustfmt check
         run: cargo fmt --check
@@ -64,11 +64,9 @@ jobs:
         with:
           components: llvm-tools-preview
 
-      # - uses: swatinem/rust-cache@v2
-      #   with:
-      #     shared-key: ${{ steps.toolchain.outputs.cachekey }}
-
-
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
 
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
