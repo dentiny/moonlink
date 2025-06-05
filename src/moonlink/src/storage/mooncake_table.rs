@@ -20,9 +20,10 @@ use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 #[cfg(test)]
 pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 pub(crate) use crate::storage::mooncake_table::table_snapshot::{
-    FileIndiceMergePayload, FileIndiceMergeResult, IcebergSnapshotDataCompactionResult,
-    IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload,
-    IcebergSnapshotResult,
+    take_data_files_to_import, take_data_files_to_remove, take_file_indices_to_import,
+    take_file_indices_to_remove, FileIndiceMergePayload, FileIndiceMergeResult,
+    IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
+    IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::FileId;
 use crate::table_notify::TableNotify;

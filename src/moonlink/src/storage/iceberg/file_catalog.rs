@@ -123,7 +123,7 @@ pub struct FileCatalog {
     puffin_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
     /// A vector of "puffin filepath"s.
     puffin_blobs_to_remove: HashSet<String>,
-    /// A set of dara files to remove, along with their corresponding deletion vectors and file indices.
+    /// A set of data files to remove, along with their corresponding deletion vectors and file indices.
     data_files_to_remove: HashSet<String>,
 }
 

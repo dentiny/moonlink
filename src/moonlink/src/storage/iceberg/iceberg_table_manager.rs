@@ -11,10 +11,13 @@ use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::mooncake_table::DiskFileDeletionVector;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
+use crate::storage::mooncake_table::{
+    take_data_files_to_import, take_file_indices_to_import, take_file_indices_to_remove,
+};
+use crate::storage::mooncake_table::{take_data_files_to_remove, DiskFileDeletionVector};
 use crate::storage::storage_utils::{create_data_file, MooncakeDataFileRef};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -541,7 +544,7 @@ impl IcebergTableManager {
         Ok(())
     }
 
-    /// Util function to get all local data file to remote one mapping.
+    /// Util function to get all local data files to remote one mapping.
     fn get_local_data_file_to_remote(&self) -> HashMap<String, String> {
         self.persisted_data_files
             .iter()
@@ -565,50 +568,16 @@ impl TableManager for IcebergTableManager {
         // Initialize iceberg table on access.
         self.initialize_iceberg_table_for_once().await?;
 
-        // Aggregate all data files to import.
-        let mut new_data_files = std::mem::take(&mut snapshot_payload.import_payload.data_files);
-        new_data_files.extend(std::mem::take(
-            &mut snapshot_payload
-                .data_compaction_payload
-                .new_data_files_to_import,
-        ));
-
-        // Aggregate all file indices to import.
-        let mut new_file_indices = std::mem::take(
-            &mut snapshot_payload
-                .index_merge_payload
-                .new_file_indices_to_import,
-        );
-        new_file_indices.extend(std::mem::take(
-            &mut snapshot_payload.import_payload.file_indices,
-        ));
-        new_file_indices.extend(std::mem::take(
-            &mut snapshot_payload
-                .data_compaction_payload
-                .new_file_indices_to_import,
-        ));
-
-        // Aggregate all file indices to remove.
-        let mut old_file_indices = std::mem::take(
-            &mut snapshot_payload
-                .index_merge_payload
-                .old_file_indices_to_remove,
-        );
-        old_file_indices.extend(std::mem::take(
-            &mut snapshot_payload
-                .data_compaction_payload
-                .old_file_indices_to_remove,
-        ));
+        let new_data_files = take_data_files_to_import(&mut snapshot_payload);
+        let old_data_files = take_data_files_to_remove(&mut snapshot_payload);
+        let new_file_indices = take_file_indices_to_import(&mut snapshot_payload);
+        let old_file_indices = take_file_indices_to_remove(&mut snapshot_payload);
 
         // Persist data files.
         let new_iceberg_data_files = self
             .sync_data_files(
                 new_data_files,
-                std::mem::take(
-                    &mut snapshot_payload
-                        .data_compaction_payload
-                        .old_data_files_to_remove,
-                ),
+                old_data_files,
                 &snapshot_payload.import_payload.new_deletion_vector,
             )
             .await?;

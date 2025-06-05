@@ -123,3 +123,64 @@ pub struct FileIndiceMergeResult {
     /// Merged file indices.
     pub(crate) merged_file_indices: GlobalIndex,
 }
+
+/// Util functions to take all data files to import.
+pub fn take_data_files_to_import(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeDataFileRef> {
+    let mut new_data_files = std::mem::take(&mut snapshot_payload.import_payload.data_files);
+    new_data_files.extend(std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .new_data_files_to_import,
+    ));
+    new_data_files
+}
+
+/// Util functions to take all data files to remove.
+pub fn take_data_files_to_remove(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeDataFileRef> {
+    std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .old_data_files_to_remove,
+    )
+}
+
+/// Util functions to take all file indices to import.
+pub fn take_file_indices_to_import(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeFileIndex> {
+    let mut new_file_indices = std::mem::take(
+        &mut snapshot_payload
+            .index_merge_payload
+            .new_file_indices_to_import,
+    );
+    new_file_indices.extend(std::mem::take(
+        &mut snapshot_payload.import_payload.file_indices,
+    ));
+    new_file_indices.extend(std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .new_file_indices_to_import,
+    ));
+    new_file_indices
+}
+
+/// Util function to take all file indices to remove.
+pub fn take_file_indices_to_remove(
+    snapshot_payload: &mut IcebergSnapshotPayload,
+) -> Vec<MooncakeFileIndex> {
+    let mut old_file_indices = std::mem::take(
+        &mut snapshot_payload
+            .index_merge_payload
+            .old_file_indices_to_remove,
+    );
+    old_file_indices.extend(std::mem::take(
+        &mut snapshot_payload
+            .data_compaction_payload
+            .old_file_indices_to_remove,
+    ));
+    old_file_indices
+}
