@@ -57,7 +57,7 @@ Engines can use this union-read interface to access the most current table state
 
 ### Connectors
 
-Moonlink can support multiple input data sources through [moonlink-connectors](https://github.com/Mooncake-Labs/moonlink-connectors). Currently, only Postgres logical replication is supported as a source. 
+Moonlink can support multiple input data sources through [moonlink-connectors](https://github.com/Mooncake-Labs/moonlink/tree/main/src/moonlink_connectors). Currently, only Postgres logical replication is supported as a source. 
 
 Feel free [request](https://join.slack.com/t/mooncakelabs/shared_invite/zt-2sepjh5hv-rb9jUtfYZ9bvbxTCUrsEEA) more connectors or open a PR!
 
