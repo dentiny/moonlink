@@ -123,6 +123,8 @@ pub struct FileCatalog {
     puffin_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
     /// A vector of "puffin filepath"s.
     puffin_blobs_to_remove: HashSet<String>,
+    /// A set of dara files to remove, along with their corresponding deletion vectors and file indices.
+    data_files_to_remove: HashSet<String>,
 }
 
 impl FileCatalog {
@@ -135,6 +137,7 @@ impl FileCatalog {
             warehouse_location,
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
+            data_files_to_remove: HashSet::new(),
         })
     }
 
@@ -362,7 +365,12 @@ impl PuffinWrite for FileCatalog {
         Ok(())
     }
 
-    fn set_puffin_file_to_remove(&mut self, puffin_filepaths: HashSet<String>) {
+    fn set_data_files_to_remove(&mut self, data_files: HashSet<String>) {
+        assert!(self.data_files_to_remove.is_empty());
+        self.data_files_to_remove = data_files;
+    }
+
+    fn set_puffin_files_to_remove(&mut self, puffin_filepaths: HashSet<String>) {
         assert!(self.puffin_blobs_to_remove.is_empty());
         self.puffin_blobs_to_remove = puffin_filepaths;
     }
@@ -370,6 +378,7 @@ impl PuffinWrite for FileCatalog {
     fn clear_puffin_metadata(&mut self) {
         self.puffin_blobs_to_add.clear();
         self.puffin_blobs_to_remove.clear();
+        self.data_files_to_remove.clear();
     }
 }
 
@@ -734,6 +743,7 @@ impl Catalog for FileCatalog {
         append_puffin_metadata_and_rewrite(
             &metadata,
             &self.file_io,
+            &self.data_files_to_remove,
             &self.puffin_blobs_to_add,
             &self.puffin_blobs_to_remove,
         )

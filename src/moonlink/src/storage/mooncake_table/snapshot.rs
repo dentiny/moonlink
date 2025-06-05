@@ -9,7 +9,9 @@ use crate::storage::iceberg::iceberg_table_manager::TableManager;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::{FileIndex, Index};
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
-use crate::storage::mooncake_table::table_snapshot::FileIndiceMergePayload;
+use crate::storage::mooncake_table::table_snapshot::{
+    FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
+};
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
@@ -502,6 +504,12 @@ impl SnapshotTableState {
                             .unpersisted_iceberg_records
                             .merged_file_indices_to_remove
                             .to_vec(),
+                    },
+                    data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+                        new_data_files_to_import: vec![],
+                        old_data_files_to_remove: vec![],
+                        new_file_indices_to_import: vec![],
+                        old_file_indices_to_remove: vec![],
                     },
                 });
             }

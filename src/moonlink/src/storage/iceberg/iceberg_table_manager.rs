@@ -72,7 +72,7 @@ pub trait TableManager: Send {
         snapshot_payload: IcebergSnapshotPayload,
     ) -> IcebergResult<HashMap<MooncakeDataFileRef, PuffinBlobRef>>;
 
-    /// Load latest snapshot from iceberg table. Used for recovery and initialization.
+    /// Load the latest snapshot from iceberg table. Used for recovery and initialization.
     /// Notice this function is supposed to call **only once**.
     #[allow(async_fn_in_trait)]
     async fn load_snapshot_from_table(&mut self) -> IcebergResult<MooncakeSnapshot>;
@@ -374,14 +374,10 @@ impl IcebergTableManager {
     async fn sync_data_files(
         &mut self,
         new_data_files: Vec<MooncakeDataFileRef>,
+        old_data_files: Vec<MooncakeDataFileRef>,
         new_deletion_vector: &HashMap<MooncakeDataFileRef, BatchDeletionVector>,
-    ) -> IcebergResult<(
-        Vec<DataFile>,
-        HashMap<String, String>, /*local to remote datafile mapping*/
-    )> {
-        // Maps from local data filepath to remote filepath.
-        let mut local_data_file_to_remote = HashMap::with_capacity(new_data_files.len());
-
+    ) -> IcebergResult<Vec<DataFile>> {
+        // Handle imported new data files.
         let mut new_iceberg_data_files = Vec::with_capacity(new_data_files.len());
         for local_data_file in new_data_files.into_iter() {
             let iceberg_data_file = utils::write_record_batch_to_iceberg(
@@ -390,10 +386,6 @@ impl IcebergTableManager {
                 self.iceberg_table.as_ref().unwrap().metadata(),
             )
             .await?;
-            local_data_file_to_remote.insert(
-                local_data_file.file_path().clone(),
-                iceberg_data_file.file_path().to_string(),
-            );
 
             // Try get deletion vector batch size.
             let max_rows = new_deletion_vector
@@ -413,7 +405,20 @@ impl IcebergTableManager {
             assert!(old_entry.is_none());
             new_iceberg_data_files.push(iceberg_data_file);
         }
-        Ok((new_iceberg_data_files, local_data_file_to_remote))
+
+        // Handle removed data files.
+        let mut data_files_to_remove_set = HashSet::with_capacity(old_data_files.len());
+        for cur_data_file in old_data_files.into_iter() {
+            let old_entry = self
+                .persisted_data_files
+                .remove(cur_data_file.file_path())
+                .unwrap();
+            data_files_to_remove_set.insert(old_entry.data_file.file_path().to_string());
+        }
+        self.catalog
+            .set_data_files_to_remove(data_files_to_remove_set);
+
+        Ok(new_iceberg_data_files)
     }
 
     /// Dump committed deletion logs into iceberg table, only the changed part will be persisted.
@@ -526,7 +531,7 @@ impl IcebergTableManager {
             .await?;
 
         // Process file indices to remove.
-        self.catalog.set_puffin_file_to_remove(
+        self.catalog.set_puffin_files_to_remove(
             file_indices_to_remove
                 .iter()
                 .map(|cur_index| self.persisted_file_indices.remove(cur_index).unwrap())
@@ -536,20 +541,17 @@ impl IcebergTableManager {
         Ok(())
     }
 
-    /// Util function to merge local to remote data filepath mapping, with already persisted one.
-    fn merge_local_to_remote_data_file_to_remote(
-        &self,
-        mut local_data_file_to_remote: HashMap<String, String>,
-    ) -> HashMap<String, String> {
-        local_data_file_to_remote
-            .reserve(local_data_file_to_remote.len() + self.persisted_data_files.len());
-        for (cur_local_filepath, cur_entry) in self.persisted_data_files.iter() {
-            local_data_file_to_remote.insert(
-                cur_local_filepath.clone(),
-                cur_entry.data_file.file_path().to_string(),
-            );
-        }
-        local_data_file_to_remote
+    /// Util function to get all local data file to remote one mapping.
+    fn get_local_data_file_to_remote(&self) -> HashMap<String, String> {
+        self.persisted_data_files
+            .iter()
+            .map(|(file_path, data_file_entry)| {
+                (
+                    file_path.clone(),
+                    data_file_entry.data_file.file_path().to_string(),
+                )
+            })
+            .collect()
     }
 }
 
@@ -563,17 +565,56 @@ impl TableManager for IcebergTableManager {
         // Initialize iceberg table on access.
         self.initialize_iceberg_table_for_once().await?;
 
+        // Aggregate all data files to import.
+        let mut new_data_files = std::mem::take(&mut snapshot_payload.import_payload.data_files);
+        new_data_files.extend(std::mem::take(
+            &mut snapshot_payload
+                .data_compaction_payload
+                .new_data_files_to_import,
+        ));
+
+        // Aggregate all file indices to import.
+        let mut new_file_indices = std::mem::take(
+            &mut snapshot_payload
+                .index_merge_payload
+                .new_file_indices_to_import,
+        );
+        new_file_indices.extend(std::mem::take(
+            &mut snapshot_payload.import_payload.file_indices,
+        ));
+        new_file_indices.extend(std::mem::take(
+            &mut snapshot_payload
+                .data_compaction_payload
+                .new_file_indices_to_import,
+        ));
+
+        // Aggregate all file indices to remove.
+        let mut old_file_indices = std::mem::take(
+            &mut snapshot_payload
+                .index_merge_payload
+                .old_file_indices_to_remove,
+        );
+        old_file_indices.extend(std::mem::take(
+            &mut snapshot_payload
+                .data_compaction_payload
+                .old_file_indices_to_remove,
+        ));
+
         // Persist data files.
-        let (new_iceberg_data_files, local_data_file_to_remote) = self
+        let new_iceberg_data_files = self
             .sync_data_files(
-                std::mem::take(&mut snapshot_payload.import_payload.data_files),
+                new_data_files,
+                std::mem::take(
+                    &mut snapshot_payload
+                        .data_compaction_payload
+                        .old_data_files_to_remove,
+                ),
                 &snapshot_payload.import_payload.new_deletion_vector,
             )
             .await?;
 
-        // Update local data file to remote mapping.
-        let local_data_file_to_remote =
-            self.merge_local_to_remote_data_file_to_remote(local_data_file_to_remote);
+        // Get local data file to remote mapping.
+        let local_data_file_to_remote = self.get_local_data_file_to_remote();
 
         // Persist committed deletion logs.
         let deletion_puffin_blobs = self
@@ -582,21 +623,9 @@ impl TableManager for IcebergTableManager {
             ))
             .await?;
 
-        // Merge all file indices to import.
-        let mut all_file_indices_to_import = std::mem::take(
-            &mut snapshot_payload
-                .index_merge_payload
-                .new_file_indices_to_import,
-        );
-        all_file_indices_to_import.extend(std::mem::take(
-            &mut snapshot_payload.import_payload.file_indices,
-        ));
-
         self.sync_file_indices(
-            &all_file_indices_to_import,
-            &snapshot_payload
-                .index_merge_payload
-                .old_file_indices_to_remove,
+            &new_file_indices,
+            &old_file_indices,
             local_data_file_to_remote,
         )
         .await?;

@@ -18,9 +18,12 @@ use crate::storage::iceberg::iceberg_table_manager::{
 };
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 pub(crate) use crate::storage::mooncake_table::table_snapshot::{
-    FileIndiceMergePayload, FileIndiceMergeResult, IcebergSnapshotImportPayload,
+    FileIndiceMergePayload, FileIndiceMergeResult,
+    IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
+#[cfg(test)]
+pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 use crate::storage::storage_utils::FileId;
 use crate::table_notify::TableNotify;
 use std::collections::{HashMap, HashSet};
@@ -705,12 +708,29 @@ impl MooncakeTable {
         let new_data_files = snapshot_payload.import_payload.data_files.clone();
         let imported_file_indices = snapshot_payload.import_payload.file_indices.clone();
 
-        let new_file_indices_to_import = snapshot_payload
+        let new_file_indices_to_import_by_index_merge = snapshot_payload
             .index_merge_payload
             .new_file_indices_to_import
             .clone();
-        let old_file_indices_to_remove = snapshot_payload
+        let old_file_indices_to_remove_by_index_merge = snapshot_payload
             .index_merge_payload
+            .old_file_indices_to_remove
+            .clone();
+
+        let new_data_files_to_import_by_compaction = snapshot_payload
+            .data_compaction_payload
+            .new_data_files_to_import
+            .clone();
+        let old_data_files_to_remove_by_compaction = snapshot_payload
+            .data_compaction_payload
+            .old_data_files_to_remove
+            .clone();
+        let new_file_indices_to_import_by_compaction = snapshot_payload
+            .data_compaction_payload
+            .new_file_indices_to_import
+            .clone();
+        let old_file_indices_to_remove_by_compaction = snapshot_payload
+            .data_compaction_payload
             .old_file_indices_to_remove
             .clone();
 
@@ -737,8 +757,14 @@ impl MooncakeTable {
                 imported_file_indices,
             },
             index_merge_result: IcebergSnapshotIndexMergeResult {
-                new_file_indices_to_import,
-                old_file_indices_to_remove,
+                new_file_indices_to_import: new_file_indices_to_import_by_index_merge,
+                old_file_indices_to_remove: old_file_indices_to_remove_by_index_merge,
+            },
+            data_compaction_result: IcebergSnapshotDataCompactionResult {
+                new_data_files_to_import: new_data_files_to_import_by_compaction,
+                old_data_files_to_remove: old_data_files_to_remove_by_compaction,
+                new_file_indices_to_import: new_file_indices_to_import_by_compaction,
+                old_file_indices_to_remove: old_file_indices_to_remove_by_compaction,
             },
         };
         table_notify
