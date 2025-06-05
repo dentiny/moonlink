@@ -19,10 +19,10 @@ allow-git = [
 ]
 
 # TODO(hjiang): Cleanup these unmaintained crates.
-[advisories]
-ignore = [
-    "RUSTSEC-2024-0436", # paste - unmaintained
-]
+# [advisories]
+# ignore = [
+#     "RUSTSEC-2024-0436", # paste - unmaintained
+# ]
 
 # TODO(hjiang): Resolve all duplicate dependencies.
 [bans]
