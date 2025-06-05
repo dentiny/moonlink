@@ -17,13 +17,13 @@ use crate::storage::iceberg::iceberg_table_manager::{
     IcebergTableConfig, IcebergTableManager, TableManager,
 };
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
-pub(crate) use crate::storage::mooncake_table::table_snapshot::{
-    FileIndiceMergePayload, FileIndiceMergeResult,
-    IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
-    IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
-};
 #[cfg(test)]
 pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
+pub(crate) use crate::storage::mooncake_table::table_snapshot::{
+    FileIndiceMergePayload, FileIndiceMergeResult, IcebergSnapshotDataCompactionResult,
+    IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload,
+    IcebergSnapshotResult,
+};
 use crate::storage::storage_utils::FileId;
 use crate::table_notify::TableNotify;
 use std::collections::{HashMap, HashSet};

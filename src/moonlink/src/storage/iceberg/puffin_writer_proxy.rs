@@ -17,7 +17,6 @@ use crate::storage::iceberg::deletion_vector::{
 use crate::storage::iceberg::index::{MOONCAKE_HASH_INDEX_V1, MOONCAKE_HASH_INDEX_V1_CARDINALITY};
 
 use std::collections::{HashMap, HashSet};
-use uuid::Uuid;
 
 use iceberg::io::FileIO;
 use iceberg::puffin::{CompressionCodec, PuffinWriter, DELETION_VECTOR_V1};
@@ -26,6 +25,7 @@ use iceberg::spec::{
     ManifestListWriter, ManifestWriter, ManifestWriterBuilder, Snapshot, Struct, TableMetadata,
 };
 use iceberg::Result as IcebergResult;
+use uuid::Uuid;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 #[allow(dead_code)]
@@ -338,13 +338,12 @@ fn create_manifest_writer_builder(
 /// - Data file entries: leave entries which are requested to remove due to compaction, and keep others unchanged
 /// - Deletion vector entries: leave entries which reference to data files to remove, and merge existing deletion vectors with puffion deletion vector blob
 /// - File indices entries: leave entries which are requested to remove due to index merge or data file compaction, and keep others unchanged
+///
 /// For more details, please refer to https://docs.google.com/document/d/1fIvrRfEHWBephsX0Br2G-Ils_30JIkmGkcdbFbovQjI/edit?usp=sharing
 ///
 /// Note: this function should be called before catalog transaction commit.
 ///
-/// TODO(hjiang):
-/// 1. There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
-/// 2. In most cases there's no payload from index merge and compaction, so could optimize the performance (i.e. no rewrite manifest for data files).
+/// TODO(hjiang): There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
 pub(crate) async fn append_puffin_metadata_and_rewrite(
     table_metadata: &TableMetadata,
     file_io: &FileIO,
@@ -421,13 +420,22 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
         // Assumption: we store all data file manifest entries in one manifest file.
         assert!(!manifest_entries.is_empty());
 
+        // For data file manifest entries, if nothing to remove we simply append the manifest file and do nothing.
+        if *manifest_metadata.content() == ManifestContentType::Data
+            && manifest_entries.first().as_ref().unwrap().file_format() == DataFileFormat::Parquet
+            && data_files_to_remove.is_empty()
+        {
+            manifest_list_writer.add_manifests([cur_manifest_file.clone()].into_iter())?;
+            continue;
+        }
+
         // Process deletion vector puffin files.
         for cur_manifest_entry in manifest_entries.into_iter() {
             // ============================
             // Data file entries
             // ============================
             //
-            // Process data files, remove those been merged.
+            // Process data files, remove those been merged; and compact all data file entries into one manifest file.
             if cur_manifest_entry.file_format() == DataFileFormat::Parquet {
                 assert_eq!(*manifest_metadata.content(), ManifestContentType::Data);
                 if data_files_to_remove.contains(cur_manifest_entry.data_file().file_path()) {
@@ -537,7 +545,6 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
             .await?;
         manifest_list_writer.add_manifests(std::iter::once(data_file_manifest))?;
     }
-
     // Flush file index manifest entries.
     if file_index_manifest_writer.is_some() {
         let index_file_manifest = file_index_manifest_writer

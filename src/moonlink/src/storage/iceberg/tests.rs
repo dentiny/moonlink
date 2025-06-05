@@ -392,7 +392,13 @@ async fn test_store_and_load_snapshot_impl(
 
     println!(
         "after recovery, data file pointed to is {:?}",
-        snapshot.indices.file_indices.get(0).as_ref().unwrap().files
+        snapshot
+            .indices
+            .file_indices
+            .first()
+            .as_ref()
+            .unwrap()
+            .files
     );
 
     validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await; // <----
