@@ -335,15 +335,17 @@ fn create_manifest_writer_builder(
 }
 
 /// Get all manifest files and entries,
-/// - Data file entries: leave entries which are requested to remove due to compaction, and keep others unchanged
-/// - Deletion vector entries: leave entries which reference to data files to remove, and merge existing deletion vectors with puffion deletion vector blob
-/// - File indices entries: leave entries which are requested to remove due to index merge or data file compaction, and keep others unchanged
+/// - Data file entries: retain all entries except those marked for removal due to compaction.
+/// - Deletion vector entries: remove entries referencing data files to be removed, and merge retained deletion vectors with the provided puffin deletion vector blob.
+/// - File indices entries: retain all entries except those marked for removal due to index merging or data file compaction.
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1fIvrRfEHWBephsX0Br2G-Ils_30JIkmGkcdbFbovQjI/edit?usp=sharing
 ///
 /// Note: this function should be called before catalog transaction commit.
 ///
-/// TODO(hjiang): There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
+/// TODO(hjiang):
+/// 1. There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
+/// 2. Could optimize to avoid file indices manifest file to rewrite.
 pub(crate) async fn append_puffin_metadata_and_rewrite(
     table_metadata: &TableMetadata,
     file_io: &FileIO,
@@ -412,7 +414,10 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
     // Map from referenced data file to deletion vector manifest entry.
     let mut existing_deletion_vector_entries = HashMap::new();
 
-    // Iterate through all manifest files, keep data manifest files, process hash index files, and merge all deletion vectors.
+    // How to tell different manifest entry types:
+    // - Data file: manifest content type `Data`, manifest entry file format `Parquet`
+    // - Deletion vector: manifest content type `Deletes`, manifest entry file format `Puffin`
+    // - File indices: manifest content type `Data`, manifest entry file format `Puffin`
     for cur_manifest_file in manifest_list.entries() {
         let manifest = cur_manifest_file.load_manifest(file_io).await?;
         let (manifest_entries, manifest_metadata) = manifest.into_parts();

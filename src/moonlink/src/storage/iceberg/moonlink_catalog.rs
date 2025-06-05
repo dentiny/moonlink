@@ -16,7 +16,7 @@ pub trait PuffinWrite {
         puffin_writer: PuffinWriter,
     ) -> IcebergResult<()>;
 
-    /// Set data files to remove, along with their corresponding deletion vectors and file indices.
+    /// Set data files to remove, their corresponding deletion vectors will be removed alongside.
     fn set_data_files_to_remove(&mut self, data_files: HashSet<String>);
 
     /// Set puffin file to remove.
