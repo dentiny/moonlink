@@ -245,7 +245,7 @@ struct IndexBlockBuilder {
 /// TODO(hjiang): Error handle for all IO operations.
 impl IndexBlockBuilder {
     pub async fn new(bucket_start_idx: u32, bucket_end_idx: u32, directory: PathBuf) -> Self {
-        let file_name = format!("index_block_{}.bin", uuid::Uuid::new_v4());
+        let file_name = format!("index_block_{}.bin", uuid::Uuid::now_v7());
         let file_path = directory.join(&file_name);
 
         let file = AsyncFile::create(&file_path).await.unwrap();

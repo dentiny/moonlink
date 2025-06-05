@@ -144,14 +144,14 @@ impl IcebergTableManager {
             DefaultLocationGenerator::new(self.iceberg_table.as_ref().unwrap().metadata().clone())
                 .unwrap();
         location_generator
-            .generate_location(&format!("{}-deletion-vector-v1-puffin.bin", Uuid::new_v4()))
+            .generate_location(&format!("{}-deletion-vector-v1-puffin.bin", Uuid::now_v7()))
     }
     fn get_unique_hash_index_v1_filepath(&self) -> String {
         let location_generator =
             DefaultLocationGenerator::new(self.iceberg_table.as_ref().unwrap().metadata().clone())
                 .unwrap();
         location_generator
-            .generate_location(&format!("{}-hash-index-v1-puffin.bin", Uuid::new_v4()))
+            .generate_location(&format!("{}-hash-index-v1-puffin.bin", Uuid::now_v7()))
     }
 
     /// Get or create an iceberg table based on the iceberg manager config.

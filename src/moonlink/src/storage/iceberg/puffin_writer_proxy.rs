@@ -324,7 +324,7 @@ fn create_manifest_writer_builder(
         file_io.new_output(format!(
             "{}/metadata/{}-m0.avro",
             table_metadata.location(),
-            Uuid::new_v4()
+            Uuid::now_v7()
         ))?,
         table_metadata.current_snapshot_id(),
         /*key_metadata=*/ vec![],
