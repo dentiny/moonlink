@@ -1,3 +1,6 @@
+[graph]
+all-features = true
+
 [licenses]
 allow = [
     "MIT",
@@ -27,8 +30,16 @@ ignore = [
 # TODO(hjiang): Resolve all duplicate dependencies.
 [bans]
 skip = [
+    { name = "base64" },
+    { name = "core-foundation" },
+    { name = "crypto-bigint" },
     { name = "getrandom" },
     { name = "hashbrown" },
+    { name = "h2" },
+    { name = "http" },
+    { name = "http-body" },
+    { name = "hyper" },
+    { name = "hyper-rustls" },
     { name = "itertools" },
     { name = "ordered-float" },
     { name = "rand" },
@@ -36,8 +47,14 @@ skip = [
     { name = "rand_core" },
     { name = "regex-automata" },
     { name = "regex-syntax" },
+    { name = "rustls" },
+    { name = "rustls-native-certs" },
+    { name = "rustls-pemfile" },
+    { name = "rustls-webpki" },
+    { name = "security-framework" },
     { name = "thiserror" },
     { name = "thiserror-impl" },
+    { name = "tokio-rustls" },
     { name = "twox-hash" },
     { name = "typed-builder" },
     { name = "typed-builder-macro" },
