@@ -1,8 +1,9 @@
-use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
+use crate::row;
+use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, RecordLocation};
 use futures::executor::block_on;
 use memmap2::Mmap;
 use more_asserts as ma;
-use std::collections::{BinaryHeap, HashSet};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
@@ -437,6 +438,84 @@ impl GlobalIndexBuilder {
             index_block_builder
                 .write_entry(entry.0, entry.1, entry.2, &global_index)
                 .await;
+        }
+        index_blocks.push(index_block_builder.build(&global_index).await);
+        global_index.index_blocks = index_blocks;
+        global_index
+    }
+
+    // ================================
+    // Build from merge with predicate
+    // ================================
+    // TODO(hjiang): Add usage example for both with and without predicate.
+    pub async fn build_from_merge_with_predicate<GetRemappedRecLoc, GetSegIdx>(
+        mut self,
+        indices: Vec<GlobalIndex>,
+        mut get_remapped_record_location: GetRemappedRecLoc,
+        mut get_seg_idx: GetSegIdx,
+    ) -> GlobalIndex
+    where
+        GetRemappedRecLoc: FnMut(RecordLocation) -> Option<RecordLocation>,
+        GetSegIdx: FnMut(RecordLocation) -> usize, /*seg_idx*/
+    {
+        // TODO(hjiang): Extract a util function to create a merging iterator from the given indices.
+        self.num_rows = indices.iter().map(|index| index.num_rows).sum();
+        self.files = indices
+            .iter()
+            .flat_map(|index| index.files.clone())
+            .collect();
+        let mut file_id_remaps = Vec::with_capacity(indices.len());
+        let mut file_id_after_remap = 0;
+        for index in indices.iter() {
+            let mut file_id_remap = vec![INVALID_FILE_ID; index.files.len()];
+            for (_, item) in file_id_remap.iter_mut().enumerate().take(index.files.len()) {
+                *item = file_id_after_remap;
+                file_id_after_remap += 1;
+            }
+            file_id_remaps.push(file_id_remap);
+        }
+        let mut iters = Vec::with_capacity(indices.len());
+        for (idx, index) in indices.iter().enumerate() {
+            iters.push(index.create_iterator(&file_id_remaps[idx]).await);
+        }
+        let merge_iter = GlobalIndexMergingIterator::new(iters).await;
+        self.build_from_merging_iterator_with_predicate(
+            merge_iter,
+            get_remapped_record_location,
+            get_seg_idx,
+        )
+        .await
+    }
+
+    async fn build_from_merging_iterator_with_predicate<GetRemappedRecLoc, GetSegIdx>(
+        mut self,
+        mut iter: GlobalIndexMergingIterator<'_>,
+        mut get_remapped_record_location: GetRemappedRecLoc,
+        mut get_seg_idx: GetSegIdx,
+    ) -> GlobalIndex
+    where
+        GetRemappedRecLoc: FnMut(RecordLocation) -> Option<RecordLocation>,
+        GetSegIdx: FnMut(RecordLocation) -> usize, /*seg_idx*/
+    {
+        let (num_buckets, mut global_index) = self.create_global_index();
+        let mut index_blocks = Vec::new();
+        let mut index_block_builder =
+            IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
+
+        while let Some((hash, old_seg_idx, old_row_idx)) = iter.next().await {
+            let old_record_location =
+                RecordLocation::DiskFile(global_index.files[old_seg_idx].file_id(), old_row_idx);
+            if let Some(new_record_location) = get_remapped_record_location(old_record_location) {
+                let new_row_idx = match new_record_location {
+                    RecordLocation::DiskFile(_, offset) => offset,
+                    _ => panic!("Expected DiskFile variant"),
+                };
+                let new_seg_idx = get_seg_idx(new_record_location);
+                index_block_builder
+                    .write_entry(hash, new_seg_idx, new_row_idx, &global_index)
+                    .await;
+            }
+            // The record doesn't exist in compacted data files, simply ignore.
         }
         index_blocks.push(index_block_builder.build(&global_index).await);
         global_index.index_blocks = index_blocks;

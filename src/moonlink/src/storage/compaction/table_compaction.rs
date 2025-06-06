@@ -21,6 +21,8 @@ pub(crate) struct CompactionPayload {
 pub(crate) struct CompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RecordLocation>,
+    /// Compacted data files.
+    pub(crate) data_files: Vec<MooncakeDataFileRef>,
     /// Compacted file indices.
     pub(crate) file_indices: Vec<FileIndex>,
 }
