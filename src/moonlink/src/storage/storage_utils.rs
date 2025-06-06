@@ -73,7 +73,6 @@ pub enum RecordLocation {
 
 impl Hash for RecordLocation {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        // Hash the variant discriminant
         std::mem::discriminant(self).hash(state);
         match self {
             RecordLocation::MemoryBatch(batch_id, offset) => {

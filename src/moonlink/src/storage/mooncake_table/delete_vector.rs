@@ -3,6 +3,7 @@ use arrow::array::BooleanArray;
 use arrow::compute;
 use arrow::record_batch::RecordBatch;
 use arrow::util::bit_util;
+use more_asserts as ma;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BatchDeletionVector {
@@ -77,17 +78,10 @@ impl BatchDeletionVector {
 
     /// Apply the deletion vector to filter a record batch
     pub(crate) fn apply_to_batch(&self, batch: &RecordBatch) -> Result<RecordBatch> {
-        if self.deletion_vector.is_none() {
-            return Ok(batch.clone());
-        }
-        let filter = BooleanArray::new_from_u8(self.deletion_vector.as_ref().unwrap())
-            .slice(0, batch.num_rows());
-        // Apply the filter to the batch
-        let filtered_batch = compute::filter_record_batch(batch, &filter)?;
-        Ok(filtered_batch)
+        self.apply_to_batch_with_slice(batch, /*start_row_idx=*/ 0)
     }
 
-    /// Similar to [`apply_to_batch`], this function also takes a slice indiciated by the [`start_row_idx`].
+    /// Similar to [`apply_to_batch`], this function also takes a slice of deletion vector indiciated by the [`start_row_idx`].
     pub(crate) fn apply_to_batch_with_slice(
         &self,
         batch: &RecordBatch,
@@ -96,6 +90,9 @@ impl BatchDeletionVector {
         if self.deletion_vector.is_none() {
             return Ok(batch.clone());
         }
+        let end_row_idx = start_row_idx + batch.num_rows();
+        ma::assert_le!(end_row_idx, self.max_rows);
+
         let filter = BooleanArray::new_from_u8(self.deletion_vector.as_ref().unwrap())
             .slice(start_row_idx, batch.num_rows());
         // Apply the filter to the batch
@@ -212,6 +209,85 @@ mod tests {
         assert_eq!(filtered_ages.value(2), 50);
 
         Ok(())
+    }
+
+    #[test]
+    fn test_apply_filter_with_slice() {
+        // Create deletion vector.
+        let mut batch_deletion_vector = BatchDeletionVector::new(/*max_rows=*/ 6);
+        batch_deletion_vector.delete_row(0);
+        batch_deletion_vector.delete_row(4);
+
+        // Create a test batch
+        let name_array =
+            Arc::new(StringArray::from(vec!["A", "B", "C", "D", "E", "F"])) as ArrayRef;
+        let age_array = Arc::new(Int32Array::from(vec![10, 20, 30, 40, 50, 60])) as ArrayRef;
+        let batch = RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("name", DataType::Utf8, false).with_metadata(HashMap::from([(
+                    "PARQUET:field_id".to_string(),
+                    "1".to_string(),
+                )])),
+                Field::new("age", DataType::Int32, false).with_metadata(HashMap::from([(
+                    "PARQUET:field_id".to_string(),
+                    "2".to_string(),
+                )])),
+            ])),
+            vec![name_array, age_array],
+        )
+        .unwrap();
+
+        // Apply deletion filter with slice.
+        let batch_part = batch.slice(/*offset=*/ 3, /*length=*/ 3);
+        let filtered = batch_deletion_vector
+            .apply_to_batch_with_slice(&batch_part, /*start_row_idx=*/ 3)
+            .unwrap();
+
+        // Check filtered batch
+        assert_eq!(filtered.num_rows(), 2);
+        let filtered_names = filtered
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        let filtered_ages = filtered
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .unwrap();
+
+        assert_eq!(filtered_names.value(0), "D");
+        assert_eq!(filtered_names.value(1), "F");
+
+        assert_eq!(filtered_ages.value(0), 40);
+        assert_eq!(filtered_ages.value(1), 60);
+
+        // Apply deletion vector with all rows siced.
+        let filtered = batch_deletion_vector
+            .apply_to_batch_with_slice(&batch, /*start_row_idx=*/ 0)
+            .unwrap();
+        // Check filtered batch
+        assert_eq!(filtered.num_rows(), 4);
+        let filtered_names = filtered
+            .column(0)
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap();
+        let filtered_ages = filtered
+            .column(1)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .unwrap();
+
+        assert_eq!(filtered_names.value(0), "B");
+        assert_eq!(filtered_names.value(1), "C");
+        assert_eq!(filtered_names.value(2), "D");
+        assert_eq!(filtered_names.value(3), "F");
+
+        assert_eq!(filtered_ages.value(0), 20);
+        assert_eq!(filtered_ages.value(1), 30);
+        assert_eq!(filtered_ages.value(2), 40);
+        assert_eq!(filtered_ages.value(3), 60);
     }
 
     #[test]
