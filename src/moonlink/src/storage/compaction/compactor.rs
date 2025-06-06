@@ -33,6 +33,12 @@ pub(crate) struct CompactionBuilder {
     schema: SchemaRef,
     /// File related parameters for compaction usage.
     file_params: CompactionFileParams,
+    /// Async arrow writer, which is initialized in a lazy style.
+    arrow_writer: Option<AsyncArrowWriter<tokio::fs::File>>,
+    /// Current data file.
+    cur_data_file: Option<MooncakeDataFileRef>,
+    /// Current compacted data file count.
+    compacted_file_count: usize,
 }
 
 // TODO(hjiang): CompactionBuilder should take a config to decide how big a compacted file should be, like DiskSliceWriter.
@@ -47,7 +53,33 @@ impl CompactionBuilder {
             compaction_payload,
             schema,
             file_params,
+            cur_data_file: None,
+            arrow_writer: None,
+            compacted_file_count: 0,
         }
+    }
+
+    /// Initialize arrow writer for once.
+    async fn initialize_arrow_writer_for_once(&mut self) -> Result<()> {
+        // If we create multiple data files during compaction, simply increment file id and recreate a new one.
+        if self.arrow_writer.is_some() {
+            return Ok(());
+        }
+
+        let file_id = get_unique_file_id_for_flush(
+            self.file_params.table_auto_incr_id as u64,
+            /*file_idx=*/ 0,
+        );
+        let file_path = get_random_file_name_in_dir(self.file_params.dir_path.as_path());
+        let data_file = create_data_file(file_id, file_path.clone());
+        self.cur_data_file = Some(data_file);
+
+        let write_file = tokio::fs::File::create(&file_path).await?;
+        let writer: AsyncArrowWriter<tokio::fs::File> =
+            AsyncArrowWriter::try_new(write_file, self.schema.clone(), /*props=*/ None)?;
+        self.arrow_writer = Some(writer);
+
+        Ok(())
     }
 
     /// Util function to read the given parquet file, apply the corresponding deletion vector, and write it to the given arrow writer.
@@ -55,11 +87,9 @@ impl CompactionBuilder {
     ///
     /// TODO(hjiang): The compacted file won't be closed and will be reused, should set a threshold.
     async fn apply_deletion_vector_and_write(
-        &self,
+        &mut self,
         old_data_file: MooncakeDataFileRef,
         puffin_blob_ref: Option<PuffinBlobRef>,
-        writer: &mut AsyncArrowWriter<tokio::fs::File>,
-        new_data_file: MooncakeDataFileRef,
         mut new_row_idx: usize,
     ) -> Result<DataFileRemap> {
         let file = tokio::fs::File::open(old_data_file.file_path()).await?;
@@ -87,7 +117,12 @@ impl CompactionBuilder {
             let cur_num_rows = cur_record_batch.num_rows();
             let filtered_record_batch =
                 get_filtered_record_batch(cur_record_batch, old_start_row_idx);
-            writer.write(&filtered_record_batch).await?;
+            self.initialize_arrow_writer_for_once().await?;
+            self.arrow_writer
+                .as_mut()
+                .unwrap()
+                .write(&filtered_record_batch)
+                .await?;
 
             // Construct old data file to new one mapping on-the-fly.
             old_to_new_remap.reserve(cur_num_rows);
@@ -97,7 +132,10 @@ impl CompactionBuilder {
                 }
                 old_to_new_remap.insert(
                     RecordLocation::DiskFile(old_data_file.file_id(), old_row_idx),
-                    RecordLocation::DiskFile(new_data_file.file_id(), new_row_idx),
+                    RecordLocation::DiskFile(
+                        self.cur_data_file.as_ref().unwrap().file_id(),
+                        new_row_idx,
+                    ),
                 );
                 new_row_idx += 1;
             }
@@ -110,43 +148,34 @@ impl CompactionBuilder {
 
     /// Util function to compact the given data files, with their corresponding deletion vector applied.
     async fn compact_data_files(&mut self) -> Result<DataFileRemap> {
-        let file_id = get_unique_file_id_for_flush(
-            self.file_params.table_auto_incr_id as u64,
-            /*file_idx=*/ 0,
-        );
-        let file_path = get_random_file_name_in_dir(self.file_params.dir_path.as_path());
-        let data_file = create_data_file(file_id, file_path.clone());
-
-        // TODO(hjiang): Should construct arrow writer in a lazy style.
-        let write_file = tokio::fs::File::create(&file_path).await?;
-        let mut writer =
-            AsyncArrowWriter::try_new(write_file, self.schema.clone(), /*props=*/ None)?;
-
         let mut new_row_idx = 0;
         let mut old_to_new_remap = HashMap::new();
-        for (cur_data_file, puffin_blob_ref) in self.compaction_payload.disk_files.iter() {
+
+        let disk_files = std::mem::take(&mut self.compaction_payload.disk_files);
+        for (cur_data_file, puffin_blob_ref) in disk_files.into_iter() {
             let new_remap = self
                 .apply_deletion_vector_and_write(
                     cur_data_file.clone(),
                     puffin_blob_ref.clone(),
-                    &mut writer,
-                    data_file.clone(),
                     new_row_idx,
                 )
                 .await?;
             new_row_idx += new_remap.len();
             old_to_new_remap.extend(new_remap);
         }
-        writer.close().await?;
 
         Ok(old_to_new_remap)
     }
 
-    /// Remap file indices based on the old record location and new one mapping.
-
     /// Perform a compaction operation, and get the result back.
     pub(crate) async fn build(&mut self) -> Result<CompactionResult> {
         let old_to_new_remap = self.compact_data_files().await?;
+        if !old_to_new_remap.is_empty() {
+            assert!(self.arrow_writer.is_some());
+            let arrow_writer = std::mem::take(&mut self.arrow_writer);
+            arrow_writer.unwrap().close().await?;
+        }
+        // TODO(hjiang): Remap file indices based on the old record location and new one mapping.
         Ok(CompactionResult {
             remapped_data_files: old_to_new_remap,
             file_indices: vec![],

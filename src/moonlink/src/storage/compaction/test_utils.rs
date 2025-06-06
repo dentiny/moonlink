@@ -124,9 +124,9 @@ pub(crate) fn get_possible_remap_for_two_files(
     // The first possibility.
     let mut expected_remap_1 = HashMap::new();
     let mut new_row_idx = 0;
-    for old_file_id in 0..2 {
+    for (old_file_id, cur_deletion_vector) in deletion_vectors.iter().enumerate().take(2) {
         for old_row_idx in 0..3 {
-            if !deletion_vectors[old_file_id].contains(&old_row_idx) {
+            if !cur_deletion_vector.contains(&old_row_idx) {
                 expected_remap_1.insert(
                     RecordLocation::DiskFile(FileId(old_file_id as u64), old_row_idx),
                     RecordLocation::DiskFile(compacted_file_id, new_row_idx),
