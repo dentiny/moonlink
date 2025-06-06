@@ -449,7 +449,9 @@ impl GlobalIndexBuilder {
     // TODO(hjiang): Add usage example for both with and without predicate.
     pub async fn build_from_merge_with_predicate<GetRemappedRecLoc, GetSegIdx>(
         mut self,
+        num_rows: u32,
         indices: Vec<GlobalIndex>,
+        new_data_files: Vec<MooncakeDataFileRef>,
         get_remapped_record_location: GetRemappedRecLoc,
         get_seg_idx: GetSegIdx,
     ) -> GlobalIndex
@@ -458,11 +460,11 @@ impl GlobalIndexBuilder {
         GetSegIdx: FnMut(RecordLocation) -> usize, /*seg_idx*/
     {
         // TODO(hjiang): Extract a util function to create a merging iterator from the given indices.
-        self.num_rows = indices.iter().map(|index| index.num_rows).sum();
         self.files = indices
             .iter()
             .flat_map(|index| index.files.clone())
             .collect();
+        self.num_rows = num_rows;
         let mut file_id_remaps = Vec::with_capacity(indices.len());
         let mut file_id_after_remap = 0;
         for index in indices.iter() {
@@ -480,6 +482,7 @@ impl GlobalIndexBuilder {
         let merge_iter = GlobalIndexMergingIterator::new(iters).await;
         self.build_from_merging_iterator_with_predicate(
             merge_iter,
+            new_data_files,
             get_remapped_record_location,
             get_seg_idx,
         )
@@ -489,6 +492,7 @@ impl GlobalIndexBuilder {
     async fn build_from_merging_iterator_with_predicate<GetRemappedRecLoc, GetSegIdx>(
         mut self,
         mut iter: GlobalIndexMergingIterator<'_>,
+        new_data_files: Vec<MooncakeDataFileRef>,
         mut get_remapped_record_location: GetRemappedRecLoc,
         mut get_seg_idx: GetSegIdx,
     ) -> GlobalIndex
@@ -518,6 +522,10 @@ impl GlobalIndexBuilder {
         }
         index_blocks.push(index_block_builder.build(&global_index).await);
         global_index.index_blocks = index_blocks;
+
+        // Now all the (hash, seg_idx, row_idx) points to the new files passed in.
+        global_index.files = new_data_files;
+
         global_index
     }
 }

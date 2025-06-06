@@ -11,13 +11,32 @@ use crate::storage::iceberg::deletion_vector::{
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_writer_proxy;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
+use crate::storage::iceberg::test_utils::load_arrow_batch;
+use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
+use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use crate::storage::PuffinBlobRef;
 
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+
+/// Test data.
+const ID_VALUES: [i32; 6] = [1, 2, 3, 4, 5, 6];
+const NAME_VALUES: [&str; 6] = ["a", "b", "c", "d", "e", "f"];
+const AGE_VALUES: [i32; 6] = [10, 20, 30, 40, 50, 60];
+
+/// Test util function to get hash value for the given row.
+fn get_hash_for_row(val1: i32, val2: &str, val3: i32) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    val1.hash(&mut hasher);
+    val2.hash(&mut hasher);
+    val3.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// Test util function to dump parquet files to local filesystem.
 pub(crate) fn create_test_batch_1() -> RecordBatch {
@@ -25,9 +44,9 @@ pub(crate) fn create_test_batch_1() -> RecordBatch {
     RecordBatch::try_new(
         arrow_schema.clone(),
         vec![
-            Arc::new(Int32Array::from(vec![1, 2, 3])), // id column
-            Arc::new(StringArray::from(vec!["a", "b", "c"])), // name column
-            Arc::new(Int32Array::from(vec![10, 20, 30])), // age column
+            Arc::new(Int32Array::from(ID_VALUES[..3].to_vec())), // id column
+            Arc::new(StringArray::from(NAME_VALUES[..3].to_vec())), // name column
+            Arc::new(Int32Array::from(AGE_VALUES[..3].to_vec())), // age column
         ],
     )
     .unwrap()
@@ -37,9 +56,9 @@ pub(crate) fn create_test_batch_2() -> RecordBatch {
     RecordBatch::try_new(
         arrow_schema.clone(),
         vec![
-            Arc::new(Int32Array::from(vec![4, 5, 6])), // id column
-            Arc::new(StringArray::from(vec!["d", "e", "f"])), // name column
-            Arc::new(Int32Array::from(vec![40, 50, 60])), // age column
+            Arc::new(Int32Array::from(ID_VALUES[3..].to_vec())), // id column
+            Arc::new(StringArray::from(NAME_VALUES[3..].to_vec())), // name column
+            Arc::new(Int32Array::from(AGE_VALUES[3..].to_vec())), // age column
         ],
     )
     .unwrap()
@@ -63,6 +82,62 @@ pub(crate) async fn dump_arrow_record_batches(
         writer.write(cur_record_batch).await.unwrap();
     }
     writer.close().await.unwrap();
+}
+
+/// Test util function to create and dump file indices, which correspond to test record batch.
+pub(crate) async fn create_file_indices_1(
+    directory: std::path::PathBuf,
+    data_file: MooncakeDataFileRef,
+) -> FileIndex {
+    let entries = vec![
+        (
+            get_hash_for_row(ID_VALUES[0], NAME_VALUES[0], AGE_VALUES[0]),
+            /*seg_idx=*/ 0,
+            /*row_idx=*/ 0,
+        ),
+        (
+            get_hash_for_row(ID_VALUES[1], NAME_VALUES[1], AGE_VALUES[1]),
+            /*seg_idx=*/ 0,
+            /*row_idx=*/ 1,
+        ),
+        (
+            get_hash_for_row(ID_VALUES[2], NAME_VALUES[2], AGE_VALUES[2]),
+            /*seg_idx=*/ 0,
+            /*row_idx=*/ 2,
+        ),
+    ];
+
+    let mut builder = GlobalIndexBuilder::new();
+    builder.set_files(vec![data_file]);
+    builder.set_directory(directory);
+    builder.build_from_flush(entries).await
+}
+pub(crate) async fn create_file_indices_2(
+    directory: std::path::PathBuf,
+    data_file: MooncakeDataFileRef,
+) -> FileIndex {
+    let entries = vec![
+        (
+            get_hash_for_row(ID_VALUES[3], NAME_VALUES[3], AGE_VALUES[3]),
+            /*seg_idx=*/ 0,
+            /*row_idx=*/ 0,
+        ),
+        (
+            get_hash_for_row(ID_VALUES[4], NAME_VALUES[4], AGE_VALUES[4]),
+            /*seg_idx=*/ 0,
+            /*row_idx=*/ 1,
+        ),
+        (
+            get_hash_for_row(ID_VALUES[5], NAME_VALUES[5], AGE_VALUES[5]),
+            /*seg_idx=*/ 0,
+            /*row_idx=*/ 2,
+        ),
+    ];
+
+    let mut builder = GlobalIndexBuilder::new();
+    builder.set_files(vec![data_file]);
+    builder.set_directory(directory);
+    builder.build_from_flush(entries).await
 }
 
 /// Test util functions to dump deletion vector puffin file to local filesystem.
@@ -173,4 +248,97 @@ pub(crate) fn get_possible_remap_for_two_files(
     }
 
     vec![expected_remap_1, expected_remap_2]
+}
+
+/// Test util function to validate data file compaction.
+///
+/// # Arguments
+///
+/// * old_row_indices: row indices of the data files before compaction, which should exist in the compacted data files.
+///
+/// Precondition: data files are generated by `create_test_batch_1` and `create_test_batch_2`.
+pub(crate) async fn check_data_file_compaction(
+    new_data_files: &Vec<MooncakeDataFileRef>,
+    old_row_indices: Vec<usize>,
+) {
+    if old_row_indices.is_empty() {
+        assert!(new_data_files.is_empty());
+        return;
+    }
+
+    // Data files are compacted into one.
+    assert_eq!(new_data_files.len(), 1);
+    let mut id_col = vec![];
+    let mut name_col = vec![];
+    let mut age_col = vec![];
+
+    for row_idx in 0..6 {
+        if old_row_indices.contains(&row_idx) {
+            id_col.push(ID_VALUES[row_idx]);
+            name_col.push(NAME_VALUES[row_idx]);
+            age_col.push(AGE_VALUES[row_idx]);
+        }
+    }
+
+    let expected_arrow_record = RecordBatch::try_new(
+        iceberg_test_utils::create_test_arrow_schema(),
+        vec![
+            Arc::new(Int32Array::from(id_col)),    // id column
+            Arc::new(StringArray::from(name_col)), // name column
+            Arc::new(Int32Array::from(age_col)),   // age column
+        ],
+    )
+    .unwrap();
+
+    let loaded_arrow_batch = load_arrow_batch(
+        &FileIOBuilder::new_fs_io().build().unwrap(),
+        &new_data_files[0].file_path(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(expected_arrow_record, loaded_arrow_batch);
+}
+
+/// Test util function to check file indices compaction.
+///
+/// # Arguments
+///
+/// * old_row_indices: row indices of the data files before compaction, which should exist in the compacted data files.
+///
+/// Precondition: data files are generated by `create_test_batch_1` and `create_test_batch_2`.
+pub(crate) async fn check_file_indices_compaction(
+    file_indices: &Vec<FileIndex>,
+    expected_file_id: Option<FileId>,
+    old_row_indices: Vec<usize>,
+) {
+    if old_row_indices.is_empty() {
+        assert!(file_indices.is_empty());
+        return;
+    }
+
+    // File indices are compacted into one.
+    assert_eq!(file_indices.len(), 1);
+    let compacted_file_indice = file_indices[0].clone();
+    assert_eq!(
+        compacted_file_indice.num_rows as usize,
+        old_row_indices.len()
+    );
+    for (expected_new_row_idx, old_row_idx) in old_row_indices.iter().enumerate() {
+        let hash_value = get_hash_for_row(
+            ID_VALUES[*old_row_idx],
+            NAME_VALUES[*old_row_idx],
+            AGE_VALUES[*old_row_idx],
+        );
+        let locs = compacted_file_indice.search(&hash_value).await;
+        assert_eq!(
+            locs.len(),
+            1,
+            "Failed to search for {}-th row in the compacted file indice",
+            old_row_idx
+        );
+        if let RecordLocation::DiskFile(actual_file_id, actual_new_row_idx) = locs[0] {
+            assert_eq!(expected_file_id.unwrap(), actual_file_id);
+            assert_eq!(expected_new_row_idx, actual_new_row_idx);
+        }
+    }
 }
