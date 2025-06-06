@@ -134,6 +134,7 @@ impl CompactionBuilder {
             new_row_idx += new_remap.len();
             old_to_new_remap.extend(new_remap);
         }
+        writer.close().await?;
 
         Ok(old_to_new_remap)
     }
@@ -145,4 +146,31 @@ impl CompactionBuilder {
             remapped_data_files: old_to_new_remap,
         })
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::storage::iceberg::test_utils::create_test_arrow_schema;
+
+    /// Case-1: single file, no deletion vector.
+    #[tokio::test]
+    async fn test_data_file_compaction_1() {}
+
+    /// Case-2: single file, with deletion vector, and there're row left.
+    #[tokio::test]
+    async fn test_data_file_compaction_2() {}
+
+    /// Case-3: single file, with deletion vector, and no rows left.
+    #[tokio::test]
+    async fn test_data_file_compaction_3() {}
+
+    /// Case-4: two files, no deletion vector.
+    #[tokio::test]
+    async fn test_data_file_compaction_4() {}
+
+    /// Case-5: two files, each with deletion vector.
+    #[tokio::test]
+    async fn test_data_file_compaction_5() {}
 }
