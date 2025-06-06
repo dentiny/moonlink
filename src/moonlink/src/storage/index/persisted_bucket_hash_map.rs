@@ -1,9 +1,8 @@
-use crate::row;
-use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, RecordLocation};
+use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use futures::executor::block_on;
 use memmap2::Mmap;
 use more_asserts as ma;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::{BinaryHeap, HashSet};
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::io::Cursor;
@@ -451,8 +450,8 @@ impl GlobalIndexBuilder {
     pub async fn build_from_merge_with_predicate<GetRemappedRecLoc, GetSegIdx>(
         mut self,
         indices: Vec<GlobalIndex>,
-        mut get_remapped_record_location: GetRemappedRecLoc,
-        mut get_seg_idx: GetSegIdx,
+        get_remapped_record_location: GetRemappedRecLoc,
+        get_seg_idx: GetSegIdx,
     ) -> GlobalIndex
     where
         GetRemappedRecLoc: FnMut(RecordLocation) -> Option<RecordLocation>,

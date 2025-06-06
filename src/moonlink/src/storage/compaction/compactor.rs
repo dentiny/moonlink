@@ -183,7 +183,7 @@ impl CompactionBuilder {
                     None
                 }
             };
-        let get_seg_idx = |new_record_location: RecordLocation| -> usize /*seg_idx*/ {
+        let get_seg_idx = |_new_record_location: RecordLocation| -> usize /*seg_idx*/ {
             0 // Now compact all data files into one.
         };
 
@@ -273,18 +273,9 @@ mod tests {
             table_auto_incr_id,
             /*file_idx=*/ 0,
         ));
-        let mut expected_remap = HashMap::with_capacity(3);
-        expected_remap.insert(
-            RecordLocation::DiskFile(FileId(0), 0),
-            RecordLocation::DiskFile(compacted_file_id, 0),
-        );
-        expected_remap.insert(
-            RecordLocation::DiskFile(FileId(0), 1),
-            RecordLocation::DiskFile(compacted_file_id, 1),
-        );
-        expected_remap.insert(
-            RecordLocation::DiskFile(FileId(0), 2),
-            RecordLocation::DiskFile(compacted_file_id, 2),
+        let expected_remap = test_utils::get_expected_remap_for_one_file(
+            compacted_file_id,
+            /*deletion_vector=*/ vec![],
         );
         assert_eq!(remap.remapped_data_files, expected_remap);
     }
@@ -340,14 +331,9 @@ mod tests {
             table_auto_incr_id,
             /*file_idx=*/ 0,
         ));
-        let mut expected_remap = HashMap::with_capacity(3);
-        expected_remap.insert(
-            RecordLocation::DiskFile(FileId(0), 0),
-            RecordLocation::DiskFile(compacted_file_id, 0),
-        );
-        expected_remap.insert(
-            RecordLocation::DiskFile(FileId(0), 2),
-            RecordLocation::DiskFile(compacted_file_id, 1),
+        let expected_remap = test_utils::get_expected_remap_for_one_file(
+            compacted_file_id,
+            /*deletion_vector=*/ vec![1],
         );
         assert_eq!(remap.remapped_data_files, expected_remap);
     }
