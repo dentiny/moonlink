@@ -177,11 +177,7 @@ impl CompactionBuilder {
     ) -> FileIndex {
         let get_remapped_record_location =
             |old_record_location: RecordLocation| -> Option<RecordLocation> {
-                if let Some(new_record_location) = old_to_new_remap.get(&old_record_location) {
-                    Some(new_record_location.clone())
-                } else {
-                    None
-                }
+                old_to_new_remap.get(&old_record_location).cloned()
             };
         let get_seg_idx = |_new_record_location: RecordLocation| -> usize /*seg_idx*/ {
             0 // Now compact all data files into one.

@@ -1,24 +1,12 @@
+use crate::create_data_file;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
-use crate::storage::compaction::table_compaction::{CompactionPayload, CompactionResult};
+use crate::storage::compaction::table_compaction::CompactionPayload;
 use crate::storage::compaction::test_utils;
-use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
-use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
-use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::FileId;
-use crate::storage::storage_utils::RecordLocation;
-use crate::storage::storage_utils::{
-    get_random_file_name_in_dir, get_unique_file_id_for_flush, MooncakeDataFileRef,
-};
-use crate::{create_data_file, Result};
-
-use arrow_array::RecordBatch;
-use arrow_schema::SchemaRef;
-use futures::TryStreamExt;
-use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
-use parquet::arrow::AsyncArrowWriter;
+use crate::storage::storage_utils::{get_unique_file_id_for_flush, MooncakeDataFileRef};
 
 use std::collections::HashMap;
 
@@ -71,7 +59,7 @@ async fn test_data_file_compaction_1() {
 
     // Check file indice compaction.
     test_utils::check_file_indices_compaction(
-        &compaction_result.file_indices,
+        compaction_result.file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ vec![0, 1, 2],
     )
@@ -79,7 +67,7 @@ async fn test_data_file_compaction_1() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        &compaction_result.data_files,
+        compaction_result.data_files.as_slice(),
         /*old_row_indices=*/ vec![0, 1, 2],
     )
     .await;
@@ -146,7 +134,7 @@ async fn test_data_file_compaction_2() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        &compaction_result.file_indices,
+        compaction_result.file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ vec![0, 2],
     )
@@ -154,7 +142,7 @@ async fn test_data_file_compaction_2() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        &compaction_result.data_files,
+        compaction_result.data_files.as_slice(),
         /*old_row_indices=*/ vec![0, 2],
     )
     .await;
@@ -216,7 +204,7 @@ async fn test_data_file_compaction_3() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        &compaction_result.file_indices,
+        compaction_result.file_indices.as_slice(),
         /*expected_file_id=*/ None,
         /*old_row_indices=*/ vec![],
     )
@@ -224,7 +212,7 @@ async fn test_data_file_compaction_3() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        &compaction_result.data_files,
+        compaction_result.data_files.as_slice(),
         /*old_row_indices=*/ vec![],
     )
     .await;
@@ -291,7 +279,7 @@ async fn test_data_file_compaction_4() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        &compaction_result.file_indices,
+        compaction_result.file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ (0..6).collect(),
     )
@@ -299,7 +287,7 @@ async fn test_data_file_compaction_4() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        &compaction_result.data_files,
+        compaction_result.data_files.as_slice(),
         /*old_row_indices=*/ (0..6).collect(),
     )
     .await;
@@ -393,7 +381,7 @@ async fn test_data_file_compaction_5() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        &compaction_result.file_indices,
+        compaction_result.file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ vec![0, 2, 4],
     )
@@ -401,7 +389,7 @@ async fn test_data_file_compaction_5() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        &compaction_result.data_files,
+        compaction_result.data_files.as_slice(),
         /*old_row_indices=*/ vec![0, 2, 4],
     )
     .await;
@@ -487,7 +475,7 @@ async fn test_data_file_compaction_6() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        &compaction_result.file_indices,
+        compaction_result.file_indices.as_slice(),
         /*expected_file_id=*/ None,
         /*old_row_indices=*/ vec![],
     )
@@ -495,7 +483,7 @@ async fn test_data_file_compaction_6() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        &compaction_result.data_files,
+        compaction_result.data_files.as_slice(),
         /*old_row_indices=*/ vec![],
     )
     .await;
