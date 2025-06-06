@@ -51,8 +51,10 @@ impl CompactionBuilder {
     }
 
     /// Util function to read the given parquet file, apply the corresponding deletion vector, and write it to the given arrow writer.
-    /// Return the number of rows written.
-    async fn apply_deletion_vector(
+    /// Return the data file mapping.
+    ///
+    /// TODO(hjiang): The compacted file won't be closed and will be reused, should set a threshold.
+    async fn apply_deletion_vector_and_write(
         &self,
         old_data_file: MooncakeDataFileRef,
         puffin_blob_ref: Option<PuffinBlobRef>,
@@ -97,10 +99,10 @@ impl CompactionBuilder {
                     RecordLocation::DiskFile(old_data_file.file_id(), old_row_idx),
                     RecordLocation::DiskFile(new_data_file.file_id(), new_row_idx),
                 );
+                new_row_idx += 1;
             }
 
             old_start_row_idx += cur_num_rows;
-            new_row_idx += filtered_record_batch.num_rows();
         }
 
         Ok(old_to_new_remap)
@@ -110,7 +112,7 @@ impl CompactionBuilder {
     async fn compact_data_files(&mut self) -> Result<DataFileRemap> {
         let file_id = get_unique_file_id_for_flush(
             self.file_params.table_auto_incr_id as u64,
-            /*out_file_id=*/ 0,
+            /*file_idx=*/ 0,
         );
         let file_path = get_random_file_name_in_dir(self.file_params.dir_path.as_path());
         let data_file = create_data_file(file_id, file_path.clone());
@@ -123,7 +125,7 @@ impl CompactionBuilder {
         let mut old_to_new_remap = HashMap::new();
         for (cur_data_file, puffin_blob_ref) in self.compaction_payload.disk_files.iter() {
             let new_remap = self
-                .apply_deletion_vector(
+                .apply_deletion_vector_and_write(
                     cur_data_file.clone(),
                     puffin_blob_ref.clone(),
                     &mut writer,
@@ -139,11 +141,14 @@ impl CompactionBuilder {
         Ok(old_to_new_remap)
     }
 
+    /// Remap file indices based on the old record location and new one mapping.
+
     /// Perform a compaction operation, and get the result back.
     pub(crate) async fn build(&mut self) -> Result<CompactionResult> {
         let old_to_new_remap = self.compact_data_files().await?;
         Ok(CompactionResult {
             remapped_data_files: old_to_new_remap,
+            file_indices: vec![],
         })
     }
 }
@@ -152,19 +157,178 @@ impl CompactionBuilder {
 mod tests {
     use super::*;
 
-    use crate::storage::iceberg::test_utils::create_test_arrow_schema;
+    use crate::storage::compaction::test_utils;
+    use crate::storage::iceberg::test_utils as iceberg_test_utils;
+    use crate::storage::storage_utils::FileId;
 
     /// Case-1: single file, no deletion vector.
     #[tokio::test]
-    async fn test_data_file_compaction_1() {}
+    async fn test_data_file_compaction_1() {
+        // Create data file.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let data_file = temp_dir.path().join("test-1.parquet");
+        let data_file =
+            create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
+        let record_batch = test_utils::create_test_batch_1();
+        test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
 
-    /// Case-2: single file, with deletion vector, and there're row left.
+        // Prepare compaction payload.
+        let payload = CompactionPayload {
+            disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
+                data_file.clone(),
+                None,
+            )]),
+            file_indices: vec![],
+        };
+        let table_auto_incr_id: u64 = 1;
+        let file_params = CompactionFileParams {
+            dir_path: std::path::PathBuf::from(temp_dir.path()),
+            table_auto_incr_id: table_auto_incr_id as u32,
+        };
+
+        // Perform compaction.
+        let mut builder = CompactionBuilder::new(
+            payload,
+            iceberg_test_utils::create_test_arrow_schema(),
+            file_params,
+        );
+        let remap = builder.build().await.unwrap();
+
+        // Check remap results.
+        let compacted_file_id = FileId(get_unique_file_id_for_flush(
+            table_auto_incr_id,
+            /*file_idx=*/ 0,
+        ));
+        let mut expected_remap = HashMap::with_capacity(3);
+        expected_remap.insert(
+            RecordLocation::DiskFile(FileId(0), 0),
+            RecordLocation::DiskFile(compacted_file_id, 0),
+        );
+        expected_remap.insert(
+            RecordLocation::DiskFile(FileId(0), 1),
+            RecordLocation::DiskFile(compacted_file_id, 1),
+        );
+        expected_remap.insert(
+            RecordLocation::DiskFile(FileId(0), 2),
+            RecordLocation::DiskFile(compacted_file_id, 2),
+        );
+        assert_eq!(remap.remapped_data_files, expected_remap);
+    }
+
+    /// Case-2: single file, with deletion vector, and there're row left after deletion.
     #[tokio::test]
-    async fn test_data_file_compaction_2() {}
+    async fn test_data_file_compaction_2() {
+        // Create data file.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let data_file = temp_dir.path().join("test-1.parquet");
+
+        // Create data file.
+        let data_file =
+            create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
+        let record_batch = test_utils::create_test_batch_1();
+        test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
+
+        // Create deletion vector puffin file.
+        let puffin_filepath = temp_dir.path().join("deletion-vector-1.puffin");
+        let mut batch_deletion_vector = BatchDeletionVector::new(/*max_rows=*/ 3);
+        batch_deletion_vector.delete_row(1);
+        let puffin_blob_ref = test_utils::dump_deletion_vector_puffin(
+            data_file.file_path().clone(),
+            puffin_filepath.to_str().unwrap().to_string(),
+            batch_deletion_vector,
+        )
+        .await;
+
+        // Prepare compaction payload.
+        let payload = CompactionPayload {
+            disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
+                data_file.clone(),
+                Some(puffin_blob_ref),
+            )]),
+            file_indices: vec![],
+        };
+        let table_auto_incr_id: u64 = 1;
+        let file_params = CompactionFileParams {
+            dir_path: std::path::PathBuf::from(temp_dir.path()),
+            table_auto_incr_id: table_auto_incr_id as u32,
+        };
+
+        // Perform compaction.
+        let mut builder = CompactionBuilder::new(
+            payload,
+            iceberg_test_utils::create_test_arrow_schema(),
+            file_params,
+        );
+        let remap = builder.build().await.unwrap();
+
+        // Check remap.
+        let compacted_file_id = FileId(get_unique_file_id_for_flush(
+            table_auto_incr_id,
+            /*file_idx=*/ 0,
+        ));
+        let mut expected_remap = HashMap::with_capacity(3);
+        expected_remap.insert(
+            RecordLocation::DiskFile(FileId(0), 0),
+            RecordLocation::DiskFile(compacted_file_id, 0),
+        );
+        expected_remap.insert(
+            RecordLocation::DiskFile(FileId(0), 2),
+            RecordLocation::DiskFile(compacted_file_id, 1),
+        );
+        assert_eq!(remap.remapped_data_files, expected_remap);
+    }
 
     /// Case-3: single file, with deletion vector, and no rows left.
     #[tokio::test]
-    async fn test_data_file_compaction_3() {}
+    async fn test_data_file_compaction_3() {
+        // Create data file.
+        let temp_dir = tempfile::tempdir().unwrap();
+        let data_file = temp_dir.path().join("test-1.parquet");
+
+        // Create data file.
+        let data_file =
+            create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
+        let record_batch = test_utils::create_test_batch_1();
+        test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
+
+        // Create deletion vector puffin file.
+        let puffin_filepath = temp_dir.path().join("deletion-vector-1.puffin");
+        let mut batch_deletion_vector = BatchDeletionVector::new(/*max_rows=*/ 3);
+        batch_deletion_vector.delete_row(0);
+        batch_deletion_vector.delete_row(1);
+        batch_deletion_vector.delete_row(2);
+        let puffin_blob_ref = test_utils::dump_deletion_vector_puffin(
+            data_file.file_path().clone(),
+            puffin_filepath.to_str().unwrap().to_string(),
+            batch_deletion_vector,
+        )
+        .await;
+
+        // Prepare compaction payload.
+        let payload = CompactionPayload {
+            disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
+                data_file.clone(),
+                Some(puffin_blob_ref),
+            )]),
+            file_indices: vec![],
+        };
+        let table_auto_incr_id: u64 = 1;
+        let file_params = CompactionFileParams {
+            dir_path: std::path::PathBuf::from(temp_dir.path()),
+            table_auto_incr_id: table_auto_incr_id as u32,
+        };
+
+        // Perform compaction.
+        let mut builder = CompactionBuilder::new(
+            payload,
+            iceberg_test_utils::create_test_arrow_schema(),
+            file_params,
+        );
+        let remap = builder.build().await.unwrap();
+
+        // Check remap.
+        assert!(remap.remapped_data_files.is_empty());
+    }
 
     /// Case-4: two files, no deletion vector.
     #[tokio::test]

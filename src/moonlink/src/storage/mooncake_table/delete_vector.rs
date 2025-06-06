@@ -26,7 +26,7 @@ impl BatchDeletionVector {
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
         if self.deletion_vector.is_none() {
-            return false;
+            return true;
         }
         self.collect_deleted_rows().is_empty()
     }
