@@ -38,7 +38,7 @@ pub(crate) struct CompactionBuilder {
     /// Current data file.
     cur_data_file: Option<MooncakeDataFileRef>,
     /// Current compacted data file count.
-    compacted_file_count: usize,
+    compacted_file_count: u64,
 }
 
 // TODO(hjiang): CompactionBuilder should take a config to decide how big a compacted file should be, like DiskSliceWriter.
@@ -68,7 +68,7 @@ impl CompactionBuilder {
 
         let file_id = get_unique_file_id_for_flush(
             self.file_params.table_auto_incr_id as u64,
-            /*file_idx=*/ 0,
+            self.compacted_file_count,
         );
         let file_path = get_random_file_name_in_dir(self.file_params.dir_path.as_path());
         let data_file = create_data_file(file_id, file_path.clone());
