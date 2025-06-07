@@ -371,6 +371,23 @@ impl GlobalIndexBuilder {
         (num_buckets, global_index)
     }
 
+    // Util function for merge file indices, to get file id remap.
+    fn create_file_id_remap_at_merge<'a>(
+        file_indice_iter: impl Iterator<Item = &'a GlobalIndex>,
+    ) -> Vec<Vec<u32>> {
+        let mut file_id_remaps = vec![];
+        let mut file_id_after_remap = 0;
+        for index in file_indice_iter {
+            let mut file_id_remap = vec![INVALID_FILE_ID; index.files.len()];
+            for (_, item) in file_id_remap.iter_mut().enumerate().take(index.files.len()) {
+                *item = file_id_after_remap;
+                file_id_after_remap += 1;
+            }
+            file_id_remaps.push(file_id_remap);
+        }
+        file_id_remaps
+    }
+
     // ================================
     // Build from flush
     // ================================
@@ -407,16 +424,7 @@ impl GlobalIndexBuilder {
             .iter()
             .flat_map(|index| index.files.clone())
             .collect();
-        let mut file_id_remaps = Vec::with_capacity(indices.len());
-        let mut file_id_after_remap = 0;
-        for index in indices.iter() {
-            let mut file_id_remap = vec![INVALID_FILE_ID; index.files.len()];
-            for (_, item) in file_id_remap.iter_mut().enumerate().take(index.files.len()) {
-                *item = file_id_after_remap;
-                file_id_after_remap += 1;
-            }
-            file_id_remaps.push(file_id_remap);
-        }
+        let file_id_remaps = Self::create_file_id_remap_at_merge(indices.iter());
         let mut iters = Vec::with_capacity(indices.len());
         for (idx, index) in indices.iter().enumerate() {
             iters.push(index.create_iterator(&file_id_remaps[idx]).await);
@@ -430,7 +438,6 @@ impl GlobalIndexBuilder {
         mut iter: GlobalIndexMergingIterator<'_>,
     ) -> GlobalIndex {
         let (num_buckets, mut global_index) = self.create_global_index();
-        let mut index_blocks = Vec::new();
         let mut index_block_builder =
             IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
         while let Some(entry) = iter.next().await {
@@ -438,6 +445,8 @@ impl GlobalIndexBuilder {
                 .write_entry(entry.0, entry.1, entry.2, &global_index)
                 .await;
         }
+
+        let mut index_blocks = Vec::new();
         index_blocks.push(index_block_builder.build(&global_index).await);
         global_index.index_blocks = index_blocks;
         global_index
@@ -446,8 +455,14 @@ impl GlobalIndexBuilder {
     // ================================
     // Build from merge with predicate
     // ================================
-    // TODO(hjiang): Add usage example for both with and without predicate.
-    pub async fn build_from_merge_with_predicate<GetRemappedRecLoc, GetSegIdx>(
+    //
+    // Different from [`build_from_merge`], it only merge items which could be found by [`get_remapped_record_location`].
+    //
+    // # Arguments
+    //
+    // * num_rows: number of rows after merge, which takes predicate into consideration.
+    // * get_remapped_record_location: a predicate to decide whether a hash entry will be merged into the final file indice, and emits (seg-idx, row-idx) for selected entries.
+    pub async fn build_from_merge_for_compaction<GetRemappedRecLoc, GetSegIdx>(
         mut self,
         num_rows: u32,
         indices: Vec<GlobalIndex>,
@@ -459,22 +474,14 @@ impl GlobalIndexBuilder {
         GetRemappedRecLoc: FnMut(RecordLocation) -> Option<RecordLocation>,
         GetSegIdx: FnMut(RecordLocation) -> usize, /*seg_idx*/
     {
-        // TODO(hjiang): Extract a util function to create a merging iterator from the given indices.
+        // Assign data files before compaction, used to compose old record location and look it up with [`get_remapped_record_location`] and new record location after compaction.
         self.files = indices
             .iter()
             .flat_map(|index| index.files.clone())
             .collect();
         self.num_rows = num_rows;
-        let mut file_id_remaps = Vec::with_capacity(indices.len());
-        let mut file_id_after_remap = 0;
-        for index in indices.iter() {
-            let mut file_id_remap = vec![INVALID_FILE_ID; index.files.len()];
-            for (_, item) in file_id_remap.iter_mut().enumerate().take(index.files.len()) {
-                *item = file_id_after_remap;
-                file_id_after_remap += 1;
-            }
-            file_id_remaps.push(file_id_remap);
-        }
+
+        let file_id_remaps = Self::create_file_id_remap_at_merge(indices.iter());
         let mut iters = Vec::with_capacity(indices.len());
         for (idx, index) in indices.iter().enumerate() {
             iters.push(index.create_iterator(&file_id_remaps[idx]).await);
@@ -501,7 +508,6 @@ impl GlobalIndexBuilder {
         GetSegIdx: FnMut(RecordLocation) -> usize, /*seg_idx*/
     {
         let (num_buckets, mut global_index) = self.create_global_index();
-        let mut index_blocks = Vec::new();
         let mut index_block_builder =
             IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
 
@@ -518,8 +524,10 @@ impl GlobalIndexBuilder {
                     .write_entry(hash, new_seg_idx, new_row_idx, &global_index)
                     .await;
             }
-            // The record doesn't exist in compacted data files, simply ignore.
+            // The record doesn't exist in compacted data files, which means the corresponding row doesn't exist in the data file after compaction, simply ignore.
         }
+
+        let mut index_blocks = Vec::new();
         index_blocks.push(index_block_builder.build(&global_index).await);
         global_index.index_blocks = index_blocks;
 
@@ -610,13 +618,12 @@ impl<'a> IndexBlockIterator<'a> {
                 .await;
             self.current_entry += 1;
             let seg_idx = self.file_id_remap.get(seg_idx).unwrap();
-            if *seg_idx != INVALID_FILE_ID {
-                return Some((
-                    lower_hash + self.current_upper_hash,
-                    *seg_idx as usize,
-                    row_idx,
-                ));
-            }
+            assert_ne!(*seg_idx, INVALID_FILE_ID);
+            return Some((
+                lower_hash + self.current_upper_hash,
+                *seg_idx as usize,
+                row_idx,
+            ));
         }
     }
 }

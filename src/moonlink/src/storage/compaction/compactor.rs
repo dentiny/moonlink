@@ -186,7 +186,7 @@ impl CompactionBuilder {
         let mut global_index_builder = GlobalIndexBuilder::new();
         global_index_builder.set_directory(self.file_params.dir_path.clone());
         global_index_builder
-            .build_from_merge_with_predicate(
+            .build_from_merge_for_compaction(
                 /*num_rows=*/ old_to_new_remap.len() as u32,
                 old_file_indices,
                 /*new_data_files=*/ vec![self.new_data_file.as_ref().unwrap().clone()],
