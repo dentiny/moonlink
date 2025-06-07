@@ -72,48 +72,41 @@ pub(crate) mod object_store_test_utils {
 
     use std::sync::Arc;
 
-    use aws_sdk_s3::config::{Credentials, Region};
-    use aws_sdk_s3::types::{Delete, ObjectIdentifier};
-    use aws_sdk_s3::Client as S3Client;
-
+    use base64::engine::general_purpose::STANDARD as base64;
+    use base64::Engine;
+    use chrono::Utc;
+    use hmac::{Hmac, Mac};
     use iceberg::Error as IcebergError;
     use iceberg::Result as IcebergResult;
+    use sha1::Sha1;
     use tokio_retry2::strategy::{jitter, ExponentialBackoff};
     use tokio_retry2::Retry;
 
-    /// Create s3 client to connect minio.
-    #[allow(dead_code)]
-    async fn create_s3_client() -> S3Client {
-        let creds = Credentials::new(
-            MINIO_ACCESS_KEY_ID.to_string(),
-            MINIO_SECRET_ACCESS_KEY.to_string(),
-            /*session_token=*/ None,
-            /*expires_after=*/ None,
-            /*provider_name=*/ "local-credentials",
-        );
-        let config = aws_sdk_s3::Config::builder()
-            .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
-            .credentials_provider(creds.clone())
-            .region(Region::new("us-east-1"))
-            .endpoint_url(MINIO_ENDPOINT.to_string())
-            .force_path_style(true)
-            .build();
-        S3Client::from_conf(config.clone())
-    }
+    type HmacSha1 = Hmac<Sha1>;
 
     /// Create test bucket in minio server.
     #[allow(dead_code)]
     async fn create_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
-        let s3_client = create_s3_client().await;
-        s3_client
-            .create_bucket()
-            .bucket(bucket.to_string())
+        let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
+        let string_to_sign = format!("PUT\n\n\n{}\n/{}", date, bucket);
+
+        let mut mac = HmacSha1::new_from_slice(MINIO_SECRET_ACCESS_KEY.as_bytes()).unwrap();
+        mac.update(string_to_sign.as_bytes());
+        let signature = base64.encode(mac.finalize().into_bytes());
+
+        let auth_header = format!("AWS {}:{}", MINIO_ACCESS_KEY_ID, signature);
+        let url = format!("{}/{}", MINIO_ENDPOINT, bucket);
+        let client = reqwest::Client::new();
+        client
+            .put(&url)
+            .header("Authorization", auth_header)
+            .header("Date", date)
             .send()
             .await
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!("Failed to create the test bucket in minio {}", e),
+                    format!("Failed to create bucket {} in minio {}", bucket, e),
                 )
             })?;
         Ok(())
@@ -142,65 +135,29 @@ pub(crate) mod object_store_test_utils {
     }
 
     /// Delete test bucket in minio server.
-    #[allow(dead_code)]
-    async fn delete_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
-        let s3_client = create_s3_client().await;
-        let objects = s3_client
-            .list_objects_v2()
-            .bucket(bucket.to_string())
+    pub async fn delete_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
+        let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
+        let string_to_sign = format!("DELETE\n\n\n{}\n/{}", date, bucket);
+
+        let mut mac = HmacSha1::new_from_slice(MINIO_SECRET_ACCESS_KEY.as_bytes()).unwrap();
+        mac.update(string_to_sign.as_bytes());
+        let signature = base64.encode(mac.finalize().into_bytes());
+        let auth_header = format!("AWS {}:{}", MINIO_ACCESS_KEY_ID, signature);
+        let url = format!("{}/{}", MINIO_ENDPOINT, bucket);
+
+        let client = reqwest::Client::new();
+        client
+            .delete(&url)
+            .header("Authorization", auth_header)
+            .header("Date", date)
             .send()
             .await
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!("Failed to list objects under test bucket in minio {}", e),
+                    format!("Failed to delete bucket {} in minio {}", bucket, e),
                 )
             })?;
-
-        if let Some(contents) = objects.contents {
-            let delete_objects: Vec<ObjectIdentifier> = contents
-                .into_iter()
-                .filter_map(|o| o.key)
-                .map(|key| {
-                    ObjectIdentifier::builder()
-                        .key(key)
-                        .build()
-                        .expect("Failed to build ObjectIdentifier")
-                })
-                .collect();
-
-            if !delete_objects.is_empty() {
-                s3_client
-                    .delete_objects()
-                    .bucket(bucket.to_string())
-                    .delete(
-                        Delete::builder()
-                            .set_objects(Some(delete_objects))
-                            .build()
-                            .expect("Failed to build Delete object"),
-                    )
-                    .send()
-                    .await
-                    .map_err(|e| {
-                        IcebergError::new(
-                            iceberg::ErrorKind::Unexpected,
-                            format!("Failed to delete objects under test bucket in minio {}", e),
-                        )
-                    })?;
-            }
-
-            s3_client
-                .delete_bucket()
-                .bucket(bucket.to_string())
-                .send()
-                .await
-                .map_err(|e| {
-                    IcebergError::new(
-                        iceberg::ErrorKind::Unexpected,
-                        format!("Failed to delete the test bucket in minio {}", e),
-                    )
-                })?;
-        }
 
         Ok(())
     }
