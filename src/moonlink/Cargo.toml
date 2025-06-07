@@ -10,7 +10,14 @@ storage-all = ["storage-fs", "storage-s3"]
 test-utils = []
 
 storage-fs = ["opendal/services-fs", "iceberg/storage-fs"]
-storage-s3 = ["opendal/services-s3", "iceberg/storage-s3", "base64", "hmac", "sha1", "reqwest"]
+storage-s3 = [
+    "opendal/services-s3",
+    "iceberg/storage-s3",
+    "base64",
+    "hmac",
+    "sha1",
+    "reqwest",
+]
 
 bench = []
 
@@ -20,10 +27,14 @@ arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-trait = { workspace = true }
+
+base64 = { version = "0.22", optional = true }
 bincode = { workspace = true }
+chrono = { workspace = true, optional = true }
 crc32fast = { workspace = true }
 futures = { workspace = true }
 hashbrown = { workspace = true }
+hmac = { version = "0.12", optional = true }
 iceberg = { workspace = true }
 itertools = { workspace = true }
 memmap2 = "0.9"
@@ -34,9 +45,11 @@ num-traits = { workspace = true }
 opendal = { workspace = true }
 parquet = { workspace = true }
 rand = { workspace = true }
+reqwest = { version = "0.12", features = ["json"], optional = true } 
 roaring = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha1 = { version = "0.10", optional = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-bitstream-io = { workspace = true }
@@ -46,12 +59,6 @@ tokio-retry2 = { version = "0.5", default-features = false, features = [
 typed-builder = "0.20"
 url = { workspace = true }
 uuid = { workspace = true }
-
-base64 = { version = "0.22", optional = true }
-hmac = { version = "0.12", optional = true }
-sha1 = { version = "0.10", optional = true }
-chrono = { workspace = true, optional = true }
-reqwest = { version = "0.12", features = ["json"], optional = true } 
 
 [dev-dependencies]
 criterion = "0.5.1"
