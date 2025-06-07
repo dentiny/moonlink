@@ -4,25 +4,37 @@ use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RecordLocation;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 
 /// Payload to trigger a compaction operation.
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
-pub(crate) struct CompactionPayload {
+pub(crate) struct DataCompactionPayload {
     /// Maps from data file to their deletion records.
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, Option<PuffinBlobRef>>,
     /// File indices to compact and rewrite.
     pub(crate) file_indices: Vec<FileIndex>,
 }
 
+/// Entry for compacted data files.
+#[allow(dead_code)]
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct CompactedDataEntry {
+    /// Number of rows for the compacted data file.
+    pub(crate) num_rows: usize,
+}
+
 /// Result for a compaction operation.
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct CompactionResult {
+pub(crate) struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RecordLocation>,
-    /// Compacted data files.
-    pub(crate) data_files: Vec<MooncakeDataFileRef>,
-    /// Compacted file indices.
-    pub(crate) file_indices: Vec<FileIndex>,
+    /// Old compacted data files.
+    pub(crate) old_data_files: Vec<MooncakeDataFileRef>,
+    /// New compacted data files.
+    pub(crate) new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+    /// Old compacted file indices.
+    pub(crate) old_file_indices: HashSet<FileIndex>,
+    /// New compacted file indices.
+    pub(crate) new_file_indices: Vec<FileIndex>,
 }

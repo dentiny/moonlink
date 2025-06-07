@@ -118,8 +118,11 @@ impl TableHandler {
         // Whether there's an ongoing iceberg snapshot operation.
         let mut iceberg_snapshot_ongoing = false;
 
-        // Whether there's an ongoing index merge operation.s
+        // Whether there's an ongoing index merge operation.
         let mut index_merge_ongoing = false;
+
+        // Whether there's an ongoig data compaction operation.
+        let mut data_compaction_ongoing = false;
 
         // Whether current table receives any update events.
         let mut table_updated = false;
@@ -226,7 +229,8 @@ impl TableHandler {
                                 table.create_snapshot(SnapshotOption {
                                     force_create: true,
                                     skip_iceberg_snapshot: iceberg_snapshot_ongoing,
-                                    skip_file_indices_merge: index_merge_ongoing,
+                                    skip_file_indices_merge: index_merge_ongoing || data_compaction_ongoing,
+                                    skip_data_file_compaction: index_merge_ongoing || data_compaction_ongoing,
                                 });
                                 mooncake_snapshot_ongoing = true;
                             }
@@ -276,19 +280,29 @@ impl TableHandler {
                 // Wait for the mooncake table event notification.
                 Some(event) = table_notify_rx.recv() => {
                     match event {
-                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, file_indice_merge_payload } => {
+                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload } => {
                             // Notify read the mooncake table commit of LSN.
                             table.notify_snapshot_reader(lsn);
 
                             // Process iceberg snapshot and trigger iceberg snapshot if necessary.
                             if can_initiate_iceberg_snapshot(iceberg_snapshot_result_consumed, iceberg_snapshot_ongoing) {
                                 if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
-                                    table.persist_iceberg_snapshot(iceberg_snapshot_payload);
                                     iceberg_snapshot_ongoing = true;
+                                    table.persist_iceberg_snapshot(iceberg_snapshot_payload);
                                 }
                             }
 
-                            // Process file indices merge.
+                            // Attemp to process data compaction.
+                            // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
+                            // to simplify workflow we limit at most one ongoing.
+                            if !data_compaction_ongoing {
+                                if let Some(data_compaction_payload) = data_compaction_payload {
+                                    data_compaction_ongoing = true;
+                                    table.perform_data_compaction(data_compaction_payload);
+                                }
+                            }
+
+                            // Attempt to process file indices merge.
                             // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
                             if !index_merge_ongoing {
@@ -346,6 +360,17 @@ impl TableHandler {
                             table.set_file_indices_merge_res(index_merge_result);
                             index_merge_ongoing = false;
                         }
+                        TableNotify::DataCompaction { data_compaction_result } => {
+                            match data_compaction_result {
+                                Ok(data_compaction_res) => {
+                                    table.set_data_compaction_res(data_compaction_res)
+                                }
+                                Err(err) => {
+                                    println!("Failed to perform compaction: {:?}", err);
+                                }
+                            }
+                            data_compaction_ongoing = false;
+                        }
                     }
                 }
                 // Periodic snapshot based on time
@@ -364,7 +389,8 @@ impl TableHandler {
                                 table.create_snapshot(SnapshotOption {
                                     force_create: true,
                                     skip_iceberg_snapshot: iceberg_snapshot_ongoing,
-                                    skip_file_indices_merge: index_merge_ongoing,
+                                    skip_file_indices_merge: index_merge_ongoing || data_compaction_ongoing,
+                                    skip_data_file_compaction: index_merge_ongoing || data_compaction_ongoing,
                                 });
                                 mooncake_snapshot_ongoing = true;
                                 continue;
@@ -377,7 +403,8 @@ impl TableHandler {
                     mooncake_snapshot_ongoing = table.create_snapshot(SnapshotOption {
                         force_create: false,
                         skip_iceberg_snapshot: iceberg_snapshot_ongoing,
-                        skip_file_indices_merge: index_merge_ongoing,
+                        skip_file_indices_merge: index_merge_ongoing || data_compaction_ongoing,
+                        skip_data_file_compaction: index_merge_ongoing || data_compaction_ongoing,
                     });
                 }
                 // If all senders have been dropped, exit the loop

@@ -145,6 +145,7 @@ pub async fn snapshot(
 ) -> (
     u64,
     Option<IcebergSnapshotPayload>,
+    Option<DataCompactionPayload>,
     Option<FileIndiceMergePayload>,
 ) {
     assert!(table.create_snapshot(SnapshotOption::default()));
@@ -153,8 +154,14 @@ pub async fn snapshot(
         TableNotify::MooncakeTableSnapshot {
             lsn,
             iceberg_snapshot_payload,
+            data_compaction_payload,
             file_indice_merge_payload,
-        } => (lsn, iceberg_snapshot_payload, file_indice_merge_payload),
+        } => (
+            lsn,
+            iceberg_snapshot_payload,
+            data_compaction_payload,
+            file_indice_merge_payload,
+        ),
         _ => {
             panic!("Expected to receive mooncake snapshot completion notification, but receives others");
         }

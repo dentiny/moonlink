@@ -1,6 +1,6 @@
 use crate::create_data_file;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
-use crate::storage::compaction::table_compaction::CompactionPayload;
+use crate::storage::compaction::table_compaction::DataCompactionPayload;
 use crate::storage::compaction::test_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
@@ -23,7 +23,7 @@ async fn test_data_file_compaction_1() {
         test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file.clone()).await;
 
     // Prepare compaction payload.
-    let payload = CompactionPayload {
+    let payload = DataCompactionPayload {
         disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
             data_file.clone(),
             None,
@@ -59,7 +59,7 @@ async fn test_data_file_compaction_1() {
 
     // Check file indice compaction.
     test_utils::check_file_indices_compaction(
-        compaction_result.file_indices.as_slice(),
+        compaction_result.new_file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ vec![0, 1, 2],
     )
@@ -67,7 +67,11 @@ async fn test_data_file_compaction_1() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result.data_files.as_slice(),
+        compaction_result
+            .new_data_files
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
         /*old_row_indices=*/ vec![0, 1, 2],
     )
     .await;
@@ -98,7 +102,7 @@ async fn test_data_file_compaction_2() {
     .await;
 
     // Prepare compaction payload.
-    let payload = CompactionPayload {
+    let payload = DataCompactionPayload {
         disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
             data_file.clone(),
             Some(puffin_blob_ref),
@@ -134,7 +138,7 @@ async fn test_data_file_compaction_2() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        compaction_result.file_indices.as_slice(),
+        compaction_result.new_file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ vec![0, 2],
     )
@@ -142,7 +146,11 @@ async fn test_data_file_compaction_2() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result.data_files.as_slice(),
+        compaction_result
+            .new_data_files
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
         /*old_row_indices=*/ vec![0, 2],
     )
     .await;
@@ -176,7 +184,7 @@ async fn test_data_file_compaction_3() {
     .await;
 
     // Prepare compaction payload.
-    let payload = CompactionPayload {
+    let payload = DataCompactionPayload {
         disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
             data_file.clone(),
             Some(puffin_blob_ref),
@@ -204,7 +212,7 @@ async fn test_data_file_compaction_3() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        compaction_result.file_indices.as_slice(),
+        compaction_result.new_file_indices.as_slice(),
         /*expected_file_id=*/ None,
         /*old_row_indices=*/ vec![],
     )
@@ -212,7 +220,11 @@ async fn test_data_file_compaction_3() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result.data_files.as_slice(),
+        compaction_result
+            .new_data_files
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
         /*old_row_indices=*/ vec![],
     )
     .await;
@@ -245,7 +257,7 @@ async fn test_data_file_compaction_4() {
         test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
 
     // Prepare compaction payload.
-    let payload = CompactionPayload {
+    let payload = DataCompactionPayload {
         disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
             (data_file_1.clone(), None),
             (data_file_2.clone(), None),
@@ -279,7 +291,7 @@ async fn test_data_file_compaction_4() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        compaction_result.file_indices.as_slice(),
+        compaction_result.new_file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ (0..6).collect(),
     )
@@ -287,7 +299,11 @@ async fn test_data_file_compaction_4() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result.data_files.as_slice(),
+        compaction_result
+            .new_data_files
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
         /*old_row_indices=*/ (0..6).collect(),
     )
     .await;
@@ -342,7 +358,7 @@ async fn test_data_file_compaction_5() {
     .await;
 
     // Prepare compaction payload.
-    let payload = CompactionPayload {
+    let payload = DataCompactionPayload {
         disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
             (data_file_1.clone(), Some(puffin_blob_ref_1)),
             (data_file_2.clone(), Some(puffin_blob_ref_2)),
@@ -381,7 +397,7 @@ async fn test_data_file_compaction_5() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        compaction_result.file_indices.as_slice(),
+        compaction_result.new_file_indices.as_slice(),
         /*expected_file_id=*/ Some(compacted_file_id),
         /*old_row_indices=*/ vec![0, 2, 4],
     )
@@ -389,7 +405,11 @@ async fn test_data_file_compaction_5() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result.data_files.as_slice(),
+        compaction_result
+            .new_data_files
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
         /*old_row_indices=*/ vec![0, 2, 4],
     )
     .await;
@@ -447,7 +467,7 @@ async fn test_data_file_compaction_6() {
     .await;
 
     // Prepare compaction payload.
-    let payload = CompactionPayload {
+    let payload = DataCompactionPayload {
         disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
             (data_file_1.clone(), Some(puffin_blob_ref_1)),
             (data_file_2.clone(), Some(puffin_blob_ref_2)),
@@ -475,7 +495,7 @@ async fn test_data_file_compaction_6() {
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
-        compaction_result.file_indices.as_slice(),
+        compaction_result.new_file_indices.as_slice(),
         /*expected_file_id=*/ None,
         /*old_row_indices=*/ vec![],
     )
@@ -483,7 +503,11 @@ async fn test_data_file_compaction_6() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result.data_files.as_slice(),
+        compaction_result
+            .new_data_files
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
         /*old_row_indices=*/ vec![],
     )
     .await;

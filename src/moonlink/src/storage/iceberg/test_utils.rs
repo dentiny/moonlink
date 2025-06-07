@@ -1,9 +1,12 @@
 /// This module provides a few test util functions.
 use crate::row::IdentityProp as RowIdentity;
+use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::puffin_utils;
+use crate::storage::index::index_merge_config::FileIndexMergeConfig;
+use crate::storage::mooncake_table::DataCompactionPayload;
 use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
@@ -177,8 +180,18 @@ pub(crate) async fn create_table_and_iceberg_manager(
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
         iceberg_snapshot_new_data_file_count: 0,
+        file_index_config: FileIndexMergeConfig::default(),
+        data_compaction_config: DataCompactionConfig::default(),
         ..Default::default()
     };
+
+    println!(
+        "data file to compact = {}",
+        mooncake_table_config
+            .data_compaction_config
+            .data_file_to_compact
+    );
+
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
@@ -210,6 +223,7 @@ pub(crate) async fn get_mooncake_snapshot_result(
     u64,
     Option<IcebergSnapshotPayload>,
     Option<FileIndiceMergePayload>,
+    Option<DataCompactionPayload>,
 ) {
     let notification = notify_rx.recv().await.unwrap();
     match notification {
@@ -217,7 +231,13 @@ pub(crate) async fn get_mooncake_snapshot_result(
             lsn,
             iceberg_snapshot_payload,
             file_indice_merge_payload,
-        } => (lsn, iceberg_snapshot_payload, file_indice_merge_payload),
+            data_compaction_payload,
+        } => (
+            lsn,
+            iceberg_snapshot_payload,
+            file_indice_merge_payload,
+            data_compaction_payload,
+        ),
         _ => {
             panic!("Expects to receive mooncake snapshot completion notification, but receives others.");
         }
@@ -232,6 +252,7 @@ pub(crate) async fn create_mooncake_snapshot(
     u64,
     Option<IcebergSnapshotPayload>,
     Option<FileIndiceMergePayload>,
+    Option<DataCompactionPayload>,
 ) {
     assert!(table.create_snapshot(SnapshotOption::default()));
     get_mooncake_snapshot_result(notify_rx).await

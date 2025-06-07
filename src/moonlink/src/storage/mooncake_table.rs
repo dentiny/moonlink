@@ -8,14 +8,20 @@ mod table_snapshot;
 mod transaction_stream;
 
 use super::iceberg::puffin_utils::PuffinBlobRef;
+use super::index::index_merge_config::FileIndexMergeConfig;
 use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
 use crate::error::{Error, Result};
 use crate::row::{IdentityProp, MoonlinkRow};
+use crate::storage::compaction::compaction_config::DataCompactionConfig;
+use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
+use crate::storage::compaction::table_compaction::CompactedDataEntry;
+pub(crate) use crate::storage::compaction::table_compaction::{
+    DataCompactionPayload, DataCompactionResult,
+};
 use crate::storage::iceberg::iceberg_table_manager::{
     IcebergTableConfig, IcebergTableManager, TableManager,
 };
-use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 #[cfg(test)]
 pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
@@ -62,7 +68,9 @@ pub struct TableConfig {
     pub iceberg_snapshot_new_data_file_count: usize,
     /// Number of unpersisted committed delete logs to trigger an iceberg snapshot.
     pub iceberg_snapshot_new_committed_deletion_log: usize,
-    /// Config for file index.
+    /// Config for data compaction.
+    pub data_compaction_config: DataCompactionConfig,
+    /// Config for index merge.
     pub file_index_config: FileIndexMergeConfig,
 }
 
@@ -112,6 +120,7 @@ impl TableConfig {
             iceberg_snapshot_new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
             iceberg_snapshot_new_committed_deletion_log:
                 Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
+            data_compaction_config: DataCompactionConfig::default(),
             file_index_config: FileIndexMergeConfig::default(),
         }
     }
@@ -234,6 +243,18 @@ pub struct SnapshotTask {
     /// New merged file indices, which should be imported to iceberg tables.
     new_merged_file_indices: Vec<FileIndex>,
 
+    /// --- States related to data compaction operation ---
+    /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
+    ///
+    /// Old data files which have been compacted.
+    old_compacted_data_files: Vec<MooncakeDataFileRef>,
+    /// New compacted data files, which should be imported to iceberg table.
+    new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+    /// Old file indices which have been compacted.
+    old_compacted_file_indices: HashSet<FileIndex>,
+    /// New compacted file indices, which should be imported to iceberg table.
+    new_compacted_file_indices: Vec<FileIndex>,
+
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
     ///
@@ -249,6 +270,14 @@ pub struct SnapshotTask {
     iceberg_persisted_new_merged_file_indices: Vec<FileIndex>,
     /// Persisted old merged file indices.
     iceberg_persisted_old_merged_file_indices: Vec<FileIndex>,
+    /// Persisted new compacted data files.
+    iceberg_persisted_new_compacted_data_files: Vec<MooncakeDataFileRef>,
+    /// Persisted old compacted data files.
+    iceberg_persisted_old_compacted_data_files: Vec<MooncakeDataFileRef>,
+    /// Persisted new compacted file indices.
+    iceberg_persisted_new_compacted_file_indices: Vec<FileIndex>,
+    /// Persisted old compacted file indices.
+    iceberg_persisted_old_compacted_file_indices: Vec<FileIndex>,
 }
 
 impl SnapshotTask {
@@ -265,14 +294,25 @@ impl SnapshotTask {
             new_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
+            // Index merge related fields.
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
+            // Data compaction related fields.
+            old_compacted_data_files: Vec::new(),
+            new_compacted_data_files: HashMap::new(),
+            old_compacted_file_indices: HashSet::new(),
+            new_compacted_file_indices: Vec::new(),
+            // Iceberg persistence result.
             iceberg_flush_lsn: None,
             iceberg_persisted_data_files: Vec::new(),
             iceberg_persisted_puffin_blob: HashMap::new(),
             iceberg_persisted_file_indices: Vec::new(),
             iceberg_persisted_new_merged_file_indices: Vec::new(),
             iceberg_persisted_old_merged_file_indices: Vec::new(),
+            iceberg_persisted_new_compacted_data_files: Vec::new(),
+            iceberg_persisted_old_compacted_data_files: Vec::new(),
+            iceberg_persisted_new_compacted_file_indices: Vec::new(),
+            iceberg_persisted_old_compacted_file_indices: Vec::new(),
         }
     }
 
@@ -340,6 +380,8 @@ pub struct SnapshotOption {
     pub(crate) skip_iceberg_snapshot: bool,
     /// Whether to skip file indices merge payload creation.
     pub(crate) skip_file_indices_merge: bool,
+    /// Whether to skip data file compaction payload creation.
+    pub(crate) skip_data_file_compaction: bool,
 }
 
 impl SnapshotOption {
@@ -348,6 +390,7 @@ impl SnapshotOption {
             force_create: false,
             skip_iceberg_snapshot: false,
             skip_file_indices_merge: false,
+            skip_data_file_compaction: false,
         }
     }
 }
@@ -555,6 +598,27 @@ impl MooncakeTable {
             .push(file_indices_res.merged_file_indices);
     }
 
+    /// Set data compaction result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
+    pub(crate) fn set_data_compaction_res(&mut self, data_compaction_res: DataCompactionResult) {
+        assert!(self.next_snapshot_task.old_compacted_data_files.is_empty());
+        self.next_snapshot_task.old_compacted_data_files = data_compaction_res.old_data_files;
+
+        assert!(self.next_snapshot_task.new_compacted_data_files.is_empty());
+        self.next_snapshot_task.new_compacted_data_files = data_compaction_res.new_data_files;
+
+        assert!(self
+            .next_snapshot_task
+            .old_compacted_file_indices
+            .is_empty());
+        self.next_snapshot_task.old_compacted_file_indices = data_compaction_res.old_file_indices;
+
+        assert!(self
+            .next_snapshot_task
+            .new_compacted_file_indices
+            .is_empty());
+        self.next_snapshot_task.new_compacted_file_indices = data_compaction_res.new_file_indices;
+    }
+
     /// Get iceberg snapshot flush LSN.
     pub(crate) fn get_iceberg_snapshot_lsn(&self) -> Option<u64> {
         self.last_iceberg_snapshot_lsn
@@ -698,6 +762,30 @@ impl MooncakeTable {
         true
     }
 
+    /// Perform data compaction, whose complection will be notified separately.
+    pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
+        let next_file_id = self.next_file_id;
+        self.next_file_id += 1;
+        let file_params = CompactionFileParams {
+            dir_path: self.metadata.path.clone(),
+            table_auto_incr_id: next_file_id,
+        };
+        let schema_ref = self.metadata.schema.clone();
+        let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
+
+        // Create a detached task, whose completion will be notified separately.
+        tokio::task::spawn(async move {
+            let mut builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
+            let data_compaction_result = builder.build().await;
+            table_notify_tx_copy
+                .send(TableNotify::DataCompaction {
+                    data_compaction_result,
+                })
+                .await
+                .unwrap();
+        });
+    }
+
     pub(crate) fn notify_snapshot_reader(&self, lsn: u64) {
         self.table_snapshot_watch_sender.send(lsn).unwrap();
     }
@@ -807,15 +895,17 @@ impl MooncakeTable {
         opt: SnapshotOption,
         table_notify: Sender<TableNotify>,
     ) {
-        let (lsn, iceberg_snapshot_payload, file_indice_merge_payload) = snapshot
-            .write()
-            .await
-            .update_snapshot(next_snapshot_task, opt)
-            .await;
+        let (lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload) =
+            snapshot
+                .write()
+                .await
+                .update_snapshot(next_snapshot_task, opt)
+                .await;
         table_notify
             .send(TableNotify::MooncakeTableSnapshot {
                 lsn,
                 iceberg_snapshot_payload,
+                data_compaction_payload,
                 file_indice_merge_payload,
             })
             .await
@@ -834,15 +924,21 @@ impl MooncakeTable {
     ) -> (
         Option<IcebergSnapshotPayload>,
         Option<FileIndiceMergePayload>,
+        Option<DataCompactionPayload>,
     ) {
         let notification = receiver.recv().await.unwrap();
         if let TableNotify::MooncakeTableSnapshot {
             iceberg_snapshot_payload,
             file_indice_merge_payload,
+            data_compaction_payload,
             ..
         } = notification
         {
-            (iceberg_snapshot_payload, file_indice_merge_payload)
+            (
+                iceberg_snapshot_payload,
+                file_indice_merge_payload,
+                data_compaction_payload,
+            )
         } else {
             panic!("Expected mooncake snapshot completion notification, but get others.");
         }
@@ -874,7 +970,7 @@ impl MooncakeTable {
         if !mooncake_snapshot_created {
             return Ok(());
         }
-        let (iceberg_snapshot_payload, _) = Self::sync_mooncake_snapshot(receiver).await;
+        let (iceberg_snapshot_payload, _, _) = Self::sync_mooncake_snapshot(receiver).await;
 
         // Create iceberg snapshot if possible.
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
@@ -900,11 +996,12 @@ impl MooncakeTable {
             force_create: true,
             skip_iceberg_snapshot: false,
             skip_file_indices_merge: false,
+            skip_data_file_compaction: false,
         };
         assert!(self.create_snapshot(force_snapshot_option.clone()));
 
         // Create iceberg snapshot.
-        let (iceberg_snapshot_payload, _) = Self::sync_mooncake_snapshot(receiver).await;
+        let (iceberg_snapshot_payload, _, _) = Self::sync_mooncake_snapshot(receiver).await;
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
             self.persist_iceberg_snapshot(iceberg_snapshot_payload);
             let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
@@ -913,7 +1010,7 @@ impl MooncakeTable {
 
         // Perform index merge.
         assert!(self.create_snapshot(force_snapshot_option.clone()));
-        let (iceberg_snapshot_payload, file_indice_merge_payload) =
+        let (iceberg_snapshot_payload, file_indice_merge_payload, _) =
             Self::sync_mooncake_snapshot(receiver).await;
         assert!(iceberg_snapshot_payload.is_none());
         let file_indice_merge_payload = file_indice_merge_payload.unwrap();
@@ -935,8 +1032,9 @@ impl MooncakeTable {
             force_create: true,
             skip_iceberg_snapshot: false,
             skip_file_indices_merge: false,
+            skip_data_file_compaction: false,
         }));
-        let (iceberg_snapshot_payload, _) = Self::sync_mooncake_snapshot(receiver).await;
+        let (iceberg_snapshot_payload, _, _) = Self::sync_mooncake_snapshot(receiver).await;
         let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
         self.persist_iceberg_snapshot(iceberg_snapshot_payload);
         let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;

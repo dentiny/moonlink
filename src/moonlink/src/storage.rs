@@ -1,4 +1,4 @@
-mod compaction;
+pub(crate) mod compaction;
 mod iceberg;
 pub(crate) mod index;
 pub(crate) mod mooncake_table;

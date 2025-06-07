@@ -308,14 +308,21 @@ async fn test_state_1_3() -> IcebergResult<()> {
     ]);
     table.append(row.clone()).unwrap();
 
+    println!("before create spshot");
+
     // Request to create snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
         .unwrap();
 
+    println!("after create spshot");
+
     // Check iceberg snapshot status.
     let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+
+    println!("load snapshot");
+
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
