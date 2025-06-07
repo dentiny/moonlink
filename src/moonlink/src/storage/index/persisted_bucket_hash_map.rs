@@ -596,35 +596,33 @@ impl<'a> IndexBlockIterator<'a> {
         usize, /*seg_idx*/
         usize, /*row_idx*/
     )> {
-        loop {
+        if self.current_bucket == self.collection.bucket_end_idx - 1 {
+            return None;
+        }
+        while self.current_entry == self.current_bucket_entry_end {
+            self.current_bucket += 1;
             if self.current_bucket == self.collection.bucket_end_idx - 1 {
                 return None;
             }
-            while self.current_entry == self.current_bucket_entry_end {
-                self.current_bucket += 1;
-                if self.current_bucket == self.collection.bucket_end_idx - 1 {
-                    return None;
-                }
-                self.current_bucket_entry_end = self
-                    .bucket_reader
-                    .read::<u32>(self.metadata.bucket_bits)
-                    .await
-                    .unwrap();
-                self.current_upper_hash += 1 << self.metadata.hash_lower_bits;
-            }
-            let (lower_hash, seg_idx, row_idx) = self
-                .collection
-                .read_entry(&mut self.entry_reader, self.metadata)
-                .await;
-            self.current_entry += 1;
-            let seg_idx = self.file_id_remap.get(seg_idx).unwrap();
-            assert_ne!(*seg_idx, INVALID_FILE_ID);
-            return Some((
-                lower_hash + self.current_upper_hash,
-                *seg_idx as usize,
-                row_idx,
-            ));
+            self.current_bucket_entry_end = self
+                .bucket_reader
+                .read::<u32>(self.metadata.bucket_bits)
+                .await
+                .unwrap();
+            self.current_upper_hash += 1 << self.metadata.hash_lower_bits;
         }
+        let (lower_hash, seg_idx, row_idx) = self
+            .collection
+            .read_entry(&mut self.entry_reader, self.metadata)
+            .await;
+        self.current_entry += 1;
+        let seg_idx = self.file_id_remap.get(seg_idx).unwrap();
+        assert_ne!(*seg_idx, INVALID_FILE_ID);
+        Some((
+            lower_hash + self.current_upper_hash,
+            *seg_idx as usize,
+            row_idx,
+        ))
     }
 }
 
