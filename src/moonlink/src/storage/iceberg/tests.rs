@@ -1402,9 +1402,7 @@ async fn test_object_storage_sync_snapshots() -> IcebergResult<()> {
     let (bucket_name, warehouse_uri) = s3_test_utils::get_test_minio_bucket_and_warehouse();
     s3_test_utils::object_store_test_utils::create_test_s3_bucket(bucket_name.clone()).await?;
     mooncake_table_snapshot_persist_impl(warehouse_uri).await?;
-    s3_test_utils::object_store_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::object_store_test_utils::delete_test_s3_bucket(bucket_name.clone()).await?;
     Ok(())
 }
 
