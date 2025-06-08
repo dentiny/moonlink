@@ -123,7 +123,6 @@ pub fn verify_file_contents(
     }
 
     assert_eq!(actual, expected, "File contents don't match expected IDs");
-    println!("File contains {} rows with IDs: {:?}", actual.len(), actual);
 }
 
 pub fn append_rows(table: &mut MooncakeTable, rows: Vec<MoonlinkRow>) -> Result<()> {

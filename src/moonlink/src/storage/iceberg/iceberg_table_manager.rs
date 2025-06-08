@@ -520,12 +520,7 @@ impl IcebergTableManager {
         file_indices_to_remove: &[MooncakeFileIndex],
         local_data_file_to_remote: HashMap<String, String>,
     ) -> IcebergResult<()> {
-        // Invariant assertion: file indices to remove should only come from compaction, so there must be new file indices to import.
-        if !file_indices_to_remove.is_empty() {
-            assert!(!file_indices_to_import.is_empty());
-        }
-
-        if file_indices_to_import.is_empty() {
+        if file_indices_to_import.is_empty() && file_indices_to_remove.is_empty() {
             return Ok(());
         }
 

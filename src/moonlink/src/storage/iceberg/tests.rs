@@ -163,6 +163,10 @@ async fn test_store_and_load_snapshot_impl(
     mooncake_table_metadata: Arc<MooncakeTableMetadata>,
     iceberg_table_config: IcebergTableConfig,
 ) -> IcebergResult<()> {
+    // ==============
+    // Step 1
+    // ==============
+    //
     // At the beginning of the test, there's nothing in table.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
@@ -213,6 +217,10 @@ async fn test_store_and_load_snapshot_impl(
         .sync_snapshot(iceberg_snapshot_payload)
         .await?;
 
+    // ==============
+    // Step 2
+    // ==============
+    //
     // Write second snapshot to iceberg table, with updated deletion vector and new data file.
     let data_filename_2 = "data-2.parquet";
     let batch_2 = RecordBatch::try_new(
@@ -286,6 +294,10 @@ async fn test_store_and_load_snapshot_impl(
         assert_eq!(deleted_rows, vec![0],);
     }
 
+    // ==============
+    // Step 3
+    // ==============
+    //
     // Write third snapshot to iceberg table, with file indices to add and remove.
     let merged_file_index = test_global_index(vec![data_file_1.clone(), data_file_2.clone()]);
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
@@ -319,6 +331,7 @@ async fn test_store_and_load_snapshot_impl(
     let snapshot = iceberg_table_manager_for_load
         .load_snapshot_from_table()
         .await?;
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
@@ -344,9 +357,13 @@ async fn test_store_and_load_snapshot_impl(
     .await?;
     let compacted_file_index = test_global_index(vec![compacted_data_file.clone()]);
 
+    // ==============
+    // Step 4
+    // ==============
+    //
     // Attempt a fourth snapshot persistence, which goes after data file compaction.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        flush_lsn: 1,
+        flush_lsn: 3,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -375,6 +392,7 @@ async fn test_store_and_load_snapshot_impl(
     let snapshot = iceberg_table_manager_for_load
         .load_snapshot_from_table()
         .await?;
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
     assert_eq!(snapshot.disk_files.len(), 1);
     let (data_file, batch_deletion_vector) = snapshot.disk_files.iter().next().unwrap();
     // No deletion vector is expected.
@@ -389,19 +407,47 @@ async fn test_store_and_load_snapshot_impl(
     // Check file indices.
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert_eq!(snapshot.indices.file_indices.len(), 1);
+    validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
 
-    println!(
-        "after recovery, data file pointed to is {:?}",
-        snapshot
-            .indices
-            .file_indices
-            .first()
-            .as_ref()
-            .unwrap()
-            .files
-    );
+    // ==============
+    // Step 5
+    // ==============
+    //
+    // Remove all existing data files and file indices.
+    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        flush_lsn: 4,
+        import_payload: IcebergSnapshotImportPayload {
+            data_files: vec![],
+            new_deletion_vector: HashMap::new(),
+            file_indices: vec![],
+        },
+        index_merge_payload: IcebergSnapshotIndexMergePayload {
+            new_file_indices_to_import: vec![],
+            old_file_indices_to_remove: vec![],
+        },
+        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+            new_data_files_to_import: vec![],
+            old_data_files_to_remove: vec![compacted_data_file.clone()],
+            new_file_indices_to_import: vec![],
+            old_file_indices_to_remove: vec![compacted_file_index.clone()],
+        },
+    };
+    iceberg_table_manager
+        .sync_snapshot(iceberg_snapshot_payload)
+        .await?;
 
-    validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await; // <----
+    // Create a new iceberg table manager and check persisted content.
+    let mut iceberg_table_manager_for_load = IcebergTableManager::new(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+    )?;
+    let snapshot = iceberg_table_manager_for_load
+        .load_snapshot_from_table()
+        .await?;
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 4);
+    assert!(snapshot.disk_files.is_empty());
+    assert!(snapshot.indices.in_memory_index.is_empty());
+    assert!(snapshot.indices.file_indices.is_empty());
 
     Ok(())
 }
