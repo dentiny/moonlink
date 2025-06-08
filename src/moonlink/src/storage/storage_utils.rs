@@ -71,6 +71,16 @@ pub enum RecordLocation {
     DiskFile(FileId, usize),
 }
 
+impl RecordLocation {
+    /// Get row index from the current record.
+    pub fn get_row_idx(&self) -> usize {
+        match self {
+            RecordLocation::DiskFile(_, row_idx) => *row_idx,
+            RecordLocation::MemoryBatch(_, row_idx) => *row_idx,
+        }
+    }
+}
+
 impl Hash for RecordLocation {
     fn hash<H: Hasher>(&self, state: &mut H) {
         std::mem::discriminant(self).hash(state);
@@ -99,6 +109,16 @@ pub struct RawDeletionRecord {
 pub struct ProcessedDeletionRecord {
     pub(crate) pos: RecordLocation,
     pub(crate) lsn: u64,
+}
+
+impl ProcessedDeletionRecord {
+    /// Return deletion record's file id, if it represents disk file.
+    pub fn get_file_id(&self) -> Option<FileId> {
+        match self.pos {
+            RecordLocation::DiskFile(file_id, _) => Some(file_id),
+            _ => None,
+        }
+    }
 }
 
 impl From<RecordLocation> for (u64, usize) {

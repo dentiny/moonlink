@@ -200,20 +200,19 @@ impl CompactionBuilder {
 
     /// Perform a compaction operation, and get the result back.
     pub(crate) async fn build(&mut self) -> Result<DataCompactionResult> {
-        let old_to_new_remap = self.compact_data_files().await?;
-
         let old_data_files = self
             .compaction_payload
             .disk_files
             .keys()
             .cloned()
-            .collect::<Vec<_>>();
+            .collect::<HashSet<_>>();
         let old_file_indices = self
             .compaction_payload
             .file_indices
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
+        let old_to_new_remap = self.compact_data_files().await?;
 
         // All rows have been deleted.
         if old_to_new_remap.is_empty() {

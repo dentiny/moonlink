@@ -52,9 +52,9 @@ pub(crate) struct SnapshotTableState {
     // 3. Committed but not yet persisted deletion logs
     //
     // Type-3, committed but not yet persisted deletion logs.
-    pub(super) committed_deletion_log: Vec<ProcessedDeletionRecord>,
+    pub(crate) committed_deletion_log: Vec<ProcessedDeletionRecord>,
     // Type-1: uncommitted deletion logs.
-    pub(super) uncommitted_deletion_log: Vec<Option<ProcessedDeletionRecord>>,
+    pub(crate) uncommitted_deletion_log: Vec<Option<ProcessedDeletionRecord>>,
 
     /// Last commit point
     last_commit: RecordLocation,
@@ -166,8 +166,9 @@ impl SnapshotTableState {
     ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
         let mut aggregated_deletion_logs = HashMap::new();
         for cur_deletion_log in self.committed_deletion_log.iter() {
-            assert!(
-                cur_deletion_log.lsn <= self.current_snapshot.snapshot_version,
+            ma::assert_le!(
+                cur_deletion_log.lsn,
+                self.current_snapshot.snapshot_version,
                 "Committed deletion log {:?} is later than current snapshot LSN {}",
                 cur_deletion_log,
                 self.current_snapshot.snapshot_version
@@ -305,10 +306,14 @@ impl SnapshotTableState {
     /// Util function to decide whether to create iceberg snapshot by data compaction results.
     fn create_iceberg_snapshot_by_data_compaction(&self, force_create: bool) -> bool {
         force_create
-            && !self
+            && (!self
                 .unpersisted_iceberg_records
                 .compacted_data_files_to_add
                 .is_empty()
+                || !self
+                    .unpersisted_iceberg_records
+                    .compacted_data_files_to_remove
+                    .is_empty())
     }
 
     /// Util function to decide whether and what to compact data files.
@@ -325,22 +330,27 @@ impl SnapshotTableState {
             return None;
         }
 
-        println!(
-            "all disk file len = {}, data file to compact {}",
-            all_disk_files.len(),
-            self.mooncake_table_config
-                .data_compaction_config
-                .data_file_to_compact as usize
-        );
-
+        // To simplify state management, only compact data files which have been persisted into iceberg table.
+        let unpersisted_data_files = self
+            .unpersisted_iceberg_records
+            .unpersisted_data_files
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
         // TODO(hjiang): Implement a naive mechanism first, which compacts as long as there's deleted rows.
         let mut tentative_data_files_to_compact = HashMap::new();
         // TODO(hjiang): We should be able to early exit, if left items are not enough to reach the compaction threshold.
         for (cur_data_file, cur_deletion) in all_disk_files.iter() {
-            if cur_deletion.puffin_deletion_blob.is_none() {
-                assert!(cur_deletion.batch_deletion_vector.is_empty());
+            // Doesn't compact those with no deletion logs.
+            if cur_deletion.batch_deletion_vector.is_empty() {
+                assert!(cur_deletion.puffin_deletion_blob.is_none());
                 continue;
             }
+            // Doesn't compact those unpersisted files.
+            if unpersisted_data_files.contains(cur_data_file) {
+                continue;
+            }
+
             let old_entry = tentative_data_files_to_compact.insert(
                 cur_data_file.clone(),
                 cur_deletion.puffin_deletion_blob.clone(),
@@ -522,23 +532,21 @@ impl SnapshotTableState {
     // Update current snapshot's data files by adding and removing a few.
     fn update_data_files_to_mooncake_snapshot_impl(
         &mut self,
-        old_data_files: Vec<MooncakeDataFileRef>,
+        old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+        remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
     ) {
         if old_data_files.is_empty() {
             assert!(new_data_files.is_empty());
+            assert!(remapped_data_files_after_compaction.is_empty());
             return;
         }
 
+        // Process new data files to import.
         ma::assert_le!(self.current_snapshot.disk_files.len(), old_data_files.len());
-        for cur_old_data_file in old_data_files.into_iter() {
-            let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
-            assert!(old_entry.is_some());
-        }
-
-        for (cur_new_data_file, cur_entry) in new_data_files.into_iter() {
+        for (cur_new_data_file, cur_entry) in new_data_files.iter() {
             self.current_snapshot.disk_files.insert(
-                cur_new_data_file,
+                cur_new_data_file.clone(),
                 DiskFileDeletionVector {
                     batch_deletion_vector: BatchDeletionVector::new(
                         /*max_rows=*/ cur_entry.num_rows,
@@ -546,6 +554,43 @@ impl SnapshotTableState {
                     puffin_deletion_blob: None,
                 },
             );
+        }
+
+        // Process old data files to remove.
+        for cur_old_data_file in old_data_files.into_iter() {
+            let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
+            assert!(old_entry.is_some());
+
+            // If no deletion record for this file, directly remove it, no need to do remapping.
+            let old_entry = old_entry.unwrap();
+            if old_entry.batch_deletion_vector.is_empty() {
+                assert!(old_entry.puffin_deletion_blob.is_some());
+                continue;
+            }
+
+            // If there's deletion record, try remap to the new compacted data file.
+            let deleted_rows = old_entry.batch_deletion_vector.collect_deleted_rows();
+            for cur_deleted_row in deleted_rows {
+                let old_record_location =
+                    RecordLocation::DiskFile(cur_old_data_file.file_id(), cur_deleted_row as usize);
+                let new_record_location =
+                    remapped_data_files_after_compaction.get(&old_record_location);
+                // Case-1: The old record still exists, need to remap.
+                if let Some(new_record_location) = new_record_location {
+                    // TODO(hjiang): A quick hack, there's only one compacted data file.
+                    let new_data_file = new_data_files.iter().next().unwrap().0.clone();
+
+                    let new_deletion_entry = self
+                        .current_snapshot
+                        .disk_files
+                        .get_mut(&new_data_file)
+                        .unwrap();
+                    new_deletion_entry
+                        .batch_deletion_vector
+                        .delete_row(new_record_location.get_row_idx());
+                }
+                // Case-2: The old record has already been compacted, directly skip.
+            }
         }
     }
 
@@ -562,15 +607,17 @@ impl SnapshotTableState {
 
     fn update_data_compaction_to_mooncake_snapshot(
         &mut self,
-        old_compacted_data_files: Vec<MooncakeDataFileRef>,
+        old_compacted_data_files: HashSet<MooncakeDataFileRef>,
         new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
         old_compacted_file_indices: HashSet<FileIndex>,
         new_compacted_file_indices: Vec<FileIndex>,
+        remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
     ) {
         if old_compacted_data_files.is_empty() {
             assert!(new_compacted_data_files.is_empty());
             assert!(old_compacted_file_indices.is_empty());
             assert!(new_compacted_file_indices.is_empty());
+            assert!(remapped_data_files_after_compaction.is_empty());
             return;
         }
 
@@ -581,6 +628,7 @@ impl SnapshotTableState {
         self.update_data_files_to_mooncake_snapshot_impl(
             old_compacted_data_files,
             new_compacted_data_files,
+            remapped_data_files_after_compaction,
         );
     }
 
@@ -618,6 +666,63 @@ impl SnapshotTableState {
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_remove
             .extend(task.old_compacted_file_indices.to_owned());
+    }
+
+    /// Remap single record location after compaction.
+    /// Return if remap succeeds.
+    fn remap_record_location_after_compaction(
+        deletion_log: &mut ProcessedDeletionRecord,
+        task: &mut SnapshotTask,
+    ) -> bool {
+        let old_record_location = &deletion_log.pos;
+        let new_record_location = task
+            .remapped_data_files_after_compaction
+            .remove(old_record_location);
+        if new_record_location.is_none() {
+            return false;
+        }
+        deletion_log.pos = new_record_location.unwrap();
+        true
+    }
+
+    /// Data compaction might delete existing persisted files, which invalidates record locations and requires a record location remap.
+    fn remap_and_prune_deletion_logs_after_compaction(&mut self, task: &mut SnapshotTask) {
+        // No need to prune and remap if no compaction happening.
+        if task.old_compacted_data_files.is_empty() {
+            return;
+        }
+
+        // Remap and prune committed deletion log.
+        let mut new_committed_deletion_log = vec![];
+        let old_committed_deletion_log = std::mem::take(&mut self.committed_deletion_log);
+        for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
+            if let Some(file_id) = cur_deletion_log.get_file_id() {
+                // Case-1: the deletion log doesn't indicate a compacted data file.
+                if !task.old_compacted_data_files.contains(&file_id) {
+                    new_committed_deletion_log.push(cur_deletion_log);
+                    continue;
+                }
+                // Case-2: the deletion log exists in the compacted new data file, perform a remap.
+                let remap_succ =
+                    Self::remap_record_location_after_compaction(&mut cur_deletion_log, task);
+                if remap_succ {
+                    new_committed_deletion_log.push(cur_deletion_log);
+                    continue;
+                }
+                // Case-3: the deletion log doesn't exist in the compacted new file, directly remove it.
+            } else {
+                new_committed_deletion_log.push(cur_deletion_log);
+            }
+        }
+        self.committed_deletion_log = new_committed_deletion_log;
+
+        // Remap uncommitted deletion log.
+        for cur_deletion_log in &mut self.uncommitted_deletion_log {
+            if cur_deletion_log.is_none() {
+                continue;
+            }
+            Self::remap_record_location_after_compaction(cur_deletion_log.as_mut().unwrap(), task);
+        }
     }
 
     pub(super) async fn update_snapshot(
@@ -668,7 +773,11 @@ impl SnapshotTableState {
             task.new_compacted_data_files.clone(),
             task.old_compacted_file_indices.clone(),
             task.new_compacted_file_indices.clone(),
+            task.remapped_data_files_after_compaction.clone(),
         );
+
+        // Apply data compaction to committed deletion logs.
+        self.remap_and_prune_deletion_logs_after_compaction(&mut task);
 
         self.rows = take(&mut task.new_rows);
         self.process_deletion_log(&mut task).await;
@@ -760,10 +869,22 @@ impl SnapshotTableState {
                             .to_vec(),
                     },
                     data_compaction_payload: IcebergSnapshotDataCompactionPayload {
-                        new_data_files_to_import: vec![],
-                        old_data_files_to_remove: vec![],
-                        new_file_indices_to_import: vec![],
-                        old_file_indices_to_remove: vec![],
+                        new_data_files_to_import: self
+                            .unpersisted_iceberg_records
+                            .compacted_data_files_to_add
+                            .to_vec(),
+                        old_data_files_to_remove: self
+                            .unpersisted_iceberg_records
+                            .compacted_data_files_to_remove
+                            .to_vec(),
+                        new_file_indices_to_import: self
+                            .unpersisted_iceberg_records
+                            .compacted_file_indices_to_add
+                            .to_vec(),
+                        old_file_indices_to_remove: self
+                            .unpersisted_iceberg_records
+                            .compacted_file_indices_to_remove
+                            .to_vec(),
                     },
                 });
             }

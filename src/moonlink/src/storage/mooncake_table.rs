@@ -32,6 +32,8 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::FileId;
+#[cfg(test)]
+use crate::storage::storage_utils::ProcessedDeletionRecord;
 use crate::table_notify::TableNotify;
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
@@ -247,13 +249,15 @@ pub struct SnapshotTask {
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
     ///
     /// Old data files which have been compacted.
-    old_compacted_data_files: Vec<MooncakeDataFileRef>,
+    old_compacted_data_files: HashSet<MooncakeDataFileRef>,
     /// New compacted data files, which should be imported to iceberg table.
     new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
     /// Old file indices which have been compacted.
     old_compacted_file_indices: HashSet<FileIndex>,
     /// New compacted file indices, which should be imported to iceberg table.
     new_compacted_file_indices: Vec<FileIndex>,
+    /// Remapped data file after compaction.
+    remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
 
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
@@ -298,10 +302,11 @@ impl SnapshotTask {
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
             // Data compaction related fields.
-            old_compacted_data_files: Vec::new(),
+            old_compacted_data_files: HashSet::new(),
             new_compacted_data_files: HashMap::new(),
             old_compacted_file_indices: HashSet::new(),
             new_compacted_file_indices: Vec::new(),
+            remapped_data_files_after_compaction: HashMap::new(),
             // Iceberg persistence result.
             iceberg_flush_lsn: None,
             iceberg_persisted_data_files: Vec::new(),
@@ -507,34 +512,30 @@ impl MooncakeTable {
         // ---- Update mooncake table fields ----
         let iceberg_flush_lsn = iceberg_snapshot_res.flush_lsn;
 
-        // Whether the iceberg snapshot result only contains index merge.
-        let only_index_merge = |res: &IcebergSnapshotResult| {
-            // Return false if any of the data files, puffin blobs or file indices are imported into iceberg.
+        // Whether the iceberg snapshot result contains new write operations from mooncake table (append/delete).
+        let contains_new_writes = |res: &IcebergSnapshotResult| {
             if !res.import_result.new_data_files.is_empty() {
-                return false;
+                assert!(!res.import_result.imported_file_indices.is_empty());
+                return true;
             }
             if !res.import_result.puffin_blob_ref.is_empty() {
-                return false;
-            }
-            if !res.import_result.imported_file_indices.is_empty() {
-                return false;
+                return true;
             }
 
-            assert!(!res.index_merge_result.new_file_indices_to_import.is_empty());
-            assert!(!res.index_merge_result.old_file_indices_to_remove.is_empty());
-            true
+            false
         };
 
-        // Merged indices are safe to import to iceberg at any time, so if only index merge files contained in the iceberg snapshot, we don't have flush LSN advanced.
-        if only_index_merge(&iceberg_snapshot_res) {
+        // There're two types of operations could trigger iceberg snapshot: (1) index merge / data compaction; (2) table writes, including append and delete.
+        // The first type is safe to import to iceberg at any time, with no flush LSN advancement.
+        if contains_new_writes(&iceberg_snapshot_res) {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() <= iceberg_flush_lsn
+                    || self.last_iceberg_snapshot_lsn.unwrap() < iceberg_flush_lsn
             );
         } else {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() < iceberg_flush_lsn
+                    || self.last_iceberg_snapshot_lsn.unwrap() <= iceberg_flush_lsn
             );
         }
         self.last_iceberg_snapshot_lsn = Some(iceberg_flush_lsn);
@@ -617,6 +618,13 @@ impl MooncakeTable {
             .new_compacted_file_indices
             .is_empty());
         self.next_snapshot_task.new_compacted_file_indices = data_compaction_res.new_file_indices;
+
+        assert!(self
+            .next_snapshot_task
+            .remapped_data_files_after_compaction
+            .is_empty());
+        self.next_snapshot_task.remapped_data_files_after_compaction =
+            data_compaction_res.remapped_data_files;
     }
 
     /// Get iceberg snapshot flush LSN.
@@ -916,7 +924,6 @@ impl MooncakeTable {
     // Test util functions
     // ================================
     //
-    //
     // Test util function to block wait and get iceberg / file indices merge payload.
     #[cfg(test)]
     async fn sync_mooncake_snapshot(
@@ -959,6 +966,21 @@ impl MooncakeTable {
         }
     }
 
+    #[cfg(test)]
+    async fn sync_data_compaction(
+        receiver: &mut Receiver<TableNotify>,
+    ) -> Result<DataCompactionResult> {
+        let notification = receiver.recv().await.unwrap();
+        if let TableNotify::DataCompaction {
+            data_compaction_result,
+        } = notification
+        {
+            data_compaction_result
+        } else {
+            panic!("Expected data compaction completion notification, but get mooncake one.");
+        }
+    }
+
     // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
     #[cfg(test)]
     pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
@@ -978,6 +1000,75 @@ impl MooncakeTable {
             let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
             self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
         }
+
+        Ok(())
+    }
+
+    // Test util function, which does the following things in serial fashion.
+    // (1) updates mooncake table snapshot, (2) create iceberg snapshot, (3) trigger data compaction, (4) perform data compaction, (5) another mooncake and iceberg snapshot.
+    //
+    // # Arguments
+    //
+    // * injected_committed_deletion_rows: rows to delete and commit in between data compaction initiation and snapshot creation
+    // * injected_uncommitted_deletion_rows: rows to delete but not commit in between data compaction initiation and snapshot creation
+    #[cfg(test)]
+    pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut self,
+        receiver: &mut Receiver<TableNotify>,
+        injected_committed_deletion_rows: Vec<(MoonlinkRow, u64 /*lsn*/)>,
+        injected_uncommitted_deletion_rows: Vec<(MoonlinkRow, u64 /*lsn*/)>,
+    ) -> Result<()> {
+        // Create mooncake snapshot.
+        let force_snapshot_option = SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: false,
+            skip_file_indices_merge: true,
+            skip_data_file_compaction: false,
+        };
+        assert!(self.create_snapshot(force_snapshot_option.clone()));
+
+        // Create iceberg snapshot.
+        let (iceberg_snapshot_payload, _, _) = Self::sync_mooncake_snapshot(receiver).await;
+        if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+            self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+            let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
+            self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+        }
+
+        // Get data compaction payload.
+        assert!(self.create_snapshot(force_snapshot_option.clone()));
+        let (iceberg_snapshot_payload, _, data_compaction_payload) =
+            Self::sync_mooncake_snapshot(receiver).await;
+        assert!(iceberg_snapshot_payload.is_none());
+        let data_compaction_payload = data_compaction_payload.unwrap();
+
+        // Perform and block wait data compaction.
+        self.perform_data_compaction(data_compaction_payload);
+        let data_compaction_result = Self::sync_data_compaction(receiver).await;
+        let data_compaction_result = data_compaction_result.unwrap();
+
+        // Before create snapshot for compaction results, perform another deletion operations.
+        for (cur_row, lsn) in injected_committed_deletion_rows {
+            self.delete(cur_row, lsn).await;
+            self.commit(/*lsn=*/ lsn);
+        }
+        for (cur_row, lsn) in injected_uncommitted_deletion_rows {
+            self.delete(cur_row, lsn).await;
+        }
+
+        // Set data compaction result and trigger another iceberg snapshot.
+        self.set_data_compaction_res(data_compaction_result);
+        assert!(self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: false,
+            skip_file_indices_merge: true,
+            skip_data_file_compaction: false,
+        }));
+        let (iceberg_snapshot_payload, _, _) = Self::sync_mooncake_snapshot(receiver).await;
+        let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
+        self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+        let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
+        self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
         Ok(())
     }
@@ -1041,6 +1132,30 @@ impl MooncakeTable {
         self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
         Ok(())
+    }
+
+    /// Test util function to get committed and uncommitted deletion logs states.
+    #[cfg(test)]
+    pub(crate) async fn get_deletion_logs_for_snapshot(
+        &mut self,
+    ) -> (
+        Vec<ProcessedDeletionRecord>,
+        Vec<Option<ProcessedDeletionRecord>>,
+    ) {
+        let guard = self.snapshot.read().await;
+        (
+            guard.committed_deletion_log.clone(),
+            guard.uncommitted_deletion_log.clone(),
+        )
+    }
+
+    /// Test util function to get all disk files and their deletion vector.
+    #[cfg(test)]
+    pub(crate) async fn get_disk_files_for_snapshot(
+        &mut self,
+    ) -> HashMap<MooncakeDataFileRef, DiskFileDeletionVector> {
+        let guard = self.snapshot.read().await;
+        guard.current_snapshot.disk_files.clone()
     }
 }
 

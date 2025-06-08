@@ -30,7 +30,7 @@ pub(crate) struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RecordLocation>,
     /// Old compacted data files.
-    pub(crate) old_data_files: Vec<MooncakeDataFileRef>,
+    pub(crate) old_data_files: HashSet<MooncakeDataFileRef>,
     /// New compacted data files.
     pub(crate) new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
     /// Old compacted file indices.

@@ -164,6 +164,19 @@ pub(crate) async fn load_arrow_batch(
 pub(crate) async fn create_table_and_iceberg_manager(
     temp_dir: &TempDir,
 ) -> (MooncakeTable, IcebergTableManager, Receiver<TableNotify>) {
+    let default_data_compaction_config = DataCompactionConfig::default();
+    create_table_and_iceberg_manager_with_data_compaction_config(
+        temp_dir,
+        default_data_compaction_config,
+    )
+    .await
+}
+
+/// Similar to [`create_table_and_iceberg_manager`], but it takes data compaction config.
+pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config(
+    temp_dir: &TempDir,
+    data_compaction_config: DataCompactionConfig,
+) -> (MooncakeTable, IcebergTableManager, Receiver<TableNotify>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
@@ -181,16 +194,9 @@ pub(crate) async fn create_table_and_iceberg_manager(
     let mooncake_table_config = MooncakeTableConfig {
         iceberg_snapshot_new_data_file_count: 0,
         file_index_config: FileIndexMergeConfig::default(),
-        data_compaction_config: DataCompactionConfig::default(),
+        data_compaction_config,
         ..Default::default()
     };
-
-    println!(
-        "data file to compact = {}",
-        mooncake_table_config
-            .data_compaction_config
-            .data_file_to_compact
-    );
 
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
