@@ -3,7 +3,7 @@ use iceberg::{Error as IcebergError, ErrorKind};
 use tempfile::tempdir;
 
 use super::test_utils::*;
-use crate::storage::index::persisted_bucket_hash_map::FileIndexMergeConfig;
+use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::MockTableManager;

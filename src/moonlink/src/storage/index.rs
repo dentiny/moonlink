@@ -1,4 +1,5 @@
 pub mod hash_index;
+pub mod index_merge_config;
 pub mod mem_index;
 pub mod persisted_bucket_hash_map;
 

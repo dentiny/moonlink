@@ -16,7 +16,6 @@ use tokio_bitstream_io::{
     BigEndian as AsyncBigEndian, BitRead as AsyncBitRead, BitReader as AsyncBitReader,
     BitWrite as AsyncBitWrite, BitWriter as AsyncBitWriter,
 };
-use typed_builder::TypedBuilder;
 
 // Constants
 const HASH_BITS: u32 = 64;
@@ -30,28 +29,6 @@ fn splitmix64(mut x: u64) -> u64 {
     z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
     z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
     z ^ (z >> 31)
-}
-
-/// Configurations for merging file indices.
-///
-/// TODO(hjiang): To reduce code change before preview release, disable index merge by default until we do further testing to make sure moonlink fine.
-#[derive(Clone, Default, Debug, TypedBuilder)]
-pub struct FileIndexMergeConfig {
-    /// Number of existing index blocks under final size to trigger a merge operation.
-    #[cfg(debug_assertions)]
-    #[builder(default = u32::MAX)]
-    pub file_indices_to_merge: u32,
-    /// Number of bytes for a block index to consider it finalized and won't be merged again.
-    #[cfg(debug_assertions)]
-    #[builder(default = u64::MAX)]
-    pub index_block_final_size: u64,
-
-    #[cfg(not(debug_assertions))]
-    #[builder(default = u32::MAX)]
-    pub file_indices_to_merge: u32,
-    #[cfg(not(debug_assertions))]
-    #[builder(default = u64::MAX)]
-    pub index_block_final_size: u64,
 }
 
 /// Hash index

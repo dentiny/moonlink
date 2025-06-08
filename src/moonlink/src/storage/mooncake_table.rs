@@ -8,7 +8,6 @@ mod table_snapshot;
 mod transaction_stream;
 
 use super::iceberg::puffin_utils::PuffinBlobRef;
-use super::index::persisted_bucket_hash_map::FileIndexMergeConfig;
 use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
 use crate::error::{Error, Result};
@@ -16,6 +15,7 @@ use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::iceberg::iceberg_table_manager::{
     IcebergTableConfig, IcebergTableManager, TableManager,
 };
+use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 #[cfg(test)]
 pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;

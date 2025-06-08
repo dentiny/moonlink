@@ -7,7 +7,7 @@ use crate::storage::iceberg::iceberg_table_manager::TableManager;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
 use crate::storage::iceberg::test_utils::*;
-use crate::storage::index::persisted_bucket_hash_map::FileIndexMergeConfig;
+use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::Index;
 use crate::storage::index::MooncakeIndex;
