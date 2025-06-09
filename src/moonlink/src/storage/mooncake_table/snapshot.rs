@@ -543,7 +543,7 @@ impl SnapshotTableState {
         }
 
         // Process new data files to import.
-        ma::assert_le!(self.current_snapshot.disk_files.len(), old_data_files.len());
+        ma::assert_ge!(self.current_snapshot.disk_files.len(), old_data_files.len());
         for (cur_new_data_file, cur_entry) in new_data_files.iter() {
             self.current_snapshot.disk_files.insert(
                 cur_new_data_file.clone(),

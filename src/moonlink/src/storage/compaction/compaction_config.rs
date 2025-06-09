@@ -18,7 +18,7 @@ impl DataCompactionConfig {
     pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = u64::MAX;
 
     #[cfg(not(debug_assertions))]
-    pub const DEFAULT_DATA_FILE_TO_COMPACT: u64 = u64::MAX;
+    pub const DEFAULT_DATA_FILE_TO_COMPACT: u32 = u32::MAX;
     #[cfg(not(debug_assertions))]
     pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = u64::MAX;
 
