@@ -20,6 +20,8 @@ pub(crate) struct DataCompactionPayload {
 pub(crate) struct CompactedDataEntry {
     /// Number of rows for the compacted data file.
     pub(crate) num_rows: usize,
+    /// Compacted file size.
+    pub(crate) file_size: usize,
 }
 
 /// Result for a compaction operation.

@@ -544,10 +544,11 @@ impl SnapshotTableState {
         // Process new data files to import.
         ma::assert_ge!(self.current_snapshot.disk_files.len(), old_data_files.len());
         for (cur_new_data_file, cur_entry) in new_data_files.iter() {
+            ma::assert_gt!(cur_entry.file_size, 0);
             self.current_snapshot.disk_files.insert(
                 cur_new_data_file.clone(),
                 DiskFileEntry {
-                    file_size: None, // TODO(hjiang): fill in compacted file size.
+                    file_size: Some(cur_entry.file_size),
                     batch_deletion_vector: BatchDeletionVector::new(
                         /*max_rows=*/ cur_entry.num_rows,
                     ),
@@ -938,6 +939,7 @@ impl SnapshotTableState {
             self.current_snapshot
                 .disk_files
                 .extend(slice.output_files().iter().map(|(f, file_attrs)| {
+                    ma::assert_gt!(file_attrs.file_size, 0);
                     (
                         f.clone(),
                         DiskFileEntry {

@@ -2,6 +2,7 @@ use super::*;
 use crate::storage::index::Index;
 use crate::storage::mooncake_table::DiskFileEntry;
 use crate::storage::storage_utils::ProcessedDeletionRecord;
+use more_asserts as ma;
 /// Used to track the state of a streamed transaction
 /// Holds appending rows in memslice and files.
 /// Deletes are more complex,
@@ -194,6 +195,7 @@ impl MooncakeTable {
             .await?;
 
             for (file, file_attrs) in disk_slice.output_files().iter() {
+                ma::assert_gt!(file_attrs.file_size, 0);
                 let disk_file_entry = DiskFileEntry {
                     file_size: Some(file_attrs.file_size),
                     batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),

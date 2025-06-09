@@ -29,7 +29,6 @@ pub(crate) struct CompactionFileParams {
     pub(crate) table_auto_incr_id: u32,
 }
 
-#[allow(dead_code)]
 pub(crate) struct CompactionBuilder {
     /// Compaction payload.
     compaction_payload: DataCompactionPayload,
@@ -46,7 +45,6 @@ pub(crate) struct CompactionBuilder {
 }
 
 // TODO(hjiang): CompactionBuilder should take a config to decide how big a compacted file should be, like DiskSliceWriter.
-#[allow(dead_code)]
 impl CompactionBuilder {
     pub(crate) fn new(
         compaction_payload: DataCompactionPayload,
@@ -227,8 +225,9 @@ impl CompactionBuilder {
 
         // Flush and close the compacted data file.
         assert!(self.arrow_writer.is_some());
-        let arrow_writer = std::mem::take(&mut self.arrow_writer);
-        arrow_writer.unwrap().close().await?;
+        let mut arrow_writer = std::mem::take(&mut self.arrow_writer);
+        arrow_writer.as_mut().unwrap().finish().await?;
+        let file_size = arrow_writer.unwrap().bytes_written();
 
         // Perform compaction on file indices.
         let new_file_indices = self
@@ -241,6 +240,7 @@ impl CompactionBuilder {
         // TODO(hjiang): Should be able to save a copy for file indices.
         let mut new_data_files = HashMap::new();
         let compacted_data_file_entry = CompactedDataEntry {
+            file_size,
             num_rows: old_to_new_remap.len(),
         };
         new_data_files.insert(
