@@ -12,8 +12,7 @@ use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
-    DiskFileDeletionVector, TableConfig as MooncakeTableConfig,
-    TableMetadata as MooncakeTableMetadata,
+    DiskFileEntry, TableConfig as MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableNotify;
@@ -35,9 +34,9 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
 /// Test util function to check consistency for snapshot batch deletion vector and deletion puffin blob.
-async fn check_deletion_vector_consistency(disk_dv_entry: &DiskFileDeletionVector) {
-    if disk_dv_entry.puffin_deletion_blob.is_none() {
-        assert!(disk_dv_entry
+async fn check_deletion_vector_consistency(disk_file_entry: &DiskFileEntry) {
+    if disk_file_entry.puffin_deletion_blob.is_none() {
+        assert!(disk_file_entry
             .batch_deletion_vector
             .collect_deleted_rows()
             .is_empty());
@@ -47,7 +46,7 @@ async fn check_deletion_vector_consistency(disk_dv_entry: &DiskFileDeletionVecto
     let local_fileio = FileIOBuilder::new_fs_io().build().unwrap();
     let blob = puffin_utils::load_blob_from_puffin_file(
         local_fileio,
-        &disk_dv_entry
+        &disk_file_entry
             .puffin_deletion_blob
             .as_ref()
             .unwrap()
@@ -57,7 +56,7 @@ async fn check_deletion_vector_consistency(disk_dv_entry: &DiskFileDeletionVecto
     .unwrap();
     let iceberg_deletion_vector = DeletionVector::deserialize(blob).unwrap();
     let batch_deletion_vector = iceberg_deletion_vector.take_as_batch_delete_vector();
-    assert_eq!(batch_deletion_vector, disk_dv_entry.batch_deletion_vector);
+    assert_eq!(batch_deletion_vector, disk_file_entry.batch_deletion_vector);
 }
 
 /// Test util function to check deletion vector consistency for the given snapshot.

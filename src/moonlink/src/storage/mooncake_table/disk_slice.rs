@@ -13,6 +13,12 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+/// Attributes for disk files.
+pub(crate) struct DiskFileAttrs {
+    pub(crate) file_size: usize,
+    pub(crate) row_num: usize,
+}
+
 pub(crate) struct DiskSliceWriter {
     /// The schema of the DiskSlice.
     ///
@@ -40,7 +46,7 @@ pub(crate) struct DiskSliceWriter {
     new_index: Option<FileIndex>,
 
     /// Records already flushed data files.
-    files: Vec<(MooncakeDataFileRef, usize /* row count */)>,
+    files: Vec<(MooncakeDataFileRef, DiskFileAttrs)>,
 }
 
 impl DiskSliceWriter {
@@ -101,7 +107,7 @@ impl DiskSliceWriter {
         &self.batches
     }
     /// Get the list of files in the DiskSlice
-    pub(super) fn output_files(&self) -> &[(MooncakeDataFileRef, usize)] {
+    pub(super) fn output_files(&self) -> &[(MooncakeDataFileRef, DiskFileAttrs)] {
         self.files.as_slice()
     }
 
@@ -152,15 +158,29 @@ impl DiskSliceWriter {
             writer.as_mut().unwrap().write(batch).await?;
             if writer.as_ref().unwrap().memory_size() > self.parquet_flush_threshold_size {
                 // Finalize the writer
-                writer.unwrap().close().await?;
+                writer.as_mut().unwrap().finish().await?;
+                let file_size = writer.as_ref().unwrap().bytes_written();
                 writer = None;
-                files.push((data_file.unwrap(), out_row_idx));
+                files.push((
+                    data_file.unwrap(),
+                    DiskFileAttrs {
+                        file_size,
+                        row_num: out_row_idx,
+                    },
+                ));
                 data_file = None;
             }
         }
-        if let Some(writer) = writer {
-            writer.close().await?;
-            files.push((data_file.unwrap(), out_row_idx));
+        if let Some(mut writer) = writer {
+            writer.finish().await?;
+            let file_size = writer.bytes_written();
+            files.push((
+                data_file.unwrap(),
+                DiskFileAttrs {
+                    file_size,
+                    row_num: out_row_idx,
+                },
+            ));
         }
         self.files = files;
         Ok(())

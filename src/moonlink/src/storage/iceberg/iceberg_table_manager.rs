@@ -17,7 +17,7 @@ use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::mooncake_table::{
     take_data_files_to_import, take_file_indices_to_import, take_file_indices_to_remove,
 };
-use crate::storage::mooncake_table::{take_data_files_to_remove, DiskFileDeletionVector};
+use crate::storage::mooncake_table::{take_data_files_to_remove, DiskFileEntry};
 use crate::storage::storage_utils::{create_data_file, MooncakeDataFileRef};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -300,7 +300,8 @@ impl IcebergTableManager {
         {
             mooncake_snapshot.disk_files.insert(
                 create_data_file(file_id as u64, data_filepath.to_string()),
-                DiskFileDeletionVector {
+                DiskFileEntry {
+                    file_size: None,
                     puffin_deletion_blob: data_file_entry.persisted_deletion_vector.clone(),
                     batch_deletion_vector: data_file_entry.deletion_vector.clone(),
                 },
