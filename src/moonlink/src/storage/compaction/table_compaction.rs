@@ -32,7 +32,7 @@ pub(crate) struct DataCompactionResult {
     /// Old compacted data files, which maps to their corresponding compacted data file.
     pub(crate) old_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
     /// New compacted data files.
-    pub(crate) new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+    pub(crate) new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
     /// Old compacted file indices.
     pub(crate) old_file_indices: HashSet<FileIndex>,
     /// New compacted file indices.

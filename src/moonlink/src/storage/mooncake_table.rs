@@ -254,7 +254,7 @@ pub struct SnapshotTask {
     /// Old data files which have been compacted.
     old_compacted_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
     /// New compacted data files, which should be imported to iceberg table.
-    new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+    new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
     /// Old file indices which have been compacted.
     old_compacted_file_indices: HashSet<FileIndex>,
     /// New compacted file indices, which should be imported to iceberg table.
@@ -306,7 +306,7 @@ impl SnapshotTask {
             new_merged_file_indices: Vec::new(),
             // Data compaction related fields.
             old_compacted_data_files: HashMap::new(),
-            new_compacted_data_files: HashMap::new(),
+            new_compacted_data_files: Vec::new(),
             old_compacted_file_indices: HashSet::new(),
             new_compacted_file_indices: Vec::new(),
             remapped_data_files_after_compaction: HashMap::new(),

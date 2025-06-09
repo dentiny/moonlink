@@ -71,11 +71,7 @@ async fn test_data_file_compaction_1() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result
-            .new_data_files
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        compaction_result.new_data_files,
         /*old_row_indices=*/ vec![0, 1, 2],
     )
     .await;
@@ -151,11 +147,7 @@ async fn test_data_file_compaction_2() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result
-            .new_data_files
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        compaction_result.new_data_files,
         /*old_row_indices=*/ vec![0, 2],
     )
     .await;
@@ -226,11 +218,7 @@ async fn test_data_file_compaction_3() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result
-            .new_data_files
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        compaction_result.new_data_files,
         /*old_row_indices=*/ vec![],
     )
     .await;
@@ -306,11 +294,7 @@ async fn test_data_file_compaction_4() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result
-            .new_data_files
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        compaction_result.new_data_files,
         /*old_row_indices=*/ (0..6).collect(),
     )
     .await;
@@ -413,11 +397,7 @@ async fn test_data_file_compaction_5() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result
-            .new_data_files
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        compaction_result.new_data_files,
         /*old_row_indices=*/ vec![0, 2, 4],
     )
     .await;
@@ -512,11 +492,7 @@ async fn test_data_file_compaction_6() {
 
     // Check data file compaction.
     test_utils::check_data_file_compaction(
-        compaction_result
-            .new_data_files
-            .keys()
-            .cloned()
-            .collect::<Vec<_>>(),
+        compaction_result.new_data_files,
         /*old_row_indices=*/ vec![],
     )
     .await;

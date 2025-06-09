@@ -538,7 +538,7 @@ impl SnapshotTableState {
     fn update_data_files_to_mooncake_snapshot_impl(
         &mut self,
         old_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
-        new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+        new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
     ) {
         if old_data_files.is_empty() {
@@ -584,7 +584,7 @@ impl SnapshotTableState {
                 // Case-1: The old record still exists, need to remap.
                 if let Some(new_record_location) = new_record_location {
                     // TODO(hjiang): A quick hack, there's only one compacted data file.
-                    let new_data_file = new_data_files.iter().next().unwrap().0.clone();
+                    let new_data_file = new_data_files.first().unwrap().0.clone();
 
                     let new_deletion_entry = self
                         .current_snapshot
@@ -614,7 +614,7 @@ impl SnapshotTableState {
     fn update_data_compaction_to_mooncake_snapshot(
         &mut self,
         old_compacted_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
-        new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+        new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
         old_compacted_file_indices: HashSet<FileIndex>,
         new_compacted_file_indices: Vec<FileIndex>,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
@@ -660,9 +660,14 @@ impl SnapshotTableState {
     }
 
     fn buffer_unpersisted_iceberg_compaction_data(&mut self, task: &SnapshotTask) {
+        let mut new_compacted_data_files = Vec::with_capacity(task.new_compacted_data_files.len());
+        for (new_data_file, _) in task.new_compacted_data_files.iter() {
+            new_compacted_data_files.push(new_data_file.clone());
+        }
+
         self.unpersisted_iceberg_records
             .compacted_data_files_to_add
-            .extend(task.new_compacted_data_files.keys().cloned().to_owned());
+            .extend(new_compacted_data_files);
         self.unpersisted_iceberg_records
             .compacted_data_files_to_remove
             .extend(task.old_compacted_data_files.keys().cloned().to_owned());

@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use futures::TryStreamExt;
+use more_asserts as ma;
 use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
 
@@ -19,7 +20,8 @@ use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::{
-    get_random_file_name_in_dir, get_unique_file_id_for_flush, MooncakeDataFileRef,
+    get_file_idx_from_flush_file_id, get_random_file_name_in_dir, get_unique_file_id_for_flush,
+    MooncakeDataFileRef,
 };
 use crate::{create_data_file, Result};
 
@@ -42,7 +44,7 @@ pub(crate) struct CompactionBuilder {
     /// File related parameters for compaction usage.
     file_params: CompactionFileParams,
     /// New data files after compaction.
-    new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+    new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
     /// Old data file to new data file mapping.
     old_data_files_to_new: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
     /// ===== Current ongoing compaction operation =====
@@ -68,7 +70,7 @@ impl CompactionBuilder {
             compaction_payload,
             schema,
             file_params,
-            new_data_files: HashMap::new(),
+            new_data_files: Vec::new(),
             old_data_files_to_new: HashMap::new(),
             // Current ongoing compaction operation
             cur_arrow_writer: None,
@@ -117,14 +119,14 @@ impl CompactionBuilder {
             file_size,
         };
         // TODO(hjiang): Should be able to save a copy.
-        let old_entry = self.new_data_files.insert(
+        self.new_data_files.push((
             self.cur_new_data_file.as_ref().unwrap().clone(),
             compacted_data_entry,
-        );
-        assert!(old_entry.is_none());
+        ));
 
         // Reinitialize states related to current new compacted data file.
         self.cur_arrow_writer = None;
+        self.cur_new_data_file = None;
         self.cur_row_num = 0;
         self.compacted_file_count += 1;
 
@@ -223,6 +225,19 @@ impl CompactionBuilder {
         Ok(old_to_new_remap)
     }
 
+    /// Util function to get new compacted data files **IN ORDER**.
+    fn get_new_compacted_data_files(&self) -> Vec<MooncakeDataFileRef> {
+        let mut prev_file_id: u64 = 0;
+        let mut new_data_files = Vec::with_capacity(self.new_data_files.len());
+        for (cur_new_data_file, _) in self.new_data_files.iter() {
+            ma::assert_lt!(prev_file_id, cur_new_data_file.file_id().0);
+            prev_file_id = cur_new_data_file.file_id().0;
+
+            new_data_files.push(cur_new_data_file.clone());
+        }
+        new_data_files
+    }
+
     /// Util function to merge all given file indices into one.
     async fn compact_file_indices(
         &mut self,
@@ -233,8 +248,9 @@ impl CompactionBuilder {
             |old_record_location: RecordLocation| -> Option<RecordLocation> {
                 old_to_new_remap.get(&old_record_location).cloned()
             };
-        let get_seg_idx = |_new_record_location: RecordLocation| -> usize /*seg_idx*/ {
-            0 // Now compact all data files into one.
+        let get_seg_idx = |new_record_location: RecordLocation| -> usize /*seg_idx*/ {
+            let file_id = new_record_location.get_file_id().unwrap().0;
+            get_file_idx_from_flush_file_id(file_id, self.file_params.table_auto_incr_id as u64) as usize
         };
 
         let mut global_index_builder = GlobalIndexBuilder::new();
@@ -243,7 +259,7 @@ impl CompactionBuilder {
             .build_from_merge_for_compaction(
                 /*num_rows=*/ old_to_new_remap.len() as u32,
                 old_file_indices,
-                /*new_data_files=*/ vec![self.cur_new_data_file.as_ref().unwrap().clone()],
+                /*new_data_files=*/ self.get_new_compacted_data_files(),
                 get_remapped_record_location,
                 get_seg_idx,
             )
@@ -266,7 +282,7 @@ impl CompactionBuilder {
                 remapped_data_files: old_to_new_remap,
                 old_data_files: self.old_data_files_to_new,
                 old_file_indices,
-                new_data_files: HashMap::new(),
+                new_data_files: Vec::new(),
                 new_file_indices: Vec::new(),
             });
         }
