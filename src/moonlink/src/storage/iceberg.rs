@@ -24,6 +24,9 @@ mod tests;
 mod state_tests;
 
 #[cfg(test)]
+mod compaction_tests;
+
+#[cfg(test)]
 pub(super) mod test_utils;
 
 #[cfg(test)]

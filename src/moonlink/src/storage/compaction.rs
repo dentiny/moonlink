@@ -1,5 +1,6 @@
-pub(super) mod compactor;
-pub(super) mod table_compaction;
+pub(crate) mod compaction_config;
+pub(crate) mod compactor;
+pub(crate) mod table_compaction;
 
 #[cfg(test)]
 mod test_utils;

@@ -1,6 +1,7 @@
 use crate::row::IdentityProp as RowIdentity;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
+use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::iceberg_table_manager::TableManager;
@@ -568,6 +569,7 @@ async fn test_index_merge_and_create_snapshot() {
         iceberg_snapshot_new_data_file_count: 1000,
         iceberg_snapshot_new_committed_deletion_log: 1000,
         temp_files_directory: tmp_dir.path().to_str().unwrap().to_string(),
+        data_compaction_config: DataCompactionConfig::default(),
         file_index_config,
     };
 
@@ -721,7 +723,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     table.delete(row.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
 
-    let (_, iceberg_snapshot_payload, _) =
+    let (_, iceberg_snapshot_payload, _, _) =
         create_mooncake_snapshot(&mut table, &mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
@@ -763,8 +765,9 @@ async fn test_skip_iceberg_snapshot() {
         force_create: false,
         skip_iceberg_snapshot: true,
         skip_file_indices_merge: false,
+        skip_data_file_compaction: false,
     }));
-    let (_, iceberg_snapshot_payload, _) = get_mooncake_snapshot_result(&mut notify_rx).await;
+    let (_, iceberg_snapshot_payload, _, _) = get_mooncake_snapshot_result(&mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
 
@@ -890,7 +893,7 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_1.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    let (_, iceberg_snapshot_payload, _) =
+    let (_, iceberg_snapshot_payload, _, _) =
         create_mooncake_snapshot(&mut table, &mut notify_rx).await;
 
     // Operation group 2: Append new rows and create mooncake snapshot.
@@ -899,7 +902,7 @@ async fn test_async_iceberg_snapshot() {
     table.delete(row_1.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
     table.flush(/*lsn=*/ 30).await.unwrap();
-    let (_, _, _) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    let (_, _, _, _) = create_mooncake_snapshot(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the first mooncake snapshot.
     let iceberg_snapshot_result =
@@ -933,7 +936,7 @@ async fn test_async_iceberg_snapshot() {
     table.append(row_3.clone()).unwrap();
     table.commit(/*lsn=*/ 40);
     table.flush(/*lsn=*/ 40).await.unwrap();
-    let (_, iceberg_snapshot_payload, _) =
+    let (_, iceberg_snapshot_payload, _, _) =
         create_mooncake_snapshot(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the mooncake snapshot.

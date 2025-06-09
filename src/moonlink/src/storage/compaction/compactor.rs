@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
@@ -6,7 +6,9 @@ use futures::TryStreamExt;
 use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
 
-use crate::storage::compaction::table_compaction::{CompactionPayload, CompactionResult};
+use crate::storage::compaction::table_compaction::{
+    CompactedDataEntry, DataCompactionPayload, DataCompactionResult,
+};
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
@@ -30,7 +32,7 @@ pub(crate) struct CompactionFileParams {
 #[allow(dead_code)]
 pub(crate) struct CompactionBuilder {
     /// Compaction payload.
-    compaction_payload: CompactionPayload,
+    compaction_payload: DataCompactionPayload,
     /// Table schema.
     schema: SchemaRef,
     /// File related parameters for compaction usage.
@@ -47,7 +49,7 @@ pub(crate) struct CompactionBuilder {
 #[allow(dead_code)]
 impl CompactionBuilder {
     pub(crate) fn new(
-        compaction_payload: CompactionPayload,
+        compaction_payload: DataCompactionPayload,
         schema: SchemaRef,
         file_params: CompactionFileParams,
     ) -> Self {
@@ -197,15 +199,29 @@ impl CompactionBuilder {
     }
 
     /// Perform a compaction operation, and get the result back.
-    pub(crate) async fn build(&mut self) -> Result<CompactionResult> {
+    pub(crate) async fn build(&mut self) -> Result<DataCompactionResult> {
+        let old_data_files = self
+            .compaction_payload
+            .disk_files
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
+        let old_file_indices = self
+            .compaction_payload
+            .file_indices
+            .iter()
+            .cloned()
+            .collect::<HashSet<_>>();
         let old_to_new_remap = self.compact_data_files().await?;
 
         // All rows have been deleted.
         if old_to_new_remap.is_empty() {
-            return Ok(CompactionResult {
+            return Ok(DataCompactionResult {
                 remapped_data_files: old_to_new_remap,
-                data_files: vec![],
-                file_indices: vec![],
+                old_data_files,
+                old_file_indices,
+                new_data_files: HashMap::new(),
+                new_file_indices: Vec::new(),
             });
         }
 
@@ -223,10 +239,21 @@ impl CompactionBuilder {
             .await;
 
         // TODO(hjiang): Should be able to save a copy for file indices.
-        Ok(CompactionResult {
+        let mut new_data_files = HashMap::new();
+        let compacted_data_file_entry = CompactedDataEntry {
+            num_rows: old_to_new_remap.len(),
+        };
+        new_data_files.insert(
+            self.new_data_file.clone().unwrap(),
+            compacted_data_file_entry,
+        );
+
+        Ok(DataCompactionResult {
             remapped_data_files: old_to_new_remap,
-            data_files: vec![self.new_data_file.clone().unwrap()],
-            file_indices: vec![new_file_indices],
+            old_data_files,
+            old_file_indices,
+            new_data_files,
+            new_file_indices: vec![new_file_indices],
         })
     }
 }
