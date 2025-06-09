@@ -785,6 +785,7 @@ impl SnapshotTableState {
         // Apply data compaction to committed deletion logs.
         self.remap_and_prune_deletion_logs_after_compaction(&mut task);
 
+        // After data compaction and index merge changes have been applied to snapshot, processed deletion record will point to the new record location.
         self.rows = take(&mut task.new_rows);
         self.process_deletion_log(&mut task).await;
 
