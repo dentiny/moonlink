@@ -111,9 +111,11 @@ impl CompactionBuilder {
     }
 
     /// Util function to flush current arrow write and re-initialize related states.
-    async fn flush_arrow_write(&mut self) -> Result<()> {
-        self.cur_arrow_writer.as_mut().unwrap().flush().await?;
+    async fn flush_arrow_writer(&mut self) -> Result<()> {
+        self.cur_arrow_writer.as_mut().unwrap().finish().await?;
         let file_size = self.cur_arrow_writer.as_ref().unwrap().bytes_written();
+        ma::assert_gt!(file_size, 0);
+        ma::assert_gt!(self.cur_row_num, 0);
         let compacted_data_entry = CompactedDataEntry {
             num_rows: self.cur_row_num,
             file_size,
@@ -204,7 +206,7 @@ impl CompactionBuilder {
         if self.cur_arrow_writer.as_ref().unwrap().memory_size()
             >= self.file_params.data_file_final_size as usize
         {
-            self.flush_arrow_write().await?;
+            self.flush_arrow_writer().await?;
         }
 
         Ok(old_to_new_remap)
@@ -288,8 +290,9 @@ impl CompactionBuilder {
         }
 
         // Flush and close the compacted data file.
-        assert!(self.cur_arrow_writer.is_some());
-        self.flush_arrow_write().await?;
+        if self.cur_arrow_writer.is_some() {
+            self.flush_arrow_writer().await?;
+        }
 
         // Perform compaction on file indices.
         let new_file_indices = self
