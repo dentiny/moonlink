@@ -301,7 +301,7 @@ impl IcebergTableManager {
             mooncake_snapshot.disk_files.insert(
                 create_data_file(file_id as u64, data_filepath.to_string()),
                 DiskFileEntry {
-                    file_size: None,
+                    file_size: data_file_entry.data_file.file_size_in_bytes() as usize,
                     puffin_deletion_blob: data_file_entry.persisted_deletion_vector.clone(),
                     batch_deletion_vector: data_file_entry.deletion_vector.clone(),
                 },

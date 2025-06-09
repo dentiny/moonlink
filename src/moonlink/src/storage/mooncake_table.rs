@@ -160,7 +160,7 @@ pub struct TableMetadata {
 pub(crate) struct DiskFileEntry {
     /// File size.
     #[allow(dead_code)]
-    pub(crate) file_size: Option<usize>,
+    pub(crate) file_size: usize,
     /// In-memory deletion vector, used for new deletion records in-memory processing.
     pub(crate) batch_deletion_vector: BatchDeletionVector,
     /// Persisted iceberg deletion vector puffin blob.
