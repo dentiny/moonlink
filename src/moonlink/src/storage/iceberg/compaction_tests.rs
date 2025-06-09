@@ -466,7 +466,6 @@ async fn test_compaction_1_2_2() {
     table.commit(/*lsn=*/ 3);
 
     // Perform mooncake and iceberg snapshot, and data compaction.
-    // Perform mooncake and iceberg snapshot, and data compaction.
     let injected_committed_deletion_rows = vec![
         (rows[1].clone(), /*lsn=*/ 6), // Belong to the first data file.
     ];
