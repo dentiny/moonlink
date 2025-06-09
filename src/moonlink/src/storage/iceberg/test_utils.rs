@@ -5,7 +5,6 @@ use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::puffin_utils;
-use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::DataCompactionPayload;
 use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
@@ -193,7 +192,6 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
         iceberg_snapshot_new_data_file_count: 0,
-        file_index_config: FileIndexMergeConfig::default(),
         data_compaction_config,
         ..Default::default()
     };

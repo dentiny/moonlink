@@ -16,7 +16,6 @@ pub(crate) struct DataCompactionPayload {
 }
 
 /// Entry for compacted data files.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CompactedDataEntry {
     /// Number of rows for the compacted data file.
@@ -24,7 +23,6 @@ pub(crate) struct CompactedDataEntry {
 }
 
 /// Result for a compaction operation.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
