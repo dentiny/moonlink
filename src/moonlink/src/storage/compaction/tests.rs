@@ -10,6 +10,9 @@ use crate::storage::storage_utils::{get_unique_file_id_for_flush, MooncakeDataFi
 
 use std::collections::HashMap;
 
+/// Single compacted file size.
+const SINGLE_COMPACTED_DATA_FILE_SIZE: u64 = u64::MAX;
+
 /// Case-1: single file, no deletion vector.
 #[tokio::test]
 async fn test_data_file_compaction_1() {
@@ -34,10 +37,11 @@ async fn test_data_file_compaction_1() {
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
     // Perform compaction.
-    let mut builder = CompactionBuilder::new(
+    let builder = CompactionBuilder::new(
         payload,
         iceberg_test_utils::create_test_arrow_schema(),
         file_params,
@@ -113,10 +117,11 @@ async fn test_data_file_compaction_2() {
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
     // Perform compaction.
-    let mut builder = CompactionBuilder::new(
+    let builder = CompactionBuilder::new(
         payload,
         iceberg_test_utils::create_test_arrow_schema(),
         file_params,
@@ -195,12 +200,13 @@ async fn test_data_file_compaction_3() {
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
     // Check compaction results.
     //
     // Check remap results.
-    let mut builder = CompactionBuilder::new(
+    let builder = CompactionBuilder::new(
         payload,
         iceberg_test_utils::create_test_arrow_schema(),
         file_params,
@@ -268,10 +274,11 @@ async fn test_data_file_compaction_4() {
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
     // Perform compaction.
-    let mut builder = CompactionBuilder::new(
+    let builder = CompactionBuilder::new(
         payload,
         iceberg_test_utils::create_test_arrow_schema(),
         file_params,
@@ -369,10 +376,11 @@ async fn test_data_file_compaction_5() {
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
     // Perform compaction.
-    let mut builder = CompactionBuilder::new(
+    let builder = CompactionBuilder::new(
         payload,
         iceberg_test_utils::create_test_arrow_schema(),
         file_params,
@@ -478,12 +486,13 @@ async fn test_data_file_compaction_6() {
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
     // Check compaction results.
     //
     // Check remap results.
-    let mut builder = CompactionBuilder::new(
+    let builder = CompactionBuilder::new(
         payload,
         iceberg_test_utils::create_test_arrow_schema(),
         file_params,

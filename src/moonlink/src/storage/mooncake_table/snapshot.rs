@@ -537,7 +537,7 @@ impl SnapshotTableState {
     // Update current snapshot's data files by adding and removing a few.
     fn update_data_files_to_mooncake_snapshot_impl(
         &mut self,
-        old_data_files: HashSet<MooncakeDataFileRef>,
+        old_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
         new_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
     ) {
@@ -564,7 +564,7 @@ impl SnapshotTableState {
         }
 
         // Process old data files to remove.
-        for cur_old_data_file in old_data_files.into_iter() {
+        for (cur_old_data_file, _) in old_data_files.into_iter() {
             let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
             assert!(old_entry.is_some());
 
@@ -613,7 +613,7 @@ impl SnapshotTableState {
 
     fn update_data_compaction_to_mooncake_snapshot(
         &mut self,
-        old_compacted_data_files: HashSet<MooncakeDataFileRef>,
+        old_compacted_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
         new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
         old_compacted_file_indices: HashSet<FileIndex>,
         new_compacted_file_indices: Vec<FileIndex>,
@@ -665,7 +665,7 @@ impl SnapshotTableState {
             .extend(task.new_compacted_data_files.keys().cloned().to_owned());
         self.unpersisted_iceberg_records
             .compacted_data_files_to_remove
-            .extend(task.old_compacted_data_files.to_owned());
+            .extend(task.old_compacted_data_files.keys().cloned().to_owned());
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_add
             .extend(task.new_compacted_file_indices.to_owned());
@@ -704,7 +704,7 @@ impl SnapshotTableState {
         for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
             if let Some(file_id) = cur_deletion_log.get_file_id() {
                 // Case-1: the deletion log doesn't indicate a compacted data file.
-                if !task.old_compacted_data_files.contains(&file_id) {
+                if !task.old_compacted_data_files.contains_key(&file_id) {
                     new_committed_deletion_log.push(cur_deletion_log);
                     continue;
                 }
