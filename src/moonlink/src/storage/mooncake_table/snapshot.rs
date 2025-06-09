@@ -347,7 +347,7 @@ impl SnapshotTableState {
 
             // Skip compaction if the file size exceeds threshold, AND it has no persisted deletion vectors.
             if disk_file_entry.file_size
-                < self
+                >= self
                     .mooncake_table_config
                     .data_compaction_config
                     .data_file_final_size as usize
@@ -571,7 +571,6 @@ impl SnapshotTableState {
             // If no deletion record for this file, directly remove it, no need to do remapping.
             let old_entry = old_entry.unwrap();
             if old_entry.batch_deletion_vector.is_empty() {
-                assert!(old_entry.puffin_deletion_blob.is_some());
                 continue;
             }
 

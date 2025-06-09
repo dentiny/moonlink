@@ -1,18 +1,21 @@
 /// This test suite tests data compaction.
 ///
 /// Possible states for compaction:
-/// (1) No corresponding deletion vector (TODO: hjiang)
+/// (1) No corresponding deletion vector
 /// (2) There're rows left after applying deletion vector
 /// (3) No rows left after deletion vector
 ///
 /// Possibles states for deletion records:
-/// (1) Deletion record is uncommitted (TODO: hjiang)
+/// (1) Deletion record is uncommitted
 /// (2) Deletion record is committed, but not persisted into iceberg
 /// (3) Deletion record committed and persisted into iceberg
 ///
 /// Possible states for concurrent deletion:
 /// (1) No deletion happens for compacted files between compaction initiation and compaction reflected to mooncake snapshot
 /// (2) There's deletion happens in between
+///
+/// Impossible states:
+/// 1 - 3 - *
 ///
 /// Possible states for file indices:
 /// (1) File indices correponds 1-1 to their data files, which means no index merge
@@ -86,7 +89,7 @@ fn get_data_compaction_config() -> DataCompactionConfig {
     // Perform compaction as long as there're two data files.
     DataCompactionConfig {
         data_file_to_compact: 2,
-        data_file_final_size: 10000,
+        data_file_final_size: 1000000,
     }
 }
 
@@ -225,9 +228,9 @@ async fn check_loaded_snapshot(
     row_indices: Vec<usize>,
 ) -> MooncakeDataFileRef {
     // After compaction, there should be only one data file with no deletion vector.
-    let (data_file, disk_deletion_vector) = snapshot.disk_files.iter().next().unwrap();
-    assert!(disk_deletion_vector.puffin_deletion_blob.is_none());
-    assert!(disk_deletion_vector.batch_deletion_vector.is_empty());
+    let (data_file, disk_file_entry) = snapshot.disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    assert!(disk_file_entry.batch_deletion_vector.is_empty());
     check_loaded_arrow_batches(data_file.file_path(), row_indices.clone()).await;
 
     let file_indice = snapshot.indices.file_indices.clone();
@@ -261,7 +264,7 @@ async fn prepare_committed_and_flushed_data_files(table: &mut MooncakeTable) -> 
 }
 
 #[tokio::test]
-async fn test_compaction_2_2_1() {
+async fn test_compaction_1_1_1() {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
@@ -269,14 +272,7 @@ async fn test_compaction_2_2_1() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
-
-    // Delete two rows and commit/flush/persist into iceberg.
-    table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
-    table.commit(/*lsn=*/ 3);
-
-    table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
-    table.commit(/*lsn=*/ 5);
+    let _ = prepare_committed_and_flushed_data_files(&mut table).await;
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     table
@@ -302,36 +298,19 @@ async fn test_compaction_2_2_1() {
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 1);
-    let (compacted_data_file, disk_deletion_vector) = disk_files.iter().next().unwrap();
-    assert!(disk_deletion_vector.puffin_deletion_blob.is_none());
-    let deleted_rows = disk_deletion_vector
-        .batch_deletion_vector
-        .collect_deleted_rows();
-    assert_eq!(deleted_rows, vec![0, 2]);
+    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    assert!(disk_file_entry.batch_deletion_vector.is_empty());
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
         table.get_deletion_logs_for_snapshot().await;
+    assert!(committed_deletion_log.is_empty());
     assert!(uncommitted_deletion_log.is_empty());
-
-    assert_eq!(committed_deletion_log.len(), 2);
-    let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
-    let (file_id_2, row_idx_2) = parse_processed_deletion_log(&committed_deletion_log[1]);
-    assert_eq!(file_id_1, compacted_data_file.file_id());
-    assert_eq!(file_id_2, compacted_data_file.file_id());
-
-    // Get referenced arrow batches.
-    let referenced_arrow_batches =
-        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1, row_idx_2])
-            .await;
-    check_deleted_rows(
-        referenced_arrow_batches,
-        vec![rows[0].clone(), rows[2].clone()],
-    );
 }
 
 #[tokio::test]
-async fn test_compaction_2_2_2() {
+async fn test_compaction_1_1_2() {
     let temp_dir = tempfile::tempdir().unwrap();
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
@@ -340,13 +319,6 @@ async fn test_compaction_2_2_2() {
         )
         .await;
     let rows = prepare_committed_and_flushed_data_files(&mut table).await;
-
-    // Delete two rows and commit/flush/persist into iceberg.
-    table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
-    table.commit(/*lsn=*/ 3);
-
-    table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
-    table.commit(/*lsn=*/ 5);
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     let injected_committed_deletion_rows = vec![
@@ -378,14 +350,11 @@ async fn test_compaction_2_2_2() {
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 1);
-    let (compacted_data_file, disk_deletion_vector) = disk_files.iter().next().unwrap();
-    assert!(disk_deletion_vector.puffin_deletion_blob.is_none());
-    let deleted_rows = disk_deletion_vector
-        .batch_deletion_vector
-        .collect_deleted_rows();
-    // Due to the non-deterministic nature of hashmap, the row indices in the compacted data file is also non-deterministic.
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
     assert!(
-        deleted_rows == vec![0, 1, 2] || deleted_rows == vec![0, 2, 3],
+        deleted_rows == vec![1] || deleted_rows == vec![3],
         "Deleted rows are {:?}",
         deleted_rows
     );
@@ -395,23 +364,323 @@ async fn test_compaction_2_2_2() {
         table.get_deletion_logs_for_snapshot().await;
 
     // Check committed deletion logs.
-    assert_eq!(committed_deletion_log.len(), 3);
+    assert_eq!(committed_deletion_log.len(), 1);
     let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
-    let (file_id_2, row_idx_2) = parse_processed_deletion_log(&committed_deletion_log[1]);
-    let (file_id_3, row_idx_3) = parse_processed_deletion_log(&committed_deletion_log[2]);
     assert_eq!(file_id_1, compacted_data_file.file_id());
-    assert_eq!(file_id_2, compacted_data_file.file_id());
-    assert_eq!(file_id_3, compacted_data_file.file_id());
 
     // Get referenced arrow batches.
-    let referenced_arrow_batches = get_arrow_batches_with_row_idx(
-        compacted_data_file.file_path(),
-        vec![row_idx_1, row_idx_2, row_idx_3],
-    )
-    .await;
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1]).await;
+    check_deleted_rows(referenced_arrow_batches, vec![rows[1].clone()]);
+
+    // Check uncommitted deletion logs.
+    assert_eq!(uncommitted_deletion_log.len(), 1);
+    let (file_id_1, row_idx_1) =
+        parse_processed_deletion_log(uncommitted_deletion_log[0].as_ref().unwrap());
+    assert_eq!(file_id_1, compacted_data_file.file_id());
+
+    // Get referenced arrow batches.
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1]).await;
+    check_deleted_rows(referenced_arrow_batches, vec![rows[3].clone()]);
+}
+
+#[tokio::test]
+async fn test_compaction_1_2_1() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
+        create_table_and_iceberg_manager_with_data_compaction_config(
+            &temp_dir,
+            get_data_compaction_config(),
+        )
+        .await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+
+    // Delete one row and commit.
+    table.delete(rows[0].clone(), /*lsn=*/ 2).await;
+    table.commit(/*lsn=*/ 3);
+
+    table
+        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+            &mut receiver,
+            /*injected_committed_deletion_rows=*/ vec![],
+            /*injected_uncommitted_deletion_rows=*/ vec![],
+        )
+        .await
+        .unwrap();
+
+    // Check iceberg snapshot status.
+    let snapshot = iceberg_table_manager_to_load
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
+    check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
+    assert_eq!(snapshot.indices.file_indices.len(), 1);
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+
+    // Check disk files for the current mooncake snapshot.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
+    assert!(
+        deleted_rows == vec![0] || deleted_rows == vec![2],
+        "Deleted rows are {:?}",
+        deleted_rows
+    );
+
+    // Check deletion log for the current mooncake snapshot.
+    let (committed_deletion_log, uncommitted_deletion_log) =
+        table.get_deletion_logs_for_snapshot().await;
+
+    // Check committed deletion logs.
+    assert_eq!(committed_deletion_log.len(), 1);
+    let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
+    assert_eq!(file_id_1, compacted_data_file.file_id());
+
+    // Get referenced arrow batches.
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1]).await;
+    check_deleted_rows(referenced_arrow_batches, vec![rows[0].clone()]);
+
+    // Check uncommitted deletion logs.
+    assert!(uncommitted_deletion_log.is_empty());
+}
+
+#[tokio::test]
+async fn test_compaction_1_2_2() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
+        create_table_and_iceberg_manager_with_data_compaction_config(
+            &temp_dir,
+            get_data_compaction_config(),
+        )
+        .await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+
+    // Delete one row and commit.
+    table.delete(rows[0].clone(), /*lsn=*/ 2).await;
+    table.commit(/*lsn=*/ 3);
+
+    // Perform mooncake and iceberg snapshot, and data compaction.
+    // Perform mooncake and iceberg snapshot, and data compaction.
+    let injected_committed_deletion_rows = vec![
+        (rows[1].clone(), /*lsn=*/ 6), // Belong to the first data file.
+    ];
+    let injected_uncommitted_deletion_rows = vec![
+        (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
+    ];
+    table
+        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+            &mut receiver,
+            injected_committed_deletion_rows,
+            injected_uncommitted_deletion_rows,
+        )
+        .await
+        .unwrap();
+
+    // Check iceberg snapshot status.
+    let snapshot = iceberg_table_manager_to_load
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
+    check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
+    assert_eq!(snapshot.indices.file_indices.len(), 1);
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+
+    // Check disk files for the current mooncake snapshot.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
+    assert!(
+        deleted_rows == vec![0, 1] || deleted_rows == vec![2, 3],
+        "Deleted rows are {:?}",
+        deleted_rows
+    );
+
+    // Check deletion log for the current mooncake snapshot.
+    let (committed_deletion_log, uncommitted_deletion_log) =
+        table.get_deletion_logs_for_snapshot().await;
+
+    // Check committed deletion logs.
+    assert_eq!(committed_deletion_log.len(), 2);
+    let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
+    let (file_id_2, row_idx_2) = parse_processed_deletion_log(&committed_deletion_log[1]);
+    assert_eq!(file_id_1, compacted_data_file.file_id());
+    assert_eq!(file_id_2, compacted_data_file.file_id());
+
+    // Get referenced arrow batches.
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1, row_idx_2])
+            .await;
     check_deleted_rows(
         referenced_arrow_batches,
-        vec![rows[0].clone(), rows[1].clone(), rows[2].clone()],
+        vec![rows[0].clone(), rows[1].clone()],
+    );
+
+    // Check uncommitted deletion logs.
+    assert_eq!(uncommitted_deletion_log.len(), 1);
+    let (file_id_1, row_idx_1) =
+        parse_processed_deletion_log(uncommitted_deletion_log[0].as_ref().unwrap());
+    assert_eq!(file_id_1, compacted_data_file.file_id());
+
+    // Get referenced arrow batches.
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1]).await;
+    check_deleted_rows(referenced_arrow_batches, vec![rows[3].clone()]);
+}
+
+#[tokio::test]
+async fn test_compaction_2_2_1() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
+        create_table_and_iceberg_manager_with_data_compaction_config(
+            &temp_dir,
+            get_data_compaction_config(),
+        )
+        .await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+
+    // Delete two rows and commit/flush/persist into iceberg.
+    table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
+    table.commit(/*lsn=*/ 3);
+    table.flush(/*lsn=*/ 3).await.unwrap();
+
+    table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
+    table.commit(/*lsn=*/ 5);
+
+    // Perform mooncake and iceberg snapshot, and data compaction.
+    table
+        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+            &mut receiver,
+            /*injected_committed_deletion_rows=*/ vec![],
+            /*injected_uncommitted_deletion_rows=*/ vec![],
+        )
+        .await
+        .unwrap();
+
+    // Check iceberg snapshot status.
+    let snapshot = iceberg_table_manager_to_load
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
+    check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 2, 3]).await;
+    assert_eq!(snapshot.indices.file_indices.len(), 1);
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+
+    // Check disk files for the current mooncake snapshot.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
+    assert!(
+        deleted_rows == vec![0] || deleted_rows == vec![1],
+        "Deleted rows are {:?}",
+        deleted_rows
+    );
+
+    // Check deletion log for the current mooncake snapshot.
+    let (committed_deletion_log, uncommitted_deletion_log) =
+        table.get_deletion_logs_for_snapshot().await;
+    assert!(uncommitted_deletion_log.is_empty());
+
+    assert_eq!(committed_deletion_log.len(), 1);
+    let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
+    assert_eq!(file_id_1, compacted_data_file.file_id());
+
+    // Get referenced arrow batches.
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1]).await;
+    check_deleted_rows(referenced_arrow_batches, vec![rows[2].clone()]);
+}
+
+#[tokio::test]
+async fn test_compaction_2_2_2() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
+        create_table_and_iceberg_manager_with_data_compaction_config(
+            &temp_dir,
+            get_data_compaction_config(),
+        )
+        .await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+
+    // Delete two rows and commit/flush/persist into iceberg.
+    table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
+    table.commit(/*lsn=*/ 3);
+    table.flush(/*lsn=*/ 3).await.unwrap();
+
+    table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
+    table.commit(/*lsn=*/ 5);
+
+    // Perform mooncake and iceberg snapshot, and data compaction.
+    let injected_committed_deletion_rows = vec![
+        (rows[1].clone(), /*lsn=*/ 6), // Belong to the first data file.
+    ];
+    let injected_uncommitted_deletion_rows = vec![
+        (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
+    ];
+    table
+        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+            &mut receiver,
+            injected_committed_deletion_rows,
+            injected_uncommitted_deletion_rows,
+        )
+        .await
+        .unwrap();
+
+    // Check iceberg snapshot status.
+    let snapshot = iceberg_table_manager_to_load
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
+    check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 2, 3]).await;
+    assert_eq!(snapshot.indices.file_indices.len(), 1);
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+
+    // Check disk files for the current mooncake snapshot.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
+    // Due to the non-deterministic nature of hashmap, the row indices in the compacted data file is also non-deterministic.
+    assert!(
+        deleted_rows == vec![0, 1] || deleted_rows == vec![0, 2],
+        "Deleted rows are {:?}",
+        deleted_rows
+    );
+
+    // Check deletion log for the current mooncake snapshot.
+    let (committed_deletion_log, uncommitted_deletion_log) =
+        table.get_deletion_logs_for_snapshot().await;
+
+    // Check committed deletion logs.
+    assert_eq!(committed_deletion_log.len(), 2);
+    let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
+    let (file_id_2, row_idx_2) = parse_processed_deletion_log(&committed_deletion_log[1]);
+    assert_eq!(file_id_1, compacted_data_file.file_id());
+    assert_eq!(file_id_2, compacted_data_file.file_id());
+
+    // Get referenced arrow batches.
+    let referenced_arrow_batches =
+        get_arrow_batches_with_row_idx(compacted_data_file.file_path(), vec![row_idx_1, row_idx_2])
+            .await;
+    check_deleted_rows(
+        referenced_arrow_batches,
+        vec![rows[1].clone(), rows[2].clone()],
     );
 
     // Check uncommitted deletion logs.
@@ -470,9 +739,9 @@ async fn test_compaction_2_3_1() {
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 1);
-    let (_, disk_deletion_vector) = disk_files.iter().next().unwrap();
-    assert!(disk_deletion_vector.puffin_deletion_blob.is_none());
-    assert!(disk_deletion_vector.batch_deletion_vector.is_empty());
+    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    assert!(disk_file_entry.batch_deletion_vector.is_empty());
 
     // Check deletion log for current snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -531,10 +800,10 @@ async fn test_compaction_2_3_2() {
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 1);
-    let (compacted_data_file, disk_deletion_vector) = disk_files.iter().next().unwrap();
-    assert!(disk_deletion_vector.puffin_deletion_blob.is_none());
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
     // Deleted row index in the compacted data file.
-    let committed_compacted_row_indice: Vec<usize> = disk_deletion_vector
+    let committed_compacted_row_indice: Vec<usize> = disk_file_entry
         .batch_deletion_vector
         .collect_deleted_rows()
         .iter()
@@ -620,11 +889,9 @@ async fn test_compaction_3_2_1() {
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 1);
-    let (compacted_data_file, disk_deletion_vector) = disk_files.iter().next().unwrap();
-    assert!(disk_deletion_vector.puffin_deletion_blob.is_none());
-    let deleted_rows = disk_deletion_vector
-        .batch_deletion_vector
-        .collect_deleted_rows();
+    let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
     assert_eq!(deleted_rows, vec![0, 1, 2, 3]);
 
     // Check deletion log for the current mooncake snapshot.
