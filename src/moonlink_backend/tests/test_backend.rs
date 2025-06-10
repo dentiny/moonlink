@@ -249,13 +249,13 @@ mod tests {
             .unwrap();
 
         // Look for any file in the Iceberg metadata dir.
-        let _meta_dir = tmp
+        let meta_dir = tmp
             .path()
             .join("default")
             .join("public.snapshot_test")
             .join("metadata");
-        assert!(_meta_dir.exists());
-        assert!(_meta_dir.read_dir().unwrap().next().is_some());
+        assert!(meta_dir.exists());
+        assert!(meta_dir.read_dir().unwrap().next().is_some());
 
         backend.drop_table("snapshot_test").await.unwrap();
         recreate_directory(DEFAULT_MOONLINK_TEMP_FILE_PATH).unwrap();
