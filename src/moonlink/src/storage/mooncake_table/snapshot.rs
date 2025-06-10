@@ -648,7 +648,7 @@ impl SnapshotTableState {
             return;
         }
 
-        // NOTICE: Update data files before file indices, so when update file indices data files for new file indices already exist in disk files map.
+        // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.
         self.update_data_files_to_mooncake_snapshot_impl(
             old_compacted_data_files,
             new_compacted_data_files,
@@ -755,6 +755,55 @@ impl SnapshotTableState {
                 continue;
             }
             Self::remap_record_location_after_compaction(cur_deletion_log.as_mut().unwrap(), task);
+        }
+    }
+
+    fn get_iceberg_snapshot_payload(
+        &self,
+        flush_lsn: u64,
+        new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
+    ) -> IcebergSnapshotPayload {
+        IcebergSnapshotPayload {
+            flush_lsn,
+            import_payload: IcebergSnapshotImportPayload {
+                data_files: self
+                    .unpersisted_iceberg_records
+                    .unpersisted_data_files
+                    .to_vec(),
+                new_deletion_vector: new_committed_deletion_logs,
+                file_indices: self
+                    .unpersisted_iceberg_records
+                    .unpersisted_file_indices
+                    .to_vec(),
+            },
+            index_merge_payload: IcebergSnapshotIndexMergePayload {
+                new_file_indices_to_import: self
+                    .unpersisted_iceberg_records
+                    .merged_file_indices_to_add
+                    .to_vec(),
+                old_file_indices_to_remove: self
+                    .unpersisted_iceberg_records
+                    .merged_file_indices_to_remove
+                    .to_vec(),
+            },
+            data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+                new_data_files_to_import: self
+                    .unpersisted_iceberg_records
+                    .compacted_data_files_to_add
+                    .to_vec(),
+                old_data_files_to_remove: self
+                    .unpersisted_iceberg_records
+                    .compacted_data_files_to_remove
+                    .to_vec(),
+                new_file_indices_to_import: self
+                    .unpersisted_iceberg_records
+                    .compacted_file_indices_to_add
+                    .to_vec(),
+                old_file_indices_to_remove: self
+                    .unpersisted_iceberg_records
+                    .compacted_file_indices_to_remove
+                    .to_vec(),
+            },
         }
     }
 
@@ -879,52 +928,15 @@ impl SnapshotTableState {
                 || flush_by_merge_file_indices
                 || flush_by_data_compaction
             {
-                iceberg_snapshot_payload = Some(IcebergSnapshotPayload {
-                    flush_lsn,
-                    import_payload: IcebergSnapshotImportPayload {
-                        data_files: self
-                            .unpersisted_iceberg_records
-                            .unpersisted_data_files
-                            .to_vec(),
-                        new_deletion_vector: aggregated_committed_deletion_logs,
-                        file_indices: self
-                            .unpersisted_iceberg_records
-                            .unpersisted_file_indices
-                            .to_vec(),
-                    },
-                    index_merge_payload: IcebergSnapshotIndexMergePayload {
-                        new_file_indices_to_import: self
-                            .unpersisted_iceberg_records
-                            .merged_file_indices_to_add
-                            .to_vec(),
-                        old_file_indices_to_remove: self
-                            .unpersisted_iceberg_records
-                            .merged_file_indices_to_remove
-                            .to_vec(),
-                    },
-                    data_compaction_payload: IcebergSnapshotDataCompactionPayload {
-                        new_data_files_to_import: self
-                            .unpersisted_iceberg_records
-                            .compacted_data_files_to_add
-                            .to_vec(),
-                        old_data_files_to_remove: self
-                            .unpersisted_iceberg_records
-                            .compacted_data_files_to_remove
-                            .to_vec(),
-                        new_file_indices_to_import: self
-                            .unpersisted_iceberg_records
-                            .compacted_file_indices_to_add
-                            .to_vec(),
-                        old_file_indices_to_remove: self
-                            .unpersisted_iceberg_records
-                            .compacted_file_indices_to_remove
-                            .to_vec(),
-                    },
-                });
+                iceberg_snapshot_payload =
+                    Some(self.get_iceberg_snapshot_payload(
+                        flush_lsn,
+                        aggregated_committed_deletion_logs,
+                    ));
             }
         }
 
-        // TODO(hjiang): add an assertion which is enabled in the test.
+        // Expensive assertion, which is only enabled in unit tests.
         #[cfg(test)]
         {
             self.assert_current_snapshot_consistent();
