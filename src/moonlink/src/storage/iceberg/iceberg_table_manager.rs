@@ -196,26 +196,27 @@ impl IcebergTableManager {
         &mut self,
         entry: &ManifestEntry,
         file_io: &FileIO,
+        next_file_id: &mut u64,
     ) -> IcebergResult<Vec<MooncakeFileIndex>> {
         if !utils::is_file_index(entry) {
             return Ok(vec![]);
         }
 
-        let mut file_index_blob =
+        let file_index_blob =
             FileIndexBlob::load_from_index_blob(file_io.clone(), entry.data_file()).await?;
-        let file_index_futures = file_index_blob
-            .file_indices
-            .iter_mut()
-            .map(|cur_file_index| cur_file_index.as_mooncake_file_index());
-        let file_indices = futures::future::join_all(file_index_futures).await;
-
-        self.persisted_file_indices.reserve(file_indices.len());
-        file_indices.iter().for_each(|cur_file_index| {
+        self.persisted_file_indices
+            .reserve(file_index_blob.file_indices.len());
+        let mut file_indices = Vec::with_capacity(file_index_blob.file_indices.len());
+        for mut cur_iceberg_file_indice in file_index_blob.file_indices.into_iter() {
+            let cur_mooncake_file_indice = cur_iceberg_file_indice
+                .as_mooncake_file_index(next_file_id)
+                .await;
+            file_indices.push(cur_mooncake_file_indice.clone());
             self.persisted_file_indices.insert(
-                cur_file_index.clone(),
+                cur_mooncake_file_indice,
                 entry.data_file().file_path().to_string(),
             );
-        });
+        }
 
         Ok(file_indices)
     }
@@ -277,6 +278,26 @@ impl IcebergTableManager {
         Ok(())
     }
 
+    /// Util function to get the data file to file indice mapping.
+    /// NOTICE: it performs a sequential scan on all file indices, which assumes file indices number to be acceptable, otherwise we need to construct the mapping from manifest entries.
+    fn get_data_file_to_file_indice_mapping(
+        persisted_file_indices: &Vec<MooncakeFileIndex>,
+    ) -> HashMap<MooncakeDataFileRef, MooncakeFileIndex> {
+        let data_file_num = persisted_file_indices
+            .iter()
+            .map(|cur_file_indice| cur_file_indice.files.len())
+            .sum();
+        let mut data_file_to_file_indice = HashMap::with_capacity(data_file_num);
+        for cur_file_indice in persisted_file_indices.iter() {
+            for cur_data_file in cur_file_indice.files.iter() {
+                let old_entry =
+                    data_file_to_file_indice.insert(cur_data_file.clone(), cur_file_indice.clone());
+                assert!(old_entry.is_none());
+            }
+        }
+        data_file_to_file_indice
+    }
+
     /// Util function to transform iceberg table status to mooncake table snapshot.
     fn transform_to_mooncake_snapshot(
         &self,
@@ -293,13 +314,21 @@ impl IcebergTableManager {
             } else {
                 0
             };
+
+        // Get data file to file indice mapping, so could compose snapshot disk files.
+        let mut data_file_to_file_indices =
+            Self::get_data_file_to_file_indice_mapping(&persisted_file_indices);
+
         // Fill in disk files.
         mooncake_snapshot.disk_files = HashMap::with_capacity(self.persisted_data_files.len());
         for (file_id, (data_filepath, data_file_entry)) in
             self.persisted_data_files.iter().enumerate()
         {
+            let data_file = create_data_file(file_id as u64, data_filepath.to_string());
+            let _file_indice = data_file_to_file_indices.remove(&data_file).unwrap();
+
             mooncake_snapshot.disk_files.insert(
-                create_data_file(file_id as u64, data_filepath.to_string()),
+                data_file,
                 DiskFileEntry {
                     file_size: data_file_entry.data_file.file_size_in_bytes() as usize,
                     puffin_deletion_blob: data_file_entry.persisted_deletion_vector.clone(),
@@ -307,6 +336,7 @@ impl IcebergTableManager {
                 },
             );
         }
+        assert!(data_file_to_file_indices.is_empty());
         // UNDONE:
         // 1. Update file id in persisted_file_indices.
 
@@ -650,6 +680,9 @@ impl TableManager for IcebergTableManager {
             )
             .await?;
 
+        // Unique file id to assign to every data file.
+        let mut next_file_id = 0;
+
         let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
         let mut loaded_file_indices = vec![];
         for manifest_file in manifest_list.entries().iter() {
@@ -665,7 +698,11 @@ impl TableManager for IcebergTableManager {
                 self.load_data_file_from_manifest_entry(entry.as_ref())
                     .await?;
                 let file_indices = self
-                    .load_file_indices_from_manifest_entry(entry.as_ref(), &file_io)
+                    .load_file_indices_from_manifest_entry(
+                        entry.as_ref(),
+                        &file_io,
+                        &mut next_file_id,
+                    )
                     .await?;
                 loaded_file_indices.extend(file_indices);
             }
