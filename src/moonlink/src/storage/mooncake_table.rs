@@ -161,7 +161,8 @@ pub(crate) struct DiskFileEntry {
     /// File size.
     pub(crate) file_size: usize,
     /// File indices.
-    pub(crate) file_indice: FileIndex,
+    /// Invariant: in a consistent snapshot, disk file entry has its file indice assigned.
+    pub(crate) file_indice: Option<FileIndex>,
     /// In-memory deletion vector, used for new deletion records in-memory processing.
     pub(crate) batch_deletion_vector: BatchDeletionVector,
     /// Persisted iceberg deletion vector puffin blob.

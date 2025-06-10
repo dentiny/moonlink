@@ -370,6 +370,8 @@ impl SnapshotTableState {
                 .get(cur_data_file)
                 .unwrap()
                 .file_indice
+                .as_ref()
+                .unwrap()
                 .clone();
             tentative_file_indices_to_compact.push(cur_file_index);
         }
@@ -512,6 +514,30 @@ impl SnapshotTableState {
             return;
         }
 
+        // Update disk files' corresponding file indices.
+        for cur_file_index in old_file_indices.iter() {
+            for cur_data_file in cur_file_index.files.iter() {
+                // File indices change could be caused by data compaction, so it's possible the disk file doesn't exist in current snapshot any more.
+                if let Some(disk_file_entry) =
+                    self.current_snapshot.disk_files.get_mut(cur_data_file)
+                {
+                    disk_file_entry.file_indice = None;
+                }
+            }
+        }
+        // Precondition: if any, data files have already been updated to disk files, so all data files referenced by new file indices already exists.
+        for cur_file_index in new_file_indices.iter() {
+            for cur_data_file in cur_file_index.files.iter() {
+                let data_file_entry = self
+                    .current_snapshot
+                    .disk_files
+                    .get_mut(cur_data_file)
+                    .unwrap();
+                data_file_entry.file_indice = Some(cur_file_index.clone());
+            }
+        }
+
+        // Update current snapshot's file indices.
         let file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
         ma::assert_le!(old_file_indices.len(), file_indices.len());
         let updated_file_indices_len = file_indices.len() - old_file_indices.len() + 1 /*merged file indice*/;
@@ -535,7 +561,6 @@ impl SnapshotTableState {
         &mut self,
         old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-        new_file_indices: Vec<FileIndex>,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
     ) {
         if old_data_files.is_empty() {
@@ -553,7 +578,7 @@ impl SnapshotTableState {
                 DiskFileEntry {
                     file_size: cur_entry.file_size,
                     // Current implementation ensures only one file index for all new compacted data files.
-                    file_indice: new_file_indices[0].clone(),
+                    file_indice: None,
                     batch_deletion_vector: BatchDeletionVector::new(
                         /*max_rows=*/ cur_entry.num_rows,
                     ),
@@ -623,15 +648,15 @@ impl SnapshotTableState {
             return;
         }
 
-        self.update_file_indices_to_mooncake_snapshot_impl(
-            old_compacted_file_indices,
-            new_compacted_file_indices.clone(),
-        );
+        // NOTICE: Update data files before file indices, so when update file indices data files for new file indices already exist in disk files map.
         self.update_data_files_to_mooncake_snapshot_impl(
             old_compacted_data_files,
             new_compacted_data_files,
-            new_compacted_file_indices.clone(),
             remapped_data_files_after_compaction,
+        );
+        self.update_file_indices_to_mooncake_snapshot_impl(
+            old_compacted_file_indices,
+            new_compacted_file_indices.clone(),
         );
     }
 
@@ -922,10 +947,8 @@ impl SnapshotTableState {
         let mut data_file_to_file_indices_1 =
             HashMap::with_capacity(self.current_snapshot.disk_files.len());
         for (cur_disk_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
-            data_file_to_file_indices_1.insert(
-                cur_disk_file.clone(),
-                cur_disk_file_entry.file_indice.clone(),
-            );
+            let cur_file_index = cur_disk_file_entry.file_indice.as_ref().unwrap().clone();
+            data_file_to_file_indices_1.insert(cur_disk_file.clone(), cur_file_index);
         }
         // (2) Get data file to file indices mapping from [`file_indices`].
         let mut data_file_to_file_indices_2 =
@@ -987,7 +1010,7 @@ impl SnapshotTableState {
                         f.clone(),
                         DiskFileEntry {
                             file_size: file_attrs.file_size,
-                            file_indice: slice.get_file_indice().as_ref().unwrap().clone(),
+                            file_indice: Some(slice.get_file_indice().as_ref().unwrap().clone()),
                             batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                             puffin_deletion_blob: None,
                         },
