@@ -585,13 +585,10 @@ impl SnapshotTableState {
                     remapped_data_files_after_compaction.get(&old_record_location);
                 // Case-1: The old record still exists, need to remap.
                 if let Some(new_record_location) = new_record_location {
-                    // TODO(hjiang): A quick hack, there's only one compacted data file.
-                    let new_data_file = new_data_files.first().unwrap().0.clone();
-
                     let new_deletion_entry = self
                         .current_snapshot
                         .disk_files
-                        .get_mut(&new_data_file)
+                        .get_mut(&new_record_location.new_data_file)
                         .unwrap();
                     new_deletion_entry
                         .batch_deletion_vector
