@@ -900,6 +900,10 @@ impl SnapshotTableState {
         }
 
         // TODO(hjiang): add an assertion which is enabled in the test.
+        #[cfg(test)]
+        {
+            self.assert_current_snapshot_consistent();
+        }
 
         (
             self.current_snapshot.snapshot_version,
@@ -907,6 +911,35 @@ impl SnapshotTableState {
             data_compaction_payload,
             file_indices_merge_payload,
         )
+    }
+
+    // Test util function to assert current snapshot is at a consistent state.
+    #[cfg(test)]
+    fn assert_current_snapshot_consistent(&self) {
+        // Check file indices and disk files are consistent.
+        //
+        // (1) Get data file to file indices mapping from [`disk_files`].
+        let mut data_file_to_file_indices_1 =
+            HashMap::with_capacity(self.current_snapshot.disk_files.len());
+        for (cur_disk_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
+            data_file_to_file_indices_1.insert(
+                cur_disk_file.clone(),
+                cur_disk_file_entry.file_indice.clone(),
+            );
+        }
+        // (2) Get data file to file indices mapping from [`file_indices`].
+        let mut data_file_to_file_indices_2 =
+            HashMap::with_capacity(self.current_snapshot.disk_files.len());
+        let file_indices = &self.current_snapshot.indices.file_indices;
+        for cur_file_index in file_indices {
+            for cur_data_file in cur_file_index.files.iter() {
+                let old_entry = data_file_to_file_indices_2
+                    .insert(cur_data_file.clone(), cur_file_index.clone());
+                assert!(old_entry.is_none());
+            }
+        }
+        // Assert mapping inferred from disk files and file indices are the same.
+        assert_eq!(data_file_to_file_indices_1, data_file_to_file_indices_2);
     }
 
     fn merge_mem_indices(&mut self, task: &mut SnapshotTask) {
