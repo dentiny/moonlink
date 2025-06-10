@@ -34,6 +34,7 @@ use iceberg::transaction::Transaction;
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
 use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
+use parquet::file::page_index::index;
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
@@ -277,6 +278,22 @@ impl IcebergTableManager {
         Ok(())
     }
 
+    /// Util function to get the data file to file indice mapping.
+    /// NOTICE: it performs a sequential scan on all file indices, which assumes file indices number to be acceptable, otherwise we need to construct the mapping from manifest entries.
+    fn get_data_file_to_file_indice_mapping(persisted_file_indices: &Vec<MooncakeFileIndex>) -> HashMap<MooncakeDataFileRef, MooncakeFileIndex> {
+        let data_file_num = persisted_file_indices.iter().map(|cur_file_indice| cur_file_indice.files.len()).sum();
+        let mut data_file_to_file_indice = HashMap::with_capacity(data_file_num);
+        for cur_file_indice in persisted_file_indices.iter() {
+            for cur_data_file in cur_file_indice.files.iter() {
+                let _old_entry = data_file_to_file_indice.insert(cur_data_file.clone(), cur_file_indice.clone());
+                // TODO(hjiang): Enable assertion after bug resolved; it's not causing production issue because pg_mooncake hasn't enabled recovery.
+                // Referenced issue: https://github.com/Mooncake-Labs/moonlink/issues/430
+                // assert!(old_entry.is_none());
+            }
+        }
+        data_file_to_file_indice
+    }
+
     /// Util function to transform iceberg table status to mooncake table snapshot.
     fn transform_to_mooncake_snapshot(
         &self,
@@ -293,20 +310,32 @@ impl IcebergTableManager {
             } else {
                 0
             };
+
+        // Get data file to file indice mapping, so could compose snapshot disk files.
+        let mut data_file_to_file_indices = Self::get_data_file_to_file_indice_mapping(&persisted_file_indices);
+
         // Fill in disk files.
         mooncake_snapshot.disk_files = HashMap::with_capacity(self.persisted_data_files.len());
         for (file_id, (data_filepath, data_file_entry)) in
             self.persisted_data_files.iter().enumerate()
         {
+            let data_file = create_data_file(file_id as u64, data_filepath.to_string());
+
+            println!("data file = {:?}, data file mapping = {:?}", data_file, data_file_to_file_indices);
+
+            let file_indice = data_file_to_file_indices.remove(&data_file).unwrap();
+
             mooncake_snapshot.disk_files.insert(
-                create_data_file(file_id as u64, data_filepath.to_string()),
+                data_file,
                 DiskFileEntry {
                     file_size: data_file_entry.data_file.file_size_in_bytes() as usize,
+                    file_indice,
                     puffin_deletion_blob: data_file_entry.persisted_deletion_vector.clone(),
                     batch_deletion_vector: data_file_entry.deletion_vector.clone(),
                 },
             );
         }
+        assert!(data_file_to_file_indices.is_empty());
         // UNDONE:
         // 1. Update file id in persisted_file_indices.
 

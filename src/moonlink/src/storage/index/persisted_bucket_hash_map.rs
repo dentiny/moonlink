@@ -63,6 +63,7 @@ impl PartialEq for GlobalIndex {
 
 impl Eq for GlobalIndex {}
 
+/// It's guaranteed every file indice references to different set of data files.
 impl Hash for GlobalIndex {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.files.hash(state);

@@ -198,6 +198,7 @@ impl MooncakeTable {
                 ma::assert_gt!(file_attrs.file_size, 0);
                 let disk_file_entry = DiskFileEntry {
                     file_size: file_attrs.file_size,
+                    file_indice: disk_slice.get_file_indice().as_ref().unwrap().clone(),
                     batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                     puffin_deletion_blob: None,
                 };

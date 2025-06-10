@@ -541,6 +541,7 @@ impl SnapshotTableState {
         &mut self,
         old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
+        new_file_indice: FileIndex,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
     ) {
         if old_data_files.is_empty() {
@@ -557,6 +558,7 @@ impl SnapshotTableState {
                 cur_new_data_file.clone(),
                 DiskFileEntry {
                     file_size: cur_entry.file_size,
+                    file_indice: new_file_indice.clone(),
                     batch_deletion_vector: BatchDeletionVector::new(
                         /*max_rows=*/ cur_entry.num_rows,
                     ),
@@ -626,13 +628,17 @@ impl SnapshotTableState {
             return;
         }
 
+        // Current implementation assume one new file indices for data compaction.
+        assert_eq!(new_compacted_file_indices.len(), 1);
+
         self.update_file_indices_to_mooncake_snapshot_impl(
             old_compacted_file_indices,
-            new_compacted_file_indices,
+            new_compacted_file_indices.clone(),
         );
         self.update_data_files_to_mooncake_snapshot_impl(
             old_compacted_data_files,
             new_compacted_data_files,
+            new_compacted_file_indices[0].clone(),
             remapped_data_files_after_compaction,
         );
     }
@@ -954,6 +960,7 @@ impl SnapshotTableState {
                         f.clone(),
                         DiskFileEntry {
                             file_size: file_attrs.file_size,
+                            file_indice: slice.get_file_indice().as_ref().unwrap().clone(),
                             batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                             puffin_deletion_blob: None,
                         },
