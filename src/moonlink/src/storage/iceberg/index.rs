@@ -30,9 +30,9 @@ pub(crate) struct IndexBlock {
 #[derive(Default, Deserialize, Serialize)]
 pub(crate) struct FileIndex {
     /// Data file paths at iceberg table.
-    pub(crate) data_files: Vec<String>,
+    data_files: Vec<String>,
     /// Corresponds to [storage::index::IndexBlock].
-    pub(crate) index_block_files: Vec<IndexBlock>,
+    index_block_files: Vec<IndexBlock>,
     /// Hash related fields.
     num_rows: u32,
     hash_bits: u32,

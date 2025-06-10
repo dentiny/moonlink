@@ -18,7 +18,7 @@ use crate::storage::mooncake_table::{
     take_data_files_to_import, take_file_indices_to_import, take_file_indices_to_remove,
 };
 use crate::storage::mooncake_table::{take_data_files_to_remove, DiskFileEntry};
-use crate::storage::storage_utils::{create_data_file, MooncakeDataFileRef};
+use crate::storage::storage_utils::{create_data_file, FileId, MooncakeDataFileRef};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -279,26 +279,38 @@ impl IcebergTableManager {
     }
 
     /// Util function to get the data file to file indice mapping.
+    /// Returns two mapping:
+    /// (1) maps from mooncake data file to its corresponding file index;
+    /// (2) maps from file path string to its unique file id.
+    ///
     /// NOTICE: it performs a sequential scan on all file indices, which assumes file indices number to be acceptable, otherwise we need to construct the mapping from manifest entries.
     fn get_data_file_to_file_indice_mapping(
         persisted_file_indices: &[MooncakeFileIndex],
-    ) -> HashMap<MooncakeDataFileRef, MooncakeFileIndex> {
+    ) -> (
+        HashMap<MooncakeDataFileRef, MooncakeFileIndex>,
+        HashMap<String, FileId>,
+    ) {
         let data_file_num = persisted_file_indices
             .iter()
             .map(|cur_file_indice| cur_file_indice.files.len())
             .sum();
         let mut data_file_to_file_indice = HashMap::with_capacity(data_file_num);
+        let mut data_file_to_file_id = HashMap::with_capacity(data_file_num);
         for cur_file_indice in persisted_file_indices.iter() {
             for cur_data_file in cur_file_indice.files.iter() {
                 let old_entry =
                     data_file_to_file_indice.insert(cur_data_file.clone(), cur_file_indice.clone());
                 assert!(old_entry.is_none());
+
+                let old_entry = data_file_to_file_id
+                    .insert(cur_data_file.file_path().clone(), cur_data_file.file_id());
+                assert!(old_entry.is_none());
             }
         }
-        data_file_to_file_indice
+        (data_file_to_file_indice, data_file_to_file_id)
     }
 
-    /// Util function to transform iceberg table status to mooncake table snapshot.
+    /// Util function to transform iceberg table status to mooncake table snapshot, assign file id uniquely to all data files.
     fn transform_to_mooncake_snapshot(
         &self,
         persisted_file_indices: Vec<MooncakeFileIndex>,
@@ -316,15 +328,14 @@ impl IcebergTableManager {
             };
 
         // Get data file to file indice mapping, so could compose snapshot disk files.
-        let mut data_file_to_file_indices =
+        let (mut data_file_to_file_indices, mut data_file_to_file_id) =
             Self::get_data_file_to_file_indice_mapping(&persisted_file_indices);
 
         // Fill in disk files.
         mooncake_snapshot.disk_files = HashMap::with_capacity(self.persisted_data_files.len());
-        for (file_id, (data_filepath, data_file_entry)) in
-            self.persisted_data_files.iter().enumerate()
-        {
-            let data_file = create_data_file(file_id as u64, data_filepath.to_string());
+        for (data_filepath, data_file_entry) in self.persisted_data_files.iter() {
+            let file_id = data_file_to_file_id.remove(data_filepath).unwrap();
+            let data_file = create_data_file(file_id.0, data_filepath.to_string());
             let _file_indice = data_file_to_file_indices.remove(&data_file).unwrap();
 
             mooncake_snapshot.disk_files.insert(
