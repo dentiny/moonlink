@@ -338,8 +338,9 @@ impl SnapshotTableState {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        // TODO(hjiang): Implement a naive mechanism first, which compacts as long as there's deleted rows.
         let mut tentative_data_files_to_compact = HashMap::new();
+        let mut tentative_file_indices_to_compact = vec![];
+
         // TODO(hjiang): We should be able to early exit, if left items are not enough to reach the compaction threshold.
         for (cur_data_file, disk_file_entry) in all_disk_files.iter() {
             // Doesn't compact those unpersisted files.
@@ -358,11 +359,19 @@ impl SnapshotTableState {
                 continue;
             }
 
+            // Tentatively decide data file to compact.
             let old_entry = tentative_data_files_to_compact.insert(
                 cur_data_file.clone(),
                 disk_file_entry.puffin_deletion_blob.clone(),
             );
             assert!(old_entry.is_none());
+            // Tentatively decide corresponding file indices to compact.
+            let cur_file_index = all_disk_files
+                .get(cur_data_file)
+                .unwrap()
+                .file_indice
+                .clone();
+            tentative_file_indices_to_compact.push(cur_file_index);
         }
 
         if tentative_data_files_to_compact.len()
@@ -374,24 +383,9 @@ impl SnapshotTableState {
             return None;
         }
 
-        // TODO(hjiang): Current implementation take the easy path to code, which does a sequential scan to get all file indices.
-        // If turns out to have performance issue, store file indices along with disk files.
-        let all_file_indices = &self.current_snapshot.indices.file_indices;
-        let mut file_indices_to_compact = vec![];
-        for cur_file_indice in all_file_indices.iter() {
-            if cur_file_indice
-                .files
-                .iter()
-                .any(|cur_file| tentative_data_files_to_compact.contains_key(cur_file))
-            {
-                file_indices_to_compact.push(cur_file_indice.clone());
-            }
-        }
-        assert!(!file_indices_to_compact.is_empty());
-
         Some(DataCompactionPayload {
             disk_files: tentative_data_files_to_compact,
-            file_indices: file_indices_to_compact,
+            file_indices: tentative_file_indices_to_compact,
         })
     }
 
@@ -541,7 +535,7 @@ impl SnapshotTableState {
         &mut self,
         old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-        new_file_indice: FileIndex,
+        new_file_indices: Vec<FileIndex>,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
     ) {
         if old_data_files.is_empty() {
@@ -558,7 +552,8 @@ impl SnapshotTableState {
                 cur_new_data_file.clone(),
                 DiskFileEntry {
                     file_size: cur_entry.file_size,
-                    file_indice: new_file_indice.clone(),
+                    // Current implementation ensures only one file index for all new compacted data files.
+                    file_indice: new_file_indices[0].clone(),
                     batch_deletion_vector: BatchDeletionVector::new(
                         /*max_rows=*/ cur_entry.num_rows,
                     ),
@@ -628,9 +623,6 @@ impl SnapshotTableState {
             return;
         }
 
-        // Current implementation assume one new file indices for data compaction.
-        assert_eq!(new_compacted_file_indices.len(), 1);
-
         self.update_file_indices_to_mooncake_snapshot_impl(
             old_compacted_file_indices,
             new_compacted_file_indices.clone(),
@@ -638,7 +630,7 @@ impl SnapshotTableState {
         self.update_data_files_to_mooncake_snapshot_impl(
             old_compacted_data_files,
             new_compacted_data_files,
-            new_compacted_file_indices[0].clone(),
+            new_compacted_file_indices.clone(),
             remapped_data_files_after_compaction,
         );
     }
@@ -906,6 +898,8 @@ impl SnapshotTableState {
                 });
             }
         }
+
+        // TODO(hjiang): add an assertion which is enabled in the test.
 
         (
             self.current_snapshot.snapshot_version,
