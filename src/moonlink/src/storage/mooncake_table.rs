@@ -15,7 +15,7 @@ use crate::error::{Error, Result};
 use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
-use crate::storage::compaction::table_compaction::CompactedDataEntry;
+use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
@@ -252,7 +252,7 @@ pub struct SnapshotTask {
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
     ///
     /// Old data files which have been compacted.
-    old_compacted_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
+    old_compacted_data_files: HashSet<MooncakeDataFileRef>,
     /// New compacted data files, which should be imported to iceberg table.
     new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
     /// Old file indices which have been compacted.
@@ -260,7 +260,7 @@ pub struct SnapshotTask {
     /// New compacted file indices, which should be imported to iceberg table.
     new_compacted_file_indices: Vec<FileIndex>,
     /// Remapped data file after compaction.
-    remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
+    remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
 
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
@@ -305,7 +305,7 @@ impl SnapshotTask {
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
             // Data compaction related fields.
-            old_compacted_data_files: HashMap::new(),
+            old_compacted_data_files: HashSet::new(),
             new_compacted_data_files: Vec::new(),
             old_compacted_file_indices: HashSet::new(),
             new_compacted_file_indices: Vec::new(),

@@ -2,6 +2,7 @@ use crate::create_data_file;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
 use crate::storage::compaction::table_compaction::DataCompactionPayload;
 use crate::storage::compaction::test_utils;
+use crate::storage::compaction::test_utils::get_record_location_mapping;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -66,7 +67,8 @@ async fn test_data_file_compaction_1() {
         compacted_file_id,
         /*deletion_vector=*/ vec![],
     );
-    assert_eq!(compaction_result.remapped_data_files, expected_remap);
+    let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
+    assert_eq!(actual_remap, expected_remap);
 
     // Check file indice compaction.
     test_utils::check_file_indices_compaction(
@@ -142,7 +144,8 @@ async fn test_data_file_compaction_2() {
         compacted_file_id,
         /*deletion_vector=*/ vec![1],
     );
-    assert_eq!(compaction_result.remapped_data_files, expected_remap);
+    let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
+    assert_eq!(actual_remap, expected_remap);
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
@@ -291,7 +294,8 @@ async fn test_data_file_compaction_4() {
         compacted_file_id,
         /*deletion_vectors=*/ vec![vec![], vec![]],
     );
-    assert!(possible_remaps.contains(&compaction_result.remapped_data_files));
+    let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
+    assert!(possible_remaps.contains(&actual_remap));
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
@@ -395,7 +399,8 @@ async fn test_data_file_compaction_5() {
             vec![0, 2], // deletion vector the second data file
         ],
     );
-    assert!(possible_remaps.contains(&compaction_result.remapped_data_files));
+    let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
+    assert!(possible_remaps.contains(&actual_remap));
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
@@ -623,7 +628,8 @@ async fn test_multiple_compacted_data_files_1() {
             ),
         ]),
     ];
-    assert!(possible_remaps.contains(&compaction_result.remapped_data_files));
+    let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
+    assert!(possible_remaps.contains(&actual_remap));
 
     // Check file indices compaction.
     // Due to non-deterministic hash map iteration, here we get all possigle record locations.
@@ -665,4 +671,81 @@ async fn test_multiple_compacted_data_files_1() {
         /*old_row_indices=*/ vec![vec![0, 2], vec![4]],
     )
     .await;
+}
+
+/// Case-2: all rows have been deleted for both files.
+#[tokio::test]
+async fn test_multiple_compacted_data_files_2() {
+    // Create data file.
+    let temp_dir = tempfile::tempdir().unwrap();
+    let data_file_1 = temp_dir.path().join("test-1.parquet");
+    let data_file_2 = temp_dir.path().join("test-2.parquet");
+
+    let data_file_1 = create_data_file(
+        /*file_id=*/ 0,
+        data_file_1.to_str().unwrap().to_string(),
+    );
+    let data_file_2 = create_data_file(
+        /*file_id=*/ 1,
+        data_file_2.to_str().unwrap().to_string(),
+    );
+    let record_batch_1 = test_utils::create_test_batch_1();
+    let record_batch_2 = test_utils::create_test_batch_2();
+    test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
+    test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
+
+    let file_indice_1 =
+        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file_1.clone()).await;
+    let file_indice_2 =
+        test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
+
+    // Create deletion vector puffin file.
+    let puffin_filepath_1 = temp_dir.path().join("deletion-vector-1.bin");
+    let mut batch_deletion_vector_1 = BatchDeletionVector::new(/*max_rows=*/ 3);
+    batch_deletion_vector_1.delete_row(0);
+    batch_deletion_vector_1.delete_row(1);
+    batch_deletion_vector_1.delete_row(2);
+    let puffin_blob_ref_1 = test_utils::dump_deletion_vector_puffin(
+        data_file_1.file_path().clone(),
+        puffin_filepath_1.to_str().unwrap().to_string(),
+        batch_deletion_vector_1,
+    )
+    .await;
+
+    let puffin_filepath_2 = temp_dir.path().join("deletion-vector-2.bin");
+    let mut batch_deletion_vector_2 = BatchDeletionVector::new(/*max_rows=*/ 3);
+    batch_deletion_vector_2.delete_row(0);
+    batch_deletion_vector_2.delete_row(1);
+    batch_deletion_vector_2.delete_row(2);
+    let puffin_blob_ref_2 = test_utils::dump_deletion_vector_puffin(
+        data_file_2.file_path().clone(),
+        puffin_filepath_2.to_str().unwrap().to_string(),
+        batch_deletion_vector_2,
+    )
+    .await;
+
+    // Prepare compaction payload.
+    let payload = DataCompactionPayload {
+        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
+            (data_file_1.clone(), Some(puffin_blob_ref_1)),
+            (data_file_2.clone(), Some(puffin_blob_ref_2)),
+        ]),
+        file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
+    };
+    let table_auto_incr_id: u64 = 2;
+    let file_params = CompactionFileParams {
+        dir_path: std::path::PathBuf::from(temp_dir.path()),
+        table_auto_incr_id: table_auto_incr_id as u32,
+        data_file_final_size: MULTI_COMPACTED_DATA_FILE_SIZE,
+    };
+
+    // Perform compaction.
+    let builder = CompactionBuilder::new(
+        payload,
+        iceberg_test_utils::create_test_arrow_schema(),
+        file_params,
+    );
+    let compaction_result = builder.build().await.unwrap();
+    assert!(compaction_result.new_data_files.is_empty());
+    assert!(compaction_result.remapped_data_files.is_empty());
 }

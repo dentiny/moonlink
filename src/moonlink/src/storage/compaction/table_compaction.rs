@@ -24,13 +24,20 @@ pub(crate) struct CompactedDataEntry {
     pub(crate) file_size: usize,
 }
 
+/// Remapped record location after compaction.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct RemappedRecordLocation {
+    pub(crate) record_location: RecordLocation,
+    pub(crate) new_data_file: MooncakeDataFileRef,
+}
+
 /// Result for a compaction operation.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
-    pub(crate) remapped_data_files: HashMap<RecordLocation, RecordLocation>,
+    pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
     /// Old compacted data files, which maps to their corresponding compacted data file.
-    pub(crate) old_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
+    pub(crate) old_data_files: HashSet<MooncakeDataFileRef>,
     /// New compacted data files.
     pub(crate) new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
     /// Old compacted file indices.

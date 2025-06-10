@@ -4,7 +4,9 @@ use super::{
     DiskFileEntry, IcebergSnapshotPayload, Snapshot, SnapshotTask, TableConfig, TableMetadata,
 };
 use crate::error::Result;
-use crate::storage::compaction::table_compaction::{CompactedDataEntry, DataCompactionPayload};
+use crate::storage::compaction::table_compaction::{
+    CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
+};
 use crate::storage::iceberg::iceberg_table_manager::TableManager;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::{FileIndex, Index};
@@ -537,9 +539,9 @@ impl SnapshotTableState {
     // Update current snapshot's data files by adding and removing a few.
     fn update_data_files_to_mooncake_snapshot_impl(
         &mut self,
-        old_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
+        old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-        remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
+        remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
     ) {
         if old_data_files.is_empty() {
             assert!(new_data_files.is_empty());
@@ -564,7 +566,7 @@ impl SnapshotTableState {
         }
 
         // Process old data files to remove.
-        for (cur_old_data_file, _) in old_data_files.into_iter() {
+        for cur_old_data_file in old_data_files.into_iter() {
             let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
             assert!(old_entry.is_some());
 
@@ -593,7 +595,7 @@ impl SnapshotTableState {
                         .unwrap();
                     new_deletion_entry
                         .batch_deletion_vector
-                        .delete_row(new_record_location.get_row_idx());
+                        .delete_row(new_record_location.record_location.get_row_idx());
                 }
                 // Case-2: The old record has already been compacted, directly skip.
             }
@@ -613,11 +615,11 @@ impl SnapshotTableState {
 
     fn update_data_compaction_to_mooncake_snapshot(
         &mut self,
-        old_compacted_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
+        old_compacted_data_files: HashSet<MooncakeDataFileRef>,
         new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
         old_compacted_file_indices: HashSet<FileIndex>,
         new_compacted_file_indices: Vec<FileIndex>,
-        remapped_data_files_after_compaction: HashMap<RecordLocation, RecordLocation>,
+        remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
     ) {
         if old_compacted_data_files.is_empty() {
             assert!(new_compacted_data_files.is_empty());
@@ -670,7 +672,7 @@ impl SnapshotTableState {
             .extend(new_compacted_data_files);
         self.unpersisted_iceberg_records
             .compacted_data_files_to_remove
-            .extend(task.old_compacted_data_files.keys().cloned().to_owned());
+            .extend(task.old_compacted_data_files.to_owned());
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_add
             .extend(task.new_compacted_file_indices.to_owned());
@@ -692,7 +694,7 @@ impl SnapshotTableState {
         if new_record_location.is_none() {
             return false;
         }
-        deletion_log.pos = new_record_location.unwrap();
+        deletion_log.pos = new_record_location.unwrap().record_location;
         true
     }
 
@@ -709,7 +711,7 @@ impl SnapshotTableState {
         for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
             if let Some(file_id) = cur_deletion_log.get_file_id() {
                 // Case-1: the deletion log doesn't indicate a compacted data file.
-                if !task.old_compacted_data_files.contains_key(&file_id) {
+                if !task.old_compacted_data_files.contains(&file_id) {
                     new_committed_deletion_log.push(cur_deletion_log);
                     continue;
                 }

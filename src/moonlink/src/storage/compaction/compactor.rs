@@ -11,7 +11,7 @@ use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
 
 use crate::storage::compaction::table_compaction::{
-    CompactedDataEntry, DataCompactionPayload, DataCompactionResult,
+    CompactedDataEntry, DataCompactionPayload, DataCompactionResult, RemappedRecordLocation,
 };
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -25,7 +25,7 @@ use crate::storage::storage_utils::{
 };
 use crate::{create_data_file, Result};
 
-type DataFileRemap = HashMap<RecordLocation, RecordLocation>;
+type DataFileRemap = HashMap<RecordLocation, RemappedRecordLocation>;
 
 pub(crate) struct CompactionFileParams {
     /// Local directory to place compacted data files.
@@ -45,8 +45,6 @@ pub(crate) struct CompactionBuilder {
     file_params: CompactionFileParams,
     /// New data files after compaction.
     new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-    /// Old data file to new data file mapping.
-    old_data_files_to_new: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
     /// ===== Current ongoing compaction operation =====
     ///
     /// Current active async arrow writer, which is initialized in a lazy style.
@@ -71,7 +69,6 @@ impl CompactionBuilder {
             schema,
             file_params,
             new_data_files: Vec::new(),
-            old_data_files_to_new: HashMap::new(),
             // Current ongoing compaction operation
             cur_arrow_writer: None,
             cur_new_data_file: None,
@@ -166,9 +163,14 @@ impl CompactionBuilder {
         let mut old_start_row_idx = 0;
         let mut old_to_new_remap = HashMap::new();
         while let Some(cur_record_batch) = reader.try_next().await? {
+            // If all rows have been deleted for the old data file, do nothing.
             let cur_num_rows = cur_record_batch.num_rows();
             let filtered_record_batch =
                 get_filtered_record_batch(cur_record_batch, old_start_row_idx);
+            if filtered_record_batch.num_rows() == 0 {
+                continue;
+            }
+
             self.initialize_arrow_writer_if_not().await?;
             self.cur_arrow_writer
                 .as_mut()
@@ -182,29 +184,29 @@ impl CompactionBuilder {
                 if batch_deletion_vector.is_deleted(old_row_idx) {
                     continue;
                 }
-                old_to_new_remap.insert(
-                    RecordLocation::DiskFile(old_data_file.file_id(), old_row_idx),
-                    RecordLocation::DiskFile(
-                        self.cur_new_data_file.as_ref().unwrap().file_id(),
-                        self.cur_row_num,
-                    ),
+                let old_record_location =
+                    RecordLocation::DiskFile(old_data_file.file_id(), old_row_idx);
+                let new_record_location = RecordLocation::DiskFile(
+                    self.cur_new_data_file.as_ref().unwrap().file_id(),
+                    self.cur_row_num,
                 );
+                let remapped_record_location = RemappedRecordLocation {
+                    record_location: new_record_location,
+                    new_data_file: self.cur_new_data_file.as_ref().unwrap().clone(),
+                };
+                let old_entry =
+                    old_to_new_remap.insert(old_record_location, remapped_record_location);
+                assert!(old_entry.is_none());
                 self.cur_row_num += 1;
             }
 
             old_start_row_idx += cur_num_rows;
         }
 
-        // Record old to new data file mapping.
-        let old_entry = self.old_data_files_to_new.insert(
-            old_data_file,
-            self.cur_new_data_file.as_ref().unwrap().clone(),
-        );
-        assert!(old_entry.is_none());
-
         // Bytes to write already reached target compacted data file size, flush and close.
-        if self.cur_arrow_writer.as_ref().unwrap().memory_size()
-            >= self.file_params.data_file_final_size as usize
+        if self.cur_arrow_writer.is_some()
+            && self.cur_arrow_writer.as_ref().unwrap().memory_size()
+                >= self.file_params.data_file_final_size as usize
         {
             self.flush_arrow_writer().await?;
         }
@@ -244,11 +246,14 @@ impl CompactionBuilder {
     async fn compact_file_indices(
         &mut self,
         old_file_indices: Vec<FileIndex>,
-        old_to_new_remap: &HashMap<RecordLocation, RecordLocation>,
+        old_to_new_remap: &HashMap<RecordLocation, RemappedRecordLocation>,
     ) -> FileIndex {
         let get_remapped_record_location =
             |old_record_location: RecordLocation| -> Option<RecordLocation> {
-                old_to_new_remap.get(&old_record_location).cloned()
+                if let Some(remapped_record_location) = old_to_new_remap.get(&old_record_location) {
+                    return Some(remapped_record_location.record_location.clone());
+                }
+                None
             };
         let get_seg_idx = |new_record_location: RecordLocation| -> usize /*seg_idx*/ {
             let file_id = new_record_location.get_file_id().unwrap().0;
@@ -270,6 +275,12 @@ impl CompactionBuilder {
 
     /// Perform a compaction operation, and get the result back.
     pub(crate) async fn build(mut self) -> Result<DataCompactionResult> {
+        let old_data_files = self
+            .compaction_payload
+            .disk_files
+            .keys()
+            .cloned()
+            .collect::<HashSet<_>>();
         let old_file_indices = self
             .compaction_payload
             .file_indices
@@ -282,7 +293,7 @@ impl CompactionBuilder {
         if old_to_new_remap.is_empty() {
             return Ok(DataCompactionResult {
                 remapped_data_files: old_to_new_remap,
-                old_data_files: self.old_data_files_to_new,
+                old_data_files,
                 old_file_indices,
                 new_data_files: Vec::new(),
                 new_file_indices: Vec::new(),
@@ -304,7 +315,7 @@ impl CompactionBuilder {
 
         Ok(DataCompactionResult {
             remapped_data_files: old_to_new_remap,
-            old_data_files: self.old_data_files_to_new,
+            old_data_files,
             old_file_indices,
             new_data_files: self.new_data_files,
             new_file_indices: vec![new_file_indices],

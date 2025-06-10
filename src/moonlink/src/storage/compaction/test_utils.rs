@@ -3,7 +3,7 @@ use iceberg::io::FileIOBuilder;
 use iceberg::puffin::CompressionCodec;
 use parquet::arrow::AsyncArrowWriter;
 
-use crate::storage::compaction::table_compaction::CompactedDataEntry;
+use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
@@ -208,6 +208,18 @@ pub(crate) fn get_expected_remap_for_one_file(
         }
     }
     expected_remap
+}
+
+/// Test util function to get old record location to new one mapping.
+pub(crate) fn get_record_location_mapping(
+    remapped_data_files: &HashMap<RecordLocation, RemappedRecordLocation>,
+) -> HashMap<RecordLocation, RecordLocation> {
+    let mut remapped_record_location = HashMap::with_capacity(remapped_data_files.len());
+    for (old_record_location, cur_remapped) in remapped_data_files.iter() {
+        let new_record_location = cur_remapped.record_location.clone();
+        remapped_record_location.insert(old_record_location.clone(), new_record_location);
+    }
+    remapped_record_location
 }
 
 /// Test util function to get all possible expected remap hashmap.
