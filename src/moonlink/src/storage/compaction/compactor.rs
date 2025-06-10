@@ -1,8 +1,12 @@
+// Compaction struct for data files, which takes a number of data files, compact them into one or more final data files, and one single file indices.
+// Deletion vectors, which correspond to data files to compact, will be applied inline.
+
 use std::collections::{HashMap, HashSet};
 
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use futures::TryStreamExt;
+use more_asserts as ma;
 use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
 
@@ -16,7 +20,8 @@ use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::{
-    get_random_file_name_in_dir, get_unique_file_id_for_flush, MooncakeDataFileRef,
+    get_file_idx_from_flush_file_id, get_random_file_name_in_dir, get_unique_file_id_for_flush,
+    MooncakeDataFileRef,
 };
 use crate::{create_data_file, Result};
 
@@ -27,6 +32,8 @@ pub(crate) struct CompactionFileParams {
     pub(crate) dir_path: std::path::PathBuf,
     /// Used to generate unique file id.
     pub(crate) table_auto_incr_id: u32,
+    /// Final size for compacted data files.
+    pub(crate) data_file_final_size: u64,
 }
 
 pub(crate) struct CompactionBuilder {
@@ -36,10 +43,18 @@ pub(crate) struct CompactionBuilder {
     schema: SchemaRef,
     /// File related parameters for compaction usage.
     file_params: CompactionFileParams,
-    /// Async arrow writer, which is initialized in a lazy style.
-    arrow_writer: Option<AsyncArrowWriter<tokio::fs::File>>,
-    /// New data file after compaction.
-    new_data_file: Option<MooncakeDataFileRef>,
+    /// New data files after compaction.
+    new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
+    /// Old data file to new data file mapping.
+    old_data_files_to_new: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
+    /// ===== Current ongoing compaction operation =====
+    ///
+    /// Current active async arrow writer, which is initialized in a lazy style.
+    cur_arrow_writer: Option<AsyncArrowWriter<tokio::fs::File>>,
+    /// Current new data file.
+    cur_new_data_file: Option<MooncakeDataFileRef>,
+    /// Current row number for the new compaction file.
+    cur_row_num: usize,
     /// Current compacted data file count.
     compacted_file_count: u64,
 }
@@ -55,31 +70,67 @@ impl CompactionBuilder {
             compaction_payload,
             schema,
             file_params,
-            new_data_file: None,
-            arrow_writer: None,
+            new_data_files: Vec::new(),
+            old_data_files_to_new: HashMap::new(),
+            // Current ongoing compaction operation
+            cur_arrow_writer: None,
+            cur_new_data_file: None,
+            cur_row_num: 0,
             compacted_file_count: 0,
         }
     }
 
-    /// Initialize arrow writer for once.
-    async fn initialize_arrow_writer_for_once(&mut self) -> Result<()> {
-        // If we create multiple data files during compaction, simply increment file id and recreate a new one.
-        if self.arrow_writer.is_some() {
-            return Ok(());
-        }
-
+    /// Util function to create a new data file.
+    fn create_new_data_file(&self) -> MooncakeDataFileRef {
+        assert!(self.cur_new_data_file.is_none());
         let file_id = get_unique_file_id_for_flush(
             self.file_params.table_auto_incr_id as u64,
             self.compacted_file_count,
         );
         let file_path = get_random_file_name_in_dir(self.file_params.dir_path.as_path());
-        let data_file = create_data_file(file_id, file_path.clone());
-        self.new_data_file = Some(data_file);
 
-        let write_file = tokio::fs::File::create(&file_path).await?;
+        create_data_file(file_id, file_path)
+    }
+
+    /// Initialize arrow writer for once.
+    async fn initialize_arrow_writer_if_not(&mut self) -> Result<()> {
+        // If we create multiple data files during compaction, simply increment file id and recreate a new one.
+        if self.cur_arrow_writer.is_some() {
+            assert!(self.cur_new_data_file.is_some());
+            return Ok(());
+        }
+
+        self.cur_new_data_file = Some(self.create_new_data_file());
+        let write_file =
+            tokio::fs::File::create(self.cur_new_data_file.as_ref().unwrap().file_path()).await?;
         let writer: AsyncArrowWriter<tokio::fs::File> =
             AsyncArrowWriter::try_new(write_file, self.schema.clone(), /*props=*/ None)?;
-        self.arrow_writer = Some(writer);
+        self.cur_arrow_writer = Some(writer);
+
+        Ok(())
+    }
+
+    /// Util function to flush current arrow write and re-initialize related states.
+    async fn flush_arrow_writer(&mut self) -> Result<()> {
+        self.cur_arrow_writer.as_mut().unwrap().finish().await?;
+        let file_size = self.cur_arrow_writer.as_ref().unwrap().bytes_written();
+        ma::assert_gt!(file_size, 0);
+        ma::assert_gt!(self.cur_row_num, 0);
+        let compacted_data_entry = CompactedDataEntry {
+            num_rows: self.cur_row_num,
+            file_size,
+        };
+        // TODO(hjiang): Should be able to save a copy.
+        self.new_data_files.push((
+            self.cur_new_data_file.as_ref().unwrap().clone(),
+            compacted_data_entry,
+        ));
+
+        // Reinitialize states related to current new compacted data file.
+        self.cur_arrow_writer = None;
+        self.cur_new_data_file = None;
+        self.cur_row_num = 0;
+        self.compacted_file_count += 1;
 
         Ok(())
     }
@@ -92,7 +143,6 @@ impl CompactionBuilder {
         &mut self,
         old_data_file: MooncakeDataFileRef,
         puffin_blob_ref: Option<PuffinBlobRef>,
-        mut new_row_idx: usize,
     ) -> Result<DataFileRemap> {
         let file = tokio::fs::File::open(old_data_file.file_path()).await?;
         let builder = ParquetRecordBatchStreamBuilder::new(file).await?;
@@ -119,8 +169,8 @@ impl CompactionBuilder {
             let cur_num_rows = cur_record_batch.num_rows();
             let filtered_record_batch =
                 get_filtered_record_batch(cur_record_batch, old_start_row_idx);
-            self.initialize_arrow_writer_for_once().await?;
-            self.arrow_writer
+            self.initialize_arrow_writer_if_not().await?;
+            self.cur_arrow_writer
                 .as_mut()
                 .unwrap()
                 .write(&filtered_record_batch)
@@ -135,14 +185,28 @@ impl CompactionBuilder {
                 old_to_new_remap.insert(
                     RecordLocation::DiskFile(old_data_file.file_id(), old_row_idx),
                     RecordLocation::DiskFile(
-                        self.new_data_file.as_ref().unwrap().file_id(),
-                        new_row_idx,
+                        self.cur_new_data_file.as_ref().unwrap().file_id(),
+                        self.cur_row_num,
                     ),
                 );
-                new_row_idx += 1;
+                self.cur_row_num += 1;
             }
 
             old_start_row_idx += cur_num_rows;
+        }
+
+        // Record old to new data file mapping.
+        let old_entry = self.old_data_files_to_new.insert(
+            old_data_file,
+            self.cur_new_data_file.as_ref().unwrap().clone(),
+        );
+        assert!(old_entry.is_none());
+
+        // Bytes to write already reached target compacted data file size, flush and close.
+        if self.cur_arrow_writer.as_ref().unwrap().memory_size()
+            >= self.file_params.data_file_final_size as usize
+        {
+            self.flush_arrow_writer().await?;
         }
 
         Ok(old_to_new_remap)
@@ -150,23 +214,30 @@ impl CompactionBuilder {
 
     /// Util function to compact the given data files, with their corresponding deletion vector applied.
     async fn compact_data_files(&mut self) -> Result<DataFileRemap> {
-        let mut new_row_idx = 0;
         let mut old_to_new_remap = HashMap::new();
 
         let disk_files = std::mem::take(&mut self.compaction_payload.disk_files);
         for (new_data_file, puffin_blob_ref) in disk_files.into_iter() {
             let new_remap = self
-                .apply_deletion_vector_and_write(
-                    new_data_file.clone(),
-                    puffin_blob_ref.clone(),
-                    new_row_idx,
-                )
+                .apply_deletion_vector_and_write(new_data_file.clone(), puffin_blob_ref.clone())
                 .await?;
-            new_row_idx += new_remap.len();
             old_to_new_remap.extend(new_remap);
         }
 
         Ok(old_to_new_remap)
+    }
+
+    /// Util function to get new compacted data files **IN ORDER**.
+    fn get_new_compacted_data_files(&self) -> Vec<MooncakeDataFileRef> {
+        let mut prev_file_id: u64 = 0;
+        let mut new_data_files = Vec::with_capacity(self.new_data_files.len());
+        for (cur_new_data_file, _) in self.new_data_files.iter() {
+            ma::assert_lt!(prev_file_id, cur_new_data_file.file_id().0);
+            prev_file_id = cur_new_data_file.file_id().0;
+
+            new_data_files.push(cur_new_data_file.clone());
+        }
+        new_data_files
     }
 
     /// Util function to merge all given file indices into one.
@@ -179,8 +250,9 @@ impl CompactionBuilder {
             |old_record_location: RecordLocation| -> Option<RecordLocation> {
                 old_to_new_remap.get(&old_record_location).cloned()
             };
-        let get_seg_idx = |_new_record_location: RecordLocation| -> usize /*seg_idx*/ {
-            0 // Now compact all data files into one.
+        let get_seg_idx = |new_record_location: RecordLocation| -> usize /*seg_idx*/ {
+            let file_id = new_record_location.get_file_id().unwrap().0;
+            get_file_idx_from_flush_file_id(file_id, self.file_params.table_auto_incr_id as u64) as usize
         };
 
         let mut global_index_builder = GlobalIndexBuilder::new();
@@ -189,7 +261,7 @@ impl CompactionBuilder {
             .build_from_merge_for_compaction(
                 /*num_rows=*/ old_to_new_remap.len() as u32,
                 old_file_indices,
-                /*new_data_files=*/ vec![self.new_data_file.as_ref().unwrap().clone()],
+                /*new_data_files=*/ self.get_new_compacted_data_files(),
                 get_remapped_record_location,
                 get_seg_idx,
             )
@@ -197,13 +269,7 @@ impl CompactionBuilder {
     }
 
     /// Perform a compaction operation, and get the result back.
-    pub(crate) async fn build(&mut self) -> Result<DataCompactionResult> {
-        let old_data_files = self
-            .compaction_payload
-            .disk_files
-            .keys()
-            .cloned()
-            .collect::<HashSet<_>>();
+    pub(crate) async fn build(mut self) -> Result<DataCompactionResult> {
         let old_file_indices = self
             .compaction_payload
             .file_indices
@@ -216,18 +282,17 @@ impl CompactionBuilder {
         if old_to_new_remap.is_empty() {
             return Ok(DataCompactionResult {
                 remapped_data_files: old_to_new_remap,
-                old_data_files,
+                old_data_files: self.old_data_files_to_new,
                 old_file_indices,
-                new_data_files: HashMap::new(),
+                new_data_files: Vec::new(),
                 new_file_indices: Vec::new(),
             });
         }
 
         // Flush and close the compacted data file.
-        assert!(self.arrow_writer.is_some());
-        let mut arrow_writer = std::mem::take(&mut self.arrow_writer);
-        arrow_writer.as_mut().unwrap().finish().await?;
-        let file_size = arrow_writer.unwrap().bytes_written();
+        if self.cur_arrow_writer.is_some() {
+            self.flush_arrow_writer().await?;
+        }
 
         // Perform compaction on file indices.
         let new_file_indices = self
@@ -237,22 +302,11 @@ impl CompactionBuilder {
             )
             .await;
 
-        // TODO(hjiang): Should be able to save a copy for file indices.
-        let mut new_data_files = HashMap::new();
-        let compacted_data_file_entry = CompactedDataEntry {
-            file_size,
-            num_rows: old_to_new_remap.len(),
-        };
-        new_data_files.insert(
-            self.new_data_file.clone().unwrap(),
-            compacted_data_file_entry,
-        );
-
         Ok(DataCompactionResult {
             remapped_data_files: old_to_new_remap,
-            old_data_files,
+            old_data_files: self.old_data_files_to_new,
             old_file_indices,
-            new_data_files,
+            new_data_files: self.new_data_files,
             new_file_indices: vec![new_file_indices],
         })
     }

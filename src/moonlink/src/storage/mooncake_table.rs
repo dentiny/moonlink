@@ -252,9 +252,9 @@ pub struct SnapshotTask {
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
     ///
     /// Old data files which have been compacted.
-    old_compacted_data_files: HashSet<MooncakeDataFileRef>,
+    old_compacted_data_files: HashMap<MooncakeDataFileRef, MooncakeDataFileRef>,
     /// New compacted data files, which should be imported to iceberg table.
-    new_compacted_data_files: HashMap<MooncakeDataFileRef, CompactedDataEntry>,
+    new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
     /// Old file indices which have been compacted.
     old_compacted_file_indices: HashSet<FileIndex>,
     /// New compacted file indices, which should be imported to iceberg table.
@@ -305,8 +305,8 @@ impl SnapshotTask {
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
             // Data compaction related fields.
-            old_compacted_data_files: HashSet::new(),
-            new_compacted_data_files: HashMap::new(),
+            old_compacted_data_files: HashMap::new(),
+            new_compacted_data_files: Vec::new(),
             old_compacted_file_indices: HashSet::new(),
             new_compacted_file_indices: Vec::new(),
             remapped_data_files_after_compaction: HashMap::new(),
@@ -780,13 +780,18 @@ impl MooncakeTable {
         let file_params = CompactionFileParams {
             dir_path: self.metadata.path.clone(),
             table_auto_incr_id: next_file_id,
+            data_file_final_size: self
+                .metadata
+                .config
+                .data_compaction_config
+                .data_file_final_size,
         };
         let schema_ref = self.metadata.schema.clone();
         let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
 
         // Create a detached task, whose completion will be notified separately.
         tokio::task::spawn(async move {
-            let mut builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
+            let builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
             let data_compaction_result = builder.build().await;
             table_notify_tx_copy
                 .send(TableNotify::DataCompaction {
