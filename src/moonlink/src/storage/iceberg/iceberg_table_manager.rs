@@ -348,6 +348,7 @@ impl IcebergTableManager {
             );
         }
         assert!(data_file_to_file_indices.is_empty());
+        assert!(data_file_to_file_id.is_empty());
         // UNDONE:
         // 1. Update file id in persisted_file_indices.
 

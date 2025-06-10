@@ -246,11 +246,13 @@ mod tests {
             .unwrap();
 
         // Look for any file in the Iceberg metadata dir.
-        let meta_dir = tmp
+        let _meta_dir = tmp
             .path()
             .join("default")
             .join("public.snapshot_test")
             .join("metadata");
+
+        // TODO(hjiang): Flaky test, track by issue https://github.com/Mooncake-Labs/moonlink/issues/432
         assert!(meta_dir.exists() && meta_dir.read_dir().unwrap().next().is_some());
 
         backend.drop_table("snapshot_test").await.unwrap();

@@ -84,8 +84,10 @@ impl FileIndex {
     }
 
     /// Transfer the ownership and convert into [storage::index::FileIndex].
-    /// The file index id is generated on-the-fly.
-    pub(crate) async fn as_mooncake_file_index(&mut self, file_id: &mut u64) -> MooncakeFileIndex {
+    pub(crate) async fn as_mooncake_file_index(
+        &mut self,
+        next_file_id: &mut u64,
+    ) -> MooncakeFileIndex {
         let index_block_futures = self.index_block_files.iter().map(|cur_index_block| {
             MooncakeIndexBlock::new(
                 cur_index_block.bucket_start_idx,
@@ -101,8 +103,8 @@ impl FileIndex {
                 .data_files
                 .iter()
                 .map(|path| {
-                    let cur_file_id = *file_id;
-                    *file_id += 1;
+                    let cur_file_id = *next_file_id;
+                    *next_file_id += 1;
                     create_data_file(cur_file_id, path.to_string())
                 })
                 .collect(),
