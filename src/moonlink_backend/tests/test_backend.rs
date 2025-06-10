@@ -240,6 +240,9 @@ mod tests {
             .unwrap();
         let lsn = current_wal_lsn(&client).await;
 
+        // It's not guaranteed whether "table insertion" or "create iceberg snapshot" reaches table handler eventloop first, add a sleep to reduce flakiness.
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
         backend
             .create_iceberg_snapshot(&"snapshot_test", lsn)
             .await
@@ -251,9 +254,8 @@ mod tests {
             .join("default")
             .join("public.snapshot_test")
             .join("metadata");
-
-        // TODO(hjiang): Flaky test, track by issue https://github.com/Mooncake-Labs/moonlink/issues/432
-        // assert!(_meta_dir.exists() && _meta_dir.read_dir().unwrap().next().is_some());
+        assert!(_meta_dir.exists());
+        assert!(_meta_dir.read_dir().unwrap().next().is_some());
 
         backend.drop_table("snapshot_test").await.unwrap();
         recreate_directory(DEFAULT_MOONLINK_TEMP_FILE_PATH).unwrap();
