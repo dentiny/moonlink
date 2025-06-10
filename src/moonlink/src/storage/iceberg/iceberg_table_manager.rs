@@ -281,7 +281,7 @@ impl IcebergTableManager {
     /// Util function to get the data file to file indice mapping.
     /// NOTICE: it performs a sequential scan on all file indices, which assumes file indices number to be acceptable, otherwise we need to construct the mapping from manifest entries.
     fn get_data_file_to_file_indice_mapping(
-        persisted_file_indices: &Vec<MooncakeFileIndex>,
+        persisted_file_indices: &[MooncakeFileIndex],
     ) -> HashMap<MooncakeDataFileRef, MooncakeFileIndex> {
         let data_file_num = persisted_file_indices
             .iter()
