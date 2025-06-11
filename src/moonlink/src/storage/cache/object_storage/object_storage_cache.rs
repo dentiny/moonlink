@@ -253,8 +253,8 @@ mod tests {
     const FAKE_FILENAME: &str = "fake-cache.parquet";
 
     /// Util function to prepare a local file.
-    async fn create_test_file(tmp_dir: &std::path::PathBuf, filename: &str) -> PathBuf {
-        let filepath = tmp_dir.as_path().join(filename);
+    async fn create_test_file(tmp_dir: &std::path::Path, filename: &str) -> PathBuf {
+        let filepath = tmp_dir.join(filename);
         let mut file = tokio::fs::File::create(&filepath).await.unwrap();
         file.write_all(CONTENT).await.unwrap();
         file.flush().await.unwrap();
@@ -332,7 +332,7 @@ mod tests {
         let cache_file_directory = tempdir().unwrap();
         let remote_file_directory = tempdir().unwrap();
         let test_data_file_1 =
-            create_test_file(&remote_file_directory.path().to_path_buf(), TEST_FILENAME_1).await;
+            create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
         let data_file_1 = create_data_file(
             /*file_id=*/ 0,
             test_data_file_1.to_str().unwrap().to_string(),
@@ -379,7 +379,7 @@ mod tests {
 
         // Operation-4: now cache file 1 is not referenced any more, and we could add import new data entries.
         let test_data_file_2 =
-            create_test_file(&remote_file_directory.path().to_path_buf(), TEST_FILENAME_2).await;
+            create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
         let data_file_2 = create_data_file(
             /*file_id=*/ 1,
             test_data_file_2.to_str().unwrap().to_string(),
@@ -462,7 +462,7 @@ mod tests {
 
             let handle = tokio::task::spawn_blocking(async move || -> DataCacheHandle {
                 let filename = format!("{}.parquet", idx);
-                let test_file = create_test_file(&remote_file_directory, &filename).await;
+                let test_file = create_test_file(remote_file_directory.as_path(), &filename).await;
                 let data_file = create_data_file(
                     /*file_id=*/ idx as u64,
                     test_file.to_str().unwrap().to_string(),
