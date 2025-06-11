@@ -27,7 +27,6 @@ arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 async-trait = { workspace = true }
-
 base64 = { version = "0.22", optional = true }
 bincode = { workspace = true }
 chrono = { workspace = true, optional = true }
@@ -37,6 +36,7 @@ hashbrown = { workspace = true }
 hmac = { version = "0.12", optional = true }
 iceberg = { workspace = true }
 itertools = { workspace = true }
+lru = { workspace = true }
 memmap2 = "0.9"
 more-asserts = { workspace = true }
 multimap = { workspace = true }
