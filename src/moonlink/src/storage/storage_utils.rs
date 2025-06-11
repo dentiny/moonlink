@@ -9,7 +9,6 @@ use std::sync::Arc;
 pub struct MooncakeDataFile {
     pub(crate) file_id: FileId,
     pub(crate) file_path: String,
-    pub(crate) cache_file_path: Option<String>,
 }
 
 impl MooncakeDataFile {
@@ -19,10 +18,6 @@ impl MooncakeDataFile {
 
     pub fn file_path(&self) -> &String {
         &self.file_path
-    }
-
-    pub fn cache_file_path(&self) -> &Option<String> {
-        &self.cache_file_path
     }
 }
 
@@ -63,7 +58,6 @@ pub fn create_data_file(file_id: u64, file_path: String) -> MooncakeDataFileRef 
     Arc::new(MooncakeDataFile {
         file_id: FileId(file_id),
         file_path,
-        cache_file_path: None,
     })
 }
 
@@ -177,7 +171,6 @@ mod tests {
         let df = Arc::new(MooncakeDataFile {
             file_id: FileId(42),
             file_path: "hello.txt".into(),
-            cache_file_path: None,
         });
         set.insert(df.clone());
 
