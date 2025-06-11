@@ -37,9 +37,10 @@ pub struct CacheEntry {
 #[allow(dead_code)]
 #[async_trait]
 pub trait CacheTrait {
-    /// Add a new cache entry to the cache.
+    /// Import cache entry to the cache.
+    /// Precondition: the file is not managed by cache.
     #[allow(async_fn_in_trait)]
-    async fn _add_new_cache_entry(
+    async fn _import_cache_entry(
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,

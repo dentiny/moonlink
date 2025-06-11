@@ -43,6 +43,7 @@ impl ObjectStorageCacheInternal {
     fn _evict_cache_entries(&mut self, max_bytes: u64) -> Vec<String> {
         let mut evicted_data_files = vec![];
         while self.cur_bytes > max_bytes {
+            // TODO(hjiang): In certain case, we could tolerate disk space insufficiency (i.e. when pg_mooncake request for data files, we could fallback to return remote files).
             assert!(
                 !self.evictable_cache.is_empty(),
                 "Cannot reduce disk usage by evicting entries."
@@ -133,7 +134,7 @@ impl ObjectStorageCache {
 
 #[async_trait::async_trait]
 impl CacheTrait for ObjectStorageCache {
-    async fn _add_new_cache_entry(
+    async fn _import_cache_entry(
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,
@@ -294,13 +295,6 @@ mod tests {
         let mut actual_count = 0;
         let mut entries = tokio::fs::read_dir(tmp_dir.path()).await.unwrap();
         while let Some(entry) = entries.next_entry().await.unwrap() {
-            // Skip test file, we only check cache file count.
-            if entry.file_name().to_str().unwrap() == TEST_FILENAME_1
-                || entry.file_name().to_str().unwrap() == TEST_FILENAME_2
-            {
-                continue;
-            }
-
             let metadata = entry.metadata().await.unwrap();
             if metadata.is_file() {
                 actual_count += 1;
@@ -340,14 +334,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_cache_operation() {
-        let tmp_dir = tempdir().unwrap();
-        let test_data_file_1 = create_test_file_1(&tmp_dir).await;
+    async fn test_data_cache_operation() {
+        let cache_file_directory = tempdir().unwrap();
+        let remote_file_directory = tempdir().unwrap();
+        let test_data_file_1 = create_test_file_1(&remote_file_directory).await;
         let data_file_1 = create_data_file(
             /*file_id=*/ 0,
             test_data_file_1.to_str().unwrap().to_string(),
         );
-        let mut cache = get_test_object_storage_cache(&tmp_dir);
+        let mut cache = get_test_object_storage_cache(&cache_file_directory);
 
         // Operation-1: download and pin with reference count 1.
         let (mut cache_handle_1, cache_to_delete) = cache
@@ -361,7 +356,7 @@ mod tests {
             CONTENT.len()
         );
         assert!(cache_to_delete.is_empty());
-        check_cache_file_count(&tmp_dir, 1).await;
+        check_cache_file_count(&cache_file_directory, 1).await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
@@ -377,7 +372,7 @@ mod tests {
             CONTENT.len()
         );
         assert!(cache_to_delete.is_empty());
-        check_cache_file_count(&tmp_dir, 1).await;
+        check_cache_file_count(&cache_file_directory, 1).await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
@@ -388,7 +383,7 @@ mod tests {
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
 
         // Operation-4: now cache file 1 is not referenced any more, and we could add import new data entries.
-        let test_data_file_2 = create_test_file_2(&tmp_dir).await;
+        let test_data_file_2 = create_test_file_2(&remote_file_directory).await;
         let data_file_2 = create_data_file(
             /*file_id=*/ 1,
             test_data_file_2.to_str().unwrap().to_string(),
@@ -400,7 +395,7 @@ mod tests {
             },
         };
         let (cache_handle, cache_to_delete) = cache
-            ._add_new_cache_entry(
+            ._import_cache_entry(
                 data_file_2.file_id(),
                 cache_entry_2.clone(),
                 /*evictable=*/ true,
@@ -425,14 +420,14 @@ mod tests {
         );
         assert_eq!(cache_to_delete.len(), 1);
         assert!(cache_to_delete[0].ends_with(FAKE_FILENAME));
-        check_cache_file_count(&tmp_dir, 1).await;
+        check_cache_file_count(&cache_file_directory, 1).await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
         // Operation-6: drop and unreference, so we could import new cache files.
         cache_handle._unreference().await;
         let (mut cache_handle, cache_to_delete) = cache
-            ._add_new_cache_entry(
+            ._import_cache_entry(
                 data_file_2.file_id(),
                 cache_entry_2.clone(),
                 /*evictable=*/ false,
@@ -449,4 +444,15 @@ mod tests {
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
     }
+
+    // #[tokio::test]
+    // async fn test_concurrent_data_file_cache() {
+    //     let tmp_dir = tempdir().unwrap();
+    //     let test_data_file_1 = create_test_file_1(&tmp_dir).await;
+    //     let data_file_1 = create_data_file(
+    //         /*file_id=*/ 0,
+    //         test_data_file_1.to_str().unwrap().to_string(),
+    //     );
+    //     let mut cache = get_test_object_storage_cache(&tmp_dir);
+    // }
 }
