@@ -91,6 +91,7 @@ impl ObjectStorageCacheInternal {
 
 // TODO(hjiang): Add stats for cache, like cache hit/miss rate, cache size, etc.
 #[allow(dead_code)]
+#[derive(Clone)]
 struct ObjectStorageCache {
     /// Cache configs.
     config: ObjectStorageCacheConfig,
@@ -252,15 +253,8 @@ mod tests {
     const FAKE_FILENAME: &str = "fake-cache.parquet";
 
     /// Util function to prepare a local file.
-    async fn create_test_file_1(tmp_dir: &TempDir) -> PathBuf {
-        let filepath = tmp_dir.path().join(TEST_FILENAME_1);
-        let mut file = tokio::fs::File::create(&filepath).await.unwrap();
-        file.write_all(CONTENT).await.unwrap();
-        file.flush().await.unwrap();
-        filepath
-    }
-    async fn create_test_file_2(tmp_dir: &TempDir) -> PathBuf {
-        let filepath = tmp_dir.path().join(TEST_FILENAME_2);
+    async fn create_test_file(tmp_dir: &std::path::PathBuf, filename: &str) -> PathBuf {
+        let filepath = tmp_dir.as_path().join(filename);
         let mut file = tokio::fs::File::create(&filepath).await.unwrap();
         file.write_all(CONTENT).await.unwrap();
         file.flush().await.unwrap();
@@ -337,7 +331,8 @@ mod tests {
     async fn test_data_cache_operation() {
         let cache_file_directory = tempdir().unwrap();
         let remote_file_directory = tempdir().unwrap();
-        let test_data_file_1 = create_test_file_1(&remote_file_directory).await;
+        let test_data_file_1 =
+            create_test_file(&remote_file_directory.path().to_path_buf(), TEST_FILENAME_1).await;
         let data_file_1 = create_data_file(
             /*file_id=*/ 0,
             test_data_file_1.to_str().unwrap().to_string(),
@@ -383,7 +378,8 @@ mod tests {
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
 
         // Operation-4: now cache file 1 is not referenced any more, and we could add import new data entries.
-        let test_data_file_2 = create_test_file_2(&remote_file_directory).await;
+        let test_data_file_2 =
+            create_test_file(&remote_file_directory.path().to_path_buf(), TEST_FILENAME_2).await;
         let data_file_2 = create_data_file(
             /*file_id=*/ 1,
             test_data_file_2.to_str().unwrap().to_string(),
@@ -445,14 +441,57 @@ mod tests {
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
     }
 
-    // #[tokio::test]
-    // async fn test_concurrent_data_file_cache() {
-    //     let tmp_dir = tempdir().unwrap();
-    //     let test_data_file_1 = create_test_file_1(&tmp_dir).await;
-    //     let data_file_1 = create_data_file(
-    //         /*file_id=*/ 0,
-    //         test_data_file_1.to_str().unwrap().to_string(),
-    //     );
-    //     let mut cache = get_test_object_storage_cache(&tmp_dir);
-    // }
+    #[tokio::test]
+    async fn test_concurrent_data_file_cache() {
+        const PARALLEL_TASK_NUM: usize = 10;
+        let mut handle_futures = Vec::with_capacity(PARALLEL_TASK_NUM);
+
+        let cache_file_directory = tempdir().unwrap();
+        let remote_file_directory = tempdir().unwrap();
+
+        let config = ObjectStorageCacheConfig {
+            // Set max bytes larger than one file, but less than two files.
+            max_bytes: (CONTENT.len() * PARALLEL_TASK_NUM) as u64,
+            cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        };
+        let cache = ObjectStorageCache::_new(config);
+
+        for idx in 0..PARALLEL_TASK_NUM {
+            let mut temp_cache = cache.clone();
+            let remote_file_directory = remote_file_directory.path().to_path_buf();
+
+            let handle = tokio::task::spawn_blocking(async move || -> DataCacheHandle {
+                let filename = format!("{}.parquet", idx);
+                let test_file = create_test_file(&remote_file_directory, &filename).await;
+                let data_file = create_data_file(
+                    /*file_id=*/ idx as u64,
+                    test_file.to_str().unwrap().to_string(),
+                );
+                let (cache_handle, cache_to_delete) = temp_cache
+                    ._get_cache_entry(data_file.file_id(), data_file.file_path())
+                    .await
+                    .unwrap();
+                assert!(cache_to_delete.is_empty());
+                cache_handle
+            });
+            handle_futures.push(handle);
+        }
+
+        let results = futures::future::join_all(handle_futures).await;
+        for cur_handle_future in results.into_iter() {
+            let cur_cache_handle = cur_handle_future.unwrap().await;
+            let non_evictable_handle = get_non_evictable_cache_handle(&cur_cache_handle);
+            check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
+            assert_eq!(
+                non_evictable_handle.cache_entry.file_metadata.file_size as usize,
+                CONTENT.len()
+            );
+        }
+        assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
+        assert_eq!(
+            cache.cache.read().await.non_evictable_cache.len(),
+            PARALLEL_TASK_NUM
+        );
+        check_cache_file_count(&cache_file_directory, PARALLEL_TASK_NUM).await;
+    }
 }
