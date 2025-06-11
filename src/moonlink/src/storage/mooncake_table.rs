@@ -35,6 +35,7 @@ use crate::storage::storage_utils::FileId;
 #[cfg(test)]
 use crate::storage::storage_utils::ProcessedDeletionRecord;
 use crate::table_notify::TableNotify;
+use crate::ObjectStorageCache;
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 use std::path::PathBuf;
@@ -444,6 +445,9 @@ pub struct MooncakeTable {
 
     /// Table notifier, which is used to sent multiple types of event completion information.
     table_notify: Option<Sender<TableNotify>>,
+
+    /// Data file cache.
+    data_file_cache: ObjectStorageCache,
 }
 
 impl MooncakeTable {
@@ -457,6 +461,7 @@ impl MooncakeTable {
         identity: IdentityProp,
         iceberg_table_config: IcebergTableConfig,
         table_config: TableConfig,
+        data_file_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {
             name,
@@ -470,13 +475,20 @@ impl MooncakeTable {
             metadata.clone(),
             iceberg_table_config,
         )?);
-        Self::new_with_table_manager(metadata, iceberg_table_manager, table_config).await
+        Self::new_with_table_manager(
+            metadata,
+            iceberg_table_manager,
+            table_config,
+            data_file_cache,
+        )
+        .await
     }
 
     pub(crate) async fn new_with_table_manager(
         table_metadata: Arc<TableMetadata>,
         mut table_manager: Box<dyn TableManager>,
         table_config: TableConfig,
+        data_file_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(0);
         Ok(Self {
@@ -497,6 +509,7 @@ impl MooncakeTable {
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn: None,
             table_notify: None,
+            data_file_cache,
         })
     }
 

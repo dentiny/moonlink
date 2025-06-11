@@ -18,15 +18,6 @@ pub struct FileMetadata {
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ObjectStorageCacheConfig {
-    /// Max number of bytes for cache entries at local filesystem.
-    pub(crate) max_bytes: u64,
-    /// Directory to store local cache files.
-    pub(crate) cache_directory: String,
-}
-
-#[allow(dead_code)]
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CacheEntry {
     /// Cache data file at local filesystem.
     pub(crate) cache_filepath: String,

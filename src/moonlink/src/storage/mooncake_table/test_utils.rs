@@ -77,6 +77,7 @@ pub async fn test_table(
         identity,
         iceberg_table_config,
         table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap()

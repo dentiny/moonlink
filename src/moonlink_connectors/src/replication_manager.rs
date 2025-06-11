@@ -1,7 +1,7 @@
 use crate::pg_replicate::table::TableId;
 use crate::Result;
 use crate::{PostgresSourceError, ReplicationConnection};
-use moonlink::{IcebergTableEventManager, ReadStateManager};
+use moonlink::{IcebergTableEventManager, ObjectStorageCache, ReadStateManager};
 use std::collections::HashMap;
 use std::hash::Hash;
 use tracing::{debug, info};
@@ -21,15 +21,22 @@ pub struct ReplicationManager<T: Eq + Hash> {
     table_base_path: String,
     /// Base directory for temporary files used in union read.
     table_temp_files_directory: String,
+    /// Data file cache.
+    data_file_cache: ObjectStorageCache,
 }
 
 impl<T: Eq + Hash> ReplicationManager<T> {
-    pub fn new(table_base_path: String, table_temp_files_directory: String) -> Self {
+    pub fn new(
+        table_base_path: String,
+        table_temp_files_directory: String,
+        data_file_cache: ObjectStorageCache,
+    ) -> Self {
         Self {
             connections: HashMap::new(),
             table_info: HashMap::new(),
             table_base_path,
             table_temp_files_directory,
+            data_file_cache,
         }
     }
 
@@ -58,6 +65,7 @@ impl<T: Eq + Hash> ReplicationManager<T> {
                 uri.to_owned(),
                 base_path.to_str().unwrap().to_string(),
                 self.table_temp_files_directory.clone(),
+                self.data_file_cache.clone(),
             )
             .await?;
             self.connections

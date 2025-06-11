@@ -442,6 +442,7 @@ async fn test_snapshot_store_failure() {
         table_metadata,
         Box::new(mock_table_manager),
         MooncakeTableConfig::default(), // No temp files generated.
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();

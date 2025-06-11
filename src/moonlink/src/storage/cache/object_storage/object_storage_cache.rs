@@ -2,9 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Object storage cache, which caches data file in file granularity at local filesystem.
-use crate::storage::cache::object_storage::base_cache::{
-    CacheEntry, CacheTrait, FileMetadata, ObjectStorageCacheConfig,
-};
+use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
+use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::cache_handle::{DataCacheHandle, NonEvictableHandle};
 use crate::storage::storage_utils::FileId;
 use crate::Result;
@@ -92,7 +91,7 @@ impl ObjectStorageCacheInternal {
 // TODO(hjiang): Add stats for cache, like cache hit/miss rate, cache size, etc.
 #[allow(dead_code)]
 #[derive(Clone)]
-struct ObjectStorageCache {
+pub struct ObjectStorageCache {
     /// Cache configs.
     config: ObjectStorageCacheConfig,
     /// Data file caches.
@@ -100,6 +99,12 @@ struct ObjectStorageCache {
 }
 
 impl ObjectStorageCache {
+    #[cfg(test)]
+    pub fn default_for_test() -> Self {
+        let config = ObjectStorageCacheConfig::default_for_test();
+        Self::_new(config)
+    }
+
     pub fn _new(config: ObjectStorageCacheConfig) -> Self {
         let evictable_cache = LruCache::unbounded();
         let non_evictable_cache = HashMap::new();
