@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::storage::cache::object_storage::base_cache::{
     CacheEntry, CacheTrait, FileMetadata, ObjectStorageCacheConfig,
 };
+use crate::storage::cache::object_storage::cache_handle::{DataCacheHandle, NonEvictableHandle};
 use crate::storage::storage_utils::{MooncakeDataFile, MooncakeDataFileRef};
 use crate::Result;
 
@@ -27,7 +28,7 @@ struct CacheEntryWrapper {
 /// (1) fetch and mark as non-evictable on access
 /// (2) dereference after usage, down-level to evictable when it's _unreferenced
 #[allow(dead_code)]
-struct ObjectStorageCacheInternal {
+pub(super) struct ObjectStorageCacheInternal {
     /// Current number of bytes of all cache entries.
     cur_bytes: u64,
     /// Evictable data file cache entries.
@@ -71,6 +72,21 @@ impl ObjectStorageCacheInternal {
         assert!(old_entry.is_none());
         self._evict_cache_entries(max_bytes)
     }
+
+    /// Unreference the given cache entry.
+    pub(super) fn _unreference(&mut self, data_file: &MooncakeDataFileRef) {
+        let cache_entry_wrapper = self.non_evictable_cache.get_mut(data_file);
+        assert!(cache_entry_wrapper.is_some());
+        let cache_entry_wrapper = cache_entry_wrapper.unwrap();
+        cache_entry_wrapper.reference_count -= 1;
+
+        // Down-level to evictable if reference count goes away.
+        if cache_entry_wrapper.reference_count == 0 {
+            let cache_entry_wrapper = self.non_evictable_cache.remove(data_file).unwrap();
+            self.evictable_cache
+                .push(data_file.clone(), cache_entry_wrapper);
+        }
+    }
 }
 
 // TODO(hjiang): Add stats for cache, like cache hit/miss rate, cache size, etc.
@@ -79,7 +95,7 @@ struct ObjectStorageCache {
     /// Cache configs.
     config: ObjectStorageCacheConfig,
     /// Data file caches.
-    cache: RwLock<ObjectStorageCacheInternal>,
+    cache: Arc<RwLock<ObjectStorageCacheInternal>>,
 }
 
 impl ObjectStorageCache {
@@ -88,11 +104,11 @@ impl ObjectStorageCache {
         let non_evictable_cache = HashMap::new();
         Self {
             config,
-            cache: RwLock::new(ObjectStorageCacheInternal {
+            cache: Arc::new(RwLock::new(ObjectStorageCacheInternal {
                 cur_bytes: 0,
                 evictable_cache,
                 non_evictable_cache,
-            }),
+            })),
         }
     }
 
@@ -123,15 +139,19 @@ impl CacheTrait for ObjectStorageCache {
         data_file: MooncakeDataFileRef,
         file_metadata: FileMetadata,
         evictable: bool,
-    ) -> Vec<String> {
-        assert!(data_file.cache_file_path().is_some());
+    ) -> (DataCacheHandle, Vec<String>) {
+        let cache_filepath = data_file
+            .cache_handle()
+            .as_ref()
+            .unwrap()
+            .get_unimported_cache_path();
         let file_size = file_metadata.file_size;
         let cache_entry = CacheEntry {
-            cache_filepath: data_file.cache_file_path().as_ref().unwrap().clone(),
+            cache_filepath,
             file_metadata,
         };
         let mut cache_entry_wrapper = CacheEntryWrapper {
-            cache_entry,
+            cache_entry: cache_entry.clone(),
             reference_count: 1,
         };
 
@@ -144,17 +164,28 @@ impl CacheTrait for ObjectStorageCache {
             cache_entry_wrapper.reference_count = 0;
             let old_entry = guard.evictable_cache.push(data_file, cache_entry_wrapper);
             assert!(old_entry.is_none());
-            return guard._evict_cache_entries(self.config.max_bytes);
+            let cache_files_to_delete = guard._evict_cache_entries(self.config.max_bytes);
+            return (DataCacheHandle::EvictableHandle, cache_files_to_delete);
         }
 
         // Emplace non-evictable cache.
-        guard._insert_non_evictable(data_file, cache_entry_wrapper, self.config.max_bytes)
+        let cache_files_to_delete = guard._insert_non_evictable(
+            data_file.clone(),
+            cache_entry_wrapper,
+            self.config.max_bytes,
+        );
+        let non_evictable_handle =
+            NonEvictableHandle::new(data_file.clone(), cache_entry, self.cache.clone());
+        (
+            DataCacheHandle::NonEvictableHandle(non_evictable_handle),
+            cache_files_to_delete,
+        )
     }
 
     async fn _get_cache_entry(
         &mut self,
         data_file: &MooncakeDataFileRef,
-    ) -> Result<(CacheEntry, Vec<String>)> {
+    ) -> Result<(DataCacheHandle, Vec<String>)> {
         {
             let mut guard = self.cache.write().await;
 
@@ -163,7 +194,13 @@ impl CacheTrait for ObjectStorageCache {
             if value.is_some() {
                 ma::assert_gt!(value.as_ref().unwrap().reference_count, 0);
                 value.as_mut().unwrap().reference_count += 1;
-                return Ok((value.as_ref().unwrap().cache_entry.clone(), vec![]));
+                let cache_entry = value.as_ref().unwrap().cache_entry.clone();
+                let non_evictable_handle =
+                    NonEvictableHandle::new(data_file.clone(), cache_entry, self.cache.clone());
+                return Ok((
+                    DataCacheHandle::NonEvictableHandle(non_evictable_handle),
+                    vec![],
+                ));
             }
 
             // Check evictable cache.
@@ -177,7 +214,12 @@ impl CacheTrait for ObjectStorageCache {
                     value.unwrap(),
                     self.config.max_bytes,
                 );
-                return Ok((cache_entry, files_to_delete));
+                let non_evictable_handle =
+                    NonEvictableHandle::new(data_file.clone(), cache_entry, self.cache.clone());
+                return Ok((
+                    DataCacheHandle::NonEvictableHandle(non_evictable_handle),
+                    files_to_delete,
+                ));
             }
         }
 
@@ -192,10 +234,12 @@ impl CacheTrait for ObjectStorageCache {
             reference_count: 1,
         };
 
+        let non_evictable_handle =
+            NonEvictableHandle::new(data_file.clone(), cache_entry.clone(), self.cache.clone());
         let result_data_file = Arc::new(MooncakeDataFile {
             file_id: data_file.file_id,
             file_path: data_file.file_path.clone(),
-            cache_file_path: Some(cache_entry.cache_filepath.clone()),
+            cache_handle: Some(DataCacheHandle::NonEvictableHandle(non_evictable_handle)),
         });
 
         {
@@ -206,23 +250,12 @@ impl CacheTrait for ObjectStorageCache {
                 cache_entry_wrapper,
                 self.config.max_bytes,
             );
-            Ok((cache_entry, evicted_entries))
-        }
-    }
-
-    async fn _unreference(&mut self, data_file: &MooncakeDataFileRef) {
-        let mut guard = self.cache.write().await;
-        let cache_entry_wrapper = guard.non_evictable_cache.get_mut(data_file);
-        assert!(cache_entry_wrapper.is_some());
-        let cache_entry_wrapper = cache_entry_wrapper.unwrap();
-        cache_entry_wrapper.reference_count -= 1;
-
-        // Down-level to evictable if reference count goes away.
-        if cache_entry_wrapper.reference_count == 0 {
-            let cache_entry_wrapper = guard.non_evictable_cache.remove(data_file).unwrap();
-            guard
-                .evictable_cache
-                .push(data_file.clone(), cache_entry_wrapper);
+            let non_evictable_handle =
+                NonEvictableHandle::new(data_file.clone(), cache_entry, self.cache.clone());
+            Ok((
+                DataCacheHandle::NonEvictableHandle(non_evictable_handle),
+                evicted_entries,
+            ))
         }
     }
 }
@@ -232,6 +265,7 @@ mod tests {
     use std::path::PathBuf;
 
     use crate::create_data_file;
+    use crate::storage::cache::object_storage::cache_handle;
     use crate::storage::storage_utils::FileId;
 
     use super::*;
@@ -307,7 +341,37 @@ mod tests {
         assert_eq!(actual_count, expected_count);
     }
 
-    #[tokio::test]
+    /// Test util function to assert returned cache handle is evictable.
+    fn assert_evictable_cache_handle(data_cache_handle: &DataCacheHandle) {
+        match data_cache_handle {
+            DataCacheHandle::EvictableHandle => {}
+            _ => {
+                panic!("Expects to get evictable cache handle, but get unimported or non evictable one")
+            }
+        }
+    }
+
+    /// Test util function to assert returned cache handle is non-evictable.
+    fn assert_non_evictable_cache_handle(data_cache_handle: &DataCacheHandle) {
+        match data_cache_handle {
+            DataCacheHandle::NonEvictableHandle(_) => {}
+            _ => panic!(
+                "Expects to get non-evictable cache handle, but get unimported or evictable one"
+            ),
+        }
+    }
+
+    /// Test util function to assert and get non-evictable cache handle.
+    fn get_non_evictable_cache_handle(data_cache_handle: &DataCacheHandle) -> &NonEvictableHandle {
+        match data_cache_handle {
+            DataCacheHandle::NonEvictableHandle(handle) => handle,
+            _ => {
+                panic!("Expects to get non-evictable cache handle, but get unimported or evictable one")
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_cache_operation() {
         let tmp_dir = tempdir().unwrap();
         let test_data_file_1 = create_test_file_1(&tmp_dir).await;
@@ -318,26 +382,36 @@ mod tests {
         let mut cache = get_test_object_storage_cache(&tmp_dir);
 
         // Operation-1: download and pin with reference count 1.
-        let (cache_entry, cache_to_delete) = cache._get_cache_entry(&data_file_1).await.unwrap();
-        check_file_content(&cache_entry.cache_filepath).await;
-        assert_eq!(cache_entry.file_metadata.file_size as usize, CONTENT.len());
+        let (mut cache_handle_1, cache_to_delete) =
+            cache._get_cache_entry(&data_file_1).await.unwrap();
+        let non_evictable_handle = get_non_evictable_cache_handle(&cache_handle_1);
+        check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
+        assert_eq!(
+            non_evictable_handle.cache_entry.file_metadata.file_size as usize,
+            CONTENT.len()
+        );
         assert!(cache_to_delete.is_empty());
         check_cache_file_count(&tmp_dir, 1).await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
         // Operation-2: get the cached file, and increment one additional reference count.
-        let (cache_entry, cache_to_delete) = cache._get_cache_entry(&data_file_1).await.unwrap();
-        check_file_content(&cache_entry.cache_filepath).await;
-        assert_eq!(cache_entry.file_metadata.file_size as usize, CONTENT.len());
+        let (mut cache_handle_2, cache_to_delete) =
+            cache._get_cache_entry(&data_file_1).await.unwrap();
+        let non_evictable_handle = get_non_evictable_cache_handle(&cache_handle_2);
+        check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
+        assert_eq!(
+            non_evictable_handle.cache_entry.file_metadata.file_size as usize,
+            CONTENT.len()
+        );
         assert!(cache_to_delete.is_empty());
         check_cache_file_count(&tmp_dir, 1).await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
-        // Operation-3: decrement reference count to 0, so later we could cache other files.
-        cache._unreference(&data_file_1).await;
-        cache._unreference(&data_file_1).await;
+        // Operation-3: explicit dop the cache handles, in order to decrement reference count to 0, so later we could cache other files.
+        cache_handle_1.unreference().await;
+        cache_handle_2.unreference().await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
 
@@ -346,9 +420,9 @@ mod tests {
         let data_file_2 = Arc::new(MooncakeDataFile {
             file_id: FileId(1),
             file_path: test_data_file_2.to_str().unwrap().to_string(),
-            cache_file_path: Some(FAKE_FILENAME.to_string()),
+            cache_handle: Some(DataCacheHandle::UnimportedHandle(FAKE_FILENAME.to_string())),
         });
-        let cache_to_delete = cache
+        let (cache_handle, cache_to_delete) = cache
             ._add_new_cache_entry(
                 data_file_2.clone(),
                 FileMetadata {
@@ -357,24 +431,30 @@ mod tests {
                 /*evictable=*/ true,
             )
             .await;
+        assert_evictable_cache_handle(&cache_handle);
         assert_eq!(cache_to_delete.len(), 1);
         tokio::fs::remove_file(&cache_to_delete[0]).await.unwrap();
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
 
         // Operation-5: newly imported file is not pinned, so we're able to evict it out.
-        let (cache_entry, cache_to_delete) = cache._get_cache_entry(&data_file_1).await.unwrap();
-        check_file_content(&cache_entry.cache_filepath).await;
-        assert_eq!(cache_entry.file_metadata.file_size as usize, CONTENT.len());
+        let (mut cache_handle, cache_to_delete) =
+            cache._get_cache_entry(&data_file_1).await.unwrap();
+        let non_evictable_handle = get_non_evictable_cache_handle(&cache_handle);
+        check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
+        assert_eq!(
+            non_evictable_handle.cache_entry.file_metadata.file_size as usize,
+            CONTENT.len()
+        );
         assert_eq!(cache_to_delete.len(), 1);
         assert!(cache_to_delete[0].ends_with(FAKE_FILENAME));
         check_cache_file_count(&tmp_dir, 1).await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
-        // Operation-6: _unreference, so we could import new cache files.
-        cache._unreference(&data_file_1).await;
-        let cache_to_delete = cache
+        // Operation-6: drop and unreference, so we could import new cache files.
+        cache_handle.unreference().await;
+        let (mut cache_handle, cache_to_delete) = cache
             ._add_new_cache_entry(
                 data_file_2.clone(),
                 FileMetadata {
@@ -383,13 +463,14 @@ mod tests {
                 /*evictable=*/ false,
             )
             .await;
+        assert_non_evictable_cache_handle(&cache_handle);
         assert_eq!(cache_to_delete.len(), 1);
         tokio::fs::remove_file(&cache_to_delete[0]).await.unwrap();
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
-        // Operation-7: reference all cache entries.
-        cache._unreference(&data_file_2).await;
+        // Operation-7: unreference all cache entries.
+        cache_handle.unreference().await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
     }

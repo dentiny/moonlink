@@ -5,7 +5,8 @@
 /// - evictable if a cache entry is unreferenced
 use async_trait::async_trait;
 
-use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
+use crate::storage::storage_utils::{FileId, MooncakeDataFileRef};
 use crate::Result;
 
 #[allow(dead_code)]
@@ -43,7 +44,7 @@ pub trait CacheTrait {
         data_file: MooncakeDataFileRef,
         file_metadata: FileMetadata,
         evictable: bool,
-    ) -> Vec<String>;
+    ) -> (DataCacheHandle, Vec<String>);
 
     /// Get file entry.
     /// If the requested file entry doesn't exist in cache, an IO operation is performed.
@@ -51,9 +52,5 @@ pub trait CacheTrait {
     async fn _get_cache_entry(
         &mut self,
         data_file: &MooncakeDataFileRef,
-    ) -> Result<(CacheEntry, Vec<String>)>;
-
-    /// Deference the given data file, it's required that the entry exists in cache and has non-zero reference count.
-    #[allow(async_fn_in_trait)]
-    async fn _unreference(&mut self, data_file: &MooncakeDataFileRef);
+    ) -> Result<(DataCacheHandle, Vec<String>)>;
 }
