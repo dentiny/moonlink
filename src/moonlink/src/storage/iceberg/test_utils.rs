@@ -16,6 +16,7 @@ use crate::storage::mooncake_table::{
 };
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableNotify;
+use crate::ObjectStorageCache;
 use crate::Result;
 
 use arrow::datatypes::Schema as ArrowSchema;
@@ -208,6 +209,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
