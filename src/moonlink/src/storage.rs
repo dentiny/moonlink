@@ -10,16 +10,17 @@ pub use cache::object_storage::object_storage_cache::ObjectStorageCache;
 pub use iceberg::iceberg_table_event_manager::{
     IcebergEventSyncReceiver, IcebergTableEventManager,
 };
-pub use iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager, TableManager};
+pub use iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
+pub use iceberg::table_manager::TableManager;
 pub use mooncake_table::{MooncakeTable, TableConfig};
 pub(crate) use mooncake_table::{PuffinDeletionBlobAtRead, SnapshotTableState};
 
 #[cfg(test)]
 pub(crate) use iceberg::deletion_vector::DeletionVector;
 #[cfg(test)]
-pub(crate) use iceberg::iceberg_table_manager::MockTableManager;
-#[cfg(test)]
 pub(crate) use iceberg::puffin_utils::*;
+#[cfg(test)]
+pub(crate) use iceberg::table_manager::MockTableManager;
 #[cfg(test)]
 pub(crate) use mooncake_table::test_utils::*;
 

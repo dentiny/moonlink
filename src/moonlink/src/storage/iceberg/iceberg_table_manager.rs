@@ -7,6 +7,7 @@ use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
@@ -37,9 +38,6 @@ use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
-#[cfg(test)]
-use mockall::*;
-
 /// Key for iceberg table property, to record flush lsn.
 const MOONCAKE_TABLE_FLUSH_LSN: &str = "mooncake-table-flush-lsn";
 /// Used to represent uninitialized deletion vector.
@@ -57,32 +55,6 @@ pub struct IcebergTableConfig {
     /// Iceberg table name.
     #[builder(default = "table".to_string())]
     pub table_name: String,
-}
-
-#[async_trait]
-#[cfg_attr(test, automock)]
-pub trait TableManager: Send {
-    /// Write a new snapshot to iceberg table.
-    /// It could be called for multiple times to write and commit multiple snapshots.
-    ///
-    /// - Apart from data files, it also supports deletion vector (which is introduced in v3) and self-defined hash index,
-    ///   both of which are stored in puffin files.
-    /// - For deletion vectors, we store one blob in one puffin file.
-    /// - For hash index, we store one mooncake file index in one puffin file.
-    #[allow(async_fn_in_trait)]
-    async fn sync_snapshot(
-        &mut self,
-        snapshot_payload: IcebergSnapshotPayload,
-    ) -> IcebergResult<HashMap<MooncakeDataFileRef, PuffinBlobRef>>;
-
-    /// Load the latest snapshot from iceberg table. Used for recovery and initialization.
-    /// Notice this function is supposed to call **only once**.
-    #[allow(async_fn_in_trait)]
-    async fn load_snapshot_from_table(&mut self) -> IcebergResult<MooncakeSnapshot>;
-
-    /// Drop the current iceberg table.
-    #[allow(async_fn_in_trait)]
-    async fn drop_table(&mut self) -> IcebergResult<()>;
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

@@ -7,8 +7,8 @@ use crate::error::Result;
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
 };
-use crate::storage::iceberg::iceberg_table_manager::TableManager;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::index::{FileIndex, Index};
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::table_snapshot::{

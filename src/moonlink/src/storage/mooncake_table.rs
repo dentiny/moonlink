@@ -19,9 +19,8 @@ use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedR
 pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
-use crate::storage::iceberg::iceberg_table_manager::{
-    IcebergTableConfig, IcebergTableManager, TableManager,
-};
+use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
+use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 #[cfg(test)]
 pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
