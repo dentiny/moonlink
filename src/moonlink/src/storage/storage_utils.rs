@@ -1,5 +1,4 @@
 use crate::row::MoonlinkRow;
-use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
 use more_asserts as ma;
 use std::borrow::Borrow;
 use std::hash::{Hash, Hasher};
@@ -10,7 +9,6 @@ use std::sync::Arc;
 pub struct MooncakeDataFile {
     pub(crate) file_id: FileId,
     pub(crate) file_path: String,
-    pub(crate) cache_handle: Option<DataCacheHandle>,
 }
 
 impl MooncakeDataFile {
@@ -20,10 +18,6 @@ impl MooncakeDataFile {
 
     pub fn file_path(&self) -> &String {
         &self.file_path
-    }
-
-    pub fn cache_handle(&self) -> &Option<DataCacheHandle> {
-        &self.cache_handle
     }
 }
 
@@ -64,7 +58,6 @@ pub fn create_data_file(file_id: u64, file_path: String) -> MooncakeDataFileRef 
     Arc::new(MooncakeDataFile {
         file_id: FileId(file_id),
         file_path,
-        cache_handle: None,
     })
 }
 
@@ -178,7 +171,6 @@ mod tests {
         let df = Arc::new(MooncakeDataFile {
             file_id: FileId(42),
             file_path: "hello.txt".into(),
-            cache_handle: None,
         });
         set.insert(df.clone());
 

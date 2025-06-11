@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 
 use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
-use crate::storage::storage_utils::{FileId, MooncakeDataFileRef};
+use crate::storage::storage_utils::FileId;
 use crate::Result;
 
 #[allow(dead_code)]
@@ -41,8 +41,8 @@ pub trait CacheTrait {
     #[allow(async_fn_in_trait)]
     async fn _add_new_cache_entry(
         &mut self,
-        data_file: MooncakeDataFileRef,
-        file_metadata: FileMetadata,
+        file_id: FileId,
+        cache_entry: CacheEntry,
         evictable: bool,
     ) -> (DataCacheHandle, Vec<String>);
 
@@ -51,6 +51,7 @@ pub trait CacheTrait {
     #[allow(async_fn_in_trait)]
     async fn _get_cache_entry(
         &mut self,
-        data_file: &MooncakeDataFileRef,
+        file_id: FileId,
+        remote_filepath: &str,
     ) -> Result<(DataCacheHandle, Vec<String>)>;
 }

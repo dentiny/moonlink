@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use crate::storage::cache::object_storage::base_cache::CacheEntry;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCacheInternal;
-use crate::storage::storage_utils::{FileId, MooncakeDataFileRef};
+use crate::storage::storage_utils::FileId;
 
 use tokio::sync::RwLock;
 
+#[allow(dead_code)]
 pub struct NonEvictableHandle {
     /// File id for the mooncake table data file.
-    pub(crate) data_file: MooncakeDataFileRef,
+    pub(crate) file_id: FileId,
     /// Non-evictable cache entry.
     pub(crate) cache_entry: CacheEntry,
     /// Access to cache, used to unreference at drop.
@@ -18,20 +19,20 @@ pub struct NonEvictableHandle {
 impl std::fmt::Debug for NonEvictableHandle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("NonEvictableHandle")
-            .field("data_file", &self.data_file)
+            .field("file_id", &self.file_id)
             .field("cache_entry", &self.cache_entry)
             .finish()
     }
 }
 
 impl NonEvictableHandle {
-    pub(super) fn new(
-        data_file: MooncakeDataFileRef,
+    pub(super) fn _new(
+        file_id: FileId,
         cache_entry: CacheEntry,
         cache: Arc<RwLock<ObjectStorageCacheInternal>>,
     ) -> Self {
         Self {
-            data_file,
+            file_id,
             cache,
             cache_entry,
         }
@@ -40,47 +41,46 @@ impl NonEvictableHandle {
     /// Unreference the pinned cache file.
     pub(super) async fn _unreference(&mut self) {
         let mut guard = self.cache.write().await;
-        guard._unreference(&self.data_file);
+        guard._unreference(self.file_id);
     }
 }
 
 /// A unified handle for data file cache entries, which represents different states for a data file cache resource.
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum DataCacheHandle {
     /// Cache file is not managed by data file cache yet.
-    UnimportedHandle(String),
+    Unimported(String),
     /// Cache file is managed by data file already and at evictable state; should pin before use.
-    EvictableHandle,
+    Evictable,
     /// Cache file is managed by data file already and pinned, could use at any time.
-    NonEvictableHandle(NonEvictableHandle),
+    NonEvictable(NonEvictableHandle),
 }
 
 impl DataCacheHandle {
     /// Get cache file path.
-    pub fn get_cache_filepath(&self) -> String {
+    pub fn _get_cache_filepath(&self) -> String {
         match self {
-            DataCacheHandle::UnimportedHandle(path) => path.clone(),
-            DataCacheHandle::NonEvictableHandle(handle) => {
-                handle.cache_entry.cache_filepath.clone()
-            }
-            DataCacheHandle::EvictableHandle => {
+            DataCacheHandle::Unimported(path) => path.clone(),
+            DataCacheHandle::NonEvictable(handle) => handle.cache_entry.cache_filepath.clone(),
+            DataCacheHandle::Evictable => {
                 panic!("Cannot get filepath from evictable cache handle")
             }
         }
     }
 
     /// Get unimported cache file path.
-    pub fn get_unimported_cache_path(&self) -> String {
+    pub fn _get_unimported_cache_path(&self) -> String {
         match self {
-            DataCacheHandle::UnimportedHandle(path) => path.clone(),
+            DataCacheHandle::Unimported(path) => path.clone(),
             _ => panic!("Cannot get filepath from already imported cache handle"),
         }
     }
 
     /// Unreferenced the pinned cache file.
-    pub async fn unreference(&mut self) {
+    pub async fn _unreference(&mut self) {
         match self {
-            DataCacheHandle::NonEvictableHandle(handle) => {
+            DataCacheHandle::NonEvictable(handle) => {
                 handle._unreference().await;
             }
             _ => panic!("Cannot unreference for an unpinned cache handle"),
