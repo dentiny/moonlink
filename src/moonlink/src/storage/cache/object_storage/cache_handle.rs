@@ -58,25 +58,6 @@ pub enum DataCacheHandle {
 }
 
 impl DataCacheHandle {
-    /// Get cache file path.
-    pub fn _get_cache_filepath(&self) -> String {
-        match self {
-            DataCacheHandle::Unimported(path) => path.clone(),
-            DataCacheHandle::NonEvictable(handle) => handle.cache_entry.cache_filepath.clone(),
-            DataCacheHandle::Evictable => {
-                panic!("Cannot get filepath from evictable cache handle")
-            }
-        }
-    }
-
-    /// Get unimported cache file path.
-    pub fn _get_unimported_cache_path(&self) -> String {
-        match self {
-            DataCacheHandle::Unimported(path) => path.clone(),
-            _ => panic!("Cannot get filepath from already imported cache handle"),
-        }
-    }
-
     /// Unreferenced the pinned cache file.
     pub async fn _unreference(&mut self) {
         match self {

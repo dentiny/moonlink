@@ -339,7 +339,7 @@ mod tests {
         }
     }
 
-    #[tokio::test(flavor = "multi_thread")]
+    #[tokio::test]
     async fn test_cache_operation() {
         let tmp_dir = tempdir().unwrap();
         let test_data_file_1 = create_test_file_1(&tmp_dir).await;
@@ -381,7 +381,7 @@ mod tests {
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
         assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
 
-        // Operation-3: explicit dop the cache handles, in order to decrement reference count to 0, so later we could cache other files.
+        // Operation-3: explicitly decrement reference count to 0, so later we could cache other files.
         cache_handle_1._unreference().await;
         cache_handle_2._unreference().await;
         assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
