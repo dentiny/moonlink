@@ -1,6 +1,6 @@
 use super::test_utils::*;
 use super::*;
-use crate::storage::iceberg::iceberg_table_manager::MockTableManager;
+use crate::storage::iceberg::table_manager::MockTableManager;
 use crate::storage::mooncake_table::snapshot::ReadOutput;
 use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
 use iceberg::{Error as IcebergError, ErrorKind};

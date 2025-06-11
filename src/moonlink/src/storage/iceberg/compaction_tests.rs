@@ -24,7 +24,7 @@
 /// For more details, please refer to https://docs.google.com/document/d/1aiQqhl5F8QODJm3HPl47BZX0rfNyUbUPSHGArUcCIw4/edit?usp=sharing
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
-use crate::storage::iceberg::iceberg_table_manager::TableManager;
+use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::{
     check_deletion_vector_consistency_for_snapshot,
     create_table_and_iceberg_manager_with_data_compaction_config, create_test_arrow_schema,
