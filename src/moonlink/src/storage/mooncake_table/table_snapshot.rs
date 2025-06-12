@@ -1,10 +1,10 @@
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::TableManager;
+use crate::storage::{iceberg::puffin_utils::PuffinBlobRef, storage_utils::FileId};
 
 use std::collections::{HashMap, HashSet};
 
@@ -66,7 +66,7 @@ pub struct IcebergSnapshotImportResult {
     /// Persisted data files.
     pub(crate) new_data_files: Vec<MooncakeDataFileRef>,
     /// Persisted puffin blob reference.
-    pub(crate) puffin_blob_ref: HashMap<MooncakeDataFileRef, PuffinBlobRef>,
+    pub(crate) puffin_blob_ref: HashMap<FileId, PuffinBlobRef>,
     /// Imported file indices.
     pub(crate) imported_file_indices: Vec<MooncakeFileIndex>,
 }
@@ -152,13 +152,11 @@ pub fn take_data_files_to_remove(
 pub fn take_file_indices_to_import(
     snapshot_payload: &mut IcebergSnapshotPayload,
 ) -> Vec<MooncakeFileIndex> {
-    let mut new_file_indices = std::mem::take(
+    let mut new_file_indices = std::mem::take(&mut snapshot_payload.import_payload.file_indices);
+    new_file_indices.extend(std::mem::take(
         &mut snapshot_payload
             .index_merge_payload
             .new_file_indices_to_import,
-    );
-    new_file_indices.extend(std::mem::take(
-        &mut snapshot_payload.import_payload.file_indices,
     ));
     new_file_indices.extend(std::mem::take(
         &mut snapshot_payload

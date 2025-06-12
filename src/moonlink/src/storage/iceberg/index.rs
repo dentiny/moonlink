@@ -4,7 +4,7 @@ use crate::storage::iceberg::puffin_utils;
 use crate::storage::index::persisted_bucket_hash_map::IndexBlock as MooncakeIndexBlock;
 /// This module defines the file index struct used for iceberg, which corresponds to in-memory mooncake table file index structs, and supports the serde between mooncake table format and iceberg format.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
-use crate::storage::storage_utils::create_data_file;
+use crate::storage::storage_utils::{create_data_file, FileId};
 
 use iceberg::io::FileIO;
 use iceberg::puffin::Blob;
@@ -30,7 +30,7 @@ pub(crate) struct IndexBlock {
 #[derive(Default, Deserialize, Serialize)]
 pub(crate) struct FileIndex {
     /// Data file paths at iceberg table.
-    data_files: Vec<String>,
+    pub(crate) data_files: Vec<String>,
     /// Corresponds to [storage::index::IndexBlock].
     index_block_files: Vec<IndexBlock>,
     /// Hash related fields.
@@ -59,7 +59,13 @@ impl FileIndex {
             data_files: mooncake_index
                 .files
                 .iter()
-                .map(|path| local_data_file_to_remote.remove(path.file_path()).unwrap())
+                .map(|cur_data_file| {
+                    // It's possible to have newly imported file indices pointing to remote filepath.
+                    // One example is file index merge.
+                    local_data_file_to_remote
+                        .remove(cur_data_file.file_path())
+                        .unwrap_or(cur_data_file.file_path().clone())
+                })
                 .collect(),
             index_block_files: mooncake_index
                 .index_blocks
@@ -86,7 +92,7 @@ impl FileIndex {
     /// Transfer the ownership and convert into [storage::index::FileIndex].
     pub(crate) async fn as_mooncake_file_index(
         &mut self,
-        next_file_id: &mut u64,
+        data_file_to_id: &HashMap<String, FileId>,
     ) -> MooncakeFileIndex {
         let index_block_futures = self.index_block_files.iter().map(|cur_index_block| {
             MooncakeIndexBlock::new(
@@ -97,15 +103,13 @@ impl FileIndex {
             )
         });
         let index_blocks = futures::future::join_all(index_block_futures).await;
-
         MooncakeFileIndex {
             files: self
                 .data_files
                 .iter()
                 .map(|path| {
-                    let cur_file_id = *next_file_id;
-                    *next_file_id += 1;
-                    create_data_file(cur_file_id, path.to_string())
+                    let file_id = data_file_to_id.get(path).unwrap();
+                    create_data_file(file_id.0, path.to_string())
                 })
                 .collect(),
             num_rows: self.num_rows,
@@ -275,8 +279,9 @@ mod tests {
         assert_eq!(deserialized_file_index_blob.file_indices.len(), 1);
         let mut file_index = std::mem::take(&mut deserialized_file_index_blob.file_indices[0]);
 
-        let mut next_file_id = 0;
-        let mooncake_file_index = file_index.as_mooncake_file_index(&mut next_file_id).await;
+        let data_file_to_id =
+            HashMap::<String, FileId>::from([(remote_data_filepath.clone(), FileId(0))]);
+        let mooncake_file_index = file_index.as_mooncake_file_index(&data_file_to_id).await;
 
         // Check global index are equal before and after serde.
         assert_eq!(

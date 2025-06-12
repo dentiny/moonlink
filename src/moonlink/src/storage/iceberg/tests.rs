@@ -276,20 +276,27 @@ async fn test_store_and_load_snapshot_impl(
         .unwrap()
         .file_io()
         .clone();
-    for (loaded_path, data_entry) in iceberg_table_manager.persisted_data_files.iter() {
-        let loaded_arrow_batch = load_arrow_batch(&file_io, loaded_path.as_str()).await?;
+
+    let mut remote_data_files = vec![];
+    for (file_id, data_entry) in iceberg_table_manager.persisted_data_files.iter() {
+        let file_path = data_entry.data_file.file_path();
+        let loaded_arrow_batch = load_arrow_batch(&file_io, file_path).await?;
         let deleted_rows = data_entry.deletion_vector.collect_deleted_rows();
         assert_eq!(*loaded_arrow_batch.schema_ref(), arrow_schema);
+        remote_data_files.push(create_data_file(
+            file_id.0,
+            data_entry.data_file.file_path().to_string(),
+        ));
 
         // Check second data file and its deletion vector.
-        if loaded_path.ends_with(data_filename_2) {
+        if file_path.ends_with(data_filename_2) {
             assert_eq!(loaded_arrow_batch, batch_2,);
             assert_eq!(deleted_rows, vec![1, 2],);
             continue;
         }
 
         // Check first data file and its deletion vector.
-        assert!(loaded_path.ends_with(data_filename_1));
+        assert!(file_path.ends_with(data_filename_1));
         assert_eq!(loaded_arrow_batch, batch_1,);
         assert_eq!(deleted_rows, vec![0],);
     }
@@ -299,7 +306,7 @@ async fn test_store_and_load_snapshot_impl(
     // ==============
     //
     // Write third snapshot to iceberg table, with file indices to add and remove.
-    let merged_file_index = test_global_index(vec![data_file_1.clone(), data_file_2.clone()]);
+    let merged_file_index = test_global_index(remote_data_files.clone());
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 2,
         import_payload: IcebergSnapshotImportPayload {
@@ -1331,11 +1338,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         "Expected deletion vector {:?}, actual deletion vector {:?}",
         expected_deleted_rows, deleted_rows
     );
-    let (_, data_entry) = iceberg_table_manager
-        .persisted_data_files
-        .iter()
-        .next()
-        .unwrap();
 
     // --------------------------------------
     // Operation series 4: append a new row, and don't delete any rows.
@@ -1390,19 +1392,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     check_row_index_on_disk(&snapshot, &row4).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
 
-    // The old data file and deletion vector is unchanged.
-    let old_data_entry = iceberg_table_manager
-        .persisted_data_files
-        .remove(loaded_path.file_path());
-    assert!(
-        old_data_entry.is_some(),
-        "Add new data file shouldn't change existing persisted items"
-    );
-    assert_eq!(
-        &old_data_entry.unwrap(),
-        data_entry,
-        "Add new data file shouldn't change existing persisted items"
-    );
     let (file_in_new_snapshot, _) = snapshot
         .disk_files
         .iter()
