@@ -242,7 +242,7 @@ impl SnapshotTableState {
     }
 
     /// Update disk files in the current snapshot from local data files to remote ones.
-    /// Return affected file indices, which are caused by data file updates.
+    /// Return affected file indices, which are caused by data file updates, and will be removed.
     fn update_data_files_to_persisted(&mut self, task: &SnapshotTask) -> HashSet<FileIndex> {
         if task.iceberg_persisted_data_files.is_empty() {
             return HashSet::new();
@@ -258,7 +258,8 @@ impl SnapshotTableState {
                 .disk_files
                 .remove(cur_data_file)
                 .unwrap();
-            affected_file_indices.insert(disk_file_entry.file_indice.as_ref().unwrap().clone()); // possible to have duplicates
+            // One file index corresponds to one or many data files, so it's possible to have duplicates.
+            affected_file_indices.insert(disk_file_entry.file_indice.as_ref().unwrap().clone());
             self.current_snapshot
                 .disk_files
                 .insert(cur_data_file.clone(), disk_file_entry);
@@ -270,7 +271,7 @@ impl SnapshotTableState {
     ///
     /// # Arguments
     ///
-    /// * affected_file_indices: file indices affected by data files update.
+    /// * affected_file_indices: file indices affected by data files update, used to identify which file indices to remove.
     fn update_file_indices_to_persisted(
         &mut self,
         task: &SnapshotTask,
@@ -300,11 +301,9 @@ impl SnapshotTableState {
         }
     }
 
-    /// Initially before iceberg snapshot, current snapshot records local write through cache in disk file.
-    /// Now iceberg snapshot has persisted them to remote, update current snapshot's disk file and file indices to point to remote path,
-    /// also import local write through cache, so they could be evicted and deleted to release disk space.
-    ///
-    /// TODO(hjiang): Could save a few copies.
+    /// Before iceberg snapshot, current snapshot records local write through cache in disk file.
+    /// After iceberg snapshot has persisted data files to remote, update current snapshot's disk file and file indices to reference to remote paths,
+    /// also import local write through cache to globally managed data file cache, so they could be pinned and evicted when necessary.
     fn update_local_path_to_persisted(&mut self, task: &SnapshotTask) {
         let affected_file_indices = self.update_data_files_to_persisted(task);
         self.update_file_indices_to_persisted(task, affected_file_indices);
