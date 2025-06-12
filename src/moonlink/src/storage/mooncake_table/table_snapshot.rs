@@ -1,10 +1,10 @@
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::TableManager;
+use crate::storage::{iceberg::puffin_utils::PuffinBlobRef, storage_utils::FileId};
 
 use std::collections::{HashMap, HashSet};
 
@@ -66,7 +66,7 @@ pub struct IcebergSnapshotImportResult {
     /// Persisted data files.
     pub(crate) new_data_files: Vec<MooncakeDataFileRef>,
     /// Persisted puffin blob reference.
-    pub(crate) puffin_blob_ref: HashMap<MooncakeDataFileRef, PuffinBlobRef>,
+    pub(crate) puffin_blob_ref: HashMap<FileId, PuffinBlobRef>,
     /// Imported file indices.
     pub(crate) imported_file_indices: Vec<MooncakeFileIndex>,
 }

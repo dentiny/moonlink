@@ -2,8 +2,10 @@
 use std::collections::HashMap;
 
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
+use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 
 use async_trait::async_trait;
@@ -11,6 +13,17 @@ use iceberg::Result as IcebergResult;
 
 #[cfg(test)]
 use mockall::*;
+
+/// Iceberg persistence results.
+#[derive(Clone, Debug)]
+pub struct PersistenceResult {
+    /// Imported data files, which only contain remote file paths.
+    pub(crate) remote_data_files: Vec<MooncakeDataFileRef>,
+    /// Imported file indices, which only contain remote file paths.
+    pub(crate) remote_file_indices: Vec<FileIndex>,
+    /// Maps from remote data files to their deletion vector puffin blob.
+    pub(crate) puffin_blob_ref: HashMap<FileId, PuffinBlobRef>,
+}
 
 #[async_trait]
 #[cfg_attr(test, automock)]
@@ -26,7 +39,7 @@ pub trait TableManager: Send {
     async fn sync_snapshot(
         &mut self,
         snapshot_payload: IcebergSnapshotPayload,
-    ) -> IcebergResult<HashMap<MooncakeDataFileRef, PuffinBlobRef>>;
+    ) -> IcebergResult<PersistenceResult>;
 
     /// Load the latest snapshot from iceberg table. Used for recovery and initialization.
     /// Notice this function is supposed to call **only once**.

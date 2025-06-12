@@ -233,16 +233,79 @@ impl SnapshotTableState {
     /// Update current mooncake snapshot with persisted deletion vector.
     fn update_current_snapshot_with_iceberg_snapshot(
         &mut self,
-        puffin_blob_ref: HashMap<MooncakeDataFileRef, PuffinBlobRef>,
+        puffin_blob_ref: HashMap<FileId, PuffinBlobRef>,
     ) {
-        for (local_disk_file, puffin_blob_ref) in puffin_blob_ref.into_iter() {
-            let entry = self
-                .current_snapshot
-                .disk_files
-                .get_mut(&local_disk_file)
-                .unwrap();
+        for (file_id, puffin_blob_ref) in puffin_blob_ref.into_iter() {
+            let entry = self.current_snapshot.disk_files.get_mut(&file_id).unwrap();
             entry.puffin_deletion_blob = Some(puffin_blob_ref);
         }
+    }
+
+    /// Update disk files in the current snapshot from local data files to remote ones.
+    /// Return affected file indices, which are caused by data file updates.
+    fn update_data_files_to_persisted(&mut self, task: &SnapshotTask) -> HashSet<FileIndex> {
+        if task.iceberg_persisted_data_files.is_empty() {
+            return HashSet::new();
+        }
+
+        // Update disk file from local write through cache to iceberg persisted remote path.
+        let mut affected_file_indices =
+            HashSet::with_capacity(task.iceberg_persisted_file_indices.len());
+        let persisted_data_files = &task.iceberg_persisted_data_files;
+        for cur_data_file in persisted_data_files.iter() {
+            let disk_file_entry = self
+                .current_snapshot
+                .disk_files
+                .remove(cur_data_file)
+                .unwrap();
+            affected_file_indices.insert(disk_file_entry.file_indice.as_ref().unwrap().clone()); // possible to have duplicates
+            self.current_snapshot
+                .disk_files
+                .insert(cur_data_file.clone(), disk_file_entry);
+        }
+        affected_file_indices
+    }
+
+    /// Update file indices in the current snapshot from local data files to remote ones.
+    /// 
+    /// # Arguments
+    /// 
+    /// * affected_file_indices: file indices affected by data files update.
+    fn update_file_indices_to_persisted(&mut self, task: &SnapshotTask, affected_file_indices: HashSet<FileIndex>) {
+        if task.iceberg_persisted_file_indices.is_empty() && affected_file_indices.is_empty() {
+            return;
+        }
+
+        // Update file indice from local write through cache to iceberg persisted remote path.
+        // TODO(hjiang): For better update performance, we might need to use hash set instead vector to store file indices.
+        let cur_file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
+        let new_file_indices = &task.iceberg_persisted_file_indices;
+        ma::assert_le!(affected_file_indices.len(), cur_file_indices.len());
+        let mut updated_file_indices = Vec::with_capacity(cur_file_indices.len());
+        for cur_file_index in cur_file_indices.into_iter() {
+            if !affected_file_indices.contains(&cur_file_index) {
+                updated_file_indices.push(cur_file_index);
+            }
+        }
+        updated_file_indices.extend(new_file_indices.clone());
+        self.current_snapshot.indices.file_indices = updated_file_indices;
+
+        let mut all_data_files = vec![];
+        for cur_file in self.current_snapshot.indices.file_indices.iter() {
+            all_data_files.extend(cur_file.files.clone());
+        }
+    }
+
+    /// Initially before iceberg snapshot, current snapshot records local write through cache in disk file.
+    /// Now iceberg snapshot has persisted them to remote, update current snapshot's disk file and file indices to point to remote path,
+    /// also import local write through cache, so they could be evicted and deleted to release disk space.
+    ///
+    /// TODO(hjiang): Could save a few copies.
+    fn update_local_path_to_persisted(&mut self, task: &SnapshotTask) {
+        let affected_file_indices = self.update_data_files_to_persisted(task);
+        self.update_file_indices_to_persisted(task, affected_file_indices);        
+
+        // TODO(hjiang): import write through cache to cache.
     }
 
     /// Update unpersisted data files from successful iceberg snapshot operation.
@@ -818,6 +881,7 @@ impl SnapshotTableState {
         Option<FileIndiceMergePayload>,
     ) {
         // Reflect iceberg snapshot to mooncake snapshot.
+        self.update_local_path_to_persisted(&task);
         self.prune_committed_deletion_logs(&task);
         self.prune_persisted_data_files(std::mem::take(&mut task.iceberg_persisted_data_files));
         self.prune_persisted_file_indices(std::mem::take(&mut task.iceberg_persisted_file_indices));
