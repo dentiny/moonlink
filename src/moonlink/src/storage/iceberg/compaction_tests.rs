@@ -28,7 +28,7 @@ use crate::storage::iceberg::iceberg_table_manager::TableManager;
 use crate::storage::iceberg::test_utils::{
     check_deletion_vector_consistency_for_snapshot,
     create_table_and_iceberg_manager_with_data_compaction_config, create_test_arrow_schema,
-    load_arrow_batch,
+    load_arrow_batch, validate_recovered_snapshot,
 };
 use crate::storage::index::{FileIndex, Index, MooncakeIndex};
 use crate::storage::mooncake_table::Snapshot;
@@ -294,6 +294,11 @@ async fn test_compaction_1_1_1() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -346,6 +351,11 @@ async fn test_compaction_1_1_2() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -419,6 +429,11 @@ async fn test_compaction_1_2_1() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -491,6 +506,11 @@ async fn test_compaction_1_2_2() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -575,6 +595,11 @@ async fn test_compaction_2_2_1() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -648,6 +673,11 @@ async fn test_compaction_2_2_2() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -734,6 +764,11 @@ async fn test_compaction_2_3_1() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -795,6 +830,11 @@ async fn test_compaction_2_3_2() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -884,6 +924,11 @@ async fn test_compaction_3_2_1() {
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -959,6 +1004,11 @@ async fn test_compaction_3_3_1() {
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager_to_load.config.warehouse_uri,
+    )
+    .await;
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = table.get_disk_files_for_snapshot().await;

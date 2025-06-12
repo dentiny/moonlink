@@ -94,13 +94,18 @@ pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_u
     // Check file indices.
     let mut index_referenced_data_filepaths: HashSet<String> = HashSet::new();
     for cur_file_index in snapshot.indices.file_indices.iter() {
+        // Check index blocks are imported into the iceberg table.
         for cur_index_block in cur_file_index.index_blocks.iter() {
             let index_pathbuf = std::path::PathBuf::from(&cur_index_block.file_path);
             assert!(index_pathbuf.starts_with(&warehouse_directory));
             assert!(tokio::fs::try_exists(&index_pathbuf).await.unwrap());
         }
 
+        // Check data files referenced by index blocks are imported into iceberg table.
         for cur_data_filepath in cur_file_index.files.iter() {
+            let data_file_pathbuf = std::path::PathBuf::from(cur_data_filepath.file_path());
+            assert!(data_file_pathbuf.starts_with(&warehouse_directory));
+            assert!(tokio::fs::try_exists(&data_file_pathbuf).await.unwrap());
             index_referenced_data_filepaths.insert(cur_data_filepath.file_path().clone());
         }
     }

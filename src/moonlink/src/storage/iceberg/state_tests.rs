@@ -34,7 +34,7 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::iceberg_table_manager::TableManager;
 use crate::storage::iceberg::test_utils::{
     check_deletion_vector_consistency_for_snapshot, create_table_and_iceberg_manager,
-    load_arrow_batch,
+    load_arrow_batch, validate_recovered_snapshot,
 };
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::Snapshot;
@@ -254,6 +254,7 @@ async fn test_state_1_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -284,6 +285,7 @@ async fn test_state_1_2() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -320,6 +322,7 @@ async fn test_state_1_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -358,6 +361,7 @@ async fn test_state_1_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -395,6 +399,7 @@ async fn test_state_1_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -434,6 +439,7 @@ async fn test_state_1_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -466,6 +472,7 @@ async fn test_state_2_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -500,6 +507,7 @@ async fn test_state_2_2() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -537,6 +545,7 @@ async fn test_state_2_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -576,6 +585,7 @@ async fn test_state_2_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -614,6 +624,7 @@ async fn test_state_2_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -654,6 +665,7 @@ async fn test_state_2_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -687,6 +699,7 @@ async fn test_state_3_1() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -722,6 +735,7 @@ async fn test_state_3_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -765,6 +779,7 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -808,6 +823,7 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -853,6 +869,7 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -898,6 +915,7 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -942,6 +960,7 @@ async fn test_state_3_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -988,6 +1007,7 @@ async fn test_state_3_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1027,6 +1047,7 @@ async fn test_state_4_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1068,6 +1089,7 @@ async fn test_state_4_2() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1112,6 +1134,7 @@ async fn test_state_4_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1158,6 +1181,7 @@ async fn test_state_4_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1203,6 +1227,7 @@ async fn test_state_4_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1250,6 +1275,7 @@ async fn test_state_4_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1291,6 +1317,7 @@ async fn test_state_5_1() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1334,6 +1361,7 @@ async fn test_state_5_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1385,6 +1413,7 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1436,6 +1465,7 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1489,6 +1519,7 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1542,6 +1573,7 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1594,6 +1626,7 @@ async fn test_state_5_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1648,6 +1681,7 @@ async fn test_state_5_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1696,6 +1730,7 @@ async fn test_state_6_1() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1746,6 +1781,7 @@ async fn test_state_6_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1804,6 +1840,7 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1862,6 +1899,7 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1921,6 +1959,7 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -1981,6 +2020,7 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2040,6 +2080,7 @@ async fn test_state_6_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2101,6 +2142,7 @@ async fn test_state_6_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2124,6 +2166,7 @@ async fn test_state_7_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2152,6 +2195,7 @@ async fn test_state_7_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2181,6 +2225,7 @@ async fn test_state_7_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2213,6 +2258,7 @@ async fn test_state_7_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2243,6 +2289,7 @@ async fn test_state_7_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }
@@ -2275,6 +2322,7 @@ async fn test_state_7_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
 
     Ok(())
 }

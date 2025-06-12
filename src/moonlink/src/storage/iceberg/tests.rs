@@ -449,6 +449,7 @@ async fn test_store_and_load_snapshot_impl(
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
+    validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
 
     Ok(())
 }
@@ -520,6 +521,8 @@ async fn test_empty_snapshot_load() -> IcebergResult<()> {
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
+    validate_recovered_snapshot(&snapshot, &config.warehouse_uri).await;
+
     Ok(())
 }
 
