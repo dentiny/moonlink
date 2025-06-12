@@ -23,4 +23,6 @@ pub(crate) use iceberg::table_manager::MockTableManager;
 pub(crate) use mooncake_table::test_utils::*;
 
 #[cfg(feature = "bench")]
+pub use index::persisted_bucket_hash_map::GlobalIndex;
+#[cfg(feature = "bench")]
 pub use index::persisted_bucket_hash_map::GlobalIndexBuilder;
