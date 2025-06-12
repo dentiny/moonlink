@@ -108,7 +108,6 @@ pub struct IcebergTableManager {
     pub(crate) persisted_file_indices: HashMap<MooncakeFileIndex, String>,
 
     /// Maps from remote data file path to its file id.
-    /// TODO(hjiang): Need to remove when there're data files to remove (i.e. data compaction).
     pub(crate) remote_data_file_to_file_id: HashMap<String, FileId>,
 }
 
@@ -130,7 +129,7 @@ impl IcebergTableManager {
         })
     }
 
-    /// ---------- load snapshot ----------
+    /// ---------- Util functions ----------
     ///
     /// Get a unique puffin filepath under table warehouse uri.
     fn get_unique_deletion_vector_filepath(&self) -> String {
@@ -187,7 +186,6 @@ impl IcebergTableManager {
         &mut self,
         entry: &ManifestEntry,
         file_io: &FileIO,
-        data_file_to_id: &HashMap<String, FileId>,
     ) -> IcebergResult<FileIndicesRecoveryResult> {
         if !utils::is_file_index(entry) {
             return Ok(FileIndicesRecoveryResult {
@@ -201,10 +199,11 @@ impl IcebergTableManager {
         self.persisted_file_indices
             .reserve(file_index_blob.file_indices.len());
         let mut file_indices = Vec::with_capacity(file_index_blob.file_indices.len());
-        let mut file_id_to_file_indices = HashMap::with_capacity(data_file_to_id.len());
+        let mut file_id_to_file_indices =
+            HashMap::with_capacity(self.remote_data_file_to_file_id.len());
         for mut cur_iceberg_file_indice in file_index_blob.file_indices.into_iter() {
             let cur_mooncake_file_indice = cur_iceberg_file_indice
-                .as_mooncake_file_index(data_file_to_id)
+                .as_mooncake_file_index(&self.remote_data_file_to_file_id)
                 .await;
             file_indices.push(cur_mooncake_file_indice.clone());
 
@@ -231,7 +230,6 @@ impl IcebergTableManager {
         &mut self,
         entry: &ManifestEntry,
         next_file_id: &mut u64,
-        data_file_to_id: &mut HashMap<String, FileId>,
     ) -> IcebergResult<()> {
         if !utils::is_data_file_entry(entry) {
             return Ok(());
@@ -247,7 +245,8 @@ impl IcebergTableManager {
 
         self.persisted_data_files
             .insert(FileId(*next_file_id), new_data_file_entry);
-        data_file_to_id.insert(data_file.file_path().to_string(), FileId(*next_file_id));
+        self.remote_data_file_to_file_id
+            .insert(data_file.file_path().to_string(), FileId(*next_file_id));
         *next_file_id += 1;
 
         Ok(())
@@ -258,7 +257,6 @@ impl IcebergTableManager {
         &mut self,
         entry: &ManifestEntry,
         file_io: &FileIO,
-        data_file_to_id: &HashMap<String, FileId>,
     ) -> IcebergResult<()> {
         // Skip data files and file indices.
         if !utils::is_deletion_vector_entry(entry) {
@@ -267,7 +265,10 @@ impl IcebergTableManager {
 
         let data_file = entry.data_file();
         let referenced_data_file = data_file.referenced_data_file().unwrap();
-        let file_id = data_file_to_id.get(&referenced_data_file).unwrap();
+        let file_id = self
+            .remote_data_file_to_file_id
+            .get(&referenced_data_file)
+            .unwrap();
         let data_file_entry = self.persisted_data_files.get_mut(file_id).unwrap();
 
         IcebergValidation::validate_puffin_manifest_entry(entry)?;
@@ -428,11 +429,12 @@ impl IcebergTableManager {
             assert!(old_entry.is_none());
 
             // Insert into local to remote mapping.
-            let old_entry = local_data_files_to_remote.insert(
-                local_data_file.file_path().clone(),
-                iceberg_data_file.file_path().to_string(),
-            );
-            assert!(old_entry.is_none());
+            assert!(local_data_files_to_remote
+                .insert(
+                    local_data_file.file_path().clone(),
+                    iceberg_data_file.file_path().to_string(),
+                )
+                .is_none());
 
             // Record all imported iceberg data files.
             new_remote_data_files.push(create_data_file(
@@ -440,11 +442,14 @@ impl IcebergTableManager {
                 iceberg_data_file.file_path().to_string(),
             ));
 
-            let old_entry = self.remote_data_file_to_file_id.insert(
-                iceberg_data_file.file_path().to_string(),
-                local_data_file.file_id(),
-            );
-            assert!(old_entry.is_none());
+            // Record file path to file id mapping.
+            assert!(self
+                .remote_data_file_to_file_id
+                .insert(
+                    iceberg_data_file.file_path().to_string(),
+                    local_data_file.file_id(),
+                )
+                .is_none());
 
             new_iceberg_data_files.push(iceberg_data_file);
         }
@@ -457,6 +462,10 @@ impl IcebergTableManager {
                 .remove(&cur_data_file.file_id())
                 .unwrap();
             data_files_to_remove_set.insert(old_entry.data_file.file_path().to_string());
+            assert!(self
+                .remote_data_file_to_file_id
+                .remove(old_entry.data_file.file_path())
+                .is_some());
         }
         self.catalog
             .set_data_files_to_remove(data_files_to_remove_set);
@@ -694,8 +703,6 @@ impl TableManager for IcebergTableManager {
 
         // Unique file id to assign to every data file.
         let mut next_file_id = 0;
-        // Maps from remote data file path to unique file id.
-        let mut data_file_to_id = HashMap::<String, FileId>::new();
         // Maps from file id to corresponding file indices.
         let mut file_id_to_file_indices = HashMap::new();
 
@@ -714,31 +721,19 @@ impl TableManager for IcebergTableManager {
             //
             // TODO(hjiang): Check whether we could load deletion vector and file indices in one pass.
             for entry in manifest_entries.iter() {
-                self.load_data_file_from_manifest_entry(
-                    entry.as_ref(),
-                    &mut next_file_id,
-                    &mut data_file_to_id,
-                )
-                .await?;
+                self.load_data_file_from_manifest_entry(entry.as_ref(), &mut next_file_id)
+                    .await?;
             }
             for entry in manifest_entries.iter() {
                 let recovered_file_indices = self
-                    .load_file_indices_from_manifest_entry(
-                        entry.as_ref(),
-                        &file_io,
-                        &data_file_to_id,
-                    )
+                    .load_file_indices_from_manifest_entry(entry.as_ref(), &file_io)
                     .await?;
                 loaded_file_indices.extend(recovered_file_indices.file_indices);
                 file_id_to_file_indices.extend(recovered_file_indices.file_id_to_file_indices);
             }
             for entry in manifest_entries.into_iter() {
-                self.load_deletion_vector_from_manifest_entry(
-                    entry.as_ref(),
-                    &file_io,
-                    &data_file_to_id,
-                )
-                .await?;
+                self.load_deletion_vector_from_manifest_entry(entry.as_ref(), &file_io)
+                    .await?;
             }
         }
 

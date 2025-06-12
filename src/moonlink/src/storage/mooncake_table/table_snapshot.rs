@@ -1,10 +1,11 @@
+use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::TableManager;
-use crate::storage::{iceberg::puffin_utils::PuffinBlobRef, storage_utils::FileId};
 
 use std::collections::{HashMap, HashSet};
 
