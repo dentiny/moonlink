@@ -664,6 +664,7 @@ impl TableManager for IcebergTableManager {
         self.iceberg_table = Some(txn.commit(&*self.catalog).await?);
         self.catalog.clear_puffin_metadata();
 
+        // NOTICE: persisted data files and file indices are returned in the order of (1) newly imported ones; (2) index merge ones; (3) data compacted ones.
         Ok(PersistenceResult {
             remote_data_files: data_file_import_result.new_remote_data_files,
             puffin_blob_ref: deletion_puffin_blobs,

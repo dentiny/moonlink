@@ -308,10 +308,10 @@ impl SnapshotTableState {
         }
     }
 
-    /// Before iceberg snapshot, current snapshot records local write through cache in disk file.
-    /// After iceberg snapshot has persisted data files to remote, update current snapshot's disk file and file indices to reference to remote paths,
+    /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
+    /// After a successful iceberg snapshot, update current snapshot's disk files and file indices to reference to remote paths,
     /// also import local write through cache to globally managed data file cache, so they could be pinned and evicted when necessary.
-    fn update_local_path_to_persisted(&mut self, task: &SnapshotTask) {
+    fn update_local_path_to_persisted_by_imported(&mut self, task: &SnapshotTask) {
         // Handle imported new data files and file indices.
         let affected_file_indices = self.update_data_files_to_persisted(task);
         self.update_file_indices_to_persisted(
@@ -630,7 +630,8 @@ impl SnapshotTableState {
         // Update current snapshot's file indices.
         let file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
         ma::assert_le!(old_file_indices.len(), file_indices.len());
-        let updated_file_indices_len = file_indices.len() - old_file_indices.len() + 1 /*merged file indice*/;
+        let updated_file_indices_len =
+            file_indices.len() - old_file_indices.len() + new_file_indices.len();
         let mut updated_file_indices = Vec::with_capacity(updated_file_indices_len);
 
         for cur_file_indice in file_indices.into_iter() {
@@ -913,14 +914,20 @@ impl SnapshotTableState {
         // 1. Prune unpersisted fields.
         // 2. Update persisted data files and index blocks from local path to remote path, and import into cache.
         // 3. Update mooncake snapshot with index merge and data compaction results.
-        self.update_local_path_to_persisted(&task);
+        //
+        // Update data files and file indices' local file path to remote file path, it only applies to newly imported data files and file indices,
+        // because both index merge and data compaction only apply to those already persisted into iceberg table.
+        self.update_local_path_to_persisted_by_imported(&task);
         self.update_current_snapshot_with_iceberg_snapshot(std::mem::take(
             &mut task.iceberg_persisted_puffin_blob,
         ));
+        // Update disk files' disk entries and file indices from merged indices.
         self.update_file_indices_merge_to_mooncake_snapshot(
             task.old_merged_file_indices.clone(),
             task.new_merged_file_indices.clone(),
         );
+        // Update disk file's disk entries and file indices from compacted data files and file indices.
+        // Also remap committed deletion logs if applicable.
         self.update_data_compaction_to_mooncake_snapshot(
             task.old_compacted_data_files.clone(),
             task.new_compacted_data_files.clone(),
@@ -929,6 +936,7 @@ impl SnapshotTableState {
             task.remapped_data_files_after_compaction.clone(),
         );
 
+        // Prune unpersisted records.
         self.prune_committed_deletion_logs(&task);
         self.prune_persisted_data_files(std::mem::take(&mut task.iceberg_persisted_data_files));
         self.prune_persisted_file_indices(std::mem::take(&mut task.iceberg_persisted_file_indices));
