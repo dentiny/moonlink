@@ -30,6 +30,8 @@ pub(crate) struct IndexBlock {
 #[derive(Default, Deserialize, Serialize)]
 pub(crate) struct FileIndex {
     /// Data file paths at iceberg table.
+    ///
+    /// TODO(hjiang): No need to expose, remove before merge.
     pub(crate) data_files: Vec<String>,
     /// Corresponds to [storage::index::IndexBlock].
     index_block_files: Vec<IndexBlock>,
