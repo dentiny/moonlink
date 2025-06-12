@@ -308,6 +308,12 @@ impl SnapshotTableState {
         let affected_file_indices = self.update_data_files_to_persisted(task);
         self.update_file_indices_to_persisted(task, affected_file_indices);
 
+        // Expensive assertion, which is only enabled in unit tests.
+        #[cfg(test)]
+        {
+            self.assert_current_snapshot_consistent();
+        }
+
         // TODO(hjiang): import write through cache to cache.
     }
 
