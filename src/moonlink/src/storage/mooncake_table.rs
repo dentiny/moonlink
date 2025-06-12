@@ -1080,6 +1080,14 @@ impl MooncakeTable {
         let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
         self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
+        // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
+        assert!(self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: true,
+            skip_file_indices_merge: true,
+            skip_data_file_compaction: true,
+        }));
+
         Ok(())
     }
 
@@ -1140,6 +1148,14 @@ impl MooncakeTable {
         self.persist_iceberg_snapshot(iceberg_snapshot_payload);
         let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
         self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+
+        // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
+        assert!(self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: true,
+            skip_file_indices_merge: true,
+            skip_data_file_compaction: true,
+        }));
 
         Ok(())
     }
