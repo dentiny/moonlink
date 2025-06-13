@@ -16,11 +16,11 @@ use uuid::Uuid;
 
 #[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct CacheEntryWrapper {
+pub(crate) struct CacheEntryWrapper {
     /// Cache entry.
-    cache_entry: CacheEntry,
+    pub(crate) cache_entry: CacheEntry,
     /// Reference count.
-    reference_count: u32,
+    pub(crate) reference_count: u32,
 }
 
 /// A cache entry could be either evictable or non-evictable.
@@ -28,13 +28,13 @@ struct CacheEntryWrapper {
 /// (1) fetch and mark as non-evictable on access
 /// (2) dereference after usage, down-level to evictable when it's _unreferenced
 #[allow(dead_code)]
-pub(super) struct ObjectStorageCacheInternal {
+pub(crate) struct ObjectStorageCacheInternal {
     /// Current number of bytes of all cache entries.
-    cur_bytes: u64,
+    pub(crate) cur_bytes: u64,
     /// Evictable data file cache entries.
-    evictable_cache: LruCache<FileId, CacheEntryWrapper>,
+    pub(crate) evictable_cache: LruCache<FileId, CacheEntryWrapper>,
     /// Non-evictable data file cache entries.
-    non_evictable_cache: HashMap<FileId, CacheEntryWrapper>,
+    pub(crate) non_evictable_cache: HashMap<FileId, CacheEntryWrapper>,
 }
 
 impl ObjectStorageCacheInternal {
@@ -92,11 +92,11 @@ impl ObjectStorageCacheInternal {
 // TODO(hjiang): Add stats for cache, like cache hit/miss rate, cache size, etc.
 #[allow(dead_code)]
 #[derive(Clone)]
-struct ObjectStorageCache {
+pub struct ObjectStorageCache {
     /// Cache configs.
     config: ObjectStorageCacheConfig,
     /// Data file caches.
-    cache: Arc<RwLock<ObjectStorageCacheInternal>>,
+    pub(crate) cache: Arc<RwLock<ObjectStorageCacheInternal>>,
 }
 
 impl ObjectStorageCache {
@@ -139,9 +139,8 @@ impl CacheTrait for ObjectStorageCache {
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,
-        evictable: bool,
     ) -> (DataCacheHandle, Vec<String>) {
-        let mut cache_entry_wrapper = CacheEntryWrapper {
+        let cache_entry_wrapper = CacheEntryWrapper {
             cache_entry: cache_entry.clone(),
             reference_count: 1,
         };
@@ -149,17 +148,6 @@ impl CacheTrait for ObjectStorageCache {
         let mut guard = self.cache.write().await;
         guard.cur_bytes += cache_entry.file_metadata.file_size;
 
-        // Emplace evictable cache.
-        if evictable {
-            assert!(!guard.non_evictable_cache.contains_key(&file_id));
-            cache_entry_wrapper.reference_count = 0;
-            let old_entry = guard.evictable_cache.push(file_id, cache_entry_wrapper);
-            assert!(old_entry.is_none());
-            let cache_files_to_delete = guard._evict_cache_entries(self.config.max_bytes);
-            return (DataCacheHandle::Evictable, cache_files_to_delete);
-        }
-
-        // Emplace non-evictable cache.
         let cache_files_to_delete =
             guard._insert_non_evictable(file_id, cache_entry_wrapper, self.config.max_bytes);
         let non_evictable_handle =
@@ -234,212 +222,12 @@ impl CacheTrait for ObjectStorageCache {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use crate::create_data_file;
+    use crate::storage::cache::object_storage::test_utils::*;
 
     use super::*;
 
-    use tempfile::{tempdir, TempDir};
-    use tokio::io::AsyncReadExt;
-    use tokio::io::AsyncWriteExt;
-
-    /// Content for test files.
-    const CONTENT: &[u8; 10] = b"0123456789";
-    /// File path for two test files.
-    const TEST_FILENAME_1: &str = "remote-1.parquet";
-    const TEST_FILENAME_2: &str = "remote-2.parquet";
-    // Fake cache file.
-    const FAKE_FILENAME: &str = "fake-cache.parquet";
-
-    /// Util function to prepare a local file.
-    async fn create_test_file(tmp_dir: &std::path::Path, filename: &str) -> PathBuf {
-        let filepath = tmp_dir.join(filename);
-        let mut file = tokio::fs::File::create(&filepath).await.unwrap();
-        file.write_all(CONTENT).await.unwrap();
-        file.flush().await.unwrap();
-        filepath
-    }
-
-    /// Test util function to assert file content.
-    async fn check_file_content(filepath: &str) {
-        let mut file = tokio::fs::File::open(filepath).await.unwrap();
-        let mut contents = Vec::new();
-        file.read_to_end(&mut contents).await.unwrap();
-        assert_eq!(contents, CONTENT);
-    }
-
-    /// Test util function to create config for cache.
-    fn get_test_cache_config(tmp_dir: &TempDir) -> ObjectStorageCacheConfig {
-        ObjectStorageCacheConfig {
-            // Set max bytes larger than one file, but less than two files.
-            max_bytes: 15,
-            cache_directory: tmp_dir.path().to_str().unwrap().to_string(),
-        }
-    }
-
-    /// Test util function to create object storage cache.
-    fn get_test_object_storage_cache(tmp_dir: &TempDir) -> ObjectStorageCache {
-        let config = get_test_cache_config(tmp_dir);
-        ObjectStorageCache::_new(config)
-    }
-
-    /// Test util function to get cache file number.
-    async fn check_cache_file_count(tmp_dir: &TempDir, expected_count: usize) {
-        let mut actual_count = 0;
-        let mut entries = tokio::fs::read_dir(tmp_dir.path()).await.unwrap();
-        while let Some(entry) = entries.next_entry().await.unwrap() {
-            let metadata = entry.metadata().await.unwrap();
-            if metadata.is_file() {
-                actual_count += 1;
-            }
-        }
-        assert_eq!(actual_count, expected_count);
-    }
-
-    /// Test util function to assert returned cache handle is evictable.
-    fn assert_evictable_cache_handle(data_cache_handle: &DataCacheHandle) {
-        match data_cache_handle {
-            DataCacheHandle::Evictable => {}
-            _ => {
-                panic!("Expects to get evictable cache handle, but get unimported or non evictable one")
-            }
-        }
-    }
-
-    /// Test util function to assert returned cache handle is non-evictable.
-    fn assert_non_evictable_cache_handle(data_cache_handle: &DataCacheHandle) {
-        match data_cache_handle {
-            DataCacheHandle::NonEvictable(_) => {}
-            _ => panic!(
-                "Expects to get non-evictable cache handle, but get unimported or evictable one"
-            ),
-        }
-    }
-
-    /// Test util function to assert and get non-evictable cache handle.
-    fn get_non_evictable_cache_handle(data_cache_handle: &DataCacheHandle) -> &NonEvictableHandle {
-        match data_cache_handle {
-            DataCacheHandle::NonEvictable(handle) => handle,
-            _ => {
-                panic!("Expects to get non-evictable cache handle, but get unimported or evictable one")
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_data_cache_operation() {
-        let cache_file_directory = tempdir().unwrap();
-        let remote_file_directory = tempdir().unwrap();
-        let test_data_file_1 =
-            create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
-        let data_file_1 = create_data_file(
-            /*file_id=*/ 0,
-            test_data_file_1.to_str().unwrap().to_string(),
-        );
-        let mut cache = get_test_object_storage_cache(&cache_file_directory);
-
-        // Operation-1: download and pin with reference count 1.
-        let (mut cache_handle_1, cache_to_delete) = cache
-            ._get_cache_entry(data_file_1.file_id(), data_file_1.file_path())
-            .await
-            .unwrap();
-        let non_evictable_handle = get_non_evictable_cache_handle(&cache_handle_1);
-        check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
-        assert_eq!(
-            non_evictable_handle.cache_entry.file_metadata.file_size as usize,
-            CONTENT.len()
-        );
-        assert!(cache_to_delete.is_empty());
-        check_cache_file_count(&cache_file_directory, 1).await;
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
-
-        // Operation-2: get the cached file, and increment one additional reference count.
-        let (mut cache_handle_2, cache_to_delete) = cache
-            ._get_cache_entry(data_file_1.file_id(), data_file_1.file_path())
-            .await
-            .unwrap();
-        let non_evictable_handle = get_non_evictable_cache_handle(&cache_handle_2);
-        check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
-        assert_eq!(
-            non_evictable_handle.cache_entry.file_metadata.file_size as usize,
-            CONTENT.len()
-        );
-        assert!(cache_to_delete.is_empty());
-        check_cache_file_count(&cache_file_directory, 1).await;
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
-
-        // Operation-3: explicitly decrement reference count to 0, so later we could cache other files.
-        cache_handle_1._unreference().await;
-        cache_handle_2._unreference().await;
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
-
-        // Operation-4: now cache file 1 is not referenced any more, and we could add import new data entries.
-        let test_data_file_2 =
-            create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
-        let data_file_2 = create_data_file(
-            /*file_id=*/ 1,
-            test_data_file_2.to_str().unwrap().to_string(),
-        );
-        let cache_entry_2 = CacheEntry {
-            cache_filepath: FAKE_FILENAME.to_string(),
-            file_metadata: FileMetadata {
-                file_size: CONTENT.len() as u64,
-            },
-        };
-        let (cache_handle, cache_to_delete) = cache
-            ._import_cache_entry(
-                data_file_2.file_id(),
-                cache_entry_2.clone(),
-                /*evictable=*/ true,
-            )
-            .await;
-        assert_evictable_cache_handle(&cache_handle);
-        assert_eq!(cache_to_delete.len(), 1);
-        tokio::fs::remove_file(&cache_to_delete[0]).await.unwrap();
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
-
-        // Operation-5: newly imported file is not pinned, so we're able to evict it out.
-        let (mut cache_handle, cache_to_delete) = cache
-            ._get_cache_entry(data_file_1.file_id(), data_file_1.file_path())
-            .await
-            .unwrap();
-        let non_evictable_handle = get_non_evictable_cache_handle(&cache_handle);
-        check_file_content(&non_evictable_handle.cache_entry.cache_filepath).await;
-        assert_eq!(
-            non_evictable_handle.cache_entry.file_metadata.file_size as usize,
-            CONTENT.len()
-        );
-        assert_eq!(cache_to_delete.len(), 1);
-        assert!(cache_to_delete[0].ends_with(FAKE_FILENAME));
-        check_cache_file_count(&cache_file_directory, 1).await;
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
-
-        // Operation-6: drop and unreference, so we could import new cache files.
-        cache_handle._unreference().await;
-        let (mut cache_handle, cache_to_delete) = cache
-            ._import_cache_entry(
-                data_file_2.file_id(),
-                cache_entry_2.clone(),
-                /*evictable=*/ false,
-            )
-            .await;
-        assert_non_evictable_cache_handle(&cache_handle);
-        assert_eq!(cache_to_delete.len(), 1);
-        tokio::fs::remove_file(&cache_to_delete[0]).await.unwrap();
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 0);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 1);
-
-        // Operation-7: unreference all cache entries.
-        cache_handle._unreference().await;
-        assert_eq!(cache.cache.read().await.evictable_cache.len(), 1);
-        assert_eq!(cache.cache.read().await.non_evictable_cache.len(), 0);
-    }
+    use tempfile::tempdir;
 
     #[tokio::test]
     async fn test_concurrent_data_file_cache() {

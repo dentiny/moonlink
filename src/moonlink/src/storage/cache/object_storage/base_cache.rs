@@ -44,7 +44,6 @@ pub trait CacheTrait {
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,
-        evictable: bool,
     ) -> (DataCacheHandle, Vec<String>);
 
     /// Get file entry.
