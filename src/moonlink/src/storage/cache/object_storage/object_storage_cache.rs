@@ -74,7 +74,7 @@ impl ObjectStorageCacheInternal {
     }
 
     /// Unreference the given cache entry.
-    pub(super) fn _unreference(&mut self, file_id: FileId) {
+    pub(super) fn unreference(&mut self, file_id: FileId) {
         let cache_entry_wrapper = self.non_evictable_cache.get_mut(&file_id);
         assert!(cache_entry_wrapper.is_some());
         let cache_entry_wrapper = cache_entry_wrapper.unwrap();
@@ -156,7 +156,7 @@ impl CacheTrait for ObjectStorageCache {
         let cache_files_to_delete =
             guard.insert_non_evictable(file_id, cache_entry_wrapper, self.config.max_bytes);
         let non_evictable_handle =
-            NonEvictableHandle::_new(file_id, cache_entry, self.cache.clone());
+            NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
         (
             DataCacheHandle::NonEvictable(non_evictable_handle),
             cache_files_to_delete,
@@ -178,7 +178,7 @@ impl CacheTrait for ObjectStorageCache {
                 value.as_mut().unwrap().reference_count += 1;
                 let cache_entry = value.as_ref().unwrap().cache_entry.clone();
                 let non_evictable_handle =
-                    NonEvictableHandle::_new(file_id, cache_entry, self.cache.clone());
+                    NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
                 return Ok((DataCacheHandle::NonEvictable(non_evictable_handle), vec![]));
             }
 
@@ -191,7 +191,7 @@ impl CacheTrait for ObjectStorageCache {
                 let files_to_delete =
                     guard.insert_non_evictable(file_id, value.unwrap(), self.config.max_bytes);
                 let non_evictable_handle =
-                    NonEvictableHandle::_new(file_id, cache_entry, self.cache.clone());
+                    NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
                 return Ok((
                     DataCacheHandle::NonEvictable(non_evictable_handle),
                     files_to_delete,
@@ -210,7 +210,7 @@ impl CacheTrait for ObjectStorageCache {
             reference_count: 1,
         };
         let non_evictable_handle =
-            NonEvictableHandle::_new(file_id, cache_entry.clone(), self.cache.clone());
+            NonEvictableHandle::new(file_id, cache_entry.clone(), self.cache.clone());
 
         {
             let mut guard = self.cache.write().await;

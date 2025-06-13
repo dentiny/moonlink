@@ -7,6 +7,7 @@ use crate::error::Result;
 use crate::storage::cache::object_storage::base_cache::{
     CacheEntry as DataFileCacheEntry, CacheTrait, FileMetadata,
 };
+use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
 };
@@ -65,7 +66,7 @@ pub(crate) struct SnapshotTableState {
     last_commit: RecordLocation,
 
     /// Data file cache.
-    data_file_cache: ObjectStorageCache,
+    pub(super) data_file_cache: ObjectStorageCache,
 
     /// ---- Items not persisted to iceberg snapshot ----
     ///
@@ -130,6 +131,8 @@ pub struct ReadOutput {
     pub deletion_vectors: Vec<PuffinDeletionBlobAtRead>,
     /// Committed but un-persisted positional deletion records.
     pub position_deletes: Vec<(u32 /*file_index*/, u32 /*row_index*/)>,
+    /// Contains non evictable cache handle, which is to unpin after usage.
+    pub cache_handles: Vec<DataCacheHandle>,
     /// Contains committed but non-persisted record batches, which are persisted as temporary data files on local filesystem.
     pub associated_files: Vec<String>,
 }
@@ -144,7 +147,7 @@ pub(crate) struct MooncakeSnapshotOutput {
     /// File indice merge payload.
     pub(crate) file_indices_merge_payload: Option<FileIndiceMergePayload>,
     /// Evicted local data cache files.
-    pub(crate) evicted_data_file_cache: Vec<String>,
+    pub(crate) evicted_cache_files: Vec<String>,
 }
 
 impl SnapshotTableState {
@@ -265,46 +268,32 @@ impl SnapshotTableState {
 
     /// Update disk files in the current snapshot from local data files to remote ones.
     /// Return affected file indices, which are caused by data file updates, and will be removed.
-    fn update_data_files_to_persisted(
-        &mut self,
-        task: &SnapshotTask,
-    ) -> (HashSet<FileIndex>, HashMap<FileId, DataFileCacheEntry>) {
+    fn update_data_files_to_persisted(&mut self, task: &SnapshotTask) -> HashSet<FileIndex> {
         if task.iceberg_persisted_data_files.is_empty() {
-            return (HashSet::new(), HashMap::new());
+            return HashSet::new();
         }
 
         // Update disk file from local write through cache to iceberg persisted remote path.
         let mut affected_file_indices =
             HashSet::with_capacity(task.iceberg_persisted_file_indices.len());
-        let mut data_file_cache_entries =
-            HashMap::with_capacity(task.iceberg_persisted_data_files.len());
 
         let persisted_data_files = &task.iceberg_persisted_data_files;
         for cur_data_file in persisted_data_files.iter() {
-            let (old_data_file, disk_file_entry) = self
+            let (_, disk_file_entry) = self
                 .current_snapshot
                 .disk_files
                 .remove_entry(cur_data_file)
                 .unwrap();
             // One file index corresponds to one or many data files, so it's possible to have duplicates.
             affected_file_indices.insert(disk_file_entry.file_indice.as_ref().unwrap().clone());
-            // Construct cache entry.
-            let cur_cache_entry = DataFileCacheEntry {
-                cache_filepath: old_data_file.file_path().clone(),
-                file_metadata: FileMetadata {
-                    file_size: disk_file_entry.file_size as u64,
-                },
-            };
-            assert!(data_file_cache_entries
-                .insert(cur_data_file.file_id(), cur_cache_entry)
-                .is_none());
 
             // Use old disk entry for now, file indices will be updated to remote paths.
             self.current_snapshot
                 .disk_files
                 .insert(cur_data_file.clone(), disk_file_entry);
         }
-        (affected_file_indices, data_file_cache_entries)
+
+        affected_file_indices
     }
 
     /// Update file indices in the current snapshot from local data files to remote ones.
@@ -350,18 +339,36 @@ impl SnapshotTableState {
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
     /// After a successful iceberg snapshot, update current snapshot's disk files and file indices to reference to remote paths,
     /// also import local write through cache to globally managed data file cache, so they could be pinned and evicted when necessary.
-    fn update_local_path_to_persisted_by_imported(
-        &mut self,
-        task: &SnapshotTask,
-    ) -> HashMap<FileId, DataFileCacheEntry> {
+    fn update_local_path_to_persisted_by_imported(&mut self, task: &SnapshotTask) {
         // Handle imported new data files and file indices.
-        let (affected_file_indices, data_file_cache_entries) =
-            self.update_data_files_to_persisted(task);
+        let affected_file_indices = self.update_data_files_to_persisted(task);
         self.update_file_indices_to_persisted(
             task.iceberg_persisted_file_indices.clone(),
             affected_file_indices,
-        );
-        data_file_cache_entries
+        )
+    }
+
+    /// After successful iceberg snapshot, remote file path is recorded in current snapshot and free to dereference write cache.
+    async fn unreference_persisted_data_files(&mut self, task: &SnapshotTask) {
+        if task.iceberg_persisted_data_files.is_empty() {
+            return;
+        }
+
+        let persisted_data_files = &task.iceberg_persisted_data_files;
+        for cur_data_file in persisted_data_files.iter() {
+            let disk_file_entry = self
+                .current_snapshot
+                .disk_files
+                .get_mut(cur_data_file)
+                .unwrap();
+            disk_file_entry
+                .cache_handle
+                .as_mut()
+                .unwrap()
+                .unreference()
+                .await;
+            disk_file_entry.cache_handle = Some(DataCacheHandle::Evictable);
+        }
     }
 
     /// Update unpersisted data files from successful iceberg snapshot operation.
@@ -941,27 +948,6 @@ impl SnapshotTableState {
         }
     }
 
-    /// Import persisted data files into data cache, and return evicted cache files to delete.  
-    async fn import_persisted_data_files_to_cache(
-        &mut self,
-        data_file_cache_entries: HashMap<FileId, DataFileCacheEntry>,
-    ) -> Vec<String> {
-        let mut evicted_cache_files = vec![];
-        for (file_id, entry) in data_file_cache_entries.into_iter() {
-            let (cache_handle, cur_evicted_files) = self
-                .data_file_cache
-                .import_cache_entry(file_id, entry, /*evictable=*/ true)
-                .await;
-            self.current_snapshot
-                .disk_files
-                .get_mut(&file_id)
-                .unwrap()
-                .cache_handle = Some(cache_handle);
-            evicted_cache_files.extend(cur_evicted_files);
-        }
-        evicted_cache_files
-    }
-
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
@@ -976,7 +962,8 @@ impl SnapshotTableState {
         //
         // Update data files and file indices' local file path to remote file path, it only applies to newly imported data files and file indices,
         // because both index merge and data compaction only apply to those already persisted into iceberg table.
-        let data_file_cache_entries = self.update_local_path_to_persisted_by_imported(&task);
+        self.update_local_path_to_persisted_by_imported(&task);
+        self.unreference_persisted_data_files(&task).await;
         self.update_current_snapshot_with_iceberg_snapshot(std::mem::take(
             &mut task.iceberg_persisted_puffin_blob,
         ));
@@ -994,11 +981,6 @@ impl SnapshotTableState {
             task.new_compacted_file_indices.clone(),
             task.remapped_data_files_after_compaction.clone(),
         );
-
-        // Import persisted data files into data cache.
-        let evicted_data_file_cache = self
-            .import_persisted_data_files_to_cache(data_file_cache_entries)
-            .await;
 
         // Prune unpersisted records.
         self.prune_committed_deletion_logs(&task);
@@ -1022,10 +1004,13 @@ impl SnapshotTableState {
         self.buffer_unpersisted_iceberg_compaction_data(&task);
 
         // Apply buffered change to current mooncake snapshot.
-        self.apply_transaction_stream(&mut task);
+        let mut evicted_cache_files = vec![];
+        let stream_evicted_cache_files = self.apply_transaction_stream(&mut task).await;
         self.merge_mem_indices(&mut task);
         self.finalize_batches(&mut task);
-        self.integrate_disk_slices(&mut task);
+        let batch_evicted_cache_files = self.integrate_disk_slices(&mut task).await;
+        evicted_cache_files.extend(stream_evicted_cache_files);
+        evicted_cache_files.extend(batch_evicted_cache_files);
 
         // Apply data compaction to committed deletion logs.
         self.remap_and_prune_deletion_logs_after_compaction(&mut task);
@@ -1116,7 +1101,7 @@ impl SnapshotTableState {
             iceberg_snapshot_payload,
             data_compaction_payload,
             file_indices_merge_payload,
-            evicted_data_file_cache,
+            evicted_cache_files,
         }
     }
 
@@ -1181,29 +1166,44 @@ impl SnapshotTableState {
             }));
     }
 
-    fn integrate_disk_slices(&mut self, task: &mut SnapshotTask) {
+    /// Return files evicted from data file cache.
+    async fn integrate_disk_slices(&mut self, task: &mut SnapshotTask) -> Vec<String> {
+        // Aggregate evicted data cache files to delete.
+        let mut evicted_files = vec![];
+
         for mut slice in take(&mut task.new_disk_slices) {
-            // register new files
-            self.current_snapshot
-                .disk_files
-                .extend(slice.output_files().iter().map(|(f, file_attrs)| {
-                    ma::assert_gt!(file_attrs.file_size, 0);
-                    (
-                        f.clone(),
-                        DiskFileEntry {
-                            file_size: file_attrs.file_size,
-                            cache_handle: None,
-                            file_indice: Some(slice.get_file_indice().as_ref().unwrap().clone()),
-                            batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
-                            puffin_deletion_blob: None,
-                        },
-                    )
-                }));
             let write_lsn = slice.lsn();
             let lsn = write_lsn.expect("commited datafile should have a valid LSN");
-            for (f, _) in slice.output_files().iter() {
-                task.disk_file_lsn_map.insert(f.file_id(), lsn);
+
+            // Register new files into mooncake snapshot, add it into cache, and record LSN map.
+            for (file, file_attrs) in slice.output_files().into_iter() {
+                ma::assert_gt!(file_attrs.file_size, 0);
+                task.disk_file_lsn_map.insert(file.file_id(), lsn);
+                let (cache_handle, cur_evicted_files) = self
+                    .data_file_cache
+                    .import_cache_entry(
+                        file.file_id(),
+                        DataFileCacheEntry {
+                            cache_filepath: file.file_path().clone(),
+                            file_metadata: FileMetadata {
+                                file_size: file_attrs.file_size as u64,
+                            },
+                        },
+                    )
+                    .await;
+                evicted_files.extend(cur_evicted_files);
+                self.current_snapshot.disk_files.insert(
+                    file.clone(),
+                    DiskFileEntry {
+                        file_size: file_attrs.file_size,
+                        cache_handle: Some(cache_handle),
+                        file_indice: Some(slice.get_file_indice().as_ref().unwrap().clone()),
+                        batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
+                        puffin_deletion_blob: None,
+                    },
+                );
             }
+
             // remap deletions written *after* this slice’s LSN
             let cut = self.committed_deletion_log.partition_point(|d| {
                 d.lsn
@@ -1235,6 +1235,8 @@ impl SnapshotTableState {
                 self.batches.remove(&b.id);
             });
         }
+
+        evicted_files
     }
 
     async fn match_deletions_with_identical_key_and_lsn(
@@ -1547,6 +1549,8 @@ impl SnapshotTableState {
                 deletion_vectors: deletion_vectors_at_read,
                 position_deletes,
                 associated_files,
+                // TODO(hjiang): Fill in the cache handle.
+                cache_handles: vec![],
             });
         }
 

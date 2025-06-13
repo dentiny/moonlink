@@ -23,7 +23,7 @@ pub(crate) enum TableNotify {
         /// Payload used to trigger an index merge.
         file_indice_merge_payload: Option<FileIndiceMergePayload>,
         /// Evicted data file cache to delete.
-        evicted_data_file_cache: Vec<String>,
+        evicted_cache_files: Vec<String>,
     },
     /// Iceberg snapshot completes.
     IcebergSnapshot {

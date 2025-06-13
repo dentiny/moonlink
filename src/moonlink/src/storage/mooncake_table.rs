@@ -500,8 +500,12 @@ impl MooncakeTable {
             ),
             metadata: table_metadata.clone(),
             snapshot: Arc::new(RwLock::new(
-                SnapshotTableState::new(table_metadata, data_file_cache, &mut *table_manager)
-                    .await?,
+                SnapshotTableState::new(
+                    table_metadata,
+                    data_file_cache.clone(),
+                    &mut *table_manager,
+                )
+                .await?,
             )),
             next_snapshot_task: SnapshotTask::new(table_config),
             transaction_stream_states: HashMap::new(),
@@ -971,7 +975,7 @@ impl MooncakeTable {
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,
                 file_indice_merge_payload: snapshot_result.file_indices_merge_payload,
-                evicted_data_file_cache: snapshot_result.evicted_data_file_cache,
+                evicted_cache_files: snapshot_result.evicted_cache_files,
             })
             .await
             .unwrap();
@@ -996,7 +1000,7 @@ impl MooncakeTable {
             iceberg_snapshot_payload,
             file_indice_merge_payload,
             data_compaction_payload,
-            evicted_data_file_cache,
+            evicted_cache_files,
             ..
         } = notification
         {
@@ -1004,7 +1008,7 @@ impl MooncakeTable {
                 iceberg_snapshot_payload,
                 file_indice_merge_payload,
                 data_compaction_payload,
-                evicted_data_file_cache,
+                evicted_cache_files,
             )
         } else {
             panic!("Expected mooncake snapshot completion notification, but get others.");

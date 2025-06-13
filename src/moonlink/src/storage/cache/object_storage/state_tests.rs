@@ -20,12 +20,8 @@
 /// (3) + query finishes + no reference count => (2)
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1kwXIl4VPzhgzV4KP8yT42M35PfvMJW9PdjNTF7VNEfA/edit?usp=sharing
-use crate::create_data_file;
-use crate::storage::cache::object_storage::base_cache::{
-    CacheEntry, CacheTrait, FileMetadata,
-};
+use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
-use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::cache::object_storage::test_utils::*;
 use crate::storage::storage_utils::FileId;
@@ -47,7 +43,7 @@ async fn test_cache_state_1_create_snashot() {
 
     // Check cache handle status.
     let (cache_handle, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -109,7 +105,7 @@ async fn test_cache_2_requested_to_read() {
         },
     };
     let (mut cache_handle, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -121,7 +117,7 @@ async fn test_cache_2_requested_to_read() {
     assert!(files_to_evict.is_empty());
 
     // Unreference to make cache entry evictable.
-    cache_handle._unreference().await;
+    cache_handle.unreference().await;
 
     // Request to read, thus pinning the cache entry.
     let (cache_handle, files_to_evict) = cache
@@ -161,7 +157,7 @@ async fn test_cache_3_requested_to_read() {
         },
     };
     let (cache_handle, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -200,7 +196,7 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
     let remote_file_directory = tempdir().unwrap();
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
-    let mut cache = ObjectStorageCache::_new(ObjectStorageCacheConfig {
+    let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: (CONTENT.len() * 2) as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
     });
@@ -213,7 +209,7 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
         },
     };
     let (mut cache_handle, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -225,7 +221,7 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Unreference to make cache entry evictable.
-    cache_handle._unreference().await;
+    cache_handle.unreference().await;
 
     // Import the second cache file.
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
@@ -236,7 +232,7 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
         },
     };
     let (cache_handle, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(1), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(1), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -258,7 +254,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
     let remote_file_directory = tempdir().unwrap();
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
-    let mut cache = ObjectStorageCache::_new(ObjectStorageCacheConfig {
+    let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
     });
@@ -271,7 +267,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
         },
     };
     let (mut cache_handle_1, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle_1).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -283,7 +279,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Unreference to make cache entry evictable.
-    cache_handle_1._unreference().await;
+    cache_handle_1.unreference().await;
 
     // Import the second cache file.
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
@@ -294,7 +290,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
         },
     };
     let (cache_handle_2, files_to_evict) = cache
-        ._import_cache_entry(/*file_id=*/ FileId(1), cache_entry)
+        .import_cache_entry(/*file_id=*/ FileId(1), cache_entry)
         .await;
     assert_non_evictable_cache_handle(&cache_handle_2).await;
     assert_non_evictable_cache_handle_ref_count(
@@ -357,7 +353,7 @@ async fn test_cache_3_unpin_still_referenced() {
     assert!(files_to_evict.is_empty());
 
     // Unreference one of the cache handles.
-    cache_handle._unreference().await;
+    cache_handle.unreference().await;
 
     // Check cache status.
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
@@ -407,8 +403,8 @@ async fn test_cache_3_unpin_not_referenced() {
     assert!(files_to_evict.is_empty());
 
     // Unreference all cache handles.
-    cache_handle_1._unreference().await;
-    cache_handle_2._unreference().await;
+    cache_handle_1.unreference().await;
+    cache_handle_2.unreference().await;
 
     // Check cache status.
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;

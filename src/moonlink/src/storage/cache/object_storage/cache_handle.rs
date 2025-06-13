@@ -27,7 +27,7 @@ impl std::fmt::Debug for NonEvictableHandle {
 }
 
 impl NonEvictableHandle {
-    pub(super) fn _new(
+    pub(super) fn new(
         file_id: FileId,
         cache_entry: CacheEntry,
         cache: Arc<RwLock<ObjectStorageCacheInternal>>,
@@ -40,9 +40,9 @@ impl NonEvictableHandle {
     }
 
     /// Unreference the pinned cache file.
-    pub(super) async fn _unreference(&mut self) {
+    pub(super) async fn unreference(&mut self) {
         let mut guard = self.cache.write().await;
-        guard._unreference(self.file_id);
+        guard.unreference(self.file_id);
     }
 }
 
@@ -58,10 +58,10 @@ pub enum DataCacheHandle {
 
 impl DataCacheHandle {
     /// Unreferenced the pinned cache file.
-    pub async fn _unreference(&mut self) {
+    pub async fn unreference(&mut self) {
         match self {
             DataCacheHandle::NonEvictable(handle) => {
-                handle._unreference().await;
+                handle.unreference().await;
             }
             _ => panic!("Cannot unreference for an unpinned cache handle"),
         }
