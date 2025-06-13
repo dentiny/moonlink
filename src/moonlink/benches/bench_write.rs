@@ -1,7 +1,9 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
-use moonlink::{IcebergTableConfig, MooncakeTable, TableConfig};
+use moonlink::{
+    IcebergTableConfig, MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig, TableConfig,
+};
 use pprof::criterion::{Output, PProfProfiler};
 use std::collections::HashMap;
 use tempfile::tempdir;
@@ -28,15 +30,15 @@ fn bench_write(c: &mut Criterion) {
     let schema = Schema::new(vec![
         Field::new("id", DataType::Int32, false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "1".to_string(),
+            "0".to_string(),
         )])),
         Field::new("name", DataType::Utf8, true).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "2".to_string(),
+            "1".to_string(),
         )])),
         Field::new("age", DataType::Int32, false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "3".to_string(),
+            "2".to_string(),
         )])),
     ]);
 
@@ -62,6 +64,7 @@ fn bench_write(c: &mut Criterion) {
                     IdentityProp::SinglePrimitiveKey(0),
                     iceberg_table_config,
                     table_config,
+                    ObjectStorageCache::new(ObjectStorageCacheConfig::default_for_bench()),
                 )
                 .await
                 .unwrap();
@@ -94,6 +97,7 @@ fn bench_write(c: &mut Criterion) {
                     IdentityProp::SinglePrimitiveKey(0),
                     iceberg_table_config,
                     table_config,
+                    ObjectStorageCache::new(ObjectStorageCacheConfig::default_for_bench()),
                 )
                 .await
                 .unwrap();
@@ -130,6 +134,7 @@ fn bench_write(c: &mut Criterion) {
                         IdentityProp::SinglePrimitiveKey(0),
                         iceberg_table_config,
                         table_config,
+                        ObjectStorageCache::new(ObjectStorageCacheConfig::default_for_bench()),
                     ))
                     .unwrap();
                 rt.block_on(async {

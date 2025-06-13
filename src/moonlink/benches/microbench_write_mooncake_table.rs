@@ -1,7 +1,7 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
-use moonlink::IcebergTableConfig;
+use moonlink::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink::{MooncakeTable, TableConfig};
 use std::collections::HashMap;
 use std::time::Duration;
@@ -63,6 +63,7 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
             IdentityProp::SinglePrimitiveKey(0),
             iceberg_table_config,
             table_config,
+            ObjectStorageCache::new(ObjectStorageCacheConfig::default_for_bench()),
         ))
         .unwrap();
 

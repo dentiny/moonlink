@@ -77,6 +77,7 @@ pub async fn test_table(
         identity,
         iceberg_table_config,
         table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap()
@@ -156,6 +157,7 @@ pub async fn snapshot(
             iceberg_snapshot_payload,
             data_compaction_payload,
             file_indice_merge_payload,
+            ..
         } => (
             lsn,
             iceberg_snapshot_payload,

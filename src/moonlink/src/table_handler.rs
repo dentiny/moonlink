@@ -281,7 +281,18 @@ impl TableHandler {
                 // Wait for the mooncake table event notification.
                 Some(event) = table_notify_rx.recv() => {
                     match event {
-                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload } => {
+                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_cache_files } => {
+                            // Spawn a detached best-effort task to delete evicted data file cache.
+                            if !evicted_cache_files.is_empty() {
+                                tokio::task::spawn(async move {
+                                    for cur_data_file in evicted_cache_files.into_iter() {
+                                        if let Err(e) = tokio::fs::remove_file(&cur_data_file).await {
+                                            error!("Failed to delete data file cache: {:?}", e);
+                                        }
+                                    }
+                                });
+                            }
+
                             // Notify read the mooncake table commit of LSN.
                             table.notify_snapshot_reader(lsn);
 

@@ -7,6 +7,7 @@ use crate::storage::storage_utils::FileId;
 use tokio::sync::RwLock;
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct NonEvictableHandle {
     /// File id for the mooncake table data file.
     pub(crate) file_id: FileId,
@@ -26,7 +27,7 @@ impl std::fmt::Debug for NonEvictableHandle {
 }
 
 impl NonEvictableHandle {
-    pub(super) fn _new(
+    pub(super) fn new(
         file_id: FileId,
         cache_entry: CacheEntry,
         cache: Arc<RwLock<ObjectStorageCacheInternal>>,
@@ -39,15 +40,15 @@ impl NonEvictableHandle {
     }
 
     /// Unreference the pinned cache file.
-    pub(super) async fn _unreference(&mut self) {
+    pub(super) async fn unreference(&mut self) {
         let mut guard = self.cache.write().await;
-        guard._unreference(self.file_id);
+        guard.unreference(self.file_id);
     }
 }
 
 /// A unified handle for data file cache entries, which represents different states for a data file cache resource.
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DataCacheHandle {
     /// Cache file is managed by data file already and at evictable state; should pin before use.
     Evictable,
@@ -57,10 +58,10 @@ pub enum DataCacheHandle {
 
 impl DataCacheHandle {
     /// Unreferenced the pinned cache file.
-    pub async fn _unreference(&mut self) {
+    pub async fn unreference(&mut self) {
         match self {
             DataCacheHandle::NonEvictable(handle) => {
-                handle._unreference().await;
+                handle.unreference().await;
             }
             _ => panic!("Cannot unreference for an unpinned cache handle"),
         }

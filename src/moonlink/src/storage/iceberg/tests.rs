@@ -28,6 +28,7 @@ use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RawDeletionRecord;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::MooncakeTable;
+use crate::ObjectStorageCache;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -603,6 +604,7 @@ async fn test_index_merge_and_create_snapshot() {
         mooncake_table_metadata.clone(),
         Box::new(iceberg_table_manager),
         mooncake_table_config.clone(),
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
@@ -713,6 +715,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
         identity_property,
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
@@ -757,6 +760,7 @@ async fn test_skip_iceberg_snapshot() {
         identity_property,
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
@@ -810,6 +814,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
@@ -1086,6 +1091,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         identity_property.clone(),
         iceberg_table_config.clone(),
         mooncake_table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
@@ -1468,6 +1474,7 @@ async fn test_drop_table_at_creation() -> IcebergResult<()> {
         mooncake_table_metadata.identity.clone(),
         iceberg_table_config.clone(),
         mooncake_table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
