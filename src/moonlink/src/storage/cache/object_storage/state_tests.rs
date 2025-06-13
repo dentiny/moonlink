@@ -13,7 +13,7 @@
 /// (1) + create mooncake snapshot => (2)
 /// (1) + requested to read + sufficient space => (3)
 /// (2) + requested to read + sufficient space => (3)
-/// (2) + requested to read + insufficient space => (2) <---- to test
+/// (2) + requested to read + insufficient space => (2)
 /// (3) + requested to read => (3)
 /// (2) + new entry + sufficient space => (2)
 /// (2) + new entry + insufficient space => (1)
@@ -89,9 +89,55 @@ async fn test_cache_1_requested_to_read() {
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
 
-// (2) + requested to read => (3)
+// (2) + requested to read + sufficient space => (3)
 #[tokio::test]
-async fn test_cache_2_requested_to_read() {
+async fn test_cache_2_requested_to_read_with_sufficient_space() {
+    let remote_file_directory = tempdir().unwrap();
+    let cache_file_directory = tempdir().unwrap();
+    let test_file_1 = create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
+    let mut cache = ObjectStorageCache::_new(ObjectStorageCacheConfig {
+        max_bytes: CONTENT.len() as u64,
+        cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+    });
+
+    // Import into cache first.
+    let cache_entry = CacheEntry {
+        cache_filepath: test_file_1.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let (_, files_to_evict) = cache
+        ._import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .await;
+    assert_non_evictable_cache_handle_ref_count(
+        &mut cache,
+        /*file_id=*/ FileId(0),
+        /*expected_ref_count=*/ 1,
+    )
+    .await;
+    assert!(files_to_evict.is_empty());
+
+    // Request to read, but failed to pin due to insufficient disk space.
+    let test_file_2 = create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
+    let (cache_handle, files_to_evict) = cache
+        ._get_cache_entry(
+            /*file_id=*/ FileId(1),
+            test_file_2.as_path().to_str().unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(cache_handle.is_none());
+    assert!(files_to_evict.is_empty());
+
+    // Check cache status.
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+}
+
+// (2) + requested to read + insufficient space => (2)
+#[tokio::test]
+async fn test_cache_2_requested_to_read_with_insufficient_space() {
     let remote_file_directory = tempdir().unwrap();
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
