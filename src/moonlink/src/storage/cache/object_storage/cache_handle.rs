@@ -50,8 +50,6 @@ impl NonEvictableHandle {
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum DataCacheHandle {
-    /// Cache file is not managed by data file cache yet.
-    Unimported(String),
     /// Cache file is managed by data file already and at evictable state; should pin before use.
     Evictable,
     /// Cache file is managed by data file already and pinned, could use at any time.
