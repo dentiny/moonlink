@@ -9,14 +9,12 @@ use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
 use crate::storage::storage_utils::FileId;
 use crate::Result;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileMetadata {
     /// Size of the current file.
     pub(crate) file_size: u64,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CacheEntry {
     /// Cache data file at local filesystem.
@@ -29,9 +27,10 @@ pub struct CacheEntry {
 #[async_trait]
 pub trait CacheTrait {
     /// Import cache entry to the cache.
+    ///
     /// Precondition: the file is not managed by cache.
     #[allow(async_fn_in_trait)]
-    async fn _import_cache_entry(
+    async fn import_cache_entry(
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,

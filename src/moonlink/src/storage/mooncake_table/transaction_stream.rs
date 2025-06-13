@@ -200,6 +200,7 @@ impl MooncakeTable {
                     file_indice: Some(disk_slice.get_file_indice().as_ref().unwrap().clone()),
                     batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                     puffin_deletion_blob: None,
+                    cache_handle: None,
                 };
                 stream_state
                     .flushed_files

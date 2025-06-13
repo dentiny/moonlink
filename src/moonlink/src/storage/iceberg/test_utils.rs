@@ -242,6 +242,7 @@ pub(crate) async fn get_mooncake_snapshot_result(
             iceberg_snapshot_payload,
             file_indice_merge_payload,
             data_compaction_payload,
+            ..
         } => (
             lsn,
             iceberg_snapshot_payload,

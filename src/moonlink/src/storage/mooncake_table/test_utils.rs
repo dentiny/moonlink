@@ -157,6 +157,7 @@ pub async fn snapshot(
             iceberg_snapshot_payload,
             data_compaction_payload,
             file_indice_merge_payload,
+            ..
         } => (
             lsn,
             iceberg_snapshot_payload,

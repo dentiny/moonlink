@@ -7,6 +7,7 @@ use crate::storage::storage_utils::FileId;
 use tokio::sync::RwLock;
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct NonEvictableHandle {
     /// File id for the mooncake table data file.
     pub(crate) file_id: FileId,
@@ -47,7 +48,7 @@ impl NonEvictableHandle {
 
 /// A unified handle for data file cache entries, which represents different states for a data file cache resource.
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum DataCacheHandle {
     /// Cache file is not managed by data file cache yet.
     Unimported(String),

@@ -54,7 +54,7 @@ fn create_default_data_file_cache() -> ObjectStorageCache {
         max_bytes: 10 * 1024 * 1024,
         cache_directory: DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH.to_string(),
     };
-    ObjectStorageCache::_new(cache_config)
+    ObjectStorageCache::new(cache_config)
 }
 
 impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {

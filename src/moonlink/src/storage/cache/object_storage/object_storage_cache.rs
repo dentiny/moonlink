@@ -39,7 +39,7 @@ pub(super) struct ObjectStorageCacheInternal {
 impl ObjectStorageCacheInternal {
     /// Util function to remove entries from evictable cache, until overall file size drops down below max size.
     /// Return data files which get evicted from LRU cache, and will be deleted locally.
-    fn _evict_cache_entries(&mut self, max_bytes: u64) -> Vec<String> {
+    fn evict_cache_entries(&mut self, max_bytes: u64) -> Vec<String> {
         let mut evicted_data_files = vec![];
         while self.cur_bytes > max_bytes {
             // TODO(hjiang): In certain case, we could tolerate disk space insufficiency (i.e. when pg_mooncake request for data files, we could fallback to return remote files).
@@ -59,7 +59,7 @@ impl ObjectStorageCacheInternal {
 
     /// Util function to insert into non-evictable cache.
     /// NOTICE: cache current bytes won't be updated.
-    fn _insert_non_evictable(
+    fn insert_non_evictable(
         &mut self,
         file_id: FileId,
         cache_entry_wrapper: CacheEntryWrapper,
@@ -70,7 +70,7 @@ impl ObjectStorageCacheInternal {
             .non_evictable_cache
             .insert(file_id, cache_entry_wrapper);
         assert!(old_entry.is_none());
-        self._evict_cache_entries(max_bytes)
+        self.evict_cache_entries(max_bytes)
     }
 
     /// Unreference the given cache entry.
@@ -102,10 +102,10 @@ impl ObjectStorageCache {
     #[cfg(test)]
     pub fn default_for_test() -> Self {
         let config = ObjectStorageCacheConfig::default_for_test();
-        Self::_new(config)
+        Self::new(config)
     }
 
-    pub fn _new(config: ObjectStorageCacheConfig) -> Self {
+    pub fn new(config: ObjectStorageCacheConfig) -> Self {
         let evictable_cache = LruCache::unbounded();
         let non_evictable_cache = HashMap::new();
         Self {
@@ -140,7 +140,7 @@ impl ObjectStorageCache {
 
 #[async_trait::async_trait]
 impl CacheTrait for ObjectStorageCache {
-    async fn _import_cache_entry(
+    async fn import_cache_entry(
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,
@@ -160,13 +160,13 @@ impl CacheTrait for ObjectStorageCache {
             cache_entry_wrapper.reference_count = 0;
             let old_entry = guard.evictable_cache.push(file_id, cache_entry_wrapper);
             assert!(old_entry.is_none());
-            let cache_files_to_delete = guard._evict_cache_entries(self.config.max_bytes);
+            let cache_files_to_delete = guard.evict_cache_entries(self.config.max_bytes);
             return (DataCacheHandle::Evictable, cache_files_to_delete);
         }
 
         // Emplace non-evictable cache.
         let cache_files_to_delete =
-            guard._insert_non_evictable(file_id, cache_entry_wrapper, self.config.max_bytes);
+            guard.insert_non_evictable(file_id, cache_entry_wrapper, self.config.max_bytes);
         let non_evictable_handle =
             NonEvictableHandle::_new(file_id, cache_entry, self.cache.clone());
         (
@@ -201,7 +201,7 @@ impl CacheTrait for ObjectStorageCache {
                 value.as_mut().unwrap().reference_count += 1;
                 let cache_entry = value.as_ref().unwrap().cache_entry.clone();
                 let files_to_delete =
-                    guard._insert_non_evictable(file_id, value.unwrap(), self.config.max_bytes);
+                    guard.insert_non_evictable(file_id, value.unwrap(), self.config.max_bytes);
                 let non_evictable_handle =
                     NonEvictableHandle::_new(file_id, cache_entry, self.cache.clone());
                 return Ok((
@@ -228,7 +228,7 @@ impl CacheTrait for ObjectStorageCache {
             let mut guard = self.cache.write().await;
             guard.cur_bytes += cache_entry.file_metadata.file_size;
             let evicted_entries =
-                guard._insert_non_evictable(file_id, cache_entry_wrapper, self.config.max_bytes);
+                guard.insert_non_evictable(file_id, cache_entry_wrapper, self.config.max_bytes);
             Ok((
                 DataCacheHandle::NonEvictable(non_evictable_handle),
                 evicted_entries,
@@ -286,7 +286,7 @@ mod tests {
     /// Test util function to create object storage cache.
     fn get_test_object_storage_cache(tmp_dir: &TempDir) -> ObjectStorageCache {
         let config = get_test_cache_config(tmp_dir);
-        ObjectStorageCache::_new(config)
+        ObjectStorageCache::new(config)
     }
 
     /// Test util function to get cache file number.
@@ -396,7 +396,7 @@ mod tests {
             },
         };
         let (cache_handle, cache_to_delete) = cache
-            ._import_cache_entry(
+            .import_cache_entry(
                 data_file_2.file_id(),
                 cache_entry_2.clone(),
                 /*evictable=*/ true,
@@ -428,7 +428,7 @@ mod tests {
         // Operation-6: drop and unreference, so we could import new cache files.
         cache_handle._unreference().await;
         let (mut cache_handle, cache_to_delete) = cache
-            ._import_cache_entry(
+            .import_cache_entry(
                 data_file_2.file_id(),
                 cache_entry_2.clone(),
                 /*evictable=*/ false,
@@ -459,7 +459,7 @@ mod tests {
             max_bytes: (CONTENT.len() * PARALLEL_TASK_NUM) as u64,
             cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
         };
-        let cache = ObjectStorageCache::_new(config);
+        let cache = ObjectStorageCache::new(config);
 
         for idx in 0..PARALLEL_TASK_NUM {
             let mut temp_cache = cache.clone();
