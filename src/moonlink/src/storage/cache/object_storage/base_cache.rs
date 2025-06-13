@@ -5,7 +5,7 @@
 /// - evictable if a cache entry is unreferenced
 use async_trait::async_trait;
 
-use crate::storage::cache::object_storage::cache_handle::DataCacheHandle;
+use crate::storage::cache::object_storage::cache_handle::NonEvictableHandle;
 use crate::storage::storage_utils::FileId;
 use crate::Result;
 
@@ -37,21 +37,25 @@ pub struct CacheEntry {
 #[allow(dead_code)]
 #[async_trait]
 pub trait CacheTrait {
-    /// Import cache entry to the cache.
+    /// Import cache entry to the cache. If there's no enough disk space, panic directly.
     /// Precondition: the file is not managed by cache.
     #[allow(async_fn_in_trait)]
     async fn _import_cache_entry(
         &mut self,
         file_id: FileId,
         cache_entry: CacheEntry,
-    ) -> (DataCacheHandle, Vec<String>);
+    ) -> (NonEvictableHandle, Vec<String>);
 
     /// Get file entry.
     /// If the requested file entry doesn't exist in cache, an IO operation is performed.
+    /// If there's no sufficient disk space, return [`None`].
     #[allow(async_fn_in_trait)]
     async fn _get_cache_entry(
         &mut self,
         file_id: FileId,
         remote_filepath: &str,
-    ) -> Result<(DataCacheHandle, Vec<String>)>;
+    ) -> Result<(
+        Option<NonEvictableHandle>,
+        Vec<String>, /*files_to_delete*/
+    )>;
 }

@@ -3,9 +3,7 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
 use crate::storage::cache::object_storage::{
-    base_cache::ObjectStorageCacheConfig,
-    cache_handle::{DataCacheHandle, NonEvictableHandle},
-    object_storage_cache::ObjectStorageCache,
+    base_cache::ObjectStorageCacheConfig, object_storage_cache::ObjectStorageCache,
 };
 use crate::storage::storage_utils::FileId;
 
@@ -61,34 +59,6 @@ pub(crate) async fn check_cache_file_count(tmp_dir: &TempDir, expected_count: us
         }
     }
     assert_eq!(actual_count, expected_count);
-}
-
-/// Test util function to assert returned cache handle is non-evictable.
-pub(crate) async fn assert_non_evictable_cache_handle(data_cache_handle: &DataCacheHandle) {
-    let non_evictable_handle = match data_cache_handle {
-        DataCacheHandle::NonEvictable(non_evictable_handle) => non_evictable_handle,
-        _ => {
-            panic!("Expects to get non-evictable cache handle, but get unimported or evictable one")
-        }
-    };
-    // Check cache file existence.
-    assert!(
-        tokio::fs::try_exists(&non_evictable_handle.cache_entry.cache_filepath)
-            .await
-            .unwrap()
-    );
-}
-
-/// Test util function to assert and get non-evictable cache handle.
-pub(crate) fn get_non_evictable_cache_handle(
-    data_cache_handle: &DataCacheHandle,
-) -> &NonEvictableHandle {
-    match data_cache_handle {
-        DataCacheHandle::NonEvictable(handle) => handle,
-        _ => {
-            panic!("Expects to get non-evictable cache handle, but get unimported or evictable one")
-        }
-    }
 }
 
 /// Test util function to check evictable cache size.

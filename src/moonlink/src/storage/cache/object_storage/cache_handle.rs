@@ -44,25 +44,3 @@ impl NonEvictableHandle {
         guard._unreference(self.file_id);
     }
 }
-
-/// A unified handle for data file cache entries, which represents different states for a data file cache resource.
-#[allow(dead_code)]
-#[derive(Debug)]
-pub enum DataCacheHandle {
-    /// Cache file is managed by data file already and at evictable state; should pin before use.
-    Evictable,
-    /// Cache file is managed by data file already and pinned, could use at any time.
-    NonEvictable(NonEvictableHandle),
-}
-
-impl DataCacheHandle {
-    /// Unreferenced the pinned cache file.
-    pub async fn _unreference(&mut self) {
-        match self {
-            DataCacheHandle::NonEvictable(handle) => {
-                handle._unreference().await;
-            }
-            _ => panic!("Cannot unreference for an unpinned cache handle"),
-        }
-    }
-}
