@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 /// Payload to trigger a compaction operation.
 #[derive(Clone, Debug)]
-pub(crate) struct DataCompactionPayload {
+pub struct DataCompactionPayload {
     /// Maps from data file to their deletion records.
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, Option<PuffinBlobRef>>,
     /// File indices to compact and rewrite.
@@ -33,7 +33,7 @@ pub(crate) struct RemappedRecordLocation {
 
 /// Result for a compaction operation.
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) struct DataCompactionResult {
+pub struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
     /// Old compacted data files, which maps to their corresponding compacted data file.

@@ -316,6 +316,7 @@ impl IcebergTableManager {
                 DiskFileEntry {
                     file_size: data_file_entry.data_file.file_size_in_bytes() as usize,
                     file_indice: Some(file_indice),
+                    cache_handle: None,
                     puffin_deletion_blob: data_file_entry.persisted_deletion_vector.clone(),
                     batch_deletion_vector: data_file_entry.deletion_vector.clone(),
                 },

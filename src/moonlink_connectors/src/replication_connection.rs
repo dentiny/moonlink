@@ -6,7 +6,7 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
-use moonlink::{IcebergTableEventManager, ReadStateManager};
+use moonlink::{IcebergTableEventManager, ObjectStorageCache, ReadStateManager};
 use std::sync::Arc;
 use tokio::pin;
 use tokio::time::Duration;
@@ -50,6 +50,8 @@ pub struct ReplicationConnection {
     source: PostgresSource,
     replication_started: bool,
     slot_name: String,
+    /// Data file cache.
+    data_file_cache: ObjectStorageCache,
 }
 
 impl ReplicationConnection {
@@ -57,6 +59,7 @@ impl ReplicationConnection {
         uri: String,
         table_base_path: String,
         table_temp_files_directory: String,
+        data_file_cache: ObjectStorageCache,
     ) -> Result<Self> {
         info!(%uri, "initializing replication connection");
 
@@ -112,6 +115,7 @@ impl ReplicationConnection {
             source: postgres_source,
             replication_started: false,
             slot_name,
+            data_file_cache,
         })
     }
 
@@ -237,6 +241,7 @@ impl ReplicationConnection {
             Path::new(&self.table_base_path),
             self.table_temp_files_directory.clone(),
             &self.replication_state,
+            self.data_file_cache.clone(),
         )
         .await?;
 
