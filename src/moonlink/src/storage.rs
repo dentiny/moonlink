@@ -5,11 +5,13 @@ pub(crate) mod index;
 pub(crate) mod mooncake_table;
 pub(crate) mod storage_utils;
 
+pub(crate) use cache::object_storage::cache_handle::NonEvictableHandle;
 pub use iceberg::iceberg_table_event_manager::{
     IcebergEventSyncReceiver, IcebergTableEventManager,
 };
 pub use iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 pub use iceberg::table_manager::TableManager;
+pub use mooncake_table::SnapshotReadOutput;
 pub use mooncake_table::{MooncakeTable, TableConfig};
 pub(crate) use mooncake_table::{PuffinDeletionBlobAtRead, SnapshotTableState};
 

@@ -59,7 +59,7 @@ pub struct IcebergEventSyncSender {
 
 impl TableHandler {
     /// Create a new TableHandler for the given schema and table name
-    pub fn new(
+    pub async fn new(
         mut table: MooncakeTable,
         iceberg_event_sync_sender: IcebergEventSyncSender,
     ) -> Self {
@@ -68,7 +68,7 @@ impl TableHandler {
 
         // Create channel for internal control events.
         let (table_notify_tx, table_notify_rx) = mpsc::channel(100);
-        table.register_table_notify(table_notify_tx.clone());
+        table.register_table_notify(table_notify_tx.clone()).await;
 
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(async move {
@@ -371,6 +371,9 @@ impl TableHandler {
                                 }
                             }
                             data_compaction_ongoing = false;
+                        }
+                        TableNotify::ReadRequest { pinned_file_ids } => {
+                            table.set_read_request_res(pinned_file_ids);
                         }
                     }
                 }
