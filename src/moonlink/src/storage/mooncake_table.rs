@@ -4,6 +4,7 @@ mod disk_slice;
 mod mem_slice;
 mod shared_array;
 mod snapshot;
+pub mod snapshot_read_output;
 mod table_snapshot;
 mod transaction_stream;
 
@@ -13,6 +14,7 @@ use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
 use crate::error::{Error, Result};
 use crate::row::{IdentityProp, MoonlinkRow};
+use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
 use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
@@ -22,6 +24,7 @@ pub(crate) use crate::storage::compaction::table_compaction::{
 use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
+pub use crate::storage::mooncake_table::snapshot_read_output::ReadOutput as SnapshotReadOutput;
 #[cfg(test)]
 pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 pub(crate) use crate::storage::mooncake_table::table_snapshot::{
@@ -34,6 +37,7 @@ use crate::storage::storage_utils::FileId;
 #[cfg(test)]
 use crate::storage::storage_utils::ProcessedDeletionRecord;
 use crate::table_notify::TableNotify;
+use crate::NonEvictableHandle;
 use std::collections::{HashMap, HashSet};
 use std::mem::take;
 use std::path::PathBuf;
@@ -157,6 +161,11 @@ pub struct TableMetadata {
 
 #[derive(Clone, Debug)]
 pub(crate) struct DiskFileEntry {
+    /// Read request reference count.
+    /// A local file could only be safely deleted if it contains persisted path && no read reference count.
+    pub(crate) read_ref_count: usize,
+    /// Cache handle. If assigned, it's pinned in data file cache.
+    pub(crate) cache_handle: Option<NonEvictableHandle>,
     /// File size.
     pub(crate) file_size: usize,
     /// File indices.
@@ -241,6 +250,9 @@ pub struct SnapshotTask {
     /// streaming xact
     new_streaming_xact: Vec<TransactionStreamOutput>,
 
+    /// --- States related to read operation ---
+    used_pinned_file_ids: Vec<FileId>,
+
     /// --- States related to file indices merge operation ---
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
     ///
@@ -302,6 +314,8 @@ impl SnapshotTask {
             new_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
+            // Read request related fields.
+            used_pinned_file_ids: Vec::new(),
             // Index merge related fields.
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
@@ -443,6 +457,9 @@ pub struct MooncakeTable {
 
     /// Table notifier, which is used to sent multiple types of event completion information.
     table_notify: Option<Sender<TableNotify>>,
+
+    /// Data file cache.
+    data_file_cache: ObjectStorageCache,
 }
 
 impl MooncakeTable {
@@ -456,6 +473,7 @@ impl MooncakeTable {
         identity: IdentityProp,
         iceberg_table_config: IcebergTableConfig,
         table_config: TableConfig,
+        data_file_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {
             name,
@@ -469,13 +487,20 @@ impl MooncakeTable {
             metadata.clone(),
             iceberg_table_config,
         )?);
-        Self::new_with_table_manager(metadata, iceberg_table_manager, table_config).await
+        Self::new_with_table_manager(
+            metadata,
+            iceberg_table_manager,
+            table_config,
+            data_file_cache,
+        )
+        .await
     }
 
     pub(crate) async fn new_with_table_manager(
         table_metadata: Arc<TableMetadata>,
         mut table_manager: Box<dyn TableManager>,
         table_config: TableConfig,
+        data_file_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(0);
         Ok(Self {
@@ -486,7 +511,12 @@ impl MooncakeTable {
             ),
             metadata: table_metadata.clone(),
             snapshot: Arc::new(RwLock::new(
-                SnapshotTableState::new(table_metadata, &mut *table_manager).await?,
+                SnapshotTableState::new(
+                    table_metadata,
+                    data_file_cache.clone(),
+                    &mut *table_manager,
+                )
+                .await?,
             )),
             next_snapshot_task: SnapshotTask::new(table_config),
             transaction_stream_states: HashMap::new(),
@@ -496,6 +526,7 @@ impl MooncakeTable {
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn: None,
             table_notify: None,
+            data_file_cache,
         })
     }
 
@@ -506,9 +537,13 @@ impl MooncakeTable {
 
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
-    pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+    pub(crate) async fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
         assert!(self.table_notify.is_none());
-        self.table_notify = Some(table_notify);
+        self.table_notify = Some(table_notify.clone());
+        self.snapshot
+            .write()
+            .await
+            .register_table_notify(table_notify);
     }
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
@@ -589,6 +624,13 @@ impl MooncakeTable {
             .iceberg_persisted_old_merged_file_indices = iceberg_snapshot_res
             .index_merge_result
             .old_file_indices_to_remove;
+    }
+
+    /// Set read request completion result, which will be sync-ed to mooncake table snapshot in the next periodic snapshot iteration.
+    pub(crate) fn set_read_request_res(&mut self, used_pinned_file_ids: Vec<FileId>) {
+        // Unreference pinned file ids.
+        assert!(self.next_snapshot_task.used_pinned_file_ids.is_empty());
+        self.next_snapshot_task.used_pinned_file_ids = used_pinned_file_ids;
     }
 
     /// Set file indices merge result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.

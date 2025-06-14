@@ -68,7 +68,7 @@ pub async fn build_table_components(
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
     let (iceberg_event_sync_sender, iceberg_event_sync_receiver) = create_iceberg_event_syncer();
-    let handler = TableHandler::new(table, iceberg_event_sync_sender);
+    let handler = TableHandler::new(table, iceberg_event_sync_sender).await;
     let iceberg_table_event_manager =
         IcebergTableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
     let event_sender = handler.get_event_sender();

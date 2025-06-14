@@ -125,6 +125,15 @@ pub struct ObjectStorageCache {
     pub(crate) cache: Arc<RwLock<ObjectStorageCacheInternal>>,
 }
 
+// A dummy [`Debug`] trait implementation.
+impl std::fmt::Debug for ObjectStorageCache {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ObjectStorageCache")
+            .field("config", &self.config)
+            .finish()
+    }
+}
+
 impl ObjectStorageCache {
     pub fn _new(config: ObjectStorageCacheConfig) -> Self {
         let evictable_cache = LruCache::unbounded();

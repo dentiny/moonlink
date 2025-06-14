@@ -21,9 +21,8 @@
 /// (3) + query finishes + no reference count => (2)
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1kwXIl4VPzhgzV4KP8yT42M35PfvMJW9PdjNTF7VNEfA/edit?usp=sharing
-use crate::storage::cache::object_storage::base_cache::{
-    CacheEntry, CacheTrait, FileMetadata, ObjectStorageCacheConfig,
-};
+use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
+use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::cache::object_storage::test_utils::*;
 use crate::storage::storage_utils::FileId;

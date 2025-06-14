@@ -4,6 +4,8 @@ use super::{
     DiskFileEntry, IcebergSnapshotPayload, Snapshot, SnapshotTask, TableConfig, TableMetadata,
 };
 use crate::error::Result;
+use crate::storage::cache::object_storage::base_cache::CacheTrait;
+use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
 };
@@ -11,6 +13,9 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
+use crate::storage::mooncake_table::snapshot_read_output::{
+    DataFileForRead, ReadOutput as SnapshotReadOutput,
+};
 use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
 };
@@ -23,7 +28,11 @@ use crate::storage::storage_utils::{
     MooncakeDataFile, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord,
     RecordLocation,
 };
+use crate::table_notify::TableNotify;
+use crate::NonEvictableHandle;
+use futures::SinkExt;
 use more_asserts as ma;
+use num_traits::ops::inv;
 use parquet::arrow::AsyncArrowWriter;
 use parquet::basic::{Compression, Encoding};
 use parquet::file::properties::WriterProperties;
@@ -31,6 +40,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem::take;
 use std::sync::Arc;
+use tokio::sync::mpsc::Sender;
 pub(crate) struct SnapshotTableState {
     /// Mooncake table config.
     mooncake_table_config: TableConfig,
@@ -60,11 +70,22 @@ pub(crate) struct SnapshotTableState {
     /// Last commit point
     last_commit: RecordLocation,
 
+    /// Data file cache.
+    data_file_cache: ObjectStorageCache,
+
+    /// Table notifier.
+    table_notify: Option<Sender<TableNotify>>,
+
     /// ---- Items not persisted to iceberg snapshot ----
     ///
     /// Iceberg snapshot is created in an async style, which means it doesn't correspond 1-1 to mooncake snapshot, so we need to ensure idempotency for iceberg snapshot payload.
     /// The following fields record unpersisted content, which will be placed in iceberg payload everytime.
     unpersisted_iceberg_records: UnpersistedIcebergSnapshotRecords,
+
+    /// ---- Items related to read request ----
+    ///
+    /// Local files which are requested to delete, but cannot because it's used by read requests.
+    files_to_delete: HashMap<FileId, DiskFileEntry>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -112,24 +133,10 @@ struct UnpersistedIcebergSnapshotRecords {
     compacted_file_indices_to_add: Vec<FileIndex>,
 }
 
-pub struct ReadOutput {
-    /// Contains two parts:
-    /// 1. Committed and persisted data files.
-    /// 2. Associated files, which include committed but un-persisted records.
-    pub data_file_paths: Vec<String>,
-    /// Puffin file paths.
-    pub puffin_file_paths: Vec<String>,
-    /// Deletion vectors persisted in puffin files.
-    pub deletion_vectors: Vec<PuffinDeletionBlobAtRead>,
-    /// Committed but un-persisted positional deletion records.
-    pub position_deletes: Vec<(u32 /*file_index*/, u32 /*row_index*/)>,
-    /// Contains committed but non-persisted record batches, which are persisted as temporary data files on local filesystem.
-    pub associated_files: Vec<String>,
-}
-
 impl SnapshotTableState {
     pub(super) async fn new(
         metadata: Arc<TableMetadata>,
+        data_file_cache: ObjectStorageCache,
         // TODO(hjiang): Used when recovery enabled.
         _iceberg_table_manager: &mut dyn TableManager,
     ) -> Result<Self> {
@@ -142,6 +149,9 @@ impl SnapshotTableState {
             batches,
             rows: None,
             last_commit: RecordLocation::MemoryBatch(0, 0),
+            data_file_cache,
+            table_notify: None,
+            files_to_delete: HashMap::new(),
             committed_deletion_log: Vec::new(),
             uncommitted_deletion_log: Vec::new(),
             unpersisted_iceberg_records: UnpersistedIcebergSnapshotRecords {
@@ -155,6 +165,13 @@ impl SnapshotTableState {
                 compacted_file_indices_to_remove: Vec::new(),
             },
         })
+    }
+
+    /// Register event completion notifier.
+    /// Notice it should be registered only once, which could be used to notify multiple events.
+    pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+        assert!(self.table_notify.is_none());
+        self.table_notify = Some(table_notify);
     }
 
     /// Aggregate committed deletion logs, which could be persisted into iceberg snapshot.
@@ -898,6 +915,17 @@ impl SnapshotTableState {
         }
     }
 
+    /// Take read request result and update mooncake snapshot.
+    ///
+    /// TODO(hjiang): Pass local files to delete out for actual deletion.
+    async fn update_snapshot_by_read_request_results(&mut self, task: &SnapshotTask) {
+        let pinned_file_ids = &task.used_pinned_file_ids;
+        for cur_file_id in pinned_file_ids.iter() {
+            // Check disk files which are not requested to delete.
+            self.data
+        }
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
@@ -908,6 +936,9 @@ impl SnapshotTableState {
         Option<DataCompactionPayload>,
         Option<FileIndiceMergePayload>,
     ) {
+        // Reflect read request result to mooncake snapshot.
+        //
+
         // Reflect iceberg snapshot to mooncake snapshot.
         //
         // There're a few things to do:
@@ -1457,30 +1488,60 @@ impl SnapshotTableState {
         (puffin_filepaths, deletion_vector_blob_at_read, ret)
     }
 
-    pub(crate) async fn request_read(&self) -> Result<ReadOutput> {
-        let mut data_file_paths = Vec::with_capacity(self.current_snapshot.disk_files.len());
+    /// Util function to get read state, which returns all current data files information.
+    async fn get_read_files_for_read(&mut self) -> (Vec<DataFileForRead>, Vec<FileId>) {
+        let mut data_files_for_read = Vec::with_capacity(self.current_snapshot.disk_files.len());
+        let mut involved_data_files = Vec::with_capacity(self.current_snapshot.disk_files.len());
+
+        for (file, file_disk_entry) in self.current_snapshot.disk_files.iter() {
+            involved_data_files.push(file.file_id());
+
+            // Current file already has pinned local cache file, simply increment the reference count.
+            if file_disk_entry.cache_handle.is_some() {
+                // No IO operation will take place, no need to pass remote filepath.
+                // TODO(hjiang): Handle evicted files to delete.
+                let (cache_handle, _files_to_delete) = self
+                    .data_file_cache
+                    ._get_cache_entry(file.file_id(), /*remote_filepath=*/ "")
+                    .await
+                    .unwrap();
+                data_files_for_read.push(DataFileForRead::PinnedLocalWriteCache(
+                    cache_handle.unwrap(),
+                ));
+                continue;
+            }
+            // Otherwise, record the file id and remote file path, so we could fetch out of critical section.
+            data_files_for_read.push(DataFileForRead::RemoteFilePath((
+                file.file_id(),
+                file.file_path().to_string(),
+            )));
+        }
+
+        (data_files_for_read, involved_data_files)
+    }
+
+    pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {
+        let (mut data_file_paths, involved_data_files) = self.get_read_files_for_read().await;
         let mut associated_files = Vec::new();
         let (puffin_file_paths, deletion_vectors_at_read, position_deletes) =
             self.get_deletion_records();
-        data_file_paths.extend(
-            self.current_snapshot
-                .disk_files
-                .keys()
-                .map(|path| path.file_path().clone()),
-        );
 
         // For committed but not persisted records, we create a temporary file for them, which gets deleted after query completion.
         let file_path = self.current_snapshot.get_name_for_inmemory_file();
         let filepath_exists = tokio::fs::try_exists(&file_path).await?;
         if filepath_exists {
-            data_file_paths.push(file_path.to_string_lossy().to_string());
+            data_file_paths.push(DataFileForRead::TemporaryDataFile(
+                file_path.to_string_lossy().to_string(),
+            ));
             associated_files.push(file_path.to_string_lossy().to_string());
-            return Ok(ReadOutput {
+            return Ok(SnapshotReadOutput {
                 data_file_paths,
                 puffin_file_paths,
+                involved_data_files,
                 deletion_vectors: deletion_vectors_at_read,
                 position_deletes,
                 associated_files,
+                table_notifier: self.table_notify.as_ref().unwrap().clone(),
             });
         }
 
@@ -1517,6 +1578,7 @@ impl SnapshotTableState {
                 }
             }
 
+            // TODO(hjiang): Check whether we could avoid IO operation inside of critical section.
             if !filtered_batches.is_empty() {
                 // Build a parquet file from current record batches
                 let temp_file = tokio::fs::File::create(&file_path).await?;
@@ -1530,11 +1592,13 @@ impl SnapshotTableState {
                     parquet_writer.write(batch).await?;
                 }
                 parquet_writer.close().await?;
-                data_file_paths.push(file_path.to_string_lossy().to_string());
+                data_file_paths.push(DataFileForRead::TemporaryDataFile(
+                    file_path.to_string_lossy().to_string(),
+                ));
                 associated_files.push(file_path.to_string_lossy().to_string());
             }
         }
-        Ok(ReadOutput {
+        Ok(SnapshotReadOutput {
             data_file_paths,
             puffin_file_paths,
             deletion_vectors: deletion_vectors_at_read,

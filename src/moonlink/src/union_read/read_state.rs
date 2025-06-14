@@ -4,21 +4,50 @@
 //
 
 use super::table_metadata::TableMetadata;
-use crate::storage::PuffinDeletionBlobAtRead;
+use crate::{
+    storage::{
+        cache::object_storage::object_storage_cache::ObjectStorageCache, storage_utils::FileId,
+        PuffinDeletionBlobAtRead,
+    },
+    table_notify::{self, TableNotify},
+    NonEvictableHandle,
+};
 
 use bincode::config;
 use tracing::warn;
 
 const BINCODE_CONFIG: config::Configuration = config::standard();
 
+// TODO(hjiang): A better solution might be wrap clean up in a functor.
 #[derive(Debug)]
 pub struct ReadState {
+    /// Serialized data files and positional deletes for query.
     pub data: Vec<u8>,
+    /// Fields related to clean up after query completion.
     associated_files: Vec<String>,
+    involved_data_files: Vec<FileId>,
+    cache_handles: Vec<NonEvictableHandle>,
+    table_notify: tokio::sync::mpsc::Sender<TableNotify>,
 }
 
 impl Drop for ReadState {
     fn drop(&mut self) {
+        // Notify query completion for data file cache unreference.
+        // Since we cannot rely on async function at `Drop` function, start a detech task immediately here.
+        let involved_files = std::mem::take(&mut self.involved_data_files);
+        let cache_handles = std::mem::take(&mut self.cache_handles);
+        let table_notify = self.table_notify.clone();
+        tokio::spawn(async move {
+            table_notify
+                .send(TableNotify::ReadRequest {
+                    file_ids: involved_files,
+                    cache_handles,
+                })
+                .await
+                .unwrap();
+        });
+
+        // Delete temporarily data files.
         if self.associated_files.is_empty() {
             return;
         }
@@ -35,12 +64,17 @@ impl Drop for ReadState {
 }
 
 impl ReadState {
-    pub(super) fn new(
+    pub fn new(
+        // Data file and positional deletes for query.
         data_files: Vec<String>,
         puffin_files: Vec<String>,
         mut deletion_vectors_at_read: Vec<PuffinDeletionBlobAtRead>,
         mut position_deletes: Vec<(u32 /*file_index*/, u32 /*row_index*/)>,
+        // Fields used for read state cleanup after query completion.
         associated_files: Vec<String>,
+        involved_data_files: Vec<FileId>,
+        cache_handles: Vec<NonEvictableHandle>,
+        table_notify: tokio::sync::mpsc::Sender<TableNotify>,
     ) -> Self {
         deletion_vectors_at_read.sort_by(|dv_1, dv_2| {
             dv_1.data_file_index
@@ -61,6 +95,9 @@ impl ReadState {
         Self {
             data,
             associated_files,
+            involved_data_files,
+            cache_handles,
+            table_notify,
         }
     }
 }

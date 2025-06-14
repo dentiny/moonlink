@@ -4,6 +4,7 @@ mod logging;
 pub use error::{Error, Result};
 pub use moonlink::ReadState;
 use moonlink::Result as MoonlinkResult;
+use moonlink::SnapshotReadOutput;
 use moonlink_connectors::ReplicationManager;
 use std::hash::Hash;
 use std::io::ErrorKind;
@@ -69,10 +70,13 @@ impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
     }
 
     pub async fn scan_table(&self, table_id: &T, lsn: Option<u64>) -> Result<Arc<ReadState>> {
-        let manager = self.replication_manager.read().await;
+        let snapshot_read_output: Option<Arc<SnapshotReadOutput>> = None;
+        {
+            let manager = self.replication_manager.read().await;
+            let table_reader = manager.get_table_reader(table_id);
+            snapshot_read_output = Some(table_reader.try_read(lsn).await?);
+        }
 
-        let table_reader = manager.get_table_reader(table_id);
-        let read_state = table_reader.try_read(lsn).await?;
         Ok(read_state)
     }
 
