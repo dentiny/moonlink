@@ -5,11 +5,11 @@ use crate::storage::{load_blob_from_puffin_file, DeletionVector};
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
 use crate::table_handler::{IcebergEventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
 use crate::union_read::{decode_read_state_for_testing, ReadStateManager};
-use crate::Result;
 use crate::{
     IcebergEventSyncReceiver, IcebergTableEventManager, IcebergTableManager,
     TableConfig as MooncakeTableConfig,
 };
+use crate::{ObjectStorageCache, Result};
 
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow_array::RecordBatch;
@@ -97,7 +97,7 @@ impl TestEnvironment {
         let iceberg_event_sync_receiver = IcebergEventSyncReceiver {
             iceberg_drop_table_completion_rx,
         };
-        let handler = TableHandler::new(mooncake_table, iceberg_event_sync_sender);
+        let handler = TableHandler::new(mooncake_table, iceberg_event_sync_sender).await;
         let iceberg_table_event_manager =
             IcebergTableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
         let event_sender = handler.get_event_sender();
@@ -127,6 +127,7 @@ impl TestEnvironment {
             IdentityProp::Keys(vec![0]),
             iceberg_table_config,
             mooncake_table_config,
+            ObjectStorageCache::default_for_test(),
         )
         .await
         .unwrap();
@@ -259,7 +260,8 @@ pub async fn check_read_snapshot(
     target_lsn: u64,
     expected_ids: &[i32],
 ) {
-    let read_state = read_manager.try_read(Some(target_lsn)).await.unwrap();
+    let snapshot_read_output = read_manager.try_read(Some(target_lsn)).await.unwrap();
+    let read_state = (*snapshot_read_output).clone().take_as_read_state().await;
     let (data_files, puffin_files, deletion_vectors, position_deletes) =
         decode_read_state_for_testing(&read_state);
 

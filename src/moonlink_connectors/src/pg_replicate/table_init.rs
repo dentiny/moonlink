@@ -4,7 +4,7 @@ use crate::pg_replicate::util::postgres_schema_to_moonlink_schema;
 use crate::{Error, Result};
 use moonlink::{
     IcebergEventSyncReceiver, IcebergEventSyncSender, IcebergTableConfig, IcebergTableEventManager,
-    MooncakeTable, ReadStateManager, TableConfig, TableEvent, TableHandler,
+    MooncakeTable, ObjectStorageCache, ReadStateManager, TableConfig, TableEvent, TableHandler,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -43,6 +43,7 @@ pub async fn build_table_components(
     base_path: &Path,
     table_temp_files_directory: String,
     replication_state: &ReplicationState,
+    data_file_cache: ObjectStorageCache,
 ) -> Result<TableResources> {
     let table_path = PathBuf::from(base_path).join(table_schema.table_name.to_string());
     tokio::fs::create_dir_all(&table_path).await.unwrap();
@@ -61,6 +62,7 @@ pub async fn build_table_components(
         identity,
         iceberg_table_config,
         mooncake_table_config,
+        data_file_cache,
     )
     .await?;
 
@@ -68,7 +70,7 @@ pub async fn build_table_components(
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
     let (iceberg_event_sync_sender, iceberg_event_sync_receiver) = create_iceberg_event_syncer();
-    let handler = TableHandler::new(table, iceberg_event_sync_sender);
+    let handler = TableHandler::new(table, iceberg_event_sync_sender).await;
     let iceberg_table_event_manager =
         IcebergTableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
     let event_sender = handler.get_event_sender();

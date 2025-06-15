@@ -1,15 +1,15 @@
 use crate::error::Error;
 use crate::error::Result;
 use crate::storage::MooncakeTable;
+use crate::storage::SnapshotReadOutput;
 use crate::storage::SnapshotTableState;
-use crate::union_read::read_state::ReadState;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 
 pub struct ReadStateManager {
     last_read_lsn: AtomicU64,
-    last_read_state: RwLock<Arc<ReadState>>,
+    last_read_snapshot_output: RwLock<Arc<SnapshotReadOutput>>,
     table_snapshot: Arc<RwLock<SnapshotTableState>>,
     table_snapshot_watch_receiver: watch::Receiver<u64>,
     replication_lsn_rx: watch::Receiver<u64>,
@@ -25,13 +25,7 @@ impl ReadStateManager {
         let (table_snapshot, table_snapshot_watch_receiver) = table.get_state_for_reader();
         ReadStateManager {
             last_read_lsn: AtomicU64::new(0),
-            last_read_state: RwLock::new(Arc::new(ReadState::new(
-                /*data_files=*/ vec![],
-                /*puffin_files=*/ vec![],
-                /*deletion_vectors_at_read=*/ vec![],
-                /*position_deletes=*/ vec![],
-                /*associated_files=*/ vec![],
-            ))),
+            last_read_snapshot_output: RwLock::new(Arc::new(SnapshotReadOutput::default())),
             table_snapshot,
             table_snapshot_watch_receiver,
             replication_lsn_rx,
@@ -41,13 +35,13 @@ impl ReadStateManager {
 
     /// Attempts to read state at or after the specified LSN.
     /// If `lsn` is `None`, it attempts to read the latest available state.
-    pub async fn try_read(&self, requested_lsn: Option<u64>) -> Result<Arc<ReadState>> {
+    pub async fn try_read(&self, requested_lsn: Option<u64>) -> Result<Arc<SnapshotReadOutput>> {
         // 1. Early exit: If a specific LSN is requested and it's older than our last read,
         //    return the cached state.
         if let Some(req_lsn_val) = requested_lsn {
             if req_lsn_val < self.last_read_lsn.load(Ordering::Relaxed) {
-                let last_state = self.last_read_state.read().await;
-                return Ok(last_state.clone());
+                let last_read_snapshot_output = self.last_read_snapshot_output.read().await;
+                return Ok(last_read_snapshot_output.clone());
             }
         }
 
@@ -111,9 +105,9 @@ impl ReadStateManager {
         current_snapshot_lsn: u64,
         current_replication_lsn: u64,
         current_commit_lsn: u64,
-    ) -> Result<Arc<ReadState>> {
-        let table_state_snapshot = self.table_snapshot.read().await;
-        let mut last_read_state_guard = self.last_read_state.write().await;
+    ) -> Result<Arc<SnapshotReadOutput>> {
+        let mut table_state_snapshot = self.table_snapshot.write().await;
+        let mut last_read_snapshot_output_guard = self.last_read_snapshot_output.write().await;
         let is_snapshot_clean = current_snapshot_lsn == current_commit_lsn;
 
         if self.last_read_lsn.load(Ordering::Acquire) < current_snapshot_lsn {
@@ -129,15 +123,9 @@ impl ReadStateManager {
             let read_output = table_state_snapshot.request_read().await?;
 
             self.last_read_lsn.store(effective_lsn, Ordering::Release);
-            *last_read_state_guard = Arc::new(ReadState::new(
-                read_output.data_file_paths,
-                read_output.puffin_file_paths,
-                read_output.deletion_vectors,
-                read_output.position_deletes,
-                read_output.associated_files,
-            ));
+            *last_read_snapshot_output_guard = Arc::new(read_output);
         }
-        Ok(last_read_state_guard.clone())
+        Ok(last_read_snapshot_output_guard.clone())
     }
 
     async fn wait_for_relevant_lsn_change(

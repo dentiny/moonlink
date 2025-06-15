@@ -7,10 +7,13 @@ mod union_read;
 
 pub use error::*;
 pub use storage::storage_utils::create_data_file;
+pub(crate) use storage::NonEvictableHandle;
+pub use storage::SnapshotReadOutput;
 pub use storage::{
     IcebergEventSyncReceiver, IcebergTableConfig, IcebergTableEventManager, IcebergTableManager,
     MooncakeTable, TableConfig, TableManager,
 };
+pub use storage::{ObjectStorageCache, ObjectStorageCacheConfig};
 pub use table_handler::{IcebergEventSyncSender, TableEvent, TableHandler};
 pub use union_read::{ReadState, ReadStateManager};
 
