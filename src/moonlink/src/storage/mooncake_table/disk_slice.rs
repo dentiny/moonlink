@@ -9,9 +9,14 @@ use crate::storage::storage_utils::{
 use arrow_array::RecordBatch;
 use arrow_schema::Schema;
 use parquet::arrow::AsyncArrowWriter;
+use parquet::basic::{Encoding, ZstdLevel};
+use parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+/// Default ZSTD compression level for parquet data.
+const PARQURT_ZSTD_COMPRESSION_LEVEL: i32 = 5;
 
 /// Attributes for disk files.
 pub(crate) struct DiskFileAttrs {
@@ -147,7 +152,18 @@ impl DiskSliceWriter {
                     tokio::fs::File::create(dir_path.join(data_file.as_ref().unwrap().file_path()))
                         .await
                         .map_err(Error::Io)?;
-                writer = Some(AsyncArrowWriter::try_new(file, self.schema.clone(), None)?);
+                let parquet_properties = WriterProperties::builder()
+                    .set_compression(parquet::basic::Compression::ZSTD(
+                        ZstdLevel::try_new(PARQURT_ZSTD_COMPRESSION_LEVEL).unwrap(),
+                    ))
+                    .set_dictionary_enabled(true)
+                    .set_encoding(Encoding::PLAIN)
+                    .build();
+                writer = Some(AsyncArrowWriter::try_new(
+                    file,
+                    self.schema.clone(),
+                    Some(parquet_properties),
+                )?);
                 out_row_idx = 0;
             }
             for row_idx in row_indices {
