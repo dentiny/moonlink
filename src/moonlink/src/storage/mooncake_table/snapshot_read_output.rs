@@ -83,19 +83,9 @@ impl ReadOutput {
         for cur_data_file in self.data_file_paths.into_iter() {
             match cur_data_file {
                 DataFileForRead::TemporaryDataFile(file) => resolved_data_files.push(file),
-                DataFileForRead::PinnedLocalWriteCache(old_cache_handle) => {
-                    // The cache file has already been pinned, no IO operation will take place, thus no error expected.
-                    let (new_cache_handle, evicted_files_to_delete) = self
-                        .data_file_cache
-                        .as_mut()
-                        .unwrap()
-                        .get_cache_entry(old_cache_handle.file_id, /*remote_filepath=*/ "")
-                        .await
-                        .unwrap();
-                    assert!(evicted_files_to_delete.is_empty());
-                    let new_cache_handle = new_cache_handle.unwrap();
-                    resolved_data_files.push(new_cache_handle.get_cache_filepath().to_string());
-                    cache_handles.push(new_cache_handle);
+                DataFileForRead::PinnedLocalWriteCache(cache_handle) => {
+                    resolved_data_files.push(cache_handle.get_cache_filepath().to_string());
+                    cache_handles.push(cache_handle);
                 }
                 DataFileForRead::RemoteFilePath((file_id, remote_filepath)) => {
                     // TODO(hjiang):

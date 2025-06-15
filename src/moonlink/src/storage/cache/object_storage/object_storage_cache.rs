@@ -25,7 +25,7 @@ pub(crate) struct CacheEntryWrapper {
 /// A cache entry could be either evictable or non-evictable.
 /// A general lifecycle of a cache entry is to
 /// (1) fetch and mark as non-evictable on access
-/// (2) dereference after usage, down-level to evictable when it's _unreferenced
+/// (2) dereference after usage, down-level to evictable when it's unreferenced
 #[allow(dead_code)]
 pub(crate) struct ObjectStorageCacheInternal {
     /// Current number of bytes of all cache entries.
@@ -112,6 +112,20 @@ impl ObjectStorageCacheInternal {
             self.evictable_cache.push(file_id, cache_entry_wrapper);
         }
     }
+
+    /// ================================
+    /// Test util functions
+    /// ================================
+    ///
+    /// Test util function to get reference count for reference count, return 0 if doesn't exist.
+    #[cfg(test)]
+    pub(crate) fn get_non_evictable_entry_ref_count(&self, file_id: &FileId) -> u32 {
+        let cache_entry = self.non_evictable_cache.get(file_id);
+        if let Some(cache_entry) = cache_entry {
+            return cache_entry.reference_count;
+        }
+        0
+    }
 }
 
 // TODO(hjiang): Add stats for cache, like cache hit/miss rate, cache size, etc.
@@ -134,12 +148,6 @@ impl std::fmt::Debug for ObjectStorageCache {
 }
 
 impl ObjectStorageCache {
-    #[cfg(test)]
-    pub fn default_for_test() -> Self {
-        let config = ObjectStorageCacheConfig::default_for_test();
-        Self::new(config)
-    }
-
     pub fn new(config: ObjectStorageCacheConfig) -> Self {
         let evictable_cache = LruCache::unbounded();
         let non_evictable_cache = HashMap::new();
@@ -170,6 +178,34 @@ impl ObjectStorageCache {
             cache_filepath: dst_filepath,
             file_metadata: FileMetadata { file_size },
         })
+    }
+
+    /// ================================
+    /// Test util functions
+    /// ================================
+    ///
+    #[cfg(test)]
+    pub fn default_for_test() -> Self {
+        let config = ObjectStorageCacheConfig::default_for_test();
+        Self::new(config)
+    }
+
+    /// Test util function to get reference count for reference count.
+    #[cfg(test)]
+    pub(crate) async fn get_non_evictable_entry_ref_count(&self, file_id: &FileId) -> u32 {
+        let guard = self.cache.read().await;
+        guard.get_non_evictable_entry_ref_count(file_id)
+    }
+
+    /// Test util function to get non-evictable filenames.
+    #[cfg(test)]
+    pub(crate) async fn get_non_evictable_filenames(&self) -> Vec<FileId> {
+        let guard = self.cache.read().await;
+        guard
+            .non_evictable_cache
+            .keys()
+            .map(|file_id| *file_id)
+            .collect::<Vec<_>>()
     }
 }
 
