@@ -9,8 +9,6 @@ use futures::TryStreamExt;
 use more_asserts as ma;
 use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
-use parquet::basic::{Encoding, ZstdLevel};
-use parquet::file::properties::WriterProperties;
 
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, DataCompactionResult, RemappedRecordLocation,
@@ -20,6 +18,7 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::parquet_utils;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::{
     get_file_idx_from_flush_file_id, get_random_file_name_in_dir, get_unique_file_id_for_flush,
@@ -28,9 +27,6 @@ use crate::storage::storage_utils::{
 use crate::{create_data_file, Result};
 
 type DataFileRemap = HashMap<RecordLocation, RemappedRecordLocation>;
-
-/// Default ZSTD compression level for parquet data.
-const PARQURT_ZSTD_COMPRESSION_LEVEL: i32 = 5;
 
 pub(crate) struct CompactionFileParams {
     /// Local directory to place compacted data files.
@@ -105,15 +101,9 @@ impl CompactionBuilder {
         self.cur_new_data_file = Some(self.create_new_data_file());
         let write_file =
             tokio::fs::File::create(self.cur_new_data_file.as_ref().unwrap().file_path()).await?;
-        let parquet_properties = WriterProperties::builder()
-            .set_compression(parquet::basic::Compression::ZSTD(
-                ZstdLevel::try_new(PARQURT_ZSTD_COMPRESSION_LEVEL).unwrap(),
-            ))
-            .set_dictionary_enabled(true)
-            .set_encoding(Encoding::PLAIN)
-            .build();
+        let properties = parquet_utils::get_default_parquet_properties();
         let writer: AsyncArrowWriter<tokio::fs::File> =
-            AsyncArrowWriter::try_new(write_file, self.schema.clone(), Some(parquet_properties))?;
+            AsyncArrowWriter::try_new(write_file, self.schema.clone(), Some(properties))?;
         self.cur_arrow_writer = Some(writer);
 
         Ok(())

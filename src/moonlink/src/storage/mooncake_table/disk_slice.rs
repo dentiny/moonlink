@@ -2,6 +2,7 @@ use super::data_batches::BatchEntry;
 use crate::error::{Error, Result};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::{FileIndex, MemIndex};
+use crate::storage::parquet_utils;
 use crate::storage::storage_utils::{
     create_data_file, get_random_file_name_in_dir, get_unique_file_id_for_flush,
     MooncakeDataFileRef, ProcessedDeletionRecord, RecordLocation,
@@ -9,14 +10,9 @@ use crate::storage::storage_utils::{
 use arrow_array::RecordBatch;
 use arrow_schema::Schema;
 use parquet::arrow::AsyncArrowWriter;
-use parquet::basic::{Encoding, ZstdLevel};
-use parquet::file::properties::WriterProperties;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-
-/// Default ZSTD compression level for parquet data.
-const PARQURT_ZSTD_COMPRESSION_LEVEL: i32 = 5;
 
 /// Attributes for disk files.
 pub(crate) struct DiskFileAttrs {
@@ -152,17 +148,11 @@ impl DiskSliceWriter {
                     tokio::fs::File::create(dir_path.join(data_file.as_ref().unwrap().file_path()))
                         .await
                         .map_err(Error::Io)?;
-                let parquet_properties = WriterProperties::builder()
-                    .set_compression(parquet::basic::Compression::ZSTD(
-                        ZstdLevel::try_new(PARQURT_ZSTD_COMPRESSION_LEVEL).unwrap(),
-                    ))
-                    .set_dictionary_enabled(true)
-                    .set_encoding(Encoding::PLAIN)
-                    .build();
+                let properties = parquet_utils::get_default_parquet_properties();
                 writer = Some(AsyncArrowWriter::try_new(
                     file,
                     self.schema.clone(),
-                    Some(parquet_properties),
+                    Some(properties),
                 )?);
                 out_row_idx = 0;
             }

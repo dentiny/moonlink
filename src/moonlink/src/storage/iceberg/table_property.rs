@@ -3,7 +3,7 @@
 ///
 /// Compression codec for parquet files.
 pub(crate) const PARQUET_COMPRESSION: &str = "write.parquet.compression-codec";
-pub(crate) const PARQUET_COMPRESSION_DEFAULT: &str = "zstd";
+pub(crate) const PARQUET_COMPRESSION_DEFAULT: &str = "snappy";
 
 /// Compression codec for metadata.
 pub(crate) const METADATA_COMPRESSION: &str = "write.metadata.compression-codec";

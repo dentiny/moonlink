@@ -3,6 +3,7 @@ pub(crate) mod compaction;
 mod iceberg;
 pub(crate) mod index;
 pub(crate) mod mooncake_table;
+pub(crate) mod parquet_utils;
 pub(crate) mod storage_utils;
 
 pub use iceberg::iceberg_table_event_manager::{
