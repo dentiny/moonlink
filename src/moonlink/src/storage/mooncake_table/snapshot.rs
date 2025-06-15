@@ -264,9 +264,9 @@ impl SnapshotTableState {
         }
     }
 
-    /// Update disk files in the current snapshot from local data files to remote ones.
+    /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from data file cache.
     /// Return affected file indices, which are caused by data file updates, and will be removed.
-    fn update_data_files_to_persisted(&mut self, task: &SnapshotTask) -> HashSet<FileIndex> {
+    async fn update_data_files_to_persisted(&mut self, task: &SnapshotTask) -> HashSet<FileIndex> {
         if task.iceberg_persisted_data_files.is_empty() {
             return HashSet::new();
         }
@@ -276,11 +276,19 @@ impl SnapshotTableState {
             HashSet::with_capacity(task.iceberg_persisted_file_indices.len());
         let persisted_data_files = &task.iceberg_persisted_data_files;
         for cur_data_file in persisted_data_files.iter() {
-            let disk_file_entry = self
+            let mut disk_file_entry = self
                 .current_snapshot
                 .disk_files
                 .remove(cur_data_file)
                 .unwrap();
+            disk_file_entry
+                .cache_handle
+                .as_mut()
+                .unwrap()
+                .unreference()
+                .await;
+            disk_file_entry.cache_handle = None;
+
             // One file index corresponds to one or many data files, so it's possible to have duplicates.
             affected_file_indices.insert(disk_file_entry.file_indice.as_ref().unwrap().clone());
             // Use old disk entry for now, file indices will be updated to remote paths.
@@ -334,36 +342,13 @@ impl SnapshotTableState {
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
     /// After a successful iceberg snapshot, update current snapshot's disk files and file indices to reference to remote paths,
     /// also import local write through cache to globally managed data file cache, so they could be pinned and evicted when necessary.
-    fn update_local_path_to_persisted_by_imported(&mut self, task: &SnapshotTask) {
+    async fn update_local_path_to_persisted_by_imported(&mut self, task: &SnapshotTask) {
         // Handle imported new data files and file indices.
-        let affected_file_indices = self.update_data_files_to_persisted(task);
+        let affected_file_indices = self.update_data_files_to_persisted(task).await;
         self.update_file_indices_to_persisted(
             task.iceberg_persisted_file_indices.clone(),
             affected_file_indices,
         );
-    }
-
-    /// After successful iceberg snapshot, remote file path is recorded in current snapshot and free to dereference write cache.
-    async fn unreference_persisted_data_files(&mut self, task: &SnapshotTask) {
-        if task.iceberg_persisted_data_files.is_empty() {
-            return;
-        }
-
-        let persisted_data_files = &task.iceberg_persisted_data_files;
-        for cur_data_file in persisted_data_files.iter() {
-            let disk_file_entry = self
-                .current_snapshot
-                .disk_files
-                .get_mut(cur_data_file)
-                .unwrap();
-            disk_file_entry
-                .cache_handle
-                .as_mut()
-                .unwrap()
-                .unreference()
-                .await;
-            disk_file_entry.cache_handle = None;
-        }
     }
 
     /// Update unpersisted data files from successful iceberg snapshot operation.
@@ -440,6 +425,8 @@ impl SnapshotTableState {
 
     /// Util function to decide whether and what to compact data files.
     /// To simplify states (aka, avoid data compaction already in iceberg with those not), only merge those already persisted.
+    ///
+    /// TODO(hjiang): Pin data file if possible.
     fn get_payload_to_compact(&self) -> Option<DataCompactionPayload> {
         // Fast-path: not enough data files to trigger compaction.
         let all_disk_files = &self.current_snapshot.disk_files;
@@ -976,8 +963,7 @@ impl SnapshotTableState {
         //
         // Update data files and file indices' local file path to remote file path, it only applies to newly imported data files and file indices,
         // because both index merge and data compaction only apply to those already persisted into iceberg table.
-        self.update_local_path_to_persisted_by_imported(&task);
-        self.unreference_persisted_data_files(&task).await;
+        self.update_local_path_to_persisted_by_imported(&task).await;
         self.update_current_snapshot_with_iceberg_snapshot(std::mem::take(
             &mut task.iceberg_persisted_puffin_blob,
         ));
@@ -1544,7 +1530,8 @@ impl SnapshotTableState {
         (puffin_filepaths, deletion_vector_blob_at_read, ret)
     }
 
-    /// Util function to get read state, which returns all current data files information, and increment read reference count.
+    /// Util function to get read state, which returns all current data files information.
+    /// If a data file already has a pinned reference, increment the reference count directly to avoid unnecessary IO.
     async fn get_read_files_for_read(&mut self) -> (Vec<DataFileForRead>, Vec<FileId>) {
         let mut data_files_for_read = Vec::with_capacity(self.current_snapshot.disk_files.len());
         let mut involved_data_files = Vec::with_capacity(self.current_snapshot.disk_files.len());
@@ -1553,6 +1540,7 @@ impl SnapshotTableState {
             involved_data_files.push(file.file_id());
 
             // Current file already has pinned local cache file, simply increment the reference count.
+            // This is a performance optimization, to avoid current data file evicted from cache by concurrent update (i.e. file persisted into iceberg).
             if file_disk_entry.cache_handle.is_some() {
                 // No IO operation will take place, no need to pass remote filepath.
                 // TODO(hjiang): Handle evicted files to delete.
@@ -1655,9 +1643,6 @@ impl SnapshotTableState {
                 associated_files.push(file_path.to_string_lossy().to_string());
             }
         }
-
-        println!("create one SnapshotReadOutput");
-
         Ok(SnapshotReadOutput {
             data_file_paths,
             puffin_file_paths,

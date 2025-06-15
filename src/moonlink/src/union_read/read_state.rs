@@ -63,6 +63,8 @@ impl Drop for ReadState {
 }
 
 impl ReadState {
+    // TODO(hjiang): Provide a struct for parameters.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         // Data file and positional deletes for query.
         data_files: Vec<String>,

@@ -1,7 +1,7 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
-use moonlink::{IcebergTableConfig, MooncakeTable, TableConfig};
+use moonlink::{IcebergTableConfig, MooncakeTable, ObjectStorageCache, TableConfig};
 use pprof::criterion::{Output, PProfProfiler};
 use std::collections::HashMap;
 use tempfile::tempdir;
@@ -62,6 +62,7 @@ fn bench_write(c: &mut Criterion) {
                     IdentityProp::SinglePrimitiveKey(0),
                     iceberg_table_config,
                     table_config,
+                    ObjectStorageCache::default_for_bench(),
                 )
                 .await
                 .unwrap();
@@ -94,6 +95,7 @@ fn bench_write(c: &mut Criterion) {
                     IdentityProp::SinglePrimitiveKey(0),
                     iceberg_table_config,
                     table_config,
+                    ObjectStorageCache::default_for_bench(),
                 )
                 .await
                 .unwrap();
@@ -130,6 +132,7 @@ fn bench_write(c: &mut Criterion) {
                         IdentityProp::SinglePrimitiveKey(0),
                         iceberg_table_config,
                         table_config,
+                        ObjectStorageCache::default_for_bench(),
                     ))
                     .unwrap();
                 rt.block_on(async {

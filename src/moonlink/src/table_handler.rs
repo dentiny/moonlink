@@ -384,9 +384,6 @@ impl TableHandler {
                             data_compaction_ongoing = false;
                         }
                         TableNotify::ReadRequest { file_ids, cache_handles } => {
-
-                            println!("finished read {:?}", file_ids);
-
                             table.set_read_request_res(file_ids, cache_handles);
                         }
                     }

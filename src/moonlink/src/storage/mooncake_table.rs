@@ -461,6 +461,8 @@ pub struct MooncakeTable {
 impl MooncakeTable {
     /// foreground functions
     ///
+    /// TODO(hjiang): Provide a struct to hold all paramters.
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         schema: Schema,
         name: String,
@@ -1036,6 +1038,21 @@ impl MooncakeTable {
         }
     }
 
+    /// Test util function to sync on completed read request.
+    #[cfg(test)]
+    pub(crate) async fn sync_read_request(&mut self, receiver: &mut Receiver<TableNotify>) {
+        let notification = receiver.recv().await.unwrap();
+        if let TableNotify::ReadRequest {
+            file_ids,
+            cache_handles,
+        } = notification
+        {
+            self.set_read_request_res(file_ids, cache_handles);
+        } else {
+            panic!("Expected iceberg read request completion notification, but get mooncake one.");
+        }
+    }
+
     #[cfg(test)]
     async fn sync_iceberg_snapshot(
         receiver: &mut Receiver<TableNotify>,
@@ -1066,6 +1083,27 @@ impl MooncakeTable {
         }
     }
 
+    // Test util function, which creates mooncake snapshot for testing.
+    #[cfg(test)]
+    pub(crate) async fn create_mooncake_snapshot_for_test(
+        &mut self,
+        receiver: &mut Receiver<TableNotify>,
+    ) -> (
+        Option<IcebergSnapshotPayload>,
+        Option<FileIndiceMergePayload>,
+        Option<DataCompactionPayload>,
+        Vec<String>,
+    ) {
+        let mooncake_snapshot_created = self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: false,
+            skip_data_file_compaction: false,
+            skip_file_indices_merge: false,
+        });
+        assert!(mooncake_snapshot_created);
+        Self::sync_mooncake_snapshot(receiver).await
+    }
+
     // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
     #[cfg(test)]
     pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
@@ -1073,7 +1111,12 @@ impl MooncakeTable {
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
         // Create mooncake snapshot.
-        let mooncake_snapshot_created = self.create_snapshot(SnapshotOption::default());
+        let mooncake_snapshot_created = self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: false,
+            skip_file_indices_merge: false,
+            skip_data_file_compaction: false,
+        });
         if !mooncake_snapshot_created {
             return Ok(());
         }
@@ -1297,6 +1340,13 @@ impl MooncakeTable {
         let guard = self.snapshot.read().await;
         guard.current_snapshot.disk_files.clone()
     }
+
+    /// Test util function to get snapshot read output.
+    #[cfg(test)]
+    pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {
+        let mut guard = self.snapshot.write().await;
+        guard.request_read().await
+    }
 }
 
 #[cfg(test)]
@@ -1304,3 +1354,6 @@ mod tests;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
+
+#[cfg(test)]
+mod state_tests;
