@@ -711,6 +711,9 @@ impl Catalog for FileCatalog {
                 TableUpdate::SetProperties { updates } => {
                     builder = builder.set_properties(updates.clone())?;
                 }
+                TableUpdate::RemoveProperties { removals } => {
+                    builder = builder.remove_properties(removals)?;
+                }
                 _ => {
                     unreachable!("Only snapshot updates are expected in this implementation");
                 }

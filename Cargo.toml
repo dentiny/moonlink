@@ -19,8 +19,7 @@ chrono = { version = "0.4", default-features = false }
 crc32fast = "1"
 futures = { version = "0.3", default-features = false }
 hashbrown = "0.15.3"
-# TODO(hjiang): Latest iceberg-rust introduces breaking interface change, need to fix related usage.
-iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "44cd71861a02259d46f2c8e51a6d33ccc0a783b6", default-features = false, features = [
+iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "bcd1033ba5c67982b7359a6330defeade9f82526", default-features = false, features = [
   "storage-fs",
 ] }
 itertools = { version = "0.14" }

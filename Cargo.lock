@@ -328,6 +328,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "as-any"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0f477b951e452a0b6b4a10b53ccd569042d1d01729b519e02074a9c0958a063"
+
+[[package]]
 name = "async-lock"
 version = "3.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1555,7 +1561,7 @@ dependencies = [
 [[package]]
 name = "iceberg"
 version = "0.5.1"
-source = "git+https://github.com/apache/iceberg-rust.git?rev=44cd71861a02259d46f2c8e51a6d33ccc0a783b6#44cd71861a02259d46f2c8e51a6d33ccc0a783b6"
+source = "git+https://github.com/apache/iceberg-rust.git?rev=bcd1033ba5c67982b7359a6330defeade9f82526#bcd1033ba5c67982b7359a6330defeade9f82526"
 dependencies = [
  "anyhow",
  "apache-avro",
@@ -1568,6 +1574,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "arrow-string",
+ "as-any",
  "async-trait",
  "base64",
  "bimap",

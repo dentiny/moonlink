@@ -31,7 +31,7 @@ use iceberg::puffin::CompressionCodec;
 use iceberg::spec::DataFileFormat;
 use iceberg::spec::{DataFile, ManifestEntry};
 use iceberg::table::Table as IcebergTable;
-use iceberg::transaction::Transaction;
+use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
 use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
@@ -651,15 +651,12 @@ impl TableManager for IcebergTableManager {
             txn = action.apply().await?;
         }
 
-        // Persist flush lsn at table property, it's just a workaround.
-        // The ideal solution is to store at snapshot summary additional properties.
-        // Issue: https://github.com/apache/iceberg-rust/issues/1329
-        let mut prop = HashMap::new();
-        prop.insert(
+        // Persist flush lsn at table property
+        let action = txn.update_table_properties().set(
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),
             snapshot_payload.flush_lsn.to_string(),
         );
-        txn = txn.set_properties(prop)?;
+        txn = action.apply(txn).unwrap();
 
         self.iceberg_table = Some(txn.commit(&*self.catalog).await?);
         self.catalog.clear_puffin_metadata();
