@@ -1448,6 +1448,9 @@ async fn test_object_storage_sync_snapshots() -> IcebergResult<()> {
 
 #[tokio::test]
 async fn test_drop_table_at_creation() -> IcebergResult<()> {
+
+    tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_str().unwrap().to_string();
 
