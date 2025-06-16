@@ -4,7 +4,7 @@ use tokio::io::AsyncWriteExt;
 
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::TableUniqueFileId;
 
 /// Content for test files.
 pub(crate) const CONTENT: &[u8; 10] = b"0123456789";
@@ -81,7 +81,7 @@ pub(crate) async fn assert_non_evictable_cache_size(
 /// Test util function to check non-evictable cache handle reference count.
 pub(crate) async fn assert_non_evictable_cache_handle_ref_count(
     cache: &mut ObjectStorageCache,
-    file_id: FileId,
+    file_id: TableUniqueFileId,
     expected_ref_count: u32,
 ) {
     let guard = cache.cache.read().await;

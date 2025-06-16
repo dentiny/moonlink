@@ -1,7 +1,6 @@
 use super::test_utils::*;
 use super::*;
 use crate::storage::iceberg::table_manager::MockTableManager;
-use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
 use iceberg::{Error as IcebergError, ErrorKind};
 use rstest::*;
 use rstest_reuse::{self, *};
@@ -440,7 +439,6 @@ async fn test_snapshot_store_failure() {
     let mut table = MooncakeTable::new_with_table_manager(
         table_metadata,
         Box::new(mock_table_manager),
-        MooncakeTableConfig::default(), // No temp files generated.
         ObjectStorageCache::default_for_test(),
     )
     .await

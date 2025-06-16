@@ -1,7 +1,7 @@
 use super::*;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::mooncake_table::DiskFileEntry;
-use crate::storage::storage_utils::ProcessedDeletionRecord;
+use crate::storage::storage_utils::{ProcessedDeletionRecord, TableUniqueFileId};
 use more_asserts as ma;
 /// Used to track the state of a streamed transaction
 /// Holds appending rows in memslice and files.
@@ -272,10 +272,14 @@ impl SnapshotTableState {
                     for (file, mut disk_file_entry) in commit.flushed_files.into_iter() {
                         task.disk_file_lsn_map
                             .insert(file.file_id(), commit.commit_lsn);
+                        let file_id = TableUniqueFileId {
+                            table_id: TableId(self.mooncake_table_metadata.id),
+                            file_id: file.file_id(),
+                        };
                         let (cache_handle, cur_evicted_files) = self
                             .data_file_cache
                             .import_cache_entry(
-                                file.file_id(),
+                                file_id,
                                 CacheEntry {
                                     cache_filepath: file.file_path().clone(),
                                     file_metadata: FileMetadata {

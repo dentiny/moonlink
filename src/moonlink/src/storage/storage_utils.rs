@@ -65,6 +65,23 @@ pub fn create_data_file(file_id: u64, file_path: String) -> MooncakeDataFileRef 
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
 pub struct FileId(pub(crate) u64);
 
+/// Unique table id.
+#[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
+pub struct TableId(pub(crate) u64);
+
+/// A globally unique id for a file.
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub struct TableUniqueFileId {
+    pub(crate) table_id: TableId,
+    pub(crate) file_id: FileId,
+}
+impl Hash for TableUniqueFileId {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.table_id.hash(state);
+        self.file_id.hash(state);
+    }
+}
+
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum RecordLocation {
     /// Record is in a memory batch
