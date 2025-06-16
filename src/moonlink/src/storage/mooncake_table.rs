@@ -248,7 +248,6 @@ pub struct SnapshotTask {
     new_streaming_xact: Vec<TransactionStreamOutput>,
 
     /// --- States related to read operation ---
-    read_involved_file_ids: Vec<FileId>,
     read_cache_handles: Vec<NonEvictableHandle>,
 
     /// --- States related to file indices merge operation ---
@@ -313,7 +312,6 @@ impl SnapshotTask {
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
             // Read request related fields.
-            read_involved_file_ids: Vec::new(),
             read_cache_handles: Vec::new(),
             // Index merge related fields.
             old_merged_file_indices: HashSet::new(),
@@ -620,14 +618,7 @@ impl MooncakeTable {
     }
 
     /// Set read request completion result, which will be sync-ed to mooncake table snapshot in the next periodic snapshot iteration.
-    pub(crate) fn set_read_request_res(
-        &mut self,
-        involved_file_ids: Vec<FileId>,
-        cache_handles: Vec<NonEvictableHandle>,
-    ) {
-        self.next_snapshot_task
-            .read_involved_file_ids
-            .extend(involved_file_ids);
+    pub(crate) fn set_read_request_res(&mut self, cache_handles: Vec<NonEvictableHandle>) {
         self.next_snapshot_task
             .read_cache_handles
             .extend(cache_handles);
@@ -1042,12 +1033,8 @@ impl MooncakeTable {
     #[cfg(test)]
     pub(crate) async fn sync_read_request(&mut self, receiver: &mut Receiver<TableNotify>) {
         let notification = receiver.recv().await.unwrap();
-        if let TableNotify::ReadRequest {
-            file_ids,
-            cache_handles,
-        } = notification
-        {
-            self.set_read_request_res(file_ids, cache_handles);
+        if let TableNotify::ReadRequest { cache_handles } = notification {
+            self.set_read_request_res(cache_handles);
         } else {
             panic!("Expected iceberg read request completion notification, but get mooncake one.");
         }

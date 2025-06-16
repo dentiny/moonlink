@@ -360,7 +360,7 @@ async fn test_4_read_4() {
         data_file_cache
             .get_non_evictable_entry_ref_count(&file.file_id())
             .await,
-        3
+        4,
     );
 }
 

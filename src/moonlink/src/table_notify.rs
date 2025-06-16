@@ -4,7 +4,6 @@ use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::FileIndiceMergeResult;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
-use crate::storage::storage_utils::FileId;
 
 use crate::NonEvictableHandle;
 use crate::Result;
@@ -44,8 +43,6 @@ pub enum TableNotify {
     },
     /// Read request completion.
     ReadRequest {
-        /// File ids involved in the current snapshot read.
-        file_ids: Vec<FileId>,
         /// Cache handles, which are pinned before query.
         cache_handles: Vec<NonEvictableHandle>,
     },

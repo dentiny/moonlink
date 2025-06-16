@@ -4,7 +4,6 @@
 //
 
 use super::table_metadata::TableMetadata;
-use crate::storage::storage_utils::FileId;
 use crate::storage::PuffinDeletionBlobAtRead;
 use crate::table_notify::TableNotify;
 use crate::NonEvictableHandle;
@@ -21,7 +20,7 @@ pub struct ReadState {
     pub data: Vec<u8>,
     /// Fields related to clean up after query completion.
     associated_files: Vec<String>,
-    involved_data_files: Vec<FileId>,
+    /// Cache handles for data files.
     cache_handles: Vec<NonEvictableHandle>,
     // Invariant: [`table_notify`] cannot be `None` if there're involved data files.
     table_notify: Option<tokio::sync::mpsc::Sender<TableNotify>>,
@@ -31,16 +30,12 @@ impl Drop for ReadState {
     fn drop(&mut self) {
         // Notify query completion for data file cache unreference.
         // Since we cannot rely on async function at `Drop` function, start a detech task immediately here.
-        let involved_files = std::mem::take(&mut self.involved_data_files);
         let cache_handles = std::mem::take(&mut self.cache_handles);
 
         if let Some(table_notify) = self.table_notify.clone() {
             tokio::spawn(async move {
                 table_notify
-                    .send(TableNotify::ReadRequest {
-                        file_ids: involved_files,
-                        cache_handles,
-                    })
+                    .send(TableNotify::ReadRequest { cache_handles })
                     .await
                     .unwrap();
             });
@@ -73,13 +68,16 @@ impl ReadState {
         mut position_deletes: Vec<(u32 /*file_index*/, u32 /*row_index*/)>,
         // Fields used for read state cleanup after query completion.
         associated_files: Vec<String>,
-        involved_data_files: Vec<FileId>,
         cache_handles: Vec<NonEvictableHandle>,
         table_notify: Option<tokio::sync::mpsc::Sender<TableNotify>>,
     ) -> Self {
         // Check invariants.
         if table_notify.is_none() {
-            assert!(involved_data_files.is_empty());
+            assert!(data_files.is_empty());
+            assert!(puffin_files.is_empty());
+            assert!(deletion_vectors_at_read.is_empty());
+            assert!(associated_files.is_empty());
+            assert!(cache_handles.is_empty());
         }
 
         deletion_vectors_at_read.sort_by(|dv_1, dv_2| {
@@ -101,7 +99,6 @@ impl ReadState {
         Self {
             data,
             associated_files,
-            involved_data_files,
             cache_handles,
             table_notify,
         }

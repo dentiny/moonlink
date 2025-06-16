@@ -1532,40 +1532,21 @@ impl SnapshotTableState {
 
     /// Util function to get read state, which returns all current data files information.
     /// If a data file already has a pinned reference, increment the reference count directly to avoid unnecessary IO.
-    async fn get_read_files_for_read(&mut self) -> (Vec<DataFileForRead>, Vec<FileId>) {
+    async fn get_read_files_for_read(&mut self) -> Vec<DataFileForRead> {
         let mut data_files_for_read = Vec::with_capacity(self.current_snapshot.disk_files.len());
-        let mut involved_data_files = Vec::with_capacity(self.current_snapshot.disk_files.len());
 
-        for (file, file_disk_entry) in self.current_snapshot.disk_files.iter_mut() {
-            involved_data_files.push(file.file_id());
-
-            // Current file already has pinned local cache file, simply increment the reference count.
-            // This is a performance optimization, to avoid current data file evicted from cache by concurrent update (i.e. file persisted into iceberg).
-            if file_disk_entry.cache_handle.is_some() {
-                // No IO operation will take place, no need to pass remote filepath.
-                // TODO(hjiang): Handle evicted files to delete.
-                let (cache_handle, _files_to_delete) = self
-                    .data_file_cache
-                    .get_cache_entry(file.file_id(), /*remote_filepath=*/ "")
-                    .await
-                    .unwrap();
-                data_files_for_read.push(DataFileForRead::PinnedLocalWriteCache(
-                    cache_handle.unwrap(),
-                ));
-                continue;
-            }
-            // Otherwise, record the file id and remote file path, so we could fetch out of critical section.
+        for (file, _) in self.current_snapshot.disk_files.iter() {
             data_files_for_read.push(DataFileForRead::RemoteFilePath((
                 file.file_id(),
                 file.file_path().to_string(),
             )));
         }
 
-        (data_files_for_read, involved_data_files)
+        data_files_for_read
     }
 
     pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {
-        let (mut data_file_paths, involved_data_files) = self.get_read_files_for_read().await;
+        let mut data_file_paths = self.get_read_files_for_read().await;
         let mut associated_files = Vec::new();
         let (puffin_file_paths, deletion_vectors_at_read, position_deletes) =
             self.get_deletion_records();
@@ -1581,7 +1562,6 @@ impl SnapshotTableState {
             return Ok(SnapshotReadOutput {
                 data_file_paths,
                 puffin_file_paths,
-                involved_data_files,
                 deletion_vectors: deletion_vectors_at_read,
                 position_deletes,
                 associated_files,
@@ -1646,7 +1626,6 @@ impl SnapshotTableState {
         Ok(SnapshotReadOutput {
             data_file_paths,
             puffin_file_paths,
-            involved_data_files,
             deletion_vectors: deletion_vectors_at_read,
             position_deletes,
             associated_files,
