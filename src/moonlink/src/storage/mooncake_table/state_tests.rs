@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::mpsc::{self, Receiver};
 
@@ -72,7 +73,7 @@ use crate::storage::storage_utils::{FileId, MooncakeDataFileRef};
 use crate::table_notify::TableNotify;
 use crate::{
     IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
-    ObjectStorageCacheConfig,
+    ObjectStorageCacheConfig, ReadState,
 };
 
 /// Test constant to mimic an infinitely large data file cache.
@@ -104,6 +105,18 @@ fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
 /// Test util function to decide whether a given file is local file.
 fn is_local_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
     !is_remote_file(file, temp_dir)
+}
+
+/// Test util function to drop read states, and apply the synchronized response to mooncake table.
+async fn drop_read_states(
+    read_states: Vec<Arc<ReadState>>,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+) {
+    for cur_read_state in read_states.into_iter() {
+        drop(cur_read_state);
+        table.sync_read_request(receiver).await;
+    }
 }
 
 /// Test util function to create mooncake table and table notify.
@@ -179,6 +192,19 @@ async fn import_fake_cache_entry(cache: &mut ObjectStorageCache) -> NonEvictable
         },
     };
     cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
+}
+
+/// Test util function to check only fake file in data file cache.
+async fn check_only_fake_file_in_cache(data_file_cache: &ObjectStorageCache) {
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        1,
+    );
+    assert_eq!(
+        data_file_cache.get_non_evictable_filenames().await,
+        vec![FAKE_FILE_ID]
+    );
 }
 
 /// Test scenario: no remote, local, not used + use => no remote, local, in use
@@ -333,15 +359,15 @@ async fn test_4_read_4() {
 
     // Read and increment reference count for the first time.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
-    let _read_state_1 = snapshot_read_output_1.take_as_read_state().await;
+    let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Read and increment reference count for the second time.
     let snapshot_read_output_2 = table.request_read().await.unwrap();
     let snapshot_read_output_2_clone = snapshot_read_output_2.clone();
-    let _read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+    let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Read and increment reference count for the third time.
-    let _read_state_3 = snapshot_read_output_2_clone.take_as_read_state().await;
+    let read_state_3 = snapshot_read_output_2_clone.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -361,6 +387,28 @@ async fn test_4_read_4() {
             .get_non_evictable_entry_ref_count(&file.file_id())
             .await,
         4,
+    );
+
+    // Drop all read states and check reference count.
+    drop_read_states(
+        vec![read_state_1, read_state_2, read_state_3],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    let (_, _, _, _) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        1,
+    );
+    assert_eq!(
+        data_file_cache
+            .get_non_evictable_entry_ref_count(&file.file_id())
+            .await,
+        1,
     );
 }
 
@@ -430,7 +478,7 @@ async fn test_3_read_3() {
 
     // Read and increment reference count.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
-    let _read_state_1 = snapshot_read_output_1.take_as_read_state().await;
+    let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
@@ -443,7 +491,7 @@ async fn test_3_read_3() {
 
     // Read and increment reference count.
     let snapshot_read_output_2 = table.request_read().await.unwrap();
-    let _read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+    let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -463,6 +511,22 @@ async fn test_3_read_3() {
             .get_non_evictable_entry_ref_count(&file.file_id())
             .await,
         2,
+    );
+
+    // Drop all read states and check reference count.
+    drop_read_states(
+        vec![read_state_1, read_state_2],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    let (_, _, _, _) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        0,
     );
 }
 
@@ -605,7 +669,7 @@ async fn test_1_read_and_pinned_3() {
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
-    let _read_state = snapshot_read_output.take_as_read_state().await;
+    let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -625,6 +689,17 @@ async fn test_1_read_and_pinned_3() {
             .get_non_evictable_entry_ref_count(&file.file_id())
             .await,
         1,
+    );
+
+    // Drop all read states and check reference count.
+    drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
+    let (_, _, _, _) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        0,
     );
 }
 
@@ -658,7 +733,7 @@ async fn test_1_read_and_unpinned_3() {
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
-    let _read_state = snapshot_read_output.take_as_read_state().await;
+    let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -668,15 +743,11 @@ async fn test_1_read_and_unpinned_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
-    assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
-        1,
-    );
-    assert_eq!(
-        data_file_cache.get_non_evictable_filenames().await,
-        vec![FAKE_FILE_ID]
-    );
+    check_only_fake_file_in_cache(&data_file_cache).await;
+
+    // Drop all read states and check reference count.
+    drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
+    check_only_fake_file_in_cache(&data_file_cache).await;
 }
 
 /// Test scenario: remote, no local, in use + use & pinned => remote, local, in use
@@ -707,16 +778,16 @@ async fn test_2_read_and_pinned_3() {
     // Import second data file into cache, so the cached entry will be evicted.
     let mut fake_cache_handle = import_fake_cache_entry(&mut data_file_cache).await;
 
-    // Read and increment reference count.
+    // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
-    let _read_state_1 = snapshot_read_output_1.take_as_read_state().await;
+    let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
     // Till now, the state is (remote, no local, in use).
 
     // Unreference the second cache handle, so we could pin requires files again in cache.
     fake_cache_handle.unreference().await;
 
     let snapshot_read_output_2 = table.request_read().await.unwrap();
-    let _read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+    let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -736,6 +807,22 @@ async fn test_2_read_and_pinned_3() {
             .get_non_evictable_entry_ref_count(&file.file_id())
             .await,
         1,
+    );
+
+    // Drop all read states and check reference count.
+    drop_read_states(
+        vec![read_state_1, read_state_2],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    let (_, _, _, _) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        0,
     );
 }
 
@@ -767,13 +854,14 @@ async fn test_2_read_and_unpinned_2() {
     // Import second data file into cache, so the cached entry will be evicted.
     import_fake_cache_entry(&mut data_file_cache).await;
 
-    // Read and increment reference count.
+    // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
-    let _read_state_1 = snapshot_read_output_1.take_as_read_state().await;
+    let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
     // Till now, the state is (remote, no local, in use).
 
+    // Read, but no reference count hold within read state.
     let snapshot_read_output_2 = table.request_read().await.unwrap();
-    let _read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+    let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -783,15 +871,19 @@ async fn test_2_read_and_unpinned_2() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
-    assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
-        1,
-    );
-    assert_eq!(
-        data_file_cache.get_non_evictable_filenames().await,
-        vec![FAKE_FILE_ID]
-    );
+    check_only_fake_file_in_cache(&data_file_cache).await;
+
+    // Drop all read states and check reference count; cache only manages fake file here.
+    drop_read_states(
+        vec![read_state_1, read_state_2],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    let (_, _, _, _) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    check_only_fake_file_in_cache(&data_file_cache).await;
 }
 
 /// Test scenario: remote, no local, in use + use over => remote, no local, not used
@@ -837,13 +929,5 @@ async fn test_2_read_over_1() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
-    assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
-        1,
-    );
-    assert_eq!(
-        data_file_cache.get_non_evictable_filenames().await,
-        vec![FAKE_FILE_ID]
-    );
+    check_only_fake_file_in_cache(&data_file_cache).await;
 }
