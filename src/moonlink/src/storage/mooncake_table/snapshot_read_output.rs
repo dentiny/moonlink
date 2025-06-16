@@ -1,6 +1,6 @@
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::TableUniqueFileId;
 use crate::storage::PuffinDeletionBlobAtRead;
 use crate::table_notify::TableNotify;
 use crate::ReadState;
@@ -17,7 +17,7 @@ pub enum DataFileForRead {
     /// Temporary data file for in-memory unpersisted data, used for union read.
     TemporaryDataFile(String),
     /// Pass out (file id, remote file path) and rely on read-through cache.
-    RemoteFilePath((FileId, String)),
+    RemoteFilePath((TableUniqueFileId, String)),
 }
 
 impl DataFileForRead {

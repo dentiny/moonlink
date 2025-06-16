@@ -33,9 +33,9 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
-use crate::storage::storage_utils::FileId;
 #[cfg(test)]
 use crate::storage::storage_utils::ProcessedDeletionRecord;
+use crate::storage::storage_utils::{FileId, TableId};
 use crate::table_notify::TableNotify;
 use crate::NonEvictableHandle;
 use std::collections::{HashMap, HashSet};
@@ -65,8 +65,6 @@ pub struct TableConfig {
     pub snapshot_deletion_record_count: usize,
     /// Max number of rows in MemSlice.
     pub batch_size: usize,
-    /// Filesystem directory to store temporary files, used for union read.
-    pub temp_files_directory: String,
     /// Disk slice parquet file flush threshold.
     pub disk_slice_parquet_file_size: usize,
     /// Number of new data files to trigger an iceberg snapshot.
@@ -77,6 +75,8 @@ pub struct TableConfig {
     pub data_compaction_config: DataCompactionConfig,
     /// Config for index merge.
     pub file_index_config: FileIndexMergeConfig,
+    /// Filesystem directory to store temporary files, used for union read.
+    pub temp_files_directory: String,
 }
 
 impl Default for TableConfig {
@@ -121,12 +121,12 @@ impl TableConfig {
             snapshot_deletion_record_count: Self::DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT,
             batch_size: Self::DEFAULT_BATCH_SIZE,
             disk_slice_parquet_file_size: Self::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
-            temp_files_directory,
             iceberg_snapshot_new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
             iceberg_snapshot_new_committed_deletion_log:
                 Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
             data_compaction_config: DataCompactionConfig::default(),
             file_index_config: FileIndexMergeConfig::default(),
+            temp_files_directory,
         }
     }
     pub fn batch_size(&self) -> usize {
@@ -483,19 +483,12 @@ impl MooncakeTable {
             metadata.clone(),
             iceberg_table_config,
         )?);
-        Self::new_with_table_manager(
-            metadata,
-            iceberg_table_manager,
-            table_config,
-            data_file_cache,
-        )
-        .await
+        Self::new_with_table_manager(metadata, iceberg_table_manager, data_file_cache).await
     }
 
     pub(crate) async fn new_with_table_manager(
         table_metadata: Arc<TableMetadata>,
         mut table_manager: Box<dyn TableManager>,
-        table_config: TableConfig,
         data_file_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(0);
@@ -507,10 +500,14 @@ impl MooncakeTable {
             ),
             metadata: table_metadata.clone(),
             snapshot: Arc::new(RwLock::new(
-                SnapshotTableState::new(table_metadata, data_file_cache, &mut *table_manager)
-                    .await?,
+                SnapshotTableState::new(
+                    table_metadata.clone(),
+                    data_file_cache,
+                    &mut *table_manager,
+                )
+                .await?,
             )),
-            next_snapshot_task: SnapshotTask::new(table_config),
+            next_snapshot_task: SnapshotTask::new(table_metadata.as_ref().config.clone()),
             transaction_stream_states: HashMap::new(),
             table_snapshot_watch_sender,
             table_snapshot_watch_receiver,

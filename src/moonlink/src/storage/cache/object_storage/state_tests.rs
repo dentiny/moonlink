@@ -25,9 +25,19 @@ use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, 
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::cache::object_storage::test_utils::*;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 
 use tempfile::tempdir;
+
+/// Test util function to return table unique id, with table id hard-coded to 0.
+fn get_table_unique_file_id(file_id: u64) -> TableUniqueFileId {
+    TableUniqueFileId {
+        table_id: TableId(0),
+        file_id: FileId(file_id),
+    }
+}
+
+/// Test util function to return table unique id, with file id 1.
 
 // (1) + create mooncake snapshot => (2)
 #[tokio::test]
@@ -44,11 +54,11 @@ async fn test_cache_state_1_create_snashot() {
 
     // Check cache handle status.
     let (_, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -70,14 +80,14 @@ async fn test_cache_1_requested_to_read() {
     // Check cache handle status.
     let (_, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -107,11 +117,11 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
         },
     };
     let (_, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -121,7 +131,7 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
     let test_file_2 = create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
     let (cache_handle, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(1),
+            /*file_id=*/ get_table_unique_file_id(1),
             test_file_2.as_path().to_str().unwrap(),
         )
         .await
@@ -150,11 +160,11 @@ async fn test_cache_2_requested_to_read_with_insufficient_space() {
         },
     };
     let (mut cache_handle, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -166,14 +176,14 @@ async fn test_cache_2_requested_to_read_with_insufficient_space() {
     // Request to read, thus pinning the cache entry.
     let (_, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -200,11 +210,11 @@ async fn test_cache_3_requested_to_read() {
         },
     };
     let (_, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -213,14 +223,14 @@ async fn test_cache_3_requested_to_read() {
     // Request to read, thus pinning the cache entry.
     let (_, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 2,
     )
     .await;
@@ -250,11 +260,11 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
         },
     };
     let (mut cache_handle, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -272,11 +282,11 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
         },
     };
     let (_, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(1), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(1), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(1),
+        /*file_id=*/ get_table_unique_file_id(1),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -306,11 +316,11 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
         },
     };
     let (mut cache_handle_1, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(0), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -328,11 +338,11 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
         },
     };
     let (_, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ FileId(1), cache_entry)
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(1), cache_entry)
         .await;
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(1),
+        /*file_id=*/ get_table_unique_file_id(1),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -355,14 +365,14 @@ async fn test_cache_3_unpin_still_referenced() {
     // Check cache handle status.
     let (_, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -371,14 +381,14 @@ async fn test_cache_3_unpin_still_referenced() {
     // Get the same cache entry again to increase its reference count.
     let (cache_handle, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 2,
     )
     .await;
@@ -403,14 +413,14 @@ async fn test_cache_3_unpin_not_referenced() {
     // Check cache handle status.
     let (cache_handle_1, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 1,
     )
     .await;
@@ -419,14 +429,14 @@ async fn test_cache_3_unpin_not_referenced() {
     // Get the same cache entry again to increase its reference count.
     let (cache_handle_2, files_to_evict) = cache
         .get_cache_entry(
-            /*file_id=*/ FileId(0),
+            /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
         )
         .await
         .unwrap();
     assert_non_evictable_cache_handle_ref_count(
         &mut cache,
-        /*file_id=*/ FileId(0),
+        /*file_id=*/ get_table_unique_file_id(0),
         /*expected_ref_count=*/ 2,
     )
     .await;

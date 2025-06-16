@@ -69,7 +69,7 @@ use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
-use crate::storage::storage_utils::{FileId, MooncakeDataFileRef};
+use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, TableId, TableUniqueFileId};
 use crate::table_notify::TableNotify;
 use crate::{
     IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
@@ -83,14 +83,27 @@ const ONE_FILE_CACHE_SIZE: u64 = 1 << 20;
 /// Iceberg test namespace and table name.
 const ICEBERG_TEST_NAMESPACE: &str = "namespace";
 const ICEBERG_TEST_TABLE: &str = "test_table";
+/// Test constant for table id.
+const TEST_TABLE_ID: TableId = TableId(0);
 /// File attributes for a fake file.
 ///
 /// File id for the fake file.
-const FAKE_FILE_ID: FileId = FileId(100);
+const FAKE_FILE_ID: TableUniqueFileId = TableUniqueFileId {
+    table_id: TEST_TABLE_ID,
+    file_id: FileId(100),
+};
 /// Fake file size.
 const FAKE_FILE_SIZE: u64 = ONE_FILE_CACHE_SIZE;
 /// Fake filename.
 const FAKE_FILE_NAME: &str = "fake-file-name";
+
+/// Test util function to get unique table file id.
+fn get_unique_table_file_id(file_id: FileId) -> TableUniqueFileId {
+    TableUniqueFileId {
+        table_id: TEST_TABLE_ID,
+        file_id,
+    }
+}
 
 /// Test util function to decide whether a given file is remote file.
 fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
@@ -146,7 +159,7 @@ async fn create_mooncake_table_and_notify(
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*version=*/ TEST_TABLE_ID.0,
         path,
         identity_property,
         iceberg_table_config.clone(),
@@ -249,7 +262,7 @@ async fn test_5_read_4() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         2
     );
@@ -335,7 +348,7 @@ async fn test_4_3() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
     );
@@ -384,7 +397,7 @@ async fn test_4_read_4() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         4,
     );
@@ -406,7 +419,7 @@ async fn test_4_read_4() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
     );
@@ -454,7 +467,7 @@ async fn test_4_read_and_read_over_4() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
     );
@@ -508,7 +521,7 @@ async fn test_3_read_3() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         2,
     );
@@ -585,7 +598,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
     );
@@ -686,7 +699,7 @@ async fn test_1_read_and_pinned_3() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
     );
@@ -804,7 +817,7 @@ async fn test_2_read_and_pinned_3() {
     );
     assert_eq!(
         data_file_cache
-            .get_non_evictable_entry_ref_count(&file.file_id())
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
     );

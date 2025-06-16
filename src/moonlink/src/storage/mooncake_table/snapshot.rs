@@ -1,7 +1,8 @@
 use super::data_batches::{create_batch_from_rows, InMemoryBatch};
 use super::delete_vector::BatchDeletionVector;
 use super::{
-    DiskFileEntry, IcebergSnapshotPayload, Snapshot, SnapshotTask, TableConfig, TableMetadata,
+    DiskFileEntry, IcebergSnapshotPayload, Snapshot, SnapshotTask,
+    TableMetadata as MooncakeTableMetadata,
 };
 use crate::error::Result;
 use crate::storage::cache::object_storage::base_cache::{
@@ -25,7 +26,7 @@ use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
 };
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFile, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord,
     RecordLocation,
@@ -41,8 +42,8 @@ use std::mem::take;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 pub(crate) struct SnapshotTableState {
-    /// Mooncake table config.
-    mooncake_table_config: TableConfig,
+    /// Mooncake table metadata.
+    pub(super) mooncake_table_metadata: Arc<MooncakeTableMetadata>,
 
     /// Current snapshot
     pub(super) current_snapshot: Snapshot,
@@ -142,7 +143,7 @@ pub(crate) struct MooncakeSnapshotOutput {
 
 impl SnapshotTableState {
     pub(super) async fn new(
-        metadata: Arc<TableMetadata>,
+        metadata: Arc<MooncakeTableMetadata>,
         data_file_cache: ObjectStorageCache,
         // TODO(hjiang): Used when recovery enabled.
         _iceberg_table_manager: &mut dyn TableManager,
@@ -151,7 +152,7 @@ impl SnapshotTableState {
         batches.insert(0, InMemoryBatch::new(metadata.config.batch_size));
 
         Ok(Self {
-            mooncake_table_config: metadata.config.clone(),
+            mooncake_table_metadata: metadata.clone(),
             current_snapshot: Snapshot::new(metadata.clone()),
             batches,
             rows: None,
@@ -384,7 +385,8 @@ impl SnapshotTableState {
         force_create: bool,
     ) -> bool {
         let data_file_snapshot_threshold = if !force_create {
-            self.mooncake_table_config
+            self.mooncake_table_metadata
+                .config
                 .iceberg_snapshot_new_data_file_count()
         } else {
             1
@@ -394,7 +396,8 @@ impl SnapshotTableState {
     /// Util function to decide whether to create iceberg snapshot by deletion vectors.
     fn create_iceberg_snapshot_by_committed_logs(&self, force_create: bool) -> bool {
         let deletion_record_snapshot_threshold = if !force_create {
-            self.mooncake_table_config
+            self.mooncake_table_metadata
+                .config
                 .iceberg_snapshot_new_committed_deletion_log()
         } else {
             1
@@ -430,7 +433,8 @@ impl SnapshotTableState {
         let all_disk_files = &self.current_snapshot.disk_files;
         if all_disk_files.len()
             < self
-                .mooncake_table_config
+                .mooncake_table_metadata
+                .config
                 .data_compaction_config
                 .data_file_to_compact as usize
         {
@@ -457,7 +461,8 @@ impl SnapshotTableState {
             // Skip compaction if the file size exceeds threshold, AND it has no persisted deletion vectors.
             if disk_file_entry.file_size
                 >= self
-                    .mooncake_table_config
+                    .mooncake_table_metadata
+                    .config
                     .data_compaction_config
                     .data_file_final_size as usize
                 && disk_file_entry.batch_deletion_vector.is_empty()
@@ -484,7 +489,8 @@ impl SnapshotTableState {
 
         if tentative_data_files_to_compact.len()
             < self
-                .mooncake_table_config
+                .mooncake_table_metadata
+                .config
                 .data_compaction_config
                 .data_file_to_compact as usize
         {
@@ -505,7 +511,8 @@ impl SnapshotTableState {
         let all_file_indices = &self.current_snapshot.indices.file_indices;
         if all_file_indices.len()
             < self
-                .mooncake_table_config
+                .mooncake_table_metadata
+                .config
                 .file_index_config
                 .file_indices_to_merge as usize
         {
@@ -528,7 +535,8 @@ impl SnapshotTableState {
 
             if cur_file_index.get_index_blocks_size()
                 >= self
-                    .mooncake_table_config
+                    .mooncake_table_metadata
+                    .config
                     .file_index_config
                     .index_block_final_size
             {
@@ -539,7 +547,8 @@ impl SnapshotTableState {
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
         if file_indices_to_merge.len()
             >= self
-                .mooncake_table_config
+                .mooncake_table_metadata
+                .config
                 .file_index_config
                 .file_indices_to_merge as usize
         {
@@ -1182,10 +1191,14 @@ impl SnapshotTableState {
             for (file, file_attrs) in slice.output_files().iter() {
                 ma::assert_gt!(file_attrs.file_size, 0);
                 task.disk_file_lsn_map.insert(file.file_id(), lsn);
+                let unique_file_id = TableUniqueFileId {
+                    table_id: TableId(self.mooncake_table_metadata.id),
+                    file_id: file.file_id(),
+                };
                 let (cache_handle, cur_evicted_files) = self
                     .data_file_cache
                     .import_cache_entry(
-                        file.file_id(),
+                        unique_file_id,
                         DataFileCacheEntry {
                             cache_filepath: file.file_path().clone(),
                             file_metadata: FileMetadata {
@@ -1534,8 +1547,12 @@ impl SnapshotTableState {
         let mut data_files_for_read = Vec::with_capacity(self.current_snapshot.disk_files.len());
 
         for (file, _) in self.current_snapshot.disk_files.iter() {
+            let file_id = TableUniqueFileId {
+                table_id: TableId(self.mooncake_table_metadata.id),
+                file_id: file.file_id(),
+            };
             data_files_for_read.push(DataFileForRead::RemoteFilePath((
-                file.file_id(),
+                file_id,
                 file.file_path().to_string(),
             )));
         }

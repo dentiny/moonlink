@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::cache_handle::NonEvictableHandle;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::TableUniqueFileId;
 use crate::Result;
 
 use lru::LruCache;
@@ -29,9 +29,9 @@ pub(crate) struct ObjectStorageCacheInternal {
     /// Current number of bytes of all cache entries.
     pub(crate) cur_bytes: u64,
     /// Evictable data file cache entries.
-    pub(crate) evictable_cache: LruCache<FileId, CacheEntryWrapper>,
+    pub(crate) evictable_cache: LruCache<TableUniqueFileId, CacheEntryWrapper>,
     /// Non-evictable data file cache entries.
-    pub(crate) non_evictable_cache: HashMap<FileId, CacheEntryWrapper>,
+    pub(crate) non_evictable_cache: HashMap<TableUniqueFileId, CacheEntryWrapper>,
 }
 
 impl ObjectStorageCacheInternal {
@@ -79,7 +79,7 @@ impl ObjectStorageCacheInternal {
     /// - If insertion fails due to insufficiency, the input cache entry won't be inserted into cache.
     fn insert_non_evictable(
         &mut self,
-        file_id: FileId,
+        file_id: TableUniqueFileId,
         cache_entry_wrapper: CacheEntryWrapper,
         max_bytes: u64,
         tolerate_insufficiency: bool,
@@ -98,7 +98,7 @@ impl ObjectStorageCacheInternal {
     }
 
     /// Unreference the given cache entry.
-    pub(super) fn unreference(&mut self, file_id: FileId) {
+    pub(super) fn unreference(&mut self, file_id: TableUniqueFileId) {
         let cache_entry_wrapper = self.non_evictable_cache.get_mut(&file_id);
         assert!(cache_entry_wrapper.is_some());
         let cache_entry_wrapper = cache_entry_wrapper.unwrap();
@@ -117,7 +117,7 @@ impl ObjectStorageCacheInternal {
     ///
     /// Test util function to get reference count for the given file id, return 0 if doesn't exist.
     #[cfg(test)]
-    pub(crate) fn get_non_evictable_entry_ref_count(&self, file_id: &FileId) -> u32 {
+    pub(crate) fn get_non_evictable_entry_ref_count(&self, file_id: &TableUniqueFileId) -> u32 {
         let cache_entry = self.non_evictable_cache.get(file_id);
         if let Some(cache_entry) = cache_entry {
             return cache_entry.reference_count;
@@ -196,19 +196,22 @@ impl ObjectStorageCache {
 
     /// Test util function to get reference count for reference count.
     #[cfg(test)]
-    pub(crate) async fn get_non_evictable_entry_ref_count(&self, file_id: &FileId) -> u32 {
+    pub(crate) async fn get_non_evictable_entry_ref_count(
+        &self,
+        file_id: &TableUniqueFileId,
+    ) -> u32 {
         let guard = self.cache.read().await;
         guard.get_non_evictable_entry_ref_count(file_id)
     }
 
     /// Test util function to get non-evictable filenames.
     #[cfg(test)]
-    pub(crate) async fn get_non_evictable_filenames(&self) -> Vec<FileId> {
+    pub(crate) async fn get_non_evictable_filenames(&self) -> Vec<TableUniqueFileId> {
         let guard = self.cache.read().await;
         guard
             .non_evictable_cache
             .keys()
-            .copied()
+            .cloned()
             .collect::<Vec<_>>()
     }
 }
@@ -217,7 +220,7 @@ impl ObjectStorageCache {
 impl CacheTrait for ObjectStorageCache {
     async fn import_cache_entry(
         &mut self,
-        file_id: FileId,
+        file_id: TableUniqueFileId,
         cache_entry: CacheEntry,
     ) -> (NonEvictableHandle, Vec<String>) {
         let cache_entry_wrapper = CacheEntryWrapper {
@@ -243,7 +246,7 @@ impl CacheTrait for ObjectStorageCache {
 
     async fn get_cache_entry(
         &mut self,
-        file_id: FileId,
+        file_id: TableUniqueFileId,
         remote_filepath: &str,
     ) -> Result<(
         Option<NonEvictableHandle>,
@@ -318,6 +321,7 @@ impl CacheTrait for ObjectStorageCache {
 mod tests {
     use crate::create_data_file;
     use crate::storage::cache::object_storage::test_utils::*;
+    use crate::storage::storage_utils::TableId;
 
     use super::*;
 
@@ -349,8 +353,12 @@ mod tests {
                     /*file_id=*/ idx as u64,
                     test_file.to_str().unwrap().to_string(),
                 );
+                let unique_file_id = TableUniqueFileId {
+                    table_id: TableId(0),
+                    file_id: data_file.file_id(),
+                };
                 let (cache_handle, cache_to_delete) = temp_cache
-                    .get_cache_entry(data_file.file_id(), data_file.file_path())
+                    .get_cache_entry(unique_file_id, data_file.file_path())
                     .await
                     .unwrap();
                 assert!(cache_to_delete.is_empty());

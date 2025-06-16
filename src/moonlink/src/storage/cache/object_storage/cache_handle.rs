@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use crate::storage::cache::object_storage::base_cache::CacheEntry;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCacheInternal;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::TableUniqueFileId;
 
 use tokio::sync::RwLock;
 
@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 #[derive(Clone)]
 pub struct NonEvictableHandle {
     /// File id for the mooncake table data file.
-    pub(crate) file_id: FileId,
+    pub(crate) file_id: TableUniqueFileId,
     /// Non-evictable cache entry.
     pub(crate) cache_entry: CacheEntry,
     /// Access to cache, used to unreference at drop.
@@ -28,7 +28,7 @@ impl std::fmt::Debug for NonEvictableHandle {
 
 impl NonEvictableHandle {
     pub(super) fn new(
-        file_id: FileId,
+        file_id: TableUniqueFileId,
         cache_entry: CacheEntry,
         cache: Arc<RwLock<ObjectStorageCacheInternal>>,
     ) -> Self {

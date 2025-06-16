@@ -1003,7 +1003,6 @@ async fn test_iceberg_snapshot_failure_mock_test() {
     let mooncake_table = MooncakeTable::new_with_table_manager(
         mooncake_table_metadata,
         Box::new(mock_table_manager),
-        mooncake_table_config,
         ObjectStorageCache::default_for_test(),
     )
     .await
@@ -1055,7 +1054,6 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     let mooncake_table = MooncakeTable::new_with_table_manager(
         mooncake_table_metadata,
         Box::new(mock_table_manager),
-        mooncake_table_config,
         ObjectStorageCache::default_for_test(),
     )
     .await

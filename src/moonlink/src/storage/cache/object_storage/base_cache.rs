@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 
 use crate::storage::cache::object_storage::cache_handle::NonEvictableHandle;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::TableUniqueFileId;
 use crate::Result;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub trait CacheTrait {
     #[allow(async_fn_in_trait)]
     async fn import_cache_entry(
         &mut self,
-        file_id: FileId,
+        file_id: TableUniqueFileId,
         cache_entry: CacheEntry,
     ) -> (NonEvictableHandle, Vec<String>);
 
@@ -42,7 +42,7 @@ pub trait CacheTrait {
     #[allow(async_fn_in_trait)]
     async fn get_cache_entry(
         &mut self,
-        file_id: FileId,
+        file_id: TableUniqueFileId,
         remote_filepath: &str,
     ) -> Result<(
         Option<NonEvictableHandle>,

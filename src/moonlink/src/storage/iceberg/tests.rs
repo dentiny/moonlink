@@ -603,7 +603,6 @@ async fn test_index_merge_and_create_snapshot() {
     let mut mooncake_table = MooncakeTable::new_with_table_manager(
         mooncake_table_metadata.clone(),
         Box::new(iceberg_table_manager),
-        mooncake_table_config.clone(),
         ObjectStorageCache::default_for_test(),
     )
     .await
