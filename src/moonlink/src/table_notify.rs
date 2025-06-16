@@ -4,14 +4,16 @@ use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::FileIndiceMergeResult;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
+use crate::storage::storage_utils::FileId;
 
+use crate::NonEvictableHandle;
 use crate::Result;
 
 /// Completion notifications for mooncake table, including snapshot creation and compaction, etc.
 ///
 /// TODO(hjiang): Revisit whether we need to place the payload into box.
 #[allow(clippy::large_enum_variant)]
-pub(crate) enum TableNotify {
+pub enum TableNotify {
     /// Mooncake snapshot completes.
     MooncakeTableSnapshot {
         /// Mooncake snapshot LSN.
@@ -22,6 +24,8 @@ pub(crate) enum TableNotify {
         data_compaction_payload: Option<DataCompactionPayload>,
         /// Payload used to trigger an index merge.
         file_indice_merge_payload: Option<FileIndiceMergePayload>,
+        /// Evicted data file cache to delete.
+        evicted_data_files_to_delete: Vec<String>,
     },
     /// Iceberg snapshot completes.
     IcebergSnapshot {
@@ -37,5 +41,12 @@ pub(crate) enum TableNotify {
     DataCompaction {
         /// Result for data compaction.
         data_compaction_result: Result<DataCompactionResult>,
+    },
+    /// Read request completion.
+    ReadRequest {
+        /// File ids involved in the current snapshot read.
+        file_ids: Vec<FileId>,
+        /// Cache handles, which are pinned before query.
+        cache_handles: Vec<NonEvictableHandle>,
     },
 }
