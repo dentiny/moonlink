@@ -2,10 +2,9 @@ use tempfile::TempDir;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
-use crate::storage::cache::object_storage::{
-    base_cache::ObjectStorageCacheConfig, object_storage_cache::ObjectStorageCache,
-};
-use crate::storage::storage_utils::FileId;
+use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
+use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
+use crate::storage::storage_utils::TableUniqueFileId;
 
 /// Content for test files.
 pub(crate) const CONTENT: &[u8; 10] = b"0123456789";
@@ -45,7 +44,7 @@ pub(crate) fn get_test_cache_config(tmp_dir: &TempDir) -> ObjectStorageCacheConf
 /// Test util function to create object storage cache.
 pub(crate) fn get_test_object_storage_cache(tmp_dir: &TempDir) -> ObjectStorageCache {
     let config = get_test_cache_config(tmp_dir);
-    ObjectStorageCache::_new(config)
+    ObjectStorageCache::new(config)
 }
 
 /// Test util function to get cache file number.
@@ -82,7 +81,7 @@ pub(crate) async fn assert_non_evictable_cache_size(
 /// Test util function to check non-evictable cache handle reference count.
 pub(crate) async fn assert_non_evictable_cache_handle_ref_count(
     cache: &mut ObjectStorageCache,
-    file_id: FileId,
+    file_id: TableUniqueFileId,
     expected_ref_count: u32,
 ) {
     let guard = cache.cache.read().await;

@@ -10,6 +10,7 @@ use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::MockTableManager;
 use crate::storage::MooncakeTable;
 use crate::storage::TableManager;
+use crate::ObjectStorageCache;
 use crate::TableConfig;
 
 use std::sync::Arc;
@@ -1002,7 +1003,7 @@ async fn test_iceberg_snapshot_failure_mock_test() {
     let mooncake_table = MooncakeTable::new_with_table_manager(
         mooncake_table_metadata,
         Box::new(mock_table_manager),
-        mooncake_table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();
@@ -1053,7 +1054,7 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     let mooncake_table = MooncakeTable::new_with_table_manager(
         mooncake_table_metadata,
         Box::new(mock_table_manager),
-        mooncake_table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap();

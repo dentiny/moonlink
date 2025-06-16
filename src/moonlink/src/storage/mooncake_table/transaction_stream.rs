@@ -1,6 +1,7 @@
 use super::*;
+use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::mooncake_table::DiskFileEntry;
-use crate::storage::storage_utils::ProcessedDeletionRecord;
+use crate::storage::storage_utils::{ProcessedDeletionRecord, TableUniqueFileId};
 use more_asserts as ma;
 /// Used to track the state of a streamed transaction
 /// Holds appending rows in memslice and files.
@@ -197,6 +198,7 @@ impl MooncakeTable {
                 ma::assert_gt!(file_attrs.file_size, 0);
                 let disk_file_entry = DiskFileEntry {
                     file_size: file_attrs.file_size,
+                    cache_handle: None,
                     file_indice: Some(disk_slice.get_file_indice().as_ref().unwrap().clone()),
                     batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                     puffin_deletion_blob: None,
@@ -254,22 +256,45 @@ impl MooncakeTable {
 }
 
 impl SnapshotTableState {
-    pub(super) fn apply_transaction_stream(&mut self, task: &mut SnapshotTask) {
+    /// Return files evicted from data file cache.
+    pub(super) async fn apply_transaction_stream(
+        &mut self,
+        task: &mut SnapshotTask,
+    ) -> Vec<String> {
+        // Aggregate evicted data cache files to delete.
+        let mut evicted_files = vec![];
+
         let new_streaming_xact = task.new_streaming_xact.drain(..);
         for output in new_streaming_xact {
             match output {
                 TransactionStreamOutput::Commit(commit) => {
-                    // add files
-                    commit
-                        .flushed_files
-                        .into_iter()
-                        .for_each(|(file, disk_file_entry)| {
-                            task.disk_file_lsn_map
-                                .insert(file.file_id(), commit.commit_lsn);
-                            self.current_snapshot
-                                .disk_files
-                                .insert(file, disk_file_entry);
-                        });
+                    // Integrate files into current snapshot and import into data file cache.
+                    for (file, mut disk_file_entry) in commit.flushed_files.into_iter() {
+                        task.disk_file_lsn_map
+                            .insert(file.file_id(), commit.commit_lsn);
+                        let file_id = TableUniqueFileId {
+                            table_id: TableId(self.mooncake_table_metadata.id),
+                            file_id: file.file_id(),
+                        };
+                        let (cache_handle, cur_evicted_files) = self
+                            .data_file_cache
+                            .import_cache_entry(
+                                file_id,
+                                CacheEntry {
+                                    cache_filepath: file.file_path().clone(),
+                                    file_metadata: FileMetadata {
+                                        file_size: disk_file_entry.file_size as u64,
+                                    },
+                                },
+                            )
+                            .await;
+                        disk_file_entry.cache_handle = Some(cache_handle);
+                        evicted_files.extend(cur_evicted_files);
+                        self.current_snapshot
+                            .disk_files
+                            .insert(file, disk_file_entry);
+                    }
+
                     // add index
                     commit
                         .flushed_file_index
@@ -311,5 +336,7 @@ impl SnapshotTableState {
                 }
             }
         }
+
+        evicted_files
     }
 }

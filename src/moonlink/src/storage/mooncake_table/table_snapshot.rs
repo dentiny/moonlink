@@ -93,7 +93,7 @@ pub struct IcebergSnapshotDataCompactionResult {
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
 }
 
-pub(crate) struct IcebergSnapshotResult {
+pub struct IcebergSnapshotResult {
     /// Table manager is (1) not `Sync` safe; (2) only used at iceberg snapshot creation, so we `move` it around every snapshot.
     pub(crate) table_manager: Box<dyn TableManager>,
     /// Iceberg flush LSN.

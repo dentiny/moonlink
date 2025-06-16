@@ -58,7 +58,6 @@ pub(crate) struct CompactionBuilder {
     compacted_file_count: u64,
 }
 
-// TODO(hjiang): CompactionBuilder should take a config to decide how big a compacted file should be, like DiskSliceWriter.
 impl CompactionBuilder {
     pub(crate) fn new(
         compaction_payload: DataCompactionPayload,
@@ -276,6 +275,8 @@ impl CompactionBuilder {
     }
 
     /// Perform a compaction operation, and get the result back.
+    ///
+    /// TODO(hjiang): compaction should leverage read-through/write-through cache.
     pub(crate) async fn build(mut self) -> Result<DataCompactionResult> {
         let old_data_files = self
             .compaction_payload
