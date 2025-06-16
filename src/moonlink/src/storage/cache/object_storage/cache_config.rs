@@ -39,8 +39,6 @@ impl ObjectStorageCacheConfig {
     }
 
     /// Provide a default option for ease of benchmark.
-    /// For unit test, by default disable on-disk caching so it provides reproducibility in all cases,
-    /// and useful to check write-through cache is not accessed and store after iceberg snapshot persistence.
     #[cfg(feature = "bench")]
     pub fn default_for_bench() -> Self {
         const DEFAULT_MAX_BYTES_FOR_TEST: u64 = 1 << 30; // 1GiB
