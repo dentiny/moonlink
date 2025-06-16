@@ -1,5 +1,4 @@
 /// Configuration for object storage cache.
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectStorageCacheConfig {
     /// Max number of bytes for cache entries at local filesystem.
@@ -45,7 +44,7 @@ impl ObjectStorageCacheConfig {
     #[cfg(feature = "bench")]
     pub fn default_for_bench() -> Self {
         const DEFAULT_MAX_BYTES_FOR_TEST: u64 = 1 << 30; // 1GiB
-        const DEFAULT_CACHE_DIRECTORY: &str = "/tmp/moonlink_test_cache";
+        const DEFAULT_CACHE_DIRECTORY: &str = "/tmp/moonlink_test_bench";
 
         // Re-create default cache directory for testing.
         match std::fs::remove_dir_all(DEFAULT_CACHE_DIRECTORY) {

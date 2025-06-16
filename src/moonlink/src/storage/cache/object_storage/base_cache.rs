@@ -9,14 +9,12 @@ use crate::storage::cache::object_storage::cache_handle::NonEvictableHandle;
 use crate::storage::storage_utils::FileId;
 use crate::Result;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FileMetadata {
     /// Size of the current file.
     pub(crate) file_size: u64,
 }
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CacheEntry {
     /// Cache data file at local filesystem.
@@ -25,7 +23,6 @@ pub struct CacheEntry {
     pub(crate) file_metadata: FileMetadata,
 }
 
-#[allow(dead_code)]
 #[async_trait]
 pub trait CacheTrait {
     /// Import cache entry to the cache. If there's no enough disk space, panic directly.
@@ -37,9 +34,9 @@ pub trait CacheTrait {
         cache_entry: CacheEntry,
     ) -> (NonEvictableHandle, Vec<String>);
 
-    /// Get a pinned cache file entry.
+    /// Attempt to get a pinned cache file entry.
     ///
-    /// If the requested file is already pinned, it will return immediately without any IO operations.
+    /// If the requested file is already pinned, cache handle will returned immediately without any IO operations.
     /// Otherwise, an IO operation might be performed, depending on whether the corresponding cache entry happens to be alive.
     /// If there's no sufficient disk space, return [`None`].
     #[allow(async_fn_in_trait)]

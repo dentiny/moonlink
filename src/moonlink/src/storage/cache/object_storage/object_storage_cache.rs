@@ -13,7 +13,6 @@ use more_asserts as ma;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-#[allow(dead_code)]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct CacheEntryWrapper {
     /// Cache entry.
@@ -26,7 +25,6 @@ pub(crate) struct CacheEntryWrapper {
 /// A general lifecycle of a cache entry is to
 /// (1) fetch and mark as non-evictable on access
 /// (2) dereference after usage, down-level to evictable when it's unreferenced
-#[allow(dead_code)]
 pub(crate) struct ObjectStorageCacheInternal {
     /// Current number of bytes of all cache entries.
     pub(crate) cur_bytes: u64,
@@ -117,7 +115,7 @@ impl ObjectStorageCacheInternal {
     /// Test util functions
     /// ================================
     ///
-    /// Test util function to get reference count for reference count, return 0 if doesn't exist.
+    /// Test util function to get reference count for the given file id, return 0 if doesn't exist.
     #[cfg(test)]
     pub(crate) fn get_non_evictable_entry_ref_count(&self, file_id: &FileId) -> u32 {
         let cache_entry = self.non_evictable_cache.get(file_id);

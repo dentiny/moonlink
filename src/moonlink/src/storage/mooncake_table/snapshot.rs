@@ -136,7 +136,7 @@ pub(crate) struct MooncakeSnapshotOutput {
     pub(crate) data_compaction_payload: Option<DataCompactionPayload>,
     /// File indice merge payload.
     pub(crate) file_indices_merge_payload: Option<FileIndiceMergePayload>,
-    /// Evicted local data cache files.
+    /// Evicted local data cache files to delete.
     pub(crate) evicted_data_files_to_delete: Vec<String>,
 }
 
@@ -425,8 +425,6 @@ impl SnapshotTableState {
 
     /// Util function to decide whether and what to compact data files.
     /// To simplify states (aka, avoid data compaction already in iceberg with those not), only merge those already persisted.
-    ///
-    /// TODO(hjiang): Pin data file if possible.
     fn get_payload_to_compact(&self) -> Option<DataCompactionPayload> {
         // Fast-path: not enough data files to trigger compaction.
         let all_disk_files = &self.current_snapshot.disk_files;
