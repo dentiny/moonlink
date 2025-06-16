@@ -75,6 +75,7 @@ jobs:
 
       # ---------- Run the suite through llvm-cov and nextest ----------
       - name: Run tests via llvm-cov/nextest
+        timeout-minutes: 5
         run: |
           cargo llvm-cov \
             --locked \
