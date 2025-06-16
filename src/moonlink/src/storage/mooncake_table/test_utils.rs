@@ -4,6 +4,7 @@ use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::snapshot::PuffinDeletionBlobAtRead;
+use crate::storage::mooncake_table::snapshot_read_output::DataFileForRead;
 use arrow::array::Int32Array;
 use arrow::datatypes::{DataType, Field};
 use futures::future::join_all;
@@ -77,6 +78,7 @@ pub async fn test_table(
         identity,
         iceberg_table_config,
         table_config,
+        ObjectStorageCache::default_for_test(),
     )
     .await
     .unwrap()
@@ -147,6 +149,7 @@ pub async fn snapshot(
     Option<IcebergSnapshotPayload>,
     Option<DataCompactionPayload>,
     Option<FileIndiceMergePayload>,
+    Vec<String>,
 ) {
     assert!(table.create_snapshot(SnapshotOption::default()));
     let table_notify = notify_rx.recv().await.unwrap();
@@ -156,11 +159,13 @@ pub async fn snapshot(
             iceberg_snapshot_payload,
             data_compaction_payload,
             file_indice_merge_payload,
+            evicted_data_files_to_delete,
         } => (
             lsn,
             iceberg_snapshot_payload,
             data_compaction_payload,
             file_indice_merge_payload,
+            evicted_data_files_to_delete,
         ),
         _ => {
             panic!("Expected to receive mooncake snapshot completion notification, but receives others");
@@ -218,6 +223,13 @@ fn verify_files_and_deletions_impl(
     }
     res.sort();
     assert_eq!(res, expected_ids);
+}
+
+pub fn get_data_files_for_read(data_file_paths: &[DataFileForRead]) -> Vec<String> {
+    data_file_paths
+        .iter()
+        .map(|data_file| data_file.get_file_path())
+        .collect::<Vec<_>>()
 }
 
 pub async fn verify_files_and_deletions(

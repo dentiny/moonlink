@@ -7,6 +7,7 @@ use crate::storage::storage_utils::FileId;
 use tokio::sync::RwLock;
 
 #[allow(dead_code)]
+#[derive(Clone)]
 pub struct NonEvictableHandle {
     /// File id for the mooncake table data file.
     pub(crate) file_id: FileId,
@@ -26,7 +27,7 @@ impl std::fmt::Debug for NonEvictableHandle {
 }
 
 impl NonEvictableHandle {
-    pub(super) fn _new(
+    pub(super) fn new(
         file_id: FileId,
         cache_entry: CacheEntry,
         cache: Arc<RwLock<ObjectStorageCacheInternal>>,
@@ -38,9 +39,14 @@ impl NonEvictableHandle {
         }
     }
 
+    /// Get cache file path.
+    pub(crate) fn get_cache_filepath(&self) -> &str {
+        &self.cache_entry.cache_filepath
+    }
+
     /// Unreference the pinned cache file.
-    pub(super) async fn _unreference(&mut self) {
+    pub(crate) async fn unreference(&mut self) {
         let mut guard = self.cache.write().await;
-        guard._unreference(self.file_id);
+        guard.unreference(self.file_id);
     }
 }

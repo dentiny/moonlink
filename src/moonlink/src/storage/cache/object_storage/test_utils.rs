@@ -2,9 +2,8 @@ use tempfile::TempDir;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 
-use crate::storage::cache::object_storage::{
-    base_cache::ObjectStorageCacheConfig, object_storage_cache::ObjectStorageCache,
-};
+use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
+use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::storage_utils::FileId;
 
 /// Content for test files.
@@ -45,7 +44,7 @@ pub(crate) fn get_test_cache_config(tmp_dir: &TempDir) -> ObjectStorageCacheConf
 /// Test util function to create object storage cache.
 pub(crate) fn get_test_object_storage_cache(tmp_dir: &TempDir) -> ObjectStorageCache {
     let config = get_test_cache_config(tmp_dir);
-    ObjectStorageCache::_new(config)
+    ObjectStorageCache::new(config)
 }
 
 /// Test util function to get cache file number.

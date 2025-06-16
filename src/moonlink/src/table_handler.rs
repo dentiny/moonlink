@@ -59,7 +59,7 @@ pub struct IcebergEventSyncSender {
 
 impl TableHandler {
     /// Create a new TableHandler for the given schema and table name
-    pub fn new(
+    pub async fn new(
         mut table: MooncakeTable,
         iceberg_event_sync_sender: IcebergEventSyncSender,
     ) -> Self {
@@ -68,7 +68,7 @@ impl TableHandler {
 
         // Create channel for internal control events.
         let (table_notify_tx, table_notify_rx) = mpsc::channel(100);
-        table.register_table_notify(table_notify_tx.clone());
+        table.register_table_notify(table_notify_tx.clone()).await;
 
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(async move {
@@ -281,7 +281,18 @@ impl TableHandler {
                 // Wait for the mooncake table event notification.
                 Some(event) = table_notify_rx.recv() => {
                     match event {
-                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload } => {
+                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
+                            // Spawn a detached best-effort task to delete evicted data file cache.
+                            if !evicted_data_files_to_delete.is_empty() {
+                                tokio::task::spawn(async move {
+                                    for cur_data_file in evicted_data_files_to_delete.into_iter() {
+                                        if let Err(e) = tokio::fs::remove_file(&cur_data_file).await {
+                                            error!("Failed to delete data file cache: {:?}", e);
+                                        }
+                                    }
+                                });
+                            }
+
                             // Notify read the mooncake table commit of LSN.
                             table.notify_snapshot_reader(lsn);
 
@@ -371,6 +382,9 @@ impl TableHandler {
                                 }
                             }
                             data_compaction_ongoing = false;
+                        }
+                        TableNotify::ReadRequest { cache_handles } => {
+                            table.set_read_request_res(cache_handles);
                         }
                     }
                 }
