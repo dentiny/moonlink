@@ -758,6 +758,17 @@ impl SnapshotTableState {
             if let Some(mut cache_handle) = old_entry.cache_handle {
                 let cur_evicted_files = cache_handle.unreference().await;
                 evicted_data_files.extend(cur_evicted_files);
+
+                // The old entry is no longer needed for mooncake table, directly mark it deleted from cache, so we could reclaim the disk space back ASAP.
+                let unique_file_id = TableUniqueFileId {
+                    table_id: TableId(self.mooncake_table_metadata.id),
+                    file_id: cur_old_data_file.file_id(),
+                };
+                let cur_evicted_files = self
+                    .data_file_cache
+                    .delete_cache_entry(unique_file_id)
+                    .await;
+                evicted_data_files.extend(cur_evicted_files);
             }
 
             // If no deletion record for this file, directly remove it, no need to do remapping.

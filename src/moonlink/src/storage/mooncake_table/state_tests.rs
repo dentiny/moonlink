@@ -1215,9 +1215,10 @@ async fn test_3_compact_3_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    table
+    let evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -1286,6 +1287,10 @@ async fn test_3_compact_1_5() {
     // Get old compacted files before compaction.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
+    let mut old_compacted_files = disk_files
+        .keys()
+        .map(|f| f.file_path().clone())
+        .collect::<Vec<_>>();
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1303,18 +1308,21 @@ async fn test_3_compact_1_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    table
+    let evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Drop read state, so old data files are unreferenced any more.
-    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+    let mut files_to_delete = drop_read_states_and_create_mooncake_snapshot(
         vec![read_state],
         &mut table,
         &mut table_notify,
     )
     .await;
-    assert!(files_to_delete.is_empty());
+    files_to_delete.sort();
+    old_compacted_files.sort();
+    assert_eq!(files_to_delete, old_compacted_files);
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -1359,6 +1367,10 @@ async fn test_1_compact_1_5() {
     // Get old compacted files before compaction.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
+    let mut old_compacted_files = disk_files
+        .keys()
+        .map(|f| f.file_path().clone())
+        .collect::<Vec<_>>();
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
@@ -1377,9 +1389,12 @@ async fn test_1_compact_1_5() {
     assert!(evicted_files_to_delete.is_empty());
 
     // Perform data compaction: use remote file to perform compaction.
-    table
+    let mut evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
+    old_compacted_files.sort();
+    evicted_files_to_delete.sort();
+    assert_eq!(old_compacted_files, evicted_files_to_delete);
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;

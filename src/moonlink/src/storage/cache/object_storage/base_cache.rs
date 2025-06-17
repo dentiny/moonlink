@@ -38,7 +38,6 @@ pub trait CacheTrait {
     /// Delete cache entry from the cache, which will be evicted immediately at next cache access.
     /// It's required requested file id exists in cache, otherwise panic.
     /// Return evicted files to delete.
-    #[allow(dead_code)]
     #[must_use]
     #[allow(async_fn_in_trait)]
     async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String>;
