@@ -680,9 +680,17 @@ impl MooncakeTable {
     }
 
     /// Shutdown the current table, which unpins all referenced data files in the global data file.
-    pub async fn shutdown(&mut self) {
-        let mut guard = self.snapshot.write().await;
-        guard.unreference_all_cache_handles().await;
+    pub async fn shutdown(&mut self) -> Result<()> {
+        let evicted_files_to_delete = {
+            let mut guard = self.snapshot.write().await;
+            guard.unreference_all_cache_handles().await
+        };
+
+        for cur_file in evicted_files_to_delete.into_iter() {
+            tokio::fs::remove_file(cur_file).await?;
+        }
+
+        Ok(())
     }
 
     pub fn should_flush(&self) -> bool {

@@ -201,7 +201,7 @@ impl TableHandler {
                                     let res = table.append_in_stream_batch(row, xact_id);
                                     if table.should_transaction_flush(xact_id) {
                                         if let Err(e) = table.flush_transaction_stream(xact_id).await {
-                                            warn!(error = %e, "flush failed in append");
+                                            error!(error = %e, "flush failed in append");
                                         }
                                     }
                                     res
@@ -210,7 +210,7 @@ impl TableHandler {
                             };
 
                             if let Err(e) = result {
-                                warn!(error = %e, "failed to append row");
+                                error!(error = %e, "failed to append row");
                             }
                         }
                         TableEvent::Delete { row, lsn, xact_id } => {
@@ -231,14 +231,14 @@ impl TableHandler {
                             match xact_id {
                                 Some(xact_id) => {
                                     if let Err(e) = table.commit_transaction_stream(xact_id, lsn).await {
-                                        warn!(error = %e, "stream commit flush failed");
+                                        error!(error = %e, "stream commit flush failed");
                                     }
                                 }
                                 None => {
                                     table.commit(lsn);
                                     if table.should_flush() || force_snapshot {
                                         if let Err(e) = table.flush(lsn).await {
-                                            warn!(error = %e, "flush failed in commit");
+                                            error!(error = %e, "flush failed in commit");
                                         }
                                     }
                                 }
@@ -260,16 +260,18 @@ impl TableHandler {
                         }
                         TableEvent::Flush { lsn } => {
                             if let Err(e) = table.flush(lsn).await {
-                                warn!(error = %e, "explicit flush failed");
+                                error!(error = %e, "explicit flush failed");
                             }
                         }
                         TableEvent::StreamFlush { xact_id } => {
                             if let Err(e) = table.flush_transaction_stream(xact_id).await {
-                                warn!(error = %e, "stream flush failed");
+                                error!(error = %e, "stream flush failed");
                             }
                         }
                         TableEvent::Shutdown => {
-                            table.shutdown().await;
+                            if let Err(e) = table.shutdown().await {
+                                error!(error = %e, "failed to shutdown table");
+                            }
                             info!("shutting down table handler");
                             break;
                         }
@@ -293,7 +295,9 @@ impl TableHandler {
                         // Branch to drop the iceberg table and clear pinned data files from the global data file cache, only used when the whole table requested to drop.
                         // So we block wait for asynchronous request completion.
                         TableEvent::DropTable => {
-                            table.shutdown().await;
+                            if let Err(e) = table.shutdown().await {
+                                error!(error = %e, "failed to shutdown table");
+                            }
                             let res = table.drop_iceberg_table().await;
                             iceberg_event_sync_sender.iceberg_drop_table_completion_tx.send(res).await.unwrap();
                         }
@@ -440,7 +444,9 @@ impl TableHandler {
                 }
                 // If all senders have been dropped, exit the loop
                 else => {
-                    table.shutdown().await;
+                    if let Err(e) = table.shutdown().await {
+                        warn!(error = %e, "failed to shutdown table");
+                    }
                     info!("all event senders dropped, shutting down table handler");
                     break;
                 }

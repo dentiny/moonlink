@@ -258,10 +258,19 @@ impl SnapshotTableState {
 
     /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from data file cache.
     /// Return affected file indices, which are caused by data file updates, and will be removed.
-    async fn update_data_files_to_persisted(&mut self, task: &SnapshotTask) -> HashSet<FileIndex> {
+    async fn update_data_files_to_persisted(
+        &mut self,
+        task: &SnapshotTask,
+    ) -> (
+        HashSet<FileIndex>,
+        Vec<String>, /*evicted files to delete*/
+    ) {
         if task.iceberg_persisted_records.data_files.is_empty() {
-            return HashSet::new();
+            return (HashSet::new(), Vec::new());
         }
+
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
 
         // Update disk file from local write through cache to iceberg persisted remote path.
         let mut affected_file_indices =
@@ -273,12 +282,13 @@ impl SnapshotTableState {
                 .disk_files
                 .remove(cur_data_file)
                 .unwrap();
-            disk_file_entry
+            let cur_evicted_files = disk_file_entry
                 .cache_handle
                 .as_mut()
                 .unwrap()
                 .unreference()
                 .await;
+            evicted_files_to_delete.extend(cur_evicted_files);
             disk_file_entry.cache_handle = None;
 
             // One file index corresponds to one or many data files, so it's possible to have duplicates.
@@ -288,7 +298,8 @@ impl SnapshotTableState {
                 .disk_files
                 .insert(cur_data_file.clone(), disk_file_entry);
         }
-        affected_file_indices
+
+        (affected_file_indices, evicted_files_to_delete)
     }
 
     /// Update file indices in the current snapshot from local data files to remote ones.
@@ -334,13 +345,21 @@ impl SnapshotTableState {
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
     /// After a successful iceberg snapshot, update current snapshot's disk files and file indices to reference to remote paths,
     /// also import local write through cache to globally managed data file cache, so they could be pinned and evicted when necessary.
-    async fn update_local_path_to_persisted_by_imported(&mut self, task: &SnapshotTask) {
+    ///
+    /// Return evicted data files to delete when unreference existing disk file entries.
+    async fn update_local_path_to_persisted_by_imported(
+        &mut self,
+        task: &SnapshotTask,
+    ) -> Vec<String> {
         // Handle imported new data files and file indices.
-        let affected_file_indices = self.update_data_files_to_persisted(task).await;
+        let (affected_file_indices, evicted_files_to_delete) =
+            self.update_data_files_to_persisted(task).await;
         self.update_file_indices_to_persisted(
             task.iceberg_persisted_records.file_indices.clone(),
             affected_file_indices,
         );
+
+        evicted_files_to_delete
     }
 
     /// Update unpersisted data files from successful iceberg snapshot operation.
@@ -737,7 +756,8 @@ impl SnapshotTableState {
             // If the old entry is pinned cache handle, unreference.
             let old_entry = old_entry.unwrap();
             if let Some(mut cache_handle) = old_entry.cache_handle {
-                cache_handle.unreference().await;
+                let cur_evicted_files = cache_handle.unreference().await;
+                evicted_data_files.extend(cur_evicted_files);
             }
 
             // If no deletion record for this file, directly remove it, no need to do remapping.
@@ -982,26 +1002,44 @@ impl SnapshotTableState {
     }
 
     /// Unreference pinned cache handles used in read operations.
-    async fn unreference_read_cache_handles(&mut self, task: &mut SnapshotTask) {
+    /// Return evicted data files to delete.
+    async fn unreference_read_cache_handles(&mut self, task: &mut SnapshotTask) -> Vec<String> {
+        // Aggregate evicted data files to delete.
+        let mut evicted_files_to_delete = vec![];
+
         for cur_cache_handle in task.read_cache_handles.iter_mut() {
-            cur_cache_handle.unreference().await;
+            let cur_evicted_files = cur_cache_handle.unreference().await;
+            evicted_files_to_delete.extend(cur_evicted_files);
         }
+
+        evicted_files_to_delete
     }
 
     /// Take read request result and update mooncake snapshot.
-    async fn update_snapshot_by_read_request_results(&mut self, task: &mut SnapshotTask) {
+    /// Return evicted data files to delete.
+    async fn update_snapshot_by_read_request_results(
+        &mut self,
+        task: &mut SnapshotTask,
+    ) -> Vec<String> {
         // Unpin cached files used in the read request.
-        self.unreference_read_cache_handles(task).await;
+        self.unreference_read_cache_handles(task).await
     }
 
     /// Unreference all pinned data files.
-    pub(crate) async fn unreference_all_cache_handles(&mut self) {
+    /// Return all evicted files to evict
+    pub(crate) async fn unreference_all_cache_handles(&mut self) -> Vec<String> {
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
         for (_, disk_file_entry) in self.current_snapshot.disk_files.iter_mut() {
             let cache_handle = &mut disk_file_entry.cache_handle;
             if let Some(cache_handle) = cache_handle {
-                cache_handle.unreference().await;
+                let cur_evicted_files = cache_handle.unreference().await;
+                evicted_files_to_delete.extend(cur_evicted_files);
             }
         }
+
+        evicted_files_to_delete
     }
 
     pub(super) async fn update_snapshot(
@@ -1013,8 +1051,10 @@ impl SnapshotTableState {
         let mut evicted_data_files_to_delete = vec![];
 
         // Reflect read request result to mooncake snapshot.
-        self.update_snapshot_by_read_request_results(&mut task)
+        let completed_read_evicted_data_files = self
+            .update_snapshot_by_read_request_results(&mut task)
             .await;
+        evicted_data_files_to_delete.extend(completed_read_evicted_data_files);
 
         // Reflect iceberg snapshot to mooncake snapshot.
         //
@@ -1025,7 +1065,10 @@ impl SnapshotTableState {
         //
         // Update data files and file indices' local file path to remote file path, it only applies to newly imported data files and file indices,
         // because both index merge and data compaction only apply to those already persisted into iceberg table.
-        self.update_local_path_to_persisted_by_imported(&task).await;
+        let persistence_evicted_data_files =
+            self.update_local_path_to_persisted_by_imported(&task).await;
+        evicted_data_files_to_delete.extend(persistence_evicted_data_files);
+
         self.update_current_snapshot_with_iceberg_snapshot(std::mem::take(
             &mut task.iceberg_persisted_records.puffin_blob,
         ));

@@ -27,6 +27,7 @@ pub struct CacheEntry {
 pub trait CacheTrait {
     /// Import cache entry to the cache. If there's no enough disk space, panic directly.
     /// Precondition: the file is not managed by cache.
+    #[must_use]
     #[allow(async_fn_in_trait)]
     async fn import_cache_entry(
         &mut self,
@@ -38,6 +39,7 @@ pub trait CacheTrait {
     /// It's required requested file id exists in cache, otherwise panic.
     /// Return evicted files to delete.
     #[allow(dead_code)]
+    #[must_use]
     #[allow(async_fn_in_trait)]
     async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String>;
 
@@ -46,7 +48,8 @@ pub trait CacheTrait {
     /// If the requested file is already pinned, cache handle will returned immediately without any IO operations.
     /// Otherwise, an IO operation might be performed, depending on whether the corresponding cache entry happens to be alive.
     /// If there's no sufficient disk space, return [`None`].
-    #[allow(async_fn_in_trait)]
+    #[deny(unused_must_use)]
+    #[must_use]
     async fn get_cache_entry(
         &mut self,
         file_id: TableUniqueFileId,
