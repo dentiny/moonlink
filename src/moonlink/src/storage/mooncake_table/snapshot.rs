@@ -788,7 +788,7 @@ impl SnapshotTableState {
         task: &SnapshotTask,
     ) -> Vec<String> {
         if task.data_compaction_result.is_empty() {
-            return task.data_compaction_result.evicted_files_to_delete.clone();
+            return vec![];
         }
 
         // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.

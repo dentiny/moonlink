@@ -1,13 +1,16 @@
 /// Possible states for data file cache entries:
 /// (1) Not managed by cache
-/// (2) Imported into cache, no reference count => can be evicted
-/// (3) Imported into cache, has reference count => cannot be evicted
+/// (2) Imported into cache, no reference count, not requested to delete => can be evicted
+/// (3) Imported into cache, has reference count, not requested to delete => cannot be evicted
+/// (4) Imported into cache, no reference count, requested to delete => should be evicted immediately
+/// (5) Imported into cache, has reference count, requested to delete => should be evicted immediately after unreferenced
 ///
 /// State inputs related to cache:
-/// - When mooncake snapshot, disk slice is record at current snapshot, thus readable
-/// - When requested to read, return local file cache to pg_mooncake
+/// - When mooncake snapshot, disk slice is record at current snapshot, thus usable
+/// - When requested to use, return local file cache to pg_mooncake
 /// - When new cache entries imported
-/// - Query finishes, thus release pinned cache files
+/// - Usage finishes, thus release pinned cache files
+/// - Request to delete
 ///
 /// State transfer to data file cache entries:
 /// (1) + create mooncake snapshot => (2)
@@ -19,6 +22,10 @@
 /// (2) + new entry + insufficient space => (1)
 /// (3) + query finishes + still reference count => (3)
 /// (3) + query finishes + no reference count => (2)
+/// (2) + requested to delete => (4)
+/// (3) + requested to delete => (5)
+/// (5) + usage finishes + still reference count => (5)
+/// (5) + usage finishes + no reference count => (4)
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1kwXIl4VPzhgzV4KP8yT42M35PfvMJW9PdjNTF7VNEfA/edit?usp=sharing
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};

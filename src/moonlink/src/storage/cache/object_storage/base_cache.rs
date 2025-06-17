@@ -34,6 +34,12 @@ pub trait CacheTrait {
         cache_entry: CacheEntry,
     ) -> (NonEvictableHandle, Vec<String>);
 
+    /// Delete cache entry from the cache, which will be evicted immediately at next cache access.
+    /// It's required requested file id exists in cache, otherwise panic.
+    /// Return evicted files to delete.
+    #[allow(async_fn_in_trait)]
+    async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String>;
+
     /// Attempt to get a pinned cache file entry.
     ///
     /// If the requested file is already pinned, cache handle will returned immediately without any IO operations.
