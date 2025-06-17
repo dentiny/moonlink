@@ -9,7 +9,6 @@ use crate::storage::storage_utils::get_unique_file_id_for_flush;
 use crate::storage::storage_utils::{FileId, RecordLocation};
 
 use std::collections::HashMap;
-use std::vec;
 
 /// Single compacted file size.
 const SINGLE_COMPACTED_DATA_FILE_SIZE: u64 = u64::MAX;
