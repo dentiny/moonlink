@@ -46,4 +46,9 @@ pub enum TableNotify {
         /// Cache handles, which are pinned before query.
         cache_handles: Vec<NonEvictableHandle>,
     },
+    /// Evicted data files to delete.
+    EvictedDataFilesToDelete {
+        /// Evicted data files by data file cache.
+        evicted_data_files: Vec<String>,
+    },
 }

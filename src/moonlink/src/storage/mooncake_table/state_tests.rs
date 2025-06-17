@@ -232,9 +232,10 @@ async fn test_5_read_4() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
     let snapshot_read_output = table.request_read().await.unwrap();
     let _read_state = snapshot_read_output.take_as_read_state().await;
 
@@ -285,9 +286,10 @@ async fn test_5_1() {
         .await
         .unwrap();
     // Till now, iceberg snapshot has been persisted, need an extra mooncake snapshot to reflect persistence result.
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -316,9 +318,10 @@ async fn test_4_3() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -329,9 +332,10 @@ async fn test_4_3() {
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -366,9 +370,10 @@ async fn test_4_read_4() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count for the first time.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -409,9 +414,10 @@ async fn test_4_read_4() {
         &mut table_notify,
     )
     .await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
         data_file_cache.cache.read().await.non_evictable_cache.len(),
@@ -437,9 +443,10 @@ async fn test_4_read_and_read_over_4() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read, increment reference count and drop to declare finish.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -448,9 +455,10 @@ async fn test_4_read_and_read_over_4() {
     table.sync_read_request(&mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -485,9 +493,10 @@ async fn test_3_read_3() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -498,9 +507,10 @@ async fn test_3_read_3() {
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output_2 = table.request_read().await.unwrap();
@@ -533,9 +543,10 @@ async fn test_3_read_3() {
         &mut table_notify,
     )
     .await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
         data_file_cache.cache.read().await.non_evictable_cache.len(),
@@ -555,9 +566,10 @@ async fn test_3_read_and_read_over_and_pinned_3() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -568,9 +580,10 @@ async fn test_3_read_and_read_over_and_pinned_3() {
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output_2 = table.request_read().await.unwrap();
@@ -579,9 +592,10 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     table.sync_read_request(&mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -616,18 +630,20 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -636,9 +652,10 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     table.sync_read_request(&mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -667,18 +684,20 @@ async fn test_1_read_and_pinned_3() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -706,9 +725,10 @@ async fn test_1_read_and_pinned_3() {
 
     // Drop all read states and check reference count.
     drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
         data_file_cache.cache.read().await.non_evictable_cache.len(),
@@ -728,18 +748,20 @@ async fn test_1_read_and_unpinned_3() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
     import_fake_cache_entry(&mut data_file_cache).await;
@@ -775,18 +797,20 @@ async fn test_2_read_and_pinned_3() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
     let mut fake_cache_handle = import_fake_cache_entry(&mut data_file_cache).await;
@@ -801,6 +825,11 @@ async fn test_2_read_and_pinned_3() {
 
     let snapshot_read_output_2 = table.request_read().await.unwrap();
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+
+    // Check fake file has been evicted.
+    table
+        .sync_delete_evicted_files(&mut table_notify, vec![FAKE_FILE_NAME.to_string()])
+        .await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -829,9 +858,10 @@ async fn test_2_read_and_pinned_3() {
         &mut table_notify,
     )
     .await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
         data_file_cache.cache.read().await.non_evictable_cache.len(),
@@ -851,18 +881,20 @@ async fn test_2_read_and_unpinned_2() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
     import_fake_cache_entry(&mut data_file_cache).await;
@@ -893,9 +925,10 @@ async fn test_2_read_and_unpinned_2() {
         &mut table_notify,
     )
     .await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
     check_only_fake_file_in_cache(&data_file_cache).await;
 }
 
@@ -911,18 +944,20 @@ async fn test_2_read_over_1() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
         .unwrap();
-    let (_, _, _, _) = table
+    let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
+    assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
     import_fake_cache_entry(&mut data_file_cache).await;

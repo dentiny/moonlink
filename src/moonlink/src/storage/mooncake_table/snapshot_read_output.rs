@@ -63,10 +63,8 @@ impl ReadOutput {
             match cur_data_file {
                 DataFileForRead::TemporaryDataFile(file) => resolved_data_files.push(file),
                 DataFileForRead::RemoteFilePath((file_id, remote_filepath)) => {
-                    // TODO(hjiang):
-                    // 1. Delete evicted data files.
-                    // 2. Better error propagation.
-                    let (cache_handle, _files_to_delete) = self
+                    // TODO(hjiang): Better error propagation.
+                    let (cache_handle, files_to_delete) = self
                         .data_file_cache
                         .as_mut()
                         .unwrap()
@@ -78,6 +76,17 @@ impl ReadOutput {
                         cache_handles.push(cache_handle);
                     } else {
                         resolved_data_files.push(remote_filepath);
+                    }
+
+                    if !files_to_delete.is_empty() {
+                        self.table_notifier
+                            .as_mut()
+                            .unwrap()
+                            .send(TableNotify::EvictedDataFilesToDelete {
+                                evicted_data_files: files_to_delete,
+                            })
+                            .await
+                            .unwrap();
                     }
                 }
             }

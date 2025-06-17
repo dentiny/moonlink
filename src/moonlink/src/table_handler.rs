@@ -159,6 +159,20 @@ impl TableHandler {
         let can_initiate_iceberg_snapshot =
             |iceberg_consumed: bool, iceberg_ongoing: bool| iceberg_consumed && !iceberg_ongoing;
 
+        // Util function to spawn a detached task to delete evicted data files.
+        let start_task_to_delete_evicted = |evicted_file_to_delete: Vec<String>| {
+            if evicted_file_to_delete.is_empty() {
+                return;
+            }
+            tokio::task::spawn(async move {
+                for cur_data_file in evicted_file_to_delete.into_iter() {
+                    if let Err(e) = tokio::fs::remove_file(&cur_data_file).await {
+                        error!("Failed to delete data file cache: {:?}", e);
+                    }
+                }
+            });
+        };
+
         // Process events until the receiver is closed or a Shutdown event is received
         loop {
             tokio::select! {
@@ -283,15 +297,7 @@ impl TableHandler {
                     match event {
                         TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
                             // Spawn a detached best-effort task to delete evicted data file cache.
-                            if !evicted_data_files_to_delete.is_empty() {
-                                tokio::task::spawn(async move {
-                                    for cur_data_file in evicted_data_files_to_delete.into_iter() {
-                                        if let Err(e) = tokio::fs::remove_file(&cur_data_file).await {
-                                            error!("Failed to delete data file cache: {:?}", e);
-                                        }
-                                    }
-                                });
-                            }
+                            start_task_to_delete_evicted(evicted_data_files_to_delete);
 
                             // Notify read the mooncake table commit of LSN.
                             table.notify_snapshot_reader(lsn);
@@ -385,6 +391,9 @@ impl TableHandler {
                         }
                         TableNotify::ReadRequest { cache_handles } => {
                             table.set_read_request_res(cache_handles);
+                        }
+                        TableNotify::EvictedDataFilesToDelete { evicted_data_files } => {
+                            start_task_to_delete_evicted(evicted_data_files);
                         }
                     }
                 }
