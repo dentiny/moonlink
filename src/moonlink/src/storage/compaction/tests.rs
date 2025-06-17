@@ -278,12 +278,12 @@ async fn test_data_file_compaction_4() {
         table_auto_incr_id,
         /*file_idx=*/ 0,
     ));
-    let possible_remaps = test_utils::get_possible_remap_for_two_files(
+    let expected_remap = test_utils::get_expected_remap_for_two_files(
         compacted_file_id,
         /*deletion_vectors=*/ vec![vec![], vec![]],
     );
     let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
-    assert!(possible_remaps.contains(&actual_remap));
+    assert_eq!(expected_remap, actual_remap);
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
@@ -379,7 +379,7 @@ async fn test_data_file_compaction_5() {
         table_auto_incr_id,
         /*file_idx=*/ 0,
     ));
-    let possible_remaps = test_utils::get_possible_remap_for_two_files(
+    let expected_remap = test_utils::get_expected_remap_for_two_files(
         compacted_file_id,
         /*deletion_vectors=*/
         vec![
@@ -388,7 +388,7 @@ async fn test_data_file_compaction_5() {
         ],
     );
     let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
-    assert!(possible_remaps.contains(&actual_remap));
+    assert_eq!(expected_remap, actual_remap);
 
     // Check file indices compaction.
     test_utils::check_file_indices_compaction(
