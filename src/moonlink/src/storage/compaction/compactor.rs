@@ -10,11 +10,12 @@ use more_asserts as ma;
 use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
 
+use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, DataCompactionResult, RemappedRecordLocation,
+    SingleFileToCompact,
 };
 use crate::storage::iceberg::puffin_utils;
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -134,21 +135,32 @@ impl CompactionBuilder {
     }
 
     /// Util function to read the given parquet file, apply the corresponding deletion vector, and write it to the given arrow writer.
-    /// Return the data file mapping.
+    /// Return the data file mapping, and cache evicted data files to delete.
     async fn apply_deletion_vector_and_write(
         &mut self,
-        old_data_file: MooncakeDataFileRef,
-        puffin_blob_ref: Option<PuffinBlobRef>,
-    ) -> Result<DataFileRemap> {
-        let file = tokio::fs::File::open(old_data_file.file_path()).await?;
+        data_file_to_compact: SingleFileToCompact,
+    ) -> Result<(DataFileRemap, Vec<String> /*evicted files to delete*/)> {
+        let (cache_handle, evicted_files_to_delete) = self
+            .compaction_payload
+            .data_file_cache
+            .get_cache_entry(data_file_to_compact.file_id, &data_file_to_compact.filepath)
+            .await?;
+        let filepath = if let Some(cache_handle) = &cache_handle {
+            cache_handle.get_cache_filepath()
+        } else {
+            &data_file_to_compact.filepath
+        };
+
+        let file = tokio::fs::File::open(filepath).await?;
         let builder = ParquetRecordBatchStreamBuilder::new(file).await?;
         let mut reader = builder.build().unwrap();
 
-        let batch_deletion_vector = if let Some(puffin_blob_ref) = puffin_blob_ref {
-            puffin_utils::load_deletion_vector_from_blob(&puffin_blob_ref).await?
-        } else {
-            BatchDeletionVector::new(/*max_rows=*/ 0)
-        };
+        let batch_deletion_vector =
+            if let Some(puffin_blob_ref) = data_file_to_compact.deletion_vector {
+                puffin_utils::load_deletion_vector_from_blob(&puffin_blob_ref).await?
+            } else {
+                BatchDeletionVector::new(/*max_rows=*/ 0)
+            };
 
         let get_filtered_record_batch = |record_batch: RecordBatch, start_row_idx: usize| {
             if batch_deletion_vector.is_empty() {
@@ -184,7 +196,7 @@ impl CompactionBuilder {
                     continue;
                 }
                 let old_record_location =
-                    RecordLocation::DiskFile(old_data_file.file_id(), old_row_idx);
+                    RecordLocation::DiskFile(data_file_to_compact.file_id.file_id, old_row_idx);
                 let new_record_location = RecordLocation::DiskFile(
                     self.cur_new_data_file.as_ref().unwrap().file_id(),
                     self.cur_row_num,
@@ -210,22 +222,32 @@ impl CompactionBuilder {
             self.flush_arrow_writer().await?;
         }
 
-        Ok(old_to_new_remap)
+        // Unpin cache handle after usage, if necessary.
+        // TODO(hjiang): Better error propagation, cache handle should be always unpinned whether success or failure.
+        if let Some(mut cache_handle) = cache_handle {
+            cache_handle.unreference().await;
+        }
+
+        Ok((old_to_new_remap, evicted_files_to_delete))
     }
 
     /// Util function to compact the given data files, with their corresponding deletion vector applied.
-    async fn compact_data_files(&mut self) -> Result<DataFileRemap> {
+    async fn compact_data_files(
+        &mut self,
+    ) -> Result<(DataFileRemap, Vec<String> /*evicted files to delete*/)> {
         let mut old_to_new_remap = HashMap::new();
 
         let disk_files = std::mem::take(&mut self.compaction_payload.disk_files);
-        for (new_data_file, puffin_blob_ref) in disk_files.into_iter() {
-            let new_remap = self
-                .apply_deletion_vector_and_write(new_data_file.clone(), puffin_blob_ref.clone())
+        let mut evicted_files_to_delete = vec![];
+        for single_file_to_compact in disk_files.into_iter() {
+            let (new_remap, cur_evicted_files) = self
+                .apply_deletion_vector_and_write(single_file_to_compact)
                 .await?;
+            evicted_files_to_delete.extend(cur_evicted_files);
             old_to_new_remap.extend(new_remap);
         }
 
-        Ok(old_to_new_remap)
+        Ok((old_to_new_remap, evicted_files_to_delete))
     }
 
     /// Util function to get new compacted data files **IN ORDER**.
@@ -273,14 +295,17 @@ impl CompactionBuilder {
     }
 
     /// Perform a compaction operation, and get the result back.
-    ///
-    /// TODO(hjiang): compaction should leverage read-through/write-through cache.
     pub(crate) async fn build(mut self) -> Result<DataCompactionResult> {
         let old_data_files = self
             .compaction_payload
             .disk_files
             .iter()
-            .map(|(f, _)| f.clone())
+            .map(|cur_file_to_compact| {
+                create_data_file(
+                    cur_file_to_compact.file_id.file_id.0,
+                    cur_file_to_compact.filepath.clone(),
+                )
+            })
             .collect::<HashSet<_>>();
         let old_file_indices = self
             .compaction_payload
@@ -288,7 +313,7 @@ impl CompactionBuilder {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        let old_to_new_remap = self.compact_data_files().await?;
+        let (old_to_new_remap, evicted_files_to_delete) = self.compact_data_files().await?;
 
         // All rows have been deleted.
         if old_to_new_remap.is_empty() {
@@ -298,6 +323,7 @@ impl CompactionBuilder {
                 old_file_indices,
                 new_data_files: Vec::new(),
                 new_file_indices: Vec::new(),
+                evicted_files_to_delete,
             });
         }
 
@@ -320,6 +346,7 @@ impl CompactionBuilder {
             old_file_indices,
             new_data_files: self.new_data_files,
             new_file_indices: vec![new_file_indices],
+            evicted_files_to_delete,
         })
     }
 }

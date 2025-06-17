@@ -2,15 +2,30 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RecordLocation;
+use crate::storage::storage_utils::TableUniqueFileId;
+use crate::ObjectStorageCache;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
 
+/// Single disk file and its deletion vector to apply.
+#[derive(Clone, Debug)]
+pub struct SingleFileToCompact {
+    /// Unique file id to lookup in the data file cache.
+    pub(crate) file_id: TableUniqueFileId,
+    /// Remote data file, Only persisted data files will be compacted.
+    pub(crate) filepath: String,
+    /// Deletion vector.
+    pub(crate) deletion_vector: Option<PuffinBlobRef>,
+}
+
 /// Payload to trigger a compaction operation.
 #[derive(Clone, Debug)]
 pub struct DataCompactionPayload {
-    /// Maps from data file to their deletion records.
-    pub(crate) disk_files: Vec<(MooncakeDataFileRef, Option<PuffinBlobRef>)>,
+    /// Data file cache.
+    pub(crate) data_file_cache: ObjectStorageCache,
+    /// Disk files to compact, including their deletion vector to apply.
+    pub(crate) disk_files: Vec<SingleFileToCompact>,
     /// File indices to compact and rewrite.
     pub(crate) file_indices: Vec<FileIndex>,
 }
@@ -44,6 +59,8 @@ pub struct DataCompactionResult {
     pub(crate) old_file_indices: HashSet<FileIndex>,
     /// New compacted file indices.
     pub(crate) new_file_indices: Vec<FileIndex>,
+    /// Compaction interacts with data file cache, this fields records evicted files to delete.
+    pub(crate) evicted_files_to_delete: Vec<String>,
 }
 
 impl DataCompactionResult {
@@ -54,6 +71,7 @@ impl DataCompactionResult {
             assert!(self.old_data_files.is_empty());
             assert!(self.old_file_indices.is_empty());
             assert!(self.new_file_indices.is_empty());
+            assert!(self.evicted_files_to_delete.is_empty());
             return true;
         }
 
