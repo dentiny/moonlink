@@ -1,12 +1,15 @@
-use crate::create_data_file;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
-use crate::storage::compaction::table_compaction::DataCompactionPayload;
+use crate::storage::compaction::table_compaction::{DataCompactionPayload, SingleFileToCompact};
 use crate::storage::compaction::test_utils;
 use crate::storage::compaction::test_utils::get_record_location_mapping;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::storage_utils::get_unique_file_id_for_flush;
+use crate::storage::storage_utils::{
+    get_unique_file_id_for_flush, MooncakeDataFileRef, TableId, TableUniqueFileId,
+};
 use crate::storage::storage_utils::{FileId, RecordLocation};
+use crate::storage::PuffinBlobRef;
+use crate::{create_data_file, ObjectStorageCache};
 
 use std::collections::HashMap;
 
@@ -15,6 +18,23 @@ const SINGLE_COMPACTED_DATA_FILE_SIZE: u64 = u64::MAX;
 /// File size for multiple compacted files.
 /// Since current we don't split ont old uncompacted file into multiple files, setting cut-off flush threshold 1 means each old file leads to one compacted file.
 const MULTI_COMPACTED_DATA_FILE_SIZE: u64 = 1;
+
+/// Test constant for test table id.
+const TEST_TABLE_ID: TableId = TableId(0);
+/// Test util function to get single file to compact.
+fn get_single_file_to_compact(
+    file: &MooncakeDataFileRef,
+    deletion_vector: Option<PuffinBlobRef>,
+) -> SingleFileToCompact {
+    SingleFileToCompact {
+        file_id: TableUniqueFileId {
+            table_id: TEST_TABLE_ID,
+            file_id: file.file_id(),
+        },
+        filepath: file.file_path().clone(),
+        deletion_vector,
+    }
+}
 
 /// ============================
 /// Compact to single file
@@ -34,7 +54,10 @@ async fn test_data_file_compaction_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: vec![(data_file.clone(), None)],
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        disk_files: vec![get_single_file_to_compact(
+            &data_file, /*deletion_vector=*/ None,
+        )],
         file_indices: vec![file_indice],
     };
     let table_auto_incr_id: u64 = 1;
@@ -108,7 +131,11 @@ async fn test_data_file_compaction_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: vec![(data_file.clone(), Some(puffin_blob_ref))],
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        disk_files: vec![get_single_file_to_compact(
+            &data_file,
+            Some(puffin_blob_ref),
+        )],
         file_indices: vec![file_indice.clone()],
     };
     let table_auto_incr_id: u64 = 1;
@@ -185,7 +212,11 @@ async fn test_data_file_compaction_3() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: vec![(data_file.clone(), Some(puffin_blob_ref))],
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        disk_files: vec![get_single_file_to_compact(
+            &data_file,
+            Some(puffin_blob_ref),
+        )],
         file_indices: vec![file_indice.clone()],
     };
     let table_auto_incr_id: u64 = 1;
@@ -252,7 +283,11 @@ async fn test_data_file_compaction_4() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: vec![(data_file_1.clone(), None), (data_file_2.clone(), None)],
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        disk_files: vec![
+            get_single_file_to_compact(&data_file_1, /*deletion_vector=*/ None),
+            get_single_file_to_compact(&data_file_2, /*deletion_vector=*/ None),
+        ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
     let table_auto_incr_id: u64 = 2;
@@ -350,9 +385,10 @@ async fn test_data_file_compaction_5() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
-            (data_file_1.clone(), Some(puffin_blob_ref_1)),
-            (data_file_2.clone(), Some(puffin_blob_ref_2)),
+            get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
+            get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
@@ -458,9 +494,10 @@ async fn test_data_file_compaction_6() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
-            (data_file_1.clone(), Some(puffin_blob_ref_1)),
-            (data_file_2.clone(), Some(puffin_blob_ref_2)),
+            get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
+            get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
@@ -554,9 +591,10 @@ async fn test_multiple_compacted_data_files_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
-            (data_file_1.clone(), Some(puffin_blob_ref_1)),
-            (data_file_2.clone(), Some(puffin_blob_ref_2)),
+            get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
+            get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
@@ -675,9 +713,10 @@ async fn test_multiple_compacted_data_files_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
+        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
-            (data_file_1.clone(), Some(puffin_blob_ref_1)),
-            (data_file_2.clone(), Some(puffin_blob_ref_2)),
+            get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
+            get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };

@@ -10,7 +10,7 @@ use crate::storage::cache::object_storage::base_cache::{
 };
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::compaction::table_compaction::{
-    CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
+    CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation, SingleFileToCompact,
 };
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::TableManager;
@@ -462,10 +462,16 @@ impl SnapshotTableState {
             }
 
             // Tentatively decide data file to compact.
-            tentative_data_files_to_compact.push((
-                cur_data_file.clone(),
-                disk_file_entry.puffin_deletion_blob.clone(),
-            ));
+            let single_file_to_compact = SingleFileToCompact {
+                file_id: TableUniqueFileId {
+                    table_id: TableId(self.mooncake_table_metadata.id),
+                    file_id: cur_data_file.file_id(),
+                },
+                filepath: cur_data_file.file_path().to_string(),
+                deletion_vector: disk_file_entry.puffin_deletion_blob.clone(),
+            };
+            tentative_data_files_to_compact.push(single_file_to_compact);
+
             // Tentatively decide corresponding file indices to compact.
             let cur_file_index = all_disk_files
                 .get(cur_data_file)
@@ -488,6 +494,7 @@ impl SnapshotTableState {
         }
 
         Some(DataCompactionPayload {
+            data_file_cache: self.data_file_cache.clone(),
             disk_files: tentative_data_files_to_compact,
             file_indices: tentative_file_indices_to_compact,
         })
@@ -671,27 +678,47 @@ impl SnapshotTableState {
     }
 
     // Update current snapshot's data files by adding and removing a few.
-    fn update_data_files_to_mooncake_snapshot_impl(
+    // Here new data files are all local data files, which will be uploaded to remote by importing into iceberg table.
+    // Return evicted data files from the data file cache to delete.
+    async fn update_data_files_to_mooncake_snapshot_impl(
         &mut self,
         old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
         remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
-    ) {
+    ) -> Vec<String> {
         if old_data_files.is_empty() {
             assert!(new_data_files.is_empty());
             assert!(remapped_data_files_after_compaction.is_empty());
-            return;
+            return vec![];
         }
+
+        let mut evicted_data_files = vec![];
 
         // Process new data files to import.
         ma::assert_ge!(self.current_snapshot.disk_files.len(), old_data_files.len());
         for (cur_new_data_file, cur_entry) in new_data_files.iter() {
             ma::assert_gt!(cur_entry.file_size, 0);
+            let unique_file_id = TableUniqueFileId {
+                table_id: TableId(self.mooncake_table_metadata.id),
+                file_id: cur_new_data_file.file_id(),
+            };
+            let cache_entry = DataFileCacheEntry {
+                cache_filepath: cur_new_data_file.file_path().clone(),
+                file_metadata: FileMetadata {
+                    file_size: cur_entry.file_size as u64,
+                },
+            };
+            let (cache_handle, cur_evicted_files) = self
+                .data_file_cache
+                .import_cache_entry(unique_file_id, cache_entry)
+                .await;
+            evicted_data_files.extend(cur_evicted_files);
+
             self.current_snapshot.disk_files.insert(
                 cur_new_data_file.clone(),
                 DiskFileEntry {
                     file_size: cur_entry.file_size,
-                    cache_handle: None,
+                    cache_handle: Some(cache_handle),
                     // Current implementation ensures only one file index for all new compacted data files.
                     file_indice: None,
                     batch_deletion_vector: BatchDeletionVector::new(
@@ -707,8 +734,13 @@ impl SnapshotTableState {
             let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
             assert!(old_entry.is_some());
 
-            // If no deletion record for this file, directly remove it, no need to do remapping.
+            // If the old entry is pinned cache handle, unreference.
             let old_entry = old_entry.unwrap();
+            if let Some(mut cache_handle) = old_entry.cache_handle {
+                cache_handle.unreference().await;
+            }
+
+            // If no deletion record for this file, directly remove it, no need to do remapping.
             if old_entry.batch_deletion_vector.is_empty() {
                 continue;
             }
@@ -734,6 +766,8 @@ impl SnapshotTableState {
                 // Case-2: The old record has already been compacted, directly skip.
             }
         }
+
+        evicted_data_files
     }
 
     fn update_file_indices_merge_to_mooncake_snapshot(
@@ -747,22 +781,40 @@ impl SnapshotTableState {
         );
     }
 
-    fn update_data_compaction_to_mooncake_snapshot(&mut self, task: &SnapshotTask) {
+    /// Reflect data compaction results to mooncake snapshot.
+    /// Return evicted data files to delete due to data compaction.
+    async fn update_data_compaction_to_mooncake_snapshot(
+        &mut self,
+        task: &SnapshotTask,
+    ) -> Vec<String> {
         if task.data_compaction_result.is_empty() {
-            return;
+            return task.data_compaction_result.evicted_files_to_delete.clone();
         }
 
         // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.
         let data_compaction_res = task.data_compaction_result.clone();
-        self.update_data_files_to_mooncake_snapshot_impl(
-            data_compaction_res.old_data_files,
-            data_compaction_res.new_data_files,
-            data_compaction_res.remapped_data_files,
-        );
+        let mut evicted_data_files = self
+            .update_data_files_to_mooncake_snapshot_impl(
+                data_compaction_res.old_data_files,
+                data_compaction_res.new_data_files,
+                data_compaction_res.remapped_data_files,
+            )
+            .await;
         self.update_file_indices_to_mooncake_snapshot_impl(
             data_compaction_res.old_file_indices,
             data_compaction_res.new_file_indices,
         );
+
+        // Apply evicted data files to delete within data compaction process.
+        evicted_data_files.extend(
+            task.data_compaction_result
+                .evicted_files_to_delete
+                .iter()
+                .cloned()
+                .to_owned(),
+        );
+
+        evicted_data_files
     }
 
     fn buffer_unpersisted_iceberg_new_data_files(&mut self, task: &SnapshotTask) {
@@ -937,8 +989,6 @@ impl SnapshotTableState {
     }
 
     /// Take read request result and update mooncake snapshot.
-    ///
-    /// TODO(hjiang): Pass local files to delete out for actual deletion.
     async fn update_snapshot_by_read_request_results(&mut self, task: &mut SnapshotTask) {
         // Unpin cached files used in the read request.
         self.unreference_read_cache_handles(task).await;
@@ -959,6 +1009,9 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
+        // All evicted data files by the data file cache.
+        let mut evicted_data_files_to_delete = vec![];
+
         // Reflect read request result to mooncake snapshot.
         self.update_snapshot_by_read_request_results(&mut task)
             .await;
@@ -983,7 +1036,10 @@ impl SnapshotTableState {
         );
         // Update disk file's disk entries and file indices from compacted data files and file indices.
         // Also remap committed deletion logs if applicable.
-        self.update_data_compaction_to_mooncake_snapshot(&task);
+        let compaction_evicted_data_files = self
+            .update_data_compaction_to_mooncake_snapshot(&task)
+            .await;
+        evicted_data_files_to_delete.extend(compaction_evicted_data_files);
 
         // Prune unpersisted records.
         self.prune_committed_deletion_logs(&task);
@@ -1006,7 +1062,6 @@ impl SnapshotTableState {
         self.buffer_unpersisted_iceberg_compaction_data(&task);
 
         // Apply buffered change to current mooncake snapshot.
-        let mut evicted_data_files_to_delete = vec![];
         let stream_evicted_cache_files = self.apply_transaction_stream(&mut task).await;
         self.merge_mem_indices(&mut task);
         self.finalize_batches(&mut task);

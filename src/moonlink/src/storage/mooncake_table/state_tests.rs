@@ -22,11 +22,11 @@ use tokio::sync::mpsc::{self, Receiver};
 ///
 /// Possible states for disk file entries:
 /// (0) No such entry
-/// (1) Has remote storage, no local cache, not requested to use
-/// (2) Has remote storage, no local cache, requested to use
-/// (3) Has remote storage, local cache pinned, requested to use
-/// (4) no remote storage, local cache pinned, requested to use
-/// (5) no remote storage, local cache pinned, not requested to use
+/// (1) Has remote storage, no local cache, not used
+/// (2) Has remote storage, no local cache, in use
+/// (3) Has remote storage, local cache pinned, in use
+/// (4) no remote storage, local cache pinned, in use
+/// (5) no remote storage, local cache pinned, not used
 ///
 /// State inputs:
 /// - Iceberg snapshot completion
@@ -63,10 +63,9 @@ use tokio::sync::mpsc::{self, Receiver};
 /// - remote, no local, in use + use over => remote, no local, not used
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1f2d0E_Zi8FbR4QmW_YEhcZwMpua0_pgkaNdrqM1qh2E/edit?usp=sharing
-///
-/// TODO(hjiang): Add test cases for compaction usage.
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
+use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
 use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, TableId, TableUniqueFileId};
@@ -131,9 +130,55 @@ async fn drop_read_states(
         table.sync_read_request(receiver).await;
     }
 }
+/// Test util function to drop read states and create a mooncake snapshot to reflect.
+/// Return evicted files to delete.
+async fn drop_read_states_and_create_mooncake_snapshot(
+    read_states: Vec<Arc<ReadState>>,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+) -> Vec<String> {
+    drop_read_states(read_states, table, receiver).await;
+    let (_, _, _, files_to_delete) = table.create_mooncake_snapshot_for_test(receiver).await;
+    files_to_delete
+}
 
-/// Test util function to create mooncake table and table notify.
-async fn create_mooncake_table_and_notify(
+/// Test util function to import a second data file cache entry.
+async fn import_fake_cache_entry(
+    temp_dir: &TempDir,
+    cache: &mut ObjectStorageCache,
+) -> NonEvictableHandle {
+    // Create a physical fake file, so later evicted files deletion won't fail.
+    let filepath = temp_dir.path().join(FAKE_FILE_NAME);
+    tokio::fs::File::create(&filepath).await.unwrap();
+
+    let cache_entry = CacheEntry {
+        cache_filepath: filepath.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: FAKE_FILE_SIZE,
+        },
+    };
+    cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
+}
+
+/// Test util function to check only fake file in data file cache.
+async fn check_only_fake_file_in_cache(data_file_cache: &ObjectStorageCache) {
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        1,
+    );
+    assert_eq!(
+        data_file_cache.get_non_evictable_filenames().await,
+        vec![FAKE_FILE_ID]
+    );
+}
+
+/// ========================
+/// Test util function for read
+/// ========================
+///
+/// Test util function to create mooncake table and table notify for read test.
+async fn create_mooncake_table_and_notify_for_read(
     temp_dir: &TempDir,
     data_file_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
@@ -177,12 +222,12 @@ async fn create_mooncake_table_and_notify(
 
 /// Prepare persisted data files in mooncake table.
 /// Rows are committed and flushed with LSN 1.
-async fn prepare_test_disk_file(
+async fn prepare_test_disk_file_for_read(
     temp_dir: &TempDir,
     data_file_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
-        create_mooncake_table_and_notify(temp_dir, data_file_cache).await;
+        create_mooncake_table_and_notify_for_read(temp_dir, data_file_cache).await;
 
     let row = MoonlinkRow::new(vec![
         RowValue::Int32(1),
@@ -196,30 +241,6 @@ async fn prepare_test_disk_file(
     (table, table_notify)
 }
 
-/// Test util function to import a second data file cache entry.
-async fn import_fake_cache_entry(cache: &mut ObjectStorageCache) -> NonEvictableHandle {
-    let cache_entry = CacheEntry {
-        cache_filepath: FAKE_FILE_NAME.to_string(),
-        file_metadata: FileMetadata {
-            file_size: FAKE_FILE_SIZE,
-        },
-    };
-    cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
-}
-
-/// Test util function to check only fake file in data file cache.
-async fn check_only_fake_file_in_cache(data_file_cache: &ObjectStorageCache) {
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
-    assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
-        1,
-    );
-    assert_eq!(
-        data_file_cache.get_non_evictable_filenames().await,
-        vec![FAKE_FILE_ID]
-    );
-}
-
 /// Test scenario: when shutdown table, all cache entries should be unpinned.
 #[tokio::test]
 async fn test_shutdown_table() {
@@ -231,7 +252,7 @@ async fn test_shutdown_table() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -248,6 +269,10 @@ async fn test_shutdown_table() {
     );
 }
 
+/// ========================
+/// Use by read
+/// ========================
+///
 /// Test scenario: no remote, local, not used + use => no remote, local, in use
 #[tokio::test]
 async fn test_5_read_4() {
@@ -259,7 +284,7 @@ async fn test_5_read_4() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -297,10 +322,12 @@ async fn test_5_read_4() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
@@ -326,7 +353,7 @@ async fn test_5_1() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
@@ -363,7 +390,7 @@ async fn test_4_3() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -404,10 +431,12 @@ async fn test_4_3() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
@@ -427,7 +456,7 @@ async fn test_4_read_4() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -466,15 +495,12 @@ async fn test_4_read_4() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
         vec![read_state_1, read_state_2, read_state_3],
         &mut table,
         &mut table_notify,
     )
     .await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
@@ -500,7 +526,7 @@ async fn test_4_read_and_read_over_4() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -550,7 +576,7 @@ async fn test_3_read_3() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -595,15 +621,12 @@ async fn test_3_read_3() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
         vec![read_state_1, read_state_2],
         &mut table,
         &mut table_notify,
     )
     .await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
@@ -623,7 +646,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -676,10 +699,12 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(vec![read_state_1], &mut table, &mut table_notify).await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state_1],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
@@ -699,7 +724,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -753,7 +778,7 @@ async fn test_1_read_and_pinned_3() {
     let data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -794,10 +819,12 @@ async fn test_1_read_and_pinned_3() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
@@ -817,7 +844,7 @@ async fn test_1_read_and_unpinned_3() {
     let mut data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -834,7 +861,7 @@ async fn test_1_read_and_unpinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    import_fake_cache_entry(&mut data_file_cache).await;
+    import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -866,7 +893,7 @@ async fn test_2_read_and_pinned_3() {
     let mut data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -883,7 +910,7 @@ async fn test_2_read_and_pinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    let mut fake_cache_handle = import_fake_cache_entry(&mut data_file_cache).await;
+    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
 
     // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -897,8 +924,12 @@ async fn test_2_read_and_pinned_3() {
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check fake file has been evicted.
+    let fake_filepath = temp_dir.path().join(FAKE_FILE_NAME);
     table
-        .sync_delete_evicted_files(&mut table_notify, vec![FAKE_FILE_NAME.to_string()])
+        .sync_delete_evicted_files(
+            &mut table_notify,
+            vec![fake_filepath.to_str().unwrap().to_string()],
+        )
         .await;
 
     // Check data file has been pinned in mooncake table.
@@ -922,15 +953,12 @@ async fn test_2_read_and_pinned_3() {
     );
 
     // Drop all read states and check reference count.
-    drop_read_states(
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
         vec![read_state_1, read_state_2],
         &mut table,
         &mut table_notify,
     )
     .await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
     assert!(files_to_delete.is_empty());
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
@@ -950,7 +978,7 @@ async fn test_2_read_and_unpinned_2() {
     let mut data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -967,7 +995,7 @@ async fn test_2_read_and_unpinned_2() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    import_fake_cache_entry(&mut data_file_cache).await;
+    import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
 
     // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -989,15 +1017,12 @@ async fn test_2_read_and_unpinned_2() {
     check_only_fake_file_in_cache(&data_file_cache).await;
 
     // Drop all read states and check reference count; cache only manages fake file here.
-    drop_read_states(
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
         vec![read_state_1, read_state_2],
         &mut table,
         &mut table_notify,
     )
     .await;
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
     assert!(files_to_delete.is_empty());
     check_only_fake_file_in_cache(&data_file_cache).await;
 }
@@ -1013,7 +1038,7 @@ async fn test_2_read_over_1() {
     let mut data_file_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -1030,7 +1055,7 @@ async fn test_2_read_over_1() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    import_fake_cache_entry(&mut data_file_cache).await;
+    import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1048,4 +1073,331 @@ async fn test_2_read_over_1() {
 
     // Check cache state.
     check_only_fake_file_in_cache(&data_file_cache).await;
+}
+
+/// There're two things different from use for read:
+/// - we can only check data compaction after its completion
+/// - data compaction only happens when there's remote path
+///
+/// Possible state transfer:
+/// - remote, local, in use + use + use over & pinned => (old) remote, local, in use, (new) no remote, local, no use
+/// - remote, local, in use + use + use over & unpinned => (old) remote, local, not used, (new) no remote, local, no use
+/// - remote, no local, not used + use & pinned + use over & pinned => (old) remote, local, in use, (new) no remote, local, no use
+/// - remote, no local, not used + use & pinned + use over & unpinned => (old) remote, no local, not used, (new) no remote, local, no use
+/// - remote, no local, in use + use + use over => (old) remote, no local, in use, (new) no remote, local, no use
+///
+/// ========================
+/// Test util function for compaction
+/// ========================
+///
+/// Test util function to create mooncake table and table notify for compaction test.
+async fn create_mooncake_table_and_notify_for_compaction(
+    temp_dir: &TempDir,
+    data_file_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableNotify>) {
+    let path = temp_dir.path().to_path_buf();
+    let warehouse_uri = path.clone().to_str().unwrap().to_string();
+    let mooncake_table_metadata =
+        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = IcebergTableConfig {
+        warehouse_uri,
+        namespace: vec!["namespace".to_string()],
+        table_name: "test_table".to_string(),
+    };
+    let schema = create_test_arrow_schema();
+
+    // Create iceberg snapshot whenever `create_snapshot` is called.
+    let mooncake_table_config = MooncakeTableConfig {
+        iceberg_snapshot_new_data_file_count: 0,
+        // Trigger compaction as long as there're two data files.
+        data_compaction_config: DataCompactionConfig {
+            data_file_final_size: u64::MAX,
+            data_file_to_compact: 2,
+        },
+        ..Default::default()
+    };
+
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*version=*/ TEST_TABLE_ID.0,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        mooncake_table_config,
+        data_file_cache,
+    )
+    .await
+    .unwrap();
+
+    let (notify_tx, notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    (table, notify_rx)
+}
+
+/// Test util function to create two data files for compaction.
+/// Rows are committed and flushed with LSN 1 and 2 respectively.
+///
+/// TODO(hjiang): After puffin files integrate to cache, add deletion vector as well.
+async fn prepare_test_disk_files_for_compaction(
+    temp_dir: &TempDir,
+    data_file_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableNotify>) {
+    let (mut table, table_notify) =
+        create_mooncake_table_and_notify_for_compaction(temp_dir, data_file_cache).await;
+
+    // Append, commit and flush the first row.
+    let row = MoonlinkRow::new(vec![
+        RowValue::Int32(1),
+        RowValue::ByteArray("John".as_bytes().to_vec()),
+        RowValue::Int32(30),
+    ]);
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 1);
+    table.flush(/*lsn=*/ 1).await.unwrap();
+
+    // Append, commit and flush the second row.
+    let row = MoonlinkRow::new(vec![
+        RowValue::Int32(2),
+        RowValue::ByteArray("Bob".as_bytes().to_vec()),
+        RowValue::Int32(20),
+    ]);
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 2);
+    table.flush(/*lsn=*/ 2).await.unwrap();
+
+    (table, table_notify)
+}
+
+/// ========================
+/// Use by compaction
+/// ========================
+///
+/// Test scenario: remote, local, in use + use + use over & pinned => (old) remote, local, in use, (new) no remote, local, no use
+#[tokio::test]
+async fn test_3_compact_3_5() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+    );
+    let data_file_cache = ObjectStorageCache::new(cache_config);
+
+    let (mut table, mut table_notify) =
+        prepare_test_disk_files_for_compaction(&temp_dir, data_file_cache.clone()).await;
+    let (_, _, _, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+
+    // Get old compacted files before compaction.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 2);
+    let old_compacted_files = disk_files.keys().cloned().collect::<Vec<_>>();
+
+    // Read and increment reference count.
+    let snapshot_read_output = table.request_read().await.unwrap();
+    let read_state = snapshot_read_output.take_as_read_state().await;
+
+    // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
+    table
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
+        .await
+        .unwrap();
+    let (_, _, data_compaction_payload, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+    assert!(data_compaction_payload.is_some());
+
+    // Perform data compaction: use pinned local cache file and unreference.
+    table
+        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
+        .await;
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.cache_handle.is_some());
+    assert!(is_local_file(new_compacted_file, &temp_dir));
+
+    // Check cache state.
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        3,
+    );
+    assert_eq!(
+        data_file_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_file.file_id()
+            ))
+            .await,
+        1,
+    );
+    for cur_old_compacted_file in old_compacted_files.into_iter() {
+        assert_eq!(
+            data_file_cache
+                .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                    cur_old_compacted_file.file_id()
+                ))
+                .await,
+            1,
+        );
+    }
+
+    // Drop all read states and check reference count.
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    assert!(files_to_delete.is_empty());
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 2);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        1,
+    );
+}
+
+/// Test scenario: remote, local, in use + use + use over & unpinned => (old) remote, no local, not used, (new) no remote, local, no use
+#[tokio::test]
+async fn test_3_compact_1_5() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+    );
+    let data_file_cache = ObjectStorageCache::new(cache_config);
+
+    let (mut table, mut table_notify) =
+        prepare_test_disk_files_for_compaction(&temp_dir, data_file_cache.clone()).await;
+    let (_, _, _, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+
+    // Get old compacted files before compaction.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 2);
+
+    // Read and increment reference count.
+    let snapshot_read_output = table.request_read().await.unwrap();
+    let read_state = snapshot_read_output.take_as_read_state().await;
+
+    // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
+    table
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
+        .await
+        .unwrap();
+    let (_, _, data_compaction_payload, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+    assert!(data_compaction_payload.is_some());
+
+    // Perform data compaction: use pinned local cache file and unreference.
+    table
+        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
+        .await;
+
+    // Drop read state, so old data files are unreferenced any more.
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    assert!(files_to_delete.is_empty());
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.cache_handle.is_some());
+    assert!(is_local_file(new_compacted_file, &temp_dir));
+
+    // Check cache state.
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 2);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        1,
+    );
+    assert_eq!(
+        data_file_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_file.file_id()
+            ))
+            .await,
+        1,
+    );
+}
+
+/// Test scenario: remote, no local, in use + use & unpinned + use over => (old) remote, no local, in use, (new) no remote, local, no use
+#[tokio::test]
+async fn test_2_compact_2_5() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        ONE_FILE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+    );
+    let mut data_file_cache = ObjectStorageCache::new(cache_config);
+
+    let (mut table, mut table_notify) =
+        prepare_test_disk_files_for_compaction(&temp_dir, data_file_cache.clone()).await;
+    let (_, _, _, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+
+    // Get old compacted files before compaction.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 2);
+
+    // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
+    table
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
+        .await
+        .unwrap();
+    let (_, _, data_compaction_payload, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+    assert!(data_compaction_payload.is_some());
+
+    // Import second data file into cache, so the cached entry will be evicted.
+    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
+    fake_cache_handle.unreference().await;
+
+    // Perform data compaction: use remote file to perform compaction.
+    table
+        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
+        .await;
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.cache_handle.is_some());
+    assert!(is_local_file(new_compacted_file, &temp_dir));
+
+    // Check cache state.
+    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 2);
+    assert_eq!(
+        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        1,
+    );
+    assert_eq!(
+        data_file_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_file.file_id()
+            ))
+            .await,
+        1,
+    );
 }
