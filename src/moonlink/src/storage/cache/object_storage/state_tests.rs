@@ -72,6 +72,7 @@ async fn test_cache_state_1_create_snashot() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -101,6 +102,7 @@ async fn test_cache_1_requested_to_read() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -147,6 +149,7 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -197,6 +200,7 @@ async fn test_cache_2_requested_to_read_with_insufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -244,6 +248,7 @@ async fn test_cache_3_requested_to_read() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -300,6 +305,7 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
 }
@@ -357,6 +363,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
     assert_eq!(files_to_evict, vec![cache_file_1]);
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -405,6 +412,7 @@ async fn test_cache_3_unpin_still_referenced() {
     cache_handle.unwrap().unreference().await;
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
@@ -454,6 +462,53 @@ async fn test_cache_3_unpin_not_referenced() {
     cache_handle_2.unwrap().unreference().await;
 
     // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+}
+
+// (2) + requested to delete => (4)
+#[tokio::test]
+async fn test_cache_2_requested_to_delete_4() {
+    let remote_file_directory = tempdir().unwrap();
+    let cache_file_directory = tempdir().unwrap();
+    let test_file_1 = create_test_file(remote_file_directory.path(), TEST_FILENAME_1).await;
+    let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
+        max_bytes: CONTENT.len() as u64,
+        cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+    });
+
+    // Import into cache first.
+    let cache_entry = CacheEntry {
+        cache_filepath: test_file_1.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let (mut cache_handle, files_to_evict) = cache
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
+        .await;
+    assert_non_evictable_cache_handle_ref_count(
+        &mut cache,
+        /*file_id=*/ get_table_unique_file_id(0),
+        /*expected_ref_count=*/ 1,
+    )
+    .await;
+    assert!(files_to_evict.is_empty());
+
+    // Unreference cache handle, so requested cache handle is not referenced.
+    let files_to_evict = cache_handle.unreference().await;
+    assert!(files_to_evict.is_empty());
+
+    // Request to delete.
+    let evicted_files = cache.delete_cache_entry(get_table_unique_file_id(0)).await;
+    assert_eq!(
+        evicted_files,
+        vec![test_file_1.to_str().unwrap().to_string()]
+    );
+
+    // Check cache status.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }

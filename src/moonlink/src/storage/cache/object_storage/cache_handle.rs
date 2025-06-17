@@ -45,8 +45,8 @@ impl NonEvictableHandle {
     }
 
     /// Unreference the pinned cache file.
-    pub(crate) async fn unreference(&mut self) {
+    pub(crate) async fn unreference(&mut self) -> Vec<String> {
         let mut guard = self.cache.write().await;
-        guard.unreference(self.file_id);
+        guard.unreference(self.file_id)
     }
 }
