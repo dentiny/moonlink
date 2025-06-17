@@ -1,3 +1,6 @@
+#[cfg(test)]
+use tempfile::TempDir;
+
 /// Configuration for object storage cache.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ObjectStorageCacheConfig {
@@ -16,25 +19,13 @@ impl ObjectStorageCacheConfig {
     }
 
     /// Provide a default option for ease of testing.
+    /// It requires to take a testcase-unique temporary directory.
     #[cfg(test)]
-    pub fn default_for_test() -> Self {
+    pub fn default_for_test(temp_dir: &TempDir) -> Self {
         const DEFAULT_MAX_BYTES_FOR_TEST: u64 = 1 << 30; // 1GiB
-        const DEFAULT_CACHE_DIRECTORY: &str = "/tmp/moonlink_test_cache";
-
-        // Re-create default cache directory for testing.
-        match std::fs::remove_dir_all(DEFAULT_CACHE_DIRECTORY) {
-            Ok(()) => {}
-            Err(e) => {
-                if e.kind() != std::io::ErrorKind::NotFound {
-                    panic!("Failed to remove directory: {:?}", e);
-                }
-            }
-        }
-        std::fs::create_dir_all(DEFAULT_CACHE_DIRECTORY).unwrap();
-
         Self {
             max_bytes: DEFAULT_MAX_BYTES_FOR_TEST,
-            cache_directory: DEFAULT_CACHE_DIRECTORY.to_string(),
+            cache_directory: temp_dir.path().to_str().unwrap().to_string(),
         }
     }
 

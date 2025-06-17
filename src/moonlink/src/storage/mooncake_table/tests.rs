@@ -439,7 +439,7 @@ async fn test_snapshot_store_failure() {
     let mut table = MooncakeTable::new_with_table_manager(
         table_metadata,
         Box::new(mock_table_manager),
-        ObjectStorageCache::default_for_test(),
+        ObjectStorageCache::default_for_test(&temp_dir),
     )
     .await
     .unwrap();

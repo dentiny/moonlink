@@ -10,6 +10,8 @@ use crate::Result;
 
 use lru::LruCache;
 use more_asserts as ma;
+#[cfg(test)]
+use tempfile::TempDir;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
@@ -183,8 +185,8 @@ impl ObjectStorageCache {
     /// ================================
     ///
     #[cfg(test)]
-    pub fn default_for_test() -> Self {
-        let config = ObjectStorageCacheConfig::default_for_test();
+    pub fn default_for_test(temp_dir: &TempDir) -> Self {
+        let config = ObjectStorageCacheConfig::default_for_test(temp_dir);
         Self::new(config)
     }
 

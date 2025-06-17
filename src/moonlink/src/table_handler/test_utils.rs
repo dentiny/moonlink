@@ -127,7 +127,7 @@ impl TestEnvironment {
             IdentityProp::Keys(vec![0]),
             iceberg_table_config,
             mooncake_table_config,
-            ObjectStorageCache::default_for_test(),
+            ObjectStorageCache::default_for_test(&temp_dir),
         )
         .await
         .unwrap();
