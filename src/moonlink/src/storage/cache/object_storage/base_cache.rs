@@ -42,6 +42,11 @@ pub trait CacheTrait {
     #[allow(async_fn_in_trait)]
     async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String>;
 
+    /// Similar to [`delete_cache_entry`], but doesn't panic if requested entry doesn't exist.
+    #[must_use]
+    #[allow(async_fn_in_trait)]
+    async fn try_delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String>;
+
     /// Attempt to get a pinned cache file entry.
     ///
     /// If the requested file is already pinned, cache handle will returned immediately without any IO operations.

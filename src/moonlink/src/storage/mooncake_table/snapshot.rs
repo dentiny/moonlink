@@ -753,6 +753,11 @@ impl SnapshotTableState {
             let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
             assert!(old_entry.is_some());
 
+            let unique_file_id = TableUniqueFileId {
+                table_id: TableId(self.mooncake_table_metadata.id),
+                file_id: cur_old_data_file.file_id(),
+            };
+
             // If the old entry is pinned cache handle, unreference.
             let old_entry = old_entry.unwrap();
             if let Some(mut cache_handle) = old_entry.cache_handle {
@@ -760,13 +765,17 @@ impl SnapshotTableState {
                 evicted_data_files.extend(cur_evicted_files);
 
                 // The old entry is no longer needed for mooncake table, directly mark it deleted from cache, so we could reclaim the disk space back ASAP.
-                let unique_file_id = TableUniqueFileId {
-                    table_id: TableId(self.mooncake_table_metadata.id),
-                    file_id: cur_old_data_file.file_id(),
-                };
                 let cur_evicted_files = self
                     .data_file_cache
                     .delete_cache_entry(unique_file_id)
+                    .await;
+                evicted_data_files.extend(cur_evicted_files);
+            }
+            // Even if there's no pinned cache handle within current snapshot (since it's persisted), still try to delete it from cache if exists.
+            else {
+                let cur_evicted_files = self
+                    .data_file_cache
+                    .try_delete_cache_entry(unique_file_id)
                     .await;
                 evicted_data_files.extend(cur_evicted_files);
             }

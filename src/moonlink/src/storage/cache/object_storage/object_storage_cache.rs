@@ -103,7 +103,11 @@ impl ObjectStorageCacheInternal {
     }
 
     /// Mark the requested cache entry as deleted, and return evicted files.
-    fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
+    fn delete_cache_entry(
+        &mut self,
+        file_id: TableUniqueFileId,
+        panic_if_non_existent: bool,
+    ) -> Vec<String> {
         let mut evicted_files = vec![];
 
         // If the requested entries are already evictable, remove it directly.
@@ -114,8 +118,15 @@ impl ObjectStorageCacheInternal {
         }
         // Otherwise, we leave a marker, so when the entries get unreferences it will be deleted.
         else {
-            assert!(self.non_evictable_cache.contains_key(&file_id));
-            assert!(self.evicted_entries.insert(file_id));
+            let exists_in_cache = self.non_evictable_cache.contains_key(&file_id);
+            if exists_in_cache {
+                assert!(self.evicted_entries.insert(file_id));
+            } else if panic_if_non_existent {
+                panic!(
+                    "Requested file id {:?} should exist in object storage cache",
+                    file_id
+                );
+            }
         }
 
         evicted_files
@@ -362,7 +373,12 @@ impl CacheTrait for ObjectStorageCache {
 
     async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
         let mut guard = self.cache.write().await;
-        guard.delete_cache_entry(file_id)
+        guard.delete_cache_entry(file_id, /*panic_if_non_existent=*/ true)
+    }
+
+    async fn try_delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
+        let mut guard = self.cache.write().await;
+        guard.delete_cache_entry(file_id, /*panic_if_non_existent=*/ false)
     }
 }
 
