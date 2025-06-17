@@ -749,12 +749,12 @@ impl SnapshotTableState {
     }
 
     fn update_data_compaction_to_mooncake_snapshot(&mut self, task: &SnapshotTask) {
-        if task.data_compaction_result.is_none() {
+        if task.data_compaction_result.is_empty() {
             return;
         }
 
         // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.
-        let data_compaction_res = task.data_compaction_result.as_ref().unwrap().clone();
+        let data_compaction_res = task.data_compaction_result.clone();
         self.update_data_files_to_mooncake_snapshot_impl(
             data_compaction_res.old_data_files,
             data_compaction_res.new_data_files,
@@ -789,11 +789,11 @@ impl SnapshotTableState {
 
     fn buffer_unpersisted_iceberg_compaction_data(&mut self, task: &SnapshotTask) {
         let data_compaction_res = &task.data_compaction_result;
-        if data_compaction_res.is_none() {
+        if data_compaction_res.is_empty() {
             return;
         }
 
-        let data_compaction_res = data_compaction_res.clone().unwrap();
+        let data_compaction_res = data_compaction_res.clone();
         let l = data_compaction_res.new_data_files.len();
 
         let mut new_compacted_data_files = Vec::with_capacity(l);
@@ -821,12 +821,12 @@ impl SnapshotTableState {
         deletion_log: &mut ProcessedDeletionRecord,
         task: &mut SnapshotTask,
     ) -> bool {
-        if task.data_compaction_result.is_none() {
+        if task.data_compaction_result.is_empty() {
             return false;
         }
 
         let old_record_location = &deletion_log.pos;
-        let remapped_data_files_after_compaction = task.data_compaction_result.as_mut().unwrap();
+        let remapped_data_files_after_compaction = &mut task.data_compaction_result;
         let new_record_location = remapped_data_files_after_compaction
             .remapped_data_files
             .remove(old_record_location);
@@ -840,7 +840,7 @@ impl SnapshotTableState {
     /// Data compaction might delete existing persisted files, which invalidates record locations and requires a record location remap.
     fn remap_and_prune_deletion_logs_after_compaction(&mut self, task: &mut SnapshotTask) {
         // No need to prune and remap if no compaction happening.
-        if task.data_compaction_result.is_none() {
+        if task.data_compaction_result.is_empty() {
             return;
         }
 
@@ -852,8 +852,6 @@ impl SnapshotTableState {
                 // Case-1: the deletion log doesn't indicate a compacted data file.
                 if !task
                     .data_compaction_result
-                    .as_ref()
-                    .unwrap()
                     .old_data_files
                     .contains(&file_id)
                 {

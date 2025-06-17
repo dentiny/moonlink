@@ -284,7 +284,7 @@ pub struct SnapshotTask {
 
     /// --- States related to data compaction operation ---
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
-    data_compaction_result: Option<DataCompactionResult>,
+    data_compaction_result: DataCompactionResult,
 
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
@@ -311,7 +311,7 @@ impl SnapshotTask {
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
             // Data compaction related fields.
-            data_compaction_result: None,
+            data_compaction_result: DataCompactionResult::default(),
             // Iceberg persistence result.
             iceberg_persisted_records: IcebergPersistedRecords::default(),
         }
@@ -629,8 +629,8 @@ impl MooncakeTable {
 
     /// Set data compaction result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
     pub(crate) fn set_data_compaction_res(&mut self, data_compaction_res: DataCompactionResult) {
-        assert!(self.next_snapshot_task.data_compaction_result.is_none());
-        self.next_snapshot_task.data_compaction_result = Some(data_compaction_res);
+        assert!(self.next_snapshot_task.data_compaction_result.is_empty());
+        self.next_snapshot_task.data_compaction_result = data_compaction_res;
     }
 
     /// Get iceberg snapshot flush LSN.
