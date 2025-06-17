@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Object storage cache, which caches data file in file granularity at local filesystem.
@@ -28,8 +28,10 @@ pub(crate) struct CacheEntryWrapper {
 /// (1) fetch and mark as non-evictable on access
 /// (2) dereference after usage, down-level to evictable when it's unreferenced
 pub(crate) struct ObjectStorageCacheInternal {
-    /// Current number of bytes of all cache entries.
+    /// Current number of bytes of all cache entries, which only accounts overall bytes for evictable cache and non-evictable cache.
     pub(crate) cur_bytes: u64,
+    /// Deleted entries, which should be evicted right away, and should never be referenced again.
+    pub(crate) evicted_entries: HashSet<TableUniqueFileId>,
     /// Evictable data file cache entries.
     pub(crate) evictable_cache: LruCache<TableUniqueFileId, CacheEntryWrapper>,
     /// Non-evictable data file cache entries.
@@ -96,21 +98,70 @@ impl ObjectStorageCacheInternal {
         if !evict_succ {
             assert!(self.non_evictable_cache.remove(&file_id).is_some());
         }
+
         (evict_succ, files_to_delete)
     }
 
+    /// Mark the requested cache entry as deleted, and return evicted files.
+    fn delete_cache_entry(
+        &mut self,
+        file_id: TableUniqueFileId,
+        panic_if_non_existent: bool,
+    ) -> Vec<String> {
+        let mut evicted_files = vec![];
+
+        // If the requested entries are already evictable, remove it directly.
+        if let Some((_, cache_entry_wrapper)) = self.evictable_cache.pop_entry(&file_id) {
+            assert_eq!(cache_entry_wrapper.reference_count, 0);
+            self.cur_bytes -= cache_entry_wrapper.cache_entry.file_metadata.file_size;
+            evicted_files.push(cache_entry_wrapper.cache_entry.cache_filepath);
+        }
+        // Otherwise, we leave a marker, so when the entries get unreferences it will be deleted.
+        else {
+            let exists_in_cache = self.non_evictable_cache.contains_key(&file_id);
+            if exists_in_cache {
+                assert!(self.evicted_entries.insert(file_id));
+            } else if panic_if_non_existent {
+                panic!(
+                    "Requested file id {:?} should exist in object storage cache",
+                    file_id
+                );
+            }
+        }
+
+        evicted_files
+    }
+
     /// Unreference the given cache entry.
-    pub(super) fn unreference(&mut self, file_id: TableUniqueFileId) {
+    pub(super) fn unreference(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
         let cache_entry_wrapper = self.non_evictable_cache.get_mut(&file_id);
         assert!(cache_entry_wrapper.is_some());
         let cache_entry_wrapper = cache_entry_wrapper.unwrap();
         cache_entry_wrapper.reference_count -= 1;
 
+        // Aggregate cache entries to delete.
+        let mut entries_to_delete = vec![];
+
         // Down-level to evictable if reference count goes away.
         if cache_entry_wrapper.reference_count == 0 {
             let cache_entry_wrapper = self.non_evictable_cache.remove(&file_id).unwrap();
-            self.evictable_cache.push(file_id, cache_entry_wrapper);
+
+            // If the current entry has already been requested to delete.
+            if self.evicted_entries.remove(&file_id) {
+                ma::assert_ge!(
+                    self.cur_bytes,
+                    cache_entry_wrapper.cache_entry.file_metadata.file_size
+                );
+                self.cur_bytes -= cache_entry_wrapper.cache_entry.file_metadata.file_size;
+                entries_to_delete.push(cache_entry_wrapper.cache_entry.cache_filepath);
+            }
+            // The cache entry is not requested to delete.
+            else {
+                self.evictable_cache.push(file_id, cache_entry_wrapper);
+            }
         }
+
+        entries_to_delete
     }
 
     /// ================================
@@ -150,13 +201,13 @@ impl std::fmt::Debug for ObjectStorageCache {
 impl ObjectStorageCache {
     pub fn new(config: ObjectStorageCacheConfig) -> Self {
         let evictable_cache = LruCache::unbounded();
-        let non_evictable_cache = HashMap::new();
         Self {
             config,
             cache: Arc::new(RwLock::new(ObjectStorageCacheInternal {
                 cur_bytes: 0,
+                evicted_entries: HashSet::new(),
                 evictable_cache,
-                non_evictable_cache,
+                non_evictable_cache: HashMap::new(),
             })),
         }
     }
@@ -243,6 +294,7 @@ impl CacheTrait for ObjectStorageCache {
             .1;
         let non_evictable_handle =
             NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
+
         (non_evictable_handle, cache_files_to_delete)
     }
 
@@ -305,6 +357,7 @@ impl CacheTrait for ObjectStorageCache {
         {
             let mut guard = self.cache.write().await;
             guard.cur_bytes += cache_entry.file_metadata.file_size;
+
             let (cache_succ, files_to_delete) = guard.insert_non_evictable(
                 file_id,
                 cache_entry_wrapper,
@@ -316,6 +369,16 @@ impl CacheTrait for ObjectStorageCache {
             }
             Ok((None, files_to_delete))
         }
+    }
+
+    async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
+        let mut guard = self.cache.write().await;
+        guard.delete_cache_entry(file_id, /*panic_if_non_existent=*/ true)
+    }
+
+    async fn try_delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
+        let mut guard = self.cache.write().await;
+        guard.delete_cache_entry(file_id, /*panic_if_non_existent=*/ false)
     }
 }
 

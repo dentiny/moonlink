@@ -141,11 +141,16 @@ impl CompactionBuilder {
         &mut self,
         data_file_to_compact: SingleFileToCompact,
     ) -> Result<(DataFileRemap, Vec<String> /*evicted files to delete*/)> {
-        let (cache_handle, evicted_files_to_delete) = self
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
+        let (cache_handle, evicted_files) = self
             .compaction_payload
             .data_file_cache
             .get_cache_entry(data_file_to_compact.file_id, &data_file_to_compact.filepath)
             .await?;
+        evicted_files_to_delete.extend(evicted_files);
+
         let filepath = if let Some(cache_handle) = &cache_handle {
             cache_handle.get_cache_filepath()
         } else {
@@ -226,7 +231,8 @@ impl CompactionBuilder {
         // Unpin cache handle after usage, if necessary.
         // TODO(hjiang): Better error propagation, cache handle should be always unpinned whether success or failure.
         if let Some(mut cache_handle) = cache_handle {
-            cache_handle.unreference().await;
+            let evicted_files = cache_handle.unreference().await;
+            evicted_files_to_delete.extend(evicted_files);
         }
 
         Ok((old_to_new_remap, evicted_files_to_delete))

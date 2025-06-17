@@ -680,9 +680,17 @@ impl MooncakeTable {
     }
 
     /// Shutdown the current table, which unpins all referenced data files in the global data file.
-    pub async fn shutdown(&mut self) {
-        let mut guard = self.snapshot.write().await;
-        guard.unreference_all_cache_handles().await;
+    pub async fn shutdown(&mut self) -> Result<()> {
+        let evicted_files_to_delete = {
+            let mut guard = self.snapshot.write().await;
+            guard.unreference_all_cache_handles().await
+        };
+
+        for cur_file in evicted_files_to_delete.into_iter() {
+            tokio::fs::remove_file(cur_file).await?;
+        }
+
+        Ok(())
     }
 
     pub fn should_flush(&self) -> bool {
@@ -1128,12 +1136,13 @@ impl MooncakeTable {
     }
 
     // Test util function to perform data compaction, block wait its completion and reflect compaction result to mooncake table.
+    // Return evicted files to assertion.
     #[cfg(test)]
     pub(crate) async fn perform_data_compaction_for_test(
         &mut self,
         receiver: &mut Receiver<TableNotify>,
         data_compaction_payload: DataCompactionPayload,
-    ) {
+    ) -> Vec<String> {
         // Perform and block wait data compaction.
         self.perform_data_compaction(data_compaction_payload);
         let data_compaction_result = Self::sync_data_compaction(receiver).await;
@@ -1146,11 +1155,12 @@ impl MooncakeTable {
             skip_file_indices_merge: true,
             skip_data_file_compaction: false,
         }));
-        let (_, _, _, evicted_data_file_cache) = Self::sync_mooncake_snapshot(receiver).await;
+        let (_, _, _, evicted_data_files_to_delete) = Self::sync_mooncake_snapshot(receiver).await;
         // Delete evicted data file cache entries immediately to make sure later accesses all happen on persisted files.
-        for cur_data_file in evicted_data_file_cache.into_iter() {
-            tokio::fs::remove_file(&cur_data_file).await.unwrap();
+        for cur_data_file in evicted_data_files_to_delete.iter() {
+            tokio::fs::remove_file(cur_data_file).await.unwrap();
         }
+        evicted_data_files_to_delete
     }
 
     // Test util function, which does the following things in serial fashion.
