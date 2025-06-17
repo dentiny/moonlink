@@ -13,7 +13,7 @@ use std::collections::HashSet;
 pub struct SingleFileToCompact {
     /// Unique file id to lookup in the data file cache.
     pub(crate) file_id: TableUniqueFileId,
-    /// Remote data file, Only persisted data files will be compacted.
+    /// Remote data file; only persisted data files will be compacted.
     pub(crate) filepath: String,
     /// Deletion vector.
     pub(crate) deletion_vector: Option<PuffinBlobRef>,
@@ -59,7 +59,7 @@ pub struct DataCompactionResult {
     pub(crate) old_file_indices: HashSet<FileIndex>,
     /// New compacted file indices.
     pub(crate) new_file_indices: Vec<FileIndex>,
-    /// Compaction interacts with data file cache, this fields records evicted files to delete.
+    /// Compaction interacts with data file cache, this field records evicted files to delete.
     pub(crate) evicted_files_to_delete: Vec<String>,
 }
 

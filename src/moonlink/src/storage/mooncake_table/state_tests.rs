@@ -1338,9 +1338,9 @@ async fn test_3_compact_1_5() {
     );
 }
 
-/// Test scenario: remote, no local, in use + use & unpinned + use over => (old) remote, no local, in use, (new) no remote, local, no use
+/// Test scenario: remote, no local, not used + use & pinned + use over & unpinned => (old) remote, no local, not used, (new) no remote, local, no use
 #[tokio::test]
-async fn test_2_compact_2_5() {
+async fn test_1_compact_1_5() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         ONE_FILE_CACHE_SIZE,
