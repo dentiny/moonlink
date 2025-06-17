@@ -439,7 +439,7 @@ impl SnapshotTableState {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        let mut tentative_data_files_to_compact = HashMap::new();
+        let mut tentative_data_files_to_compact = vec![];
         let mut tentative_file_indices_to_compact = vec![];
 
         // TODO(hjiang): We should be able to early exit, if left items are not enough to reach the compaction threshold.
@@ -462,11 +462,10 @@ impl SnapshotTableState {
             }
 
             // Tentatively decide data file to compact.
-            let old_entry = tentative_data_files_to_compact.insert(
+            tentative_data_files_to_compact.push((
                 cur_data_file.clone(),
                 disk_file_entry.puffin_deletion_blob.clone(),
-            );
-            assert!(old_entry.is_none());
+            ));
             // Tentatively decide corresponding file indices to compact.
             let cur_file_index = all_disk_files
                 .get(cur_data_file)

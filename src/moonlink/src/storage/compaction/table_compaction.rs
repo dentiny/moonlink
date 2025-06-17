@@ -10,7 +10,7 @@ use std::collections::HashSet;
 #[derive(Clone, Debug)]
 pub struct DataCompactionPayload {
     /// Maps from data file to their deletion records.
-    pub(crate) disk_files: HashMap<MooncakeDataFileRef, Option<PuffinBlobRef>>,
+    pub(crate) disk_files: Vec<(MooncakeDataFileRef, Option<PuffinBlobRef>)>,
     /// File indices to compact and rewrite.
     pub(crate) file_indices: Vec<FileIndex>,
 }

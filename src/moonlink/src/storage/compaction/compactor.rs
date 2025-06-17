@@ -281,8 +281,8 @@ impl CompactionBuilder {
         let old_data_files = self
             .compaction_payload
             .disk_files
-            .keys()
-            .cloned()
+            .iter()
+            .map(|(f, _)| f.clone())
             .collect::<HashSet<_>>();
         let old_file_indices = self
             .compaction_payload

@@ -3,13 +3,13 @@ use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFilePar
 use crate::storage::compaction::table_compaction::DataCompactionPayload;
 use crate::storage::compaction::test_utils;
 use crate::storage::compaction::test_utils::get_record_location_mapping;
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::storage_utils::{get_unique_file_id_for_flush, MooncakeDataFileRef};
+use crate::storage::storage_utils::get_unique_file_id_for_flush;
 use crate::storage::storage_utils::{FileId, RecordLocation};
 
 use std::collections::HashMap;
+use std::vec;
 
 /// Single compacted file size.
 const SINGLE_COMPACTED_DATA_FILE_SIZE: u64 = u64::MAX;
@@ -35,10 +35,7 @@ async fn test_data_file_compaction_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
-            data_file.clone(),
-            None,
-        )]),
+        disk_files: vec![(data_file.clone(), None)],
         file_indices: vec![file_indice],
     };
     let table_auto_incr_id: u64 = 1;
@@ -112,10 +109,7 @@ async fn test_data_file_compaction_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
-            data_file.clone(),
-            Some(puffin_blob_ref),
-        )]),
+        disk_files: vec![(data_file.clone(), Some(puffin_blob_ref))],
         file_indices: vec![file_indice.clone()],
     };
     let table_auto_incr_id: u64 = 1;
@@ -192,10 +186,7 @@ async fn test_data_file_compaction_3() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([(
-            data_file.clone(),
-            Some(puffin_blob_ref),
-        )]),
+        disk_files: vec![(data_file.clone(), Some(puffin_blob_ref))],
         file_indices: vec![file_indice.clone()],
     };
     let table_auto_incr_id: u64 = 1;
@@ -262,10 +253,7 @@ async fn test_data_file_compaction_4() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
-            (data_file_1.clone(), None),
-            (data_file_2.clone(), None),
-        ]),
+        disk_files: vec![(data_file_1.clone(), None), (data_file_2.clone(), None)],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
     let table_auto_incr_id: u64 = 2;
@@ -363,10 +351,10 @@ async fn test_data_file_compaction_5() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
+        disk_files: vec![
             (data_file_1.clone(), Some(puffin_blob_ref_1)),
             (data_file_2.clone(), Some(puffin_blob_ref_2)),
-        ]),
+        ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
     let table_auto_incr_id: u64 = 2;
@@ -471,10 +459,10 @@ async fn test_data_file_compaction_6() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
+        disk_files: vec![
             (data_file_1.clone(), Some(puffin_blob_ref_1)),
             (data_file_2.clone(), Some(puffin_blob_ref_2)),
-        ]),
+        ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
     let table_auto_incr_id: u64 = 2;
@@ -567,10 +555,10 @@ async fn test_multiple_compacted_data_files_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
+        disk_files: vec![
             (data_file_1.clone(), Some(puffin_blob_ref_1)),
             (data_file_2.clone(), Some(puffin_blob_ref_2)),
-        ]),
+        ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
     let table_auto_incr_id: u64 = 2;
@@ -594,73 +582,35 @@ async fn test_multiple_compacted_data_files_1() {
     let new_file_id_2 = FileId(get_unique_file_id_for_flush(table_auto_incr_id, 1));
 
     // Check compaction results.
-    // Due to non-deterministic hash map iteration, here we get all possigle record locations.
     //
     // Check remap results.
-    // TODO(hjiang): Consider using vector as compaction payload, so we don't have non-deterministic problem for compaction.
-    let possible_remaps = [
-        HashMap::<RecordLocation, RecordLocation>::from([
-            (
-                RecordLocation::DiskFile(old_file_id_1, 0),
-                RecordLocation::DiskFile(new_file_id_1, 0),
-            ),
-            (
-                RecordLocation::DiskFile(old_file_id_1, 2),
-                RecordLocation::DiskFile(new_file_id_1, 1),
-            ),
-            (
-                RecordLocation::DiskFile(old_file_id_2, 1),
-                (RecordLocation::DiskFile(new_file_id_2, 0)),
-            ),
-        ]),
-        HashMap::<RecordLocation, RecordLocation>::from([
-            (
-                RecordLocation::DiskFile(old_file_id_1, 0),
-                RecordLocation::DiskFile(new_file_id_2, 0),
-            ),
-            (
-                RecordLocation::DiskFile(old_file_id_1, 2),
-                RecordLocation::DiskFile(new_file_id_2, 1),
-            ),
-            (
-                RecordLocation::DiskFile(old_file_id_2, 1),
-                (RecordLocation::DiskFile(new_file_id_1, 0)),
-            ),
-        ]),
-    ];
+    let expected_remap = HashMap::<RecordLocation, RecordLocation>::from([
+        (
+            RecordLocation::DiskFile(old_file_id_1, 0),
+            RecordLocation::DiskFile(new_file_id_1, 0),
+        ),
+        (
+            RecordLocation::DiskFile(old_file_id_1, 2),
+            RecordLocation::DiskFile(new_file_id_1, 1),
+        ),
+        (
+            RecordLocation::DiskFile(old_file_id_2, 1),
+            (RecordLocation::DiskFile(new_file_id_2, 0)),
+        ),
+    ]);
     let actual_remap = get_record_location_mapping(&compaction_result.remapped_data_files);
-    assert!(possible_remaps.contains(&actual_remap));
+    assert_eq!(expected_remap, actual_remap);
 
     // Check file indices compaction.
-    // Due to non-deterministic hash map iteration, here we get all possigle record locations.
-    //
-    // TODO(hjiang): Consider using vector as compaction payload, so we don't have non-deterministic problem for compaction.
-    let possible_expected_record_locations = vec![
-        vec![
-            (new_file_id_1, /*row_idx=*/ 0),
-            (new_file_id_2, /*row_idx=*/ 0),
-            (new_file_id_2, /*row_idx=*/ 1),
-        ],
-        vec![
-            (new_file_id_1, /*row_idx=*/ 0),
-            (new_file_id_1, /*row_idx=*/ 1),
-            (new_file_id_2, /*row_idx=*/ 0),
-        ],
-        vec![
-            (new_file_id_2, /*row_idx=*/ 0),
-            (new_file_id_2, /*row_idx=*/ 1),
-            (new_file_id_1, /*row_idx=*/ 0),
-        ],
-        vec![
-            (new_file_id_2, /*row_idx=*/ 0),
-            (new_file_id_1, /*row_idx=*/ 0),
-            (new_file_id_1, /*row_idx=*/ 1),
-        ],
+    let expected_record_locations = vec![
+        (new_file_id_1, /*row_idx=*/ 0),
+        (new_file_id_1, /*row_idx=*/ 1),
+        (new_file_id_2, /*row_idx=*/ 0),
     ];
 
     test_utils::check_file_indices_compaction_for_multiple_compacted_files(
         compaction_result.new_file_indices.as_slice(),
-        possible_expected_record_locations,
+        expected_record_locations,
         /*old_row_indices=*/ vec![0, 2, 4],
     )
     .await;
@@ -726,10 +676,10 @@ async fn test_multiple_compacted_data_files_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        disk_files: HashMap::<MooncakeDataFileRef, Option<PuffinBlobRef>>::from([
+        disk_files: vec![
             (data_file_1.clone(), Some(puffin_blob_ref_1)),
             (data_file_2.clone(), Some(puffin_blob_ref_2)),
-        ]),
+        ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
     let table_auto_incr_id: u64 = 2;
