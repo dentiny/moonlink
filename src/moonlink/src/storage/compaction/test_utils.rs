@@ -292,7 +292,8 @@ fn get_compacted_arrow_batch(old_row_indices: Vec<usize>) -> RecordBatch {
             age_col.push(AGE_VALUES[row_idx]);
         }
     }
-    let expected_arrow_record = RecordBatch::try_new(
+
+    RecordBatch::try_new(
         iceberg_test_utils::create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(id_col)),    // id column
@@ -300,8 +301,7 @@ fn get_compacted_arrow_batch(old_row_indices: Vec<usize>) -> RecordBatch {
             Arc::new(Int32Array::from(age_col)),   // age column
         ],
     )
-    .unwrap();
-    expected_arrow_record
+    .unwrap()
 }
 
 /// Test util function to validate deletion vector applied to single compacted file.
