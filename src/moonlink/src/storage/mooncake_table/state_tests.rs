@@ -259,7 +259,7 @@ async fn test_shutdown_table() {
     assert!(files_to_delete.is_empty());
 
     // Shutdown the table, which unreferences all cache handles in the snapshot.
-    table.shutdown().await;
+    table.shutdown().await.unwrap();
 
     // Check cache state.
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
@@ -918,7 +918,8 @@ async fn test_2_read_and_pinned_3() {
     // Till now, the state is (remote, no local, in use).
 
     // Unreference the second cache handle, so we could pin requires files again in cache.
-    fake_cache_handle.unreference().await;
+    let evicted_files_to_delete = fake_cache_handle.unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     let snapshot_read_output_2 = table.request_read().await.unwrap();
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
@@ -1372,7 +1373,8 @@ async fn test_1_compact_1_5() {
 
     // Import second data file into cache, so the cached entry will be evicted.
     let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
-    fake_cache_handle.unreference().await;
+    let evicted_files_to_delete = fake_cache_handle.unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Perform data compaction: use remote file to perform compaction.
     table

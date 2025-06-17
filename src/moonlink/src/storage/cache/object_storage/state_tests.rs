@@ -181,7 +181,8 @@ async fn test_cache_2_requested_to_read_with_insufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Unreference to make cache entry evictable.
-    cache_handle.unreference().await;
+    let evicted_files_to_delete = cache_handle.unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Request to read, thus pinning the cache entry.
     let (_, files_to_evict) = cache
@@ -283,7 +284,8 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Unreference to make cache entry evictable.
-    cache_handle.unreference().await;
+    let evicted_files_to_delete = cache_handle.unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Import the second cache file.
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
@@ -340,7 +342,8 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Unreference to make cache entry evictable.
-    cache_handle_1.unreference().await;
+    let evicted_files_to_delete = cache_handle_1.unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Import the second cache file.
     let test_file = create_test_file(remote_file_directory.path(), TEST_FILENAME_2).await;
@@ -409,7 +412,8 @@ async fn test_cache_3_unpin_still_referenced() {
     assert!(files_to_evict.is_empty());
 
     // Unreference one of the cache handles.
-    cache_handle.unwrap().unreference().await;
+    let evicted_files_to_delete = cache_handle.unwrap().unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Check cache status.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -458,8 +462,10 @@ async fn test_cache_3_unpin_not_referenced() {
     assert!(files_to_evict.is_empty());
 
     // Unreference all cache handles.
-    cache_handle_1.unwrap().unreference().await;
-    cache_handle_2.unwrap().unreference().await;
+    let evicted_files_to_delete = cache_handle_1.unwrap().unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
+    let evicted_files_to_delete = cache_handle_2.unwrap().unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
 
     // Check cache status.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
