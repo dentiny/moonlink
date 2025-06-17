@@ -247,7 +247,7 @@ impl TestEnvironment {
 
     // --- Lifecycle Helper ---
     pub async fn shutdown(&mut self) {
-        self.send_event(TableEvent::_Shutdown).await;
+        self.send_event(TableEvent::Shutdown).await;
         if let Some(handle) = self.handler._event_handle.take() {
             handle.await.expect("TableHandler task panicked");
         }

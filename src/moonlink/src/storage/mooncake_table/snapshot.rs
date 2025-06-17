@@ -952,6 +952,16 @@ impl SnapshotTableState {
         self.unreference_read_cache_handles(task).await;
     }
 
+    /// Unreference all pinned data files.
+    pub(crate) async fn unreference_all_cache_handles(&mut self) {
+        for (_, disk_file_entry) in self.current_snapshot.disk_files.iter_mut() {
+            let cache_handle = &mut disk_file_entry.cache_handle;
+            if let Some(cache_handle) = cache_handle {
+                cache_handle.unreference().await;
+            }
+        }
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,

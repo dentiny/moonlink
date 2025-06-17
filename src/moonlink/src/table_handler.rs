@@ -35,11 +35,11 @@ pub enum TableEvent {
     /// Flush the transaction stream with given xact_id
     StreamFlush { xact_id: u32 },
     /// Shutdown the handler
-    _Shutdown,
+    Shutdown,
     /// Force a mooncake and iceberg snapshot.
     ForceSnapshot { lsn: u64, tx: Sender<Result<()>> },
     /// Drop table.
-    DropIcebergTable,
+    DropTable,
 }
 
 /// Handler for table operations
@@ -263,7 +263,8 @@ impl TableHandler {
                                 warn!(error = %e, "stream flush failed");
                             }
                         }
-                        TableEvent::_Shutdown => {
+                        TableEvent::Shutdown => {
+                            table.shutdown().await;
                             info!("shutting down table handler");
                             break;
                         }
@@ -284,9 +285,10 @@ impl TableHandler {
                                 force_snapshot_lsns.entry(lsn).or_default().push(tx);
                             }
                         }
-                        // Branch to drop the iceberg table, only used when the whole table requested to drop.
+                        // Branch to drop the iceberg table and clear pinned data files from the global data file cache, only used when the whole table requested to drop.
                         // So we block wait for asynchronous request completion.
-                        TableEvent::DropIcebergTable => {
+                        TableEvent::DropTable => {
+                            table.shutdown().await;
                             let res = table.drop_iceberg_table().await;
                             iceberg_event_sync_sender.iceberg_drop_table_completion_tx.send(res).await.unwrap();
                         }
@@ -433,6 +435,7 @@ impl TableHandler {
                 }
                 // If all senders have been dropped, exit the loop
                 else => {
+                    table.shutdown().await;
                     info!("all event senders dropped, shutting down table handler");
                     break;
                 }

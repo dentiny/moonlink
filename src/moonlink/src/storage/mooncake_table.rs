@@ -705,6 +705,12 @@ impl MooncakeTable {
         self.next_snapshot_task.new_commit_point = Some(self.mem_slice.get_commit_check_point());
     }
 
+    /// Shutdown the current table, which unpins all referenced data files in the global data file.
+    pub async fn shutdown(&mut self) {
+        let mut guard = self.snapshot.write().await;
+        guard.unreference_all_cache_handles().await;
+    }
+
     pub fn should_flush(&self) -> bool {
         self.mem_slice.get_num_rows() >= self.metadata.config.mem_slice_size
     }
