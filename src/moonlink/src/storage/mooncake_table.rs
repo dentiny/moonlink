@@ -1116,6 +1116,32 @@ impl MooncakeTable {
         Ok(())
     }
 
+    // Test util function to perform data compaction, block wait its completion and reflect compaction result to mooncake table.
+    #[cfg(test)]
+    pub(crate) async fn perform_data_compaction_for_test(
+        &mut self,
+        receiver: &mut Receiver<TableNotify>,
+        data_compaction_payload: DataCompactionPayload,
+    ) {
+        // Perform and block wait data compaction.
+        self.perform_data_compaction(data_compaction_payload);
+        let data_compaction_result = Self::sync_data_compaction(receiver).await;
+        let data_compaction_result = data_compaction_result.unwrap();
+
+        self.set_data_compaction_res(data_compaction_result);
+        assert!(self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: false,
+            skip_file_indices_merge: true,
+            skip_data_file_compaction: false,
+        }));
+        let (_, _, _, evicted_data_file_cache) = Self::sync_mooncake_snapshot(receiver).await;
+        // Delete evicted data file cache entries immediately to make sure later accesses all happen on persisted files.
+        for cur_data_file in evicted_data_file_cache.into_iter() {
+            tokio::fs::remove_file(&cur_data_file).await.unwrap();
+        }
+    }
+
     // Test util function, which does the following things in serial fashion.
     // (1) updates mooncake table snapshot, (2) create iceberg snapshot, (3) trigger data compaction, (4) perform data compaction, (5) another mooncake and iceberg snapshot.
     //
