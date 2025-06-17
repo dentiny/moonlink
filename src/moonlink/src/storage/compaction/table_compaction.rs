@@ -45,3 +45,20 @@ pub struct DataCompactionResult {
     /// New compacted file indices.
     pub(crate) new_file_indices: Vec<FileIndex>,
 }
+
+impl DataCompactionResult {
+    /// Return whether data compaction result is empty.
+    pub fn is_empty(&self) -> bool {
+        if self.old_data_files.is_empty() {
+            assert!(self.remapped_data_files.is_empty());
+            assert!(self.old_data_files.is_empty());
+            assert!(self.old_file_indices.is_empty());
+            assert!(self.new_file_indices.is_empty());
+            return true;
+        }
+
+        // If all rows have been deleted after compaction, there'll be no new data files, file indices and remaps.
+        assert!(!self.old_file_indices.is_empty());
+        false
+    }
+}
