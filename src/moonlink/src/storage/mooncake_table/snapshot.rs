@@ -574,52 +574,47 @@ impl SnapshotTableState {
             .drain(0..new_merged_file_indices.len());
     }
 
-    fn prune_persisted_compacted_data(
-        &mut self,
-        old_compacted_data_files: &[MooncakeDataFileRef],
-        new_compacted_data_files: &[MooncakeDataFileRef],
-        old_compacted_file_indices: &[FileIndex],
-        new_compacted_file_indices: &[FileIndex],
-    ) {
+    fn prune_persisted_compacted_data(&mut self, task: &SnapshotTask) {
+        let persisted_compaction_res = &task.iceberg_persisted_records;
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .compacted_data_files_to_add
                 .len(),
-            new_compacted_data_files.len()
+            persisted_compaction_res.new_compacted_data_files.len()
         );
         self.unpersisted_iceberg_records
             .compacted_data_files_to_add
-            .drain(0..new_compacted_data_files.len());
+            .drain(0..persisted_compaction_res.new_compacted_data_files.len());
 
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .compacted_data_files_to_remove
                 .len(),
-            old_compacted_data_files.len()
+            persisted_compaction_res.old_compacted_data_files.len()
         );
         self.unpersisted_iceberg_records
             .compacted_data_files_to_remove
-            .drain(0..old_compacted_data_files.len());
+            .drain(0..persisted_compaction_res.old_compacted_data_files.len());
 
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .compacted_file_indices_to_add
                 .len(),
-            new_compacted_file_indices.len()
+            persisted_compaction_res.new_compacted_file_indices.len()
         );
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_add
-            .drain(0..new_compacted_file_indices.len());
+            .drain(0..persisted_compaction_res.new_compacted_file_indices.len());
 
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .compacted_file_indices_to_remove
                 .len(),
-            old_compacted_file_indices.len()
+            persisted_compaction_res.old_compacted_file_indices.len()
         );
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_remove
-            .drain(0..old_compacted_file_indices.len());
+            .drain(0..persisted_compaction_res.old_compacted_file_indices.len());
     }
 
     // Update current snapshot's file indices by adding and removing a few.
@@ -753,31 +748,21 @@ impl SnapshotTableState {
         );
     }
 
-    fn update_data_compaction_to_mooncake_snapshot(
-        &mut self,
-        old_compacted_data_files: HashSet<MooncakeDataFileRef>,
-        new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-        old_compacted_file_indices: HashSet<FileIndex>,
-        new_compacted_file_indices: Vec<FileIndex>,
-        remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
-    ) {
-        if old_compacted_data_files.is_empty() {
-            assert!(new_compacted_data_files.is_empty());
-            assert!(old_compacted_file_indices.is_empty());
-            assert!(new_compacted_file_indices.is_empty());
-            assert!(remapped_data_files_after_compaction.is_empty());
+    fn update_data_compaction_to_mooncake_snapshot(&mut self, task: &SnapshotTask) {
+        if task.data_compaction_result.is_none() {
             return;
         }
 
         // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.
+        let data_compaction_res = task.data_compaction_result.as_ref().unwrap().clone();
         self.update_data_files_to_mooncake_snapshot_impl(
-            old_compacted_data_files,
-            new_compacted_data_files,
-            remapped_data_files_after_compaction,
+            data_compaction_res.old_data_files,
+            data_compaction_res.new_data_files,
+            data_compaction_res.remapped_data_files,
         );
         self.update_file_indices_to_mooncake_snapshot_impl(
-            old_compacted_file_indices,
-            new_compacted_file_indices.clone(),
+            data_compaction_res.old_file_indices,
+            data_compaction_res.new_file_indices,
         );
     }
 
@@ -803,8 +788,16 @@ impl SnapshotTableState {
     }
 
     fn buffer_unpersisted_iceberg_compaction_data(&mut self, task: &SnapshotTask) {
-        let mut new_compacted_data_files = Vec::with_capacity(task.new_compacted_data_files.len());
-        for (new_data_file, _) in task.new_compacted_data_files.iter() {
+        let data_compaction_res = &task.data_compaction_result;
+        if data_compaction_res.is_none() {
+            return;
+        }
+
+        let data_compaction_res = data_compaction_res.clone().unwrap();
+        let l = data_compaction_res.new_data_files.len();
+
+        let mut new_compacted_data_files = Vec::with_capacity(l);
+        for (new_data_file, _) in data_compaction_res.new_data_files.into_iter() {
             new_compacted_data_files.push(new_data_file.clone());
         }
 
@@ -813,13 +806,13 @@ impl SnapshotTableState {
             .extend(new_compacted_data_files);
         self.unpersisted_iceberg_records
             .compacted_data_files_to_remove
-            .extend(task.old_compacted_data_files.to_owned());
+            .extend(data_compaction_res.old_data_files);
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_add
-            .extend(task.new_compacted_file_indices.to_owned());
+            .extend(data_compaction_res.new_file_indices);
         self.unpersisted_iceberg_records
             .compacted_file_indices_to_remove
-            .extend(task.old_compacted_file_indices.to_owned());
+            .extend(data_compaction_res.old_file_indices);
     }
 
     /// Remap single record location after compaction.
@@ -828,9 +821,14 @@ impl SnapshotTableState {
         deletion_log: &mut ProcessedDeletionRecord,
         task: &mut SnapshotTask,
     ) -> bool {
+        if task.data_compaction_result.is_none() {
+            return false;
+        }
+
         let old_record_location = &deletion_log.pos;
-        let new_record_location = task
-            .remapped_data_files_after_compaction
+        let remapped_data_files_after_compaction = task.data_compaction_result.as_mut().unwrap();
+        let new_record_location = remapped_data_files_after_compaction
+            .remapped_data_files
             .remove(old_record_location);
         if new_record_location.is_none() {
             return false;
@@ -842,7 +840,7 @@ impl SnapshotTableState {
     /// Data compaction might delete existing persisted files, which invalidates record locations and requires a record location remap.
     fn remap_and_prune_deletion_logs_after_compaction(&mut self, task: &mut SnapshotTask) {
         // No need to prune and remap if no compaction happening.
-        if task.old_compacted_data_files.is_empty() {
+        if task.data_compaction_result.is_none() {
             return;
         }
 
@@ -852,7 +850,13 @@ impl SnapshotTableState {
         for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
             if let Some(file_id) = cur_deletion_log.get_file_id() {
                 // Case-1: the deletion log doesn't indicate a compacted data file.
-                if !task.old_compacted_data_files.contains(&file_id) {
+                if !task
+                    .data_compaction_result
+                    .as_ref()
+                    .unwrap()
+                    .old_data_files
+                    .contains(&file_id)
+                {
                     new_committed_deletion_log.push(cur_deletion_log);
                     continue;
                 }
@@ -982,13 +986,7 @@ impl SnapshotTableState {
         );
         // Update disk file's disk entries and file indices from compacted data files and file indices.
         // Also remap committed deletion logs if applicable.
-        self.update_data_compaction_to_mooncake_snapshot(
-            task.old_compacted_data_files.clone(),
-            task.new_compacted_data_files.clone(),
-            task.old_compacted_file_indices.clone(),
-            task.new_compacted_file_indices.clone(),
-            task.remapped_data_files_after_compaction.clone(),
-        );
+        self.update_data_compaction_to_mooncake_snapshot(&task);
 
         // Prune unpersisted records.
         self.prune_committed_deletion_logs(&task);
@@ -1002,12 +1000,7 @@ impl SnapshotTableState {
             &task.iceberg_persisted_records.old_merged_file_indices,
             &task.iceberg_persisted_records.new_merged_file_indices,
         );
-        self.prune_persisted_compacted_data(
-            &task.iceberg_persisted_records.old_compacted_data_files,
-            &task.iceberg_persisted_records.new_compacted_data_files,
-            &task.iceberg_persisted_records.old_compacted_file_indices,
-            &task.iceberg_persisted_records.new_compacted_file_indices,
-        );
+        self.prune_persisted_compacted_data(&task);
 
         // Sync buffer snapshot states into unpersisted iceberg content.
         self.buffer_unpersisted_iceberg_new_data_files(&task);

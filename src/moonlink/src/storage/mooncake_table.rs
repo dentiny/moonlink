@@ -17,7 +17,6 @@ use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
-use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
@@ -285,17 +284,7 @@ pub struct SnapshotTask {
 
     /// --- States related to data compaction operation ---
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
-    ///
-    /// Old data files which have been compacted.
-    old_compacted_data_files: HashSet<MooncakeDataFileRef>,
-    /// New compacted data files, which should be imported to iceberg table.
-    new_compacted_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-    /// Old file indices which have been compacted.
-    old_compacted_file_indices: HashSet<FileIndex>,
-    /// New compacted file indices, which should be imported to iceberg table.
-    new_compacted_file_indices: Vec<FileIndex>,
-    /// Remapped data file after compaction.
-    remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
+    data_compaction_result: Option<DataCompactionResult>,
 
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
@@ -322,11 +311,7 @@ impl SnapshotTask {
             old_merged_file_indices: HashSet::new(),
             new_merged_file_indices: Vec::new(),
             // Data compaction related fields.
-            old_compacted_data_files: HashSet::new(),
-            new_compacted_data_files: Vec::new(),
-            old_compacted_file_indices: HashSet::new(),
-            new_compacted_file_indices: Vec::new(),
-            remapped_data_files_after_compaction: HashMap::new(),
+            data_compaction_result: None,
             // Iceberg persistence result.
             iceberg_persisted_records: IcebergPersistedRecords::default(),
         }
@@ -644,30 +629,8 @@ impl MooncakeTable {
 
     /// Set data compaction result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
     pub(crate) fn set_data_compaction_res(&mut self, data_compaction_res: DataCompactionResult) {
-        assert!(self.next_snapshot_task.old_compacted_data_files.is_empty());
-        self.next_snapshot_task.old_compacted_data_files = data_compaction_res.old_data_files;
-
-        assert!(self.next_snapshot_task.new_compacted_data_files.is_empty());
-        self.next_snapshot_task.new_compacted_data_files = data_compaction_res.new_data_files;
-
-        assert!(self
-            .next_snapshot_task
-            .old_compacted_file_indices
-            .is_empty());
-        self.next_snapshot_task.old_compacted_file_indices = data_compaction_res.old_file_indices;
-
-        assert!(self
-            .next_snapshot_task
-            .new_compacted_file_indices
-            .is_empty());
-        self.next_snapshot_task.new_compacted_file_indices = data_compaction_res.new_file_indices;
-
-        assert!(self
-            .next_snapshot_task
-            .remapped_data_files_after_compaction
-            .is_empty());
-        self.next_snapshot_task.remapped_data_files_after_compaction =
-            data_compaction_res.remapped_data_files;
+        assert!(self.next_snapshot_task.data_compaction_result.is_none());
+        self.next_snapshot_task.data_compaction_result = Some(data_compaction_res);
     }
 
     /// Get iceberg snapshot flush LSN.

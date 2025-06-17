@@ -32,7 +32,7 @@ pub(crate) struct RemappedRecordLocation {
 }
 
 /// Result for a compaction operation.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
