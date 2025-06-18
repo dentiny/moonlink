@@ -427,10 +427,28 @@ async fn test_streaming_transaction_periodic_flush_then_abort() {
 
 // This test only checks whether drop table event send and receive works through table handler.
 #[tokio::test]
-async fn test_iceberg_drop_table() {
+async fn test_iceberg_drop_empty_table() {
     let temp_dir = tempdir().unwrap();
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await; // No temp files created.
     env.drop_iceberg_table().await.unwrap()
+}
+
+// This test checks whether drop tables go through when there's real data.
+#[tokio::test]
+async fn test_iceberg_drop_table_with_data() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    // Write a few records to trigger mooncake and iceberg snapshot.
+    env.append_row(/*id=*/ 0, /*name=*/ "Bob", /*age=*/ 10, /*xact_id=*/ None).await;
+    env.commit(/*lsn=*/ 1).await;
+    env.flush_table(/*lsn=*/ 1).await;
+
+    println!("before wait read");
+
+
+    // Drop table and block wait its completion, check whether error status is correctly propagated.
+    env.drop_iceberg_table().await.unwrap();
 }
 
 #[tokio::test]

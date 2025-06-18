@@ -110,6 +110,9 @@ impl ReadStateManager {
         replication_lsn: u64,
         commit_lsn: u64,
     ) -> bool {
+
+        println!("requested {:?}, snapshot {}", requested_lsn, snapshot_lsn);
+
         let is_snapshot_clean = snapshot_lsn == commit_lsn;
         match requested_lsn {
             // If no specific LSN is requested, we can always try to read the latest.
@@ -161,6 +164,9 @@ impl ReadStateManager {
         replication_lsn_rx: &mut watch::Receiver<u64>,
         table_snapshot_rx: &mut watch::Receiver<u64>,
     ) -> Result<()> {
+
+        println!("request lsn val {}, cur repl lsn {}", requested_lsn_val, current_replication_lsn);
+
         if requested_lsn_val > current_replication_lsn {
             replication_lsn_rx
                 .changed()
