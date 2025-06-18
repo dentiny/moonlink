@@ -14,6 +14,12 @@ use iceberg::Result as IcebergResult;
 #[cfg(test)]
 use mockall::*;
 
+/// File parameters required for snapshot persistence.
+pub struct PersistenceFileParams {
+    /// Used to generate unique file id.
+    pub(crate) table_auto_incr_id: u32,
+}
+
 /// Iceberg persistence results.
 #[derive(Clone, Debug)]
 pub struct PersistenceResult {
@@ -41,6 +47,7 @@ pub trait TableManager: Send {
     async fn sync_snapshot(
         &mut self,
         snapshot_payload: IcebergSnapshotPayload,
+        file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult>;
 
     /// Load the latest snapshot from iceberg table. Used for recovery and initialization.

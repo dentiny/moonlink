@@ -1,3 +1,4 @@
+use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
@@ -7,7 +8,9 @@ use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
-use crate::storage::iceberg::table_manager::{PersistenceResult, TableManager};
+use crate::storage::iceberg::table_manager::{
+    PersistenceFileParams, PersistenceResult, TableManager,
+};
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
@@ -20,7 +23,11 @@ use crate::storage::mooncake_table::{
     take_data_files_to_import, take_file_indices_to_import, take_file_indices_to_remove,
 };
 use crate::storage::mooncake_table::{take_data_files_to_remove, DiskFileEntry};
-use crate::storage::storage_utils::{create_data_file, FileId, MooncakeDataFileRef};
+use crate::storage::storage_utils::{
+    create_data_file, get_unique_file_id_for_flush, FileId, MooncakeDataFileRef, TableId,
+    TableUniqueFileId,
+};
+use crate::ObjectStorageCache;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::vec;
@@ -57,7 +64,7 @@ pub struct IcebergTableConfig {
     pub table_name: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) struct DataFileEntry {
     /// Iceberg data file, used to decide what to persist at new commit requests.
     pub(crate) data_file: DataFile,
@@ -101,6 +108,9 @@ pub struct IcebergTableManager {
     /// The iceberg table it's managing.
     pub(crate) iceberg_table: Option<IcebergTable>,
 
+    /// Object storage cache.
+    pub(crate) object_storage_cache: ObjectStorageCache,
+
     /// Maps from already persisted data file filepath to its deletion vector, and iceberg `DataFile`.
     pub(crate) persisted_data_files: HashMap<FileId, DataFileEntry>,
 
@@ -114,6 +124,7 @@ pub struct IcebergTableManager {
 impl IcebergTableManager {
     pub fn new(
         mooncake_table_metadata: Arc<MooncakeTableMetadata>,
+        object_storage_cache: ObjectStorageCache,
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
         let catalog = utils::create_catalog(&config.warehouse_uri)?;
@@ -123,6 +134,7 @@ impl IcebergTableManager {
             mooncake_table_metadata,
             catalog,
             iceberg_table: None,
+            object_storage_cache,
             persisted_data_files: HashMap::new(),
             persisted_file_indices: HashMap::new(),
             remote_data_file_to_file_id: HashMap::new(),
@@ -257,6 +269,7 @@ impl IcebergTableManager {
         &mut self,
         entry: &ManifestEntry,
         file_io: &FileIO,
+        next_file_id: &mut u64,
     ) -> IcebergResult<()> {
         // Skip data files and file indices.
         if !utils::is_deletion_vector_entry(entry) {
@@ -275,8 +288,24 @@ impl IcebergTableManager {
         let deletion_vector = DeletionVector::load_from_dv_blob(file_io.clone(), data_file).await?;
         let batch_deletion_vector = deletion_vector.take_as_batch_delete_vector();
         data_file_entry.deletion_vector = batch_deletion_vector;
+
+        // Load remote puffin file to local cache and pin.
+        let cur_file_id = *next_file_id;
+        *next_file_id += 1;
+        let unique_file_id = TableUniqueFileId {
+            table_id: TableId(self.mooncake_table_metadata.id),
+            file_id: FileId(cur_file_id),
+        };
+        let (cache_handle, evicted_files_to_delete) = self
+            .object_storage_cache
+            .get_cache_entry(unique_file_id, data_file.file_path())
+            .await
+            .map_err(|err| utils::to_iceberg_error(err))?;
+        utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
+
         data_file_entry.persisted_deletion_vector = Some(PuffinBlobRef {
-            puffin_filepath: data_file.file_path().to_string(),
+            // Deletion vector cache should be pinned on cache.
+            puffin_file_cache_handle: cache_handle.unwrap(),
             start_offset: data_file.content_offset().unwrap() as u32,
             blob_size: data_file.content_size_in_bytes().unwrap() as u32,
         });
@@ -350,6 +379,8 @@ impl IcebergTableManager {
         &mut self,
         data_file: String,
         deletion_vector: BatchDeletionVector,
+        file_params: &PersistenceFileParams,
+        puffin_index: u64,
     ) -> IcebergResult<PuffinBlobRef> {
         let deleted_rows = deletion_vector.collect_deleted_rows();
         assert!(!deleted_rows.is_empty());
@@ -382,11 +413,27 @@ impl IcebergTableManager {
             .record_puffin_metadata_and_close(puffin_filepath.clone(), puffin_writer)
             .await?;
 
-        Ok(PuffinBlobRef {
-            puffin_filepath,
+        // Import the puffin file in object storage cache.
+        let unique_file_id = TableUniqueFileId {
+            table_id: TableId(self.mooncake_table_metadata.id),
+            file_id: FileId(get_unique_file_id_for_flush(
+                file_params.table_auto_incr_id as u64,
+                puffin_index,
+            )),
+        };
+        let (cache_handle, evicted_files_to_delete) = self
+            .object_storage_cache
+            .get_cache_entry(unique_file_id, &puffin_filepath)
+            .await
+            .map_err(|err| utils::to_iceberg_error(err))?;
+        utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
+
+        let puffin_blob_ref = PuffinBlobRef {
+            puffin_file_cache_handle: cache_handle.unwrap(),
             start_offset: 4_u32, // Puffin file starts with 4 magic bytes.
             blob_size: blob_size as u32,
-        })
+        };
+        Ok(puffin_blob_ref)
     }
 
     /// Dump local data files into iceberg table.
@@ -482,9 +529,12 @@ impl IcebergTableManager {
     async fn sync_deletion_vector(
         &mut self,
         new_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
+        file_params: &PersistenceFileParams,
     ) -> IcebergResult<HashMap<FileId, PuffinBlobRef>> {
         let mut puffin_deletion_blobs = HashMap::with_capacity(new_deletion_logs.len());
-        for (data_file, new_deletion_vector) in new_deletion_logs.into_iter() {
+        for (puffin_index, (data_file, new_deletion_vector)) in
+            new_deletion_logs.into_iter().enumerate()
+        {
             let mut entry = self
                 .persisted_data_files
                 .get(&data_file.file_id())
@@ -500,7 +550,12 @@ impl IcebergTableManager {
             // Data filepath in iceberg table.
             let iceberg_data_file = entry.data_file.file_path();
             let puffin_blob = self
-                .write_deletion_vector(iceberg_data_file.to_string(), entry.deletion_vector.clone())
+                .write_deletion_vector(
+                    iceberg_data_file.to_string(),
+                    entry.deletion_vector.clone(),
+                    &file_params,
+                    puffin_index as u64,
+                )
                 .await?;
             let old_entry = self.persisted_data_files.insert(data_file.file_id(), entry);
             assert!(old_entry.is_some());
@@ -610,6 +665,7 @@ impl TableManager for IcebergTableManager {
     async fn sync_snapshot(
         &mut self,
         mut snapshot_payload: IcebergSnapshotPayload,
+        file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult> {
         // Initialize iceberg table on access.
         self.initialize_iceberg_table_for_once().await?;
@@ -629,10 +685,10 @@ impl TableManager for IcebergTableManager {
             .await?;
 
         // Persist committed deletion logs.
+        let new_deletion_vector =
+            std::mem::take(&mut snapshot_payload.import_payload.new_deletion_vector);
         let deletion_puffin_blobs = self
-            .sync_deletion_vector(std::mem::take(
-                &mut snapshot_payload.import_payload.new_deletion_vector,
-            ))
+            .sync_deletion_vector(new_deletion_vector, &file_params)
             .await?;
 
         let remote_file_indices = self
@@ -731,8 +787,12 @@ impl TableManager for IcebergTableManager {
                 file_id_to_file_indices.extend(recovered_file_indices.file_id_to_file_indices);
             }
             for entry in manifest_entries.into_iter() {
-                self.load_deletion_vector_from_manifest_entry(entry.as_ref(), &file_io)
-                    .await?;
+                self.load_deletion_vector_from_manifest_entry(
+                    entry.as_ref(),
+                    &file_io,
+                    &mut next_file_id,
+                )
+                .await?;
             }
         }
 

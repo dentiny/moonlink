@@ -8,12 +8,13 @@ use iceberg::{Error as IcebergError, Result as IcebergResult};
 
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::NonEvictableHandle;
 
-/// Reference to puffin blob.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Reference to puffin blob, which is always cached on-disk.
+#[derive(Clone, Debug)]
 pub struct PuffinBlobRef {
-    /// Path for the puffin file.
-    pub(crate) puffin_filepath: String,
+    /// Puffin file cache handle.
+    pub(crate) puffin_file_cache_handle: NonEvictableHandle,
     /// Start offset for the blob.
     pub(crate) start_offset: u32,
     /// Blob size.
@@ -65,8 +66,11 @@ pub(crate) async fn load_blob_from_puffin_file(
 pub(crate) async fn load_deletion_vector_from_blob(
     puffin_blob_ref: &PuffinBlobRef,
 ) -> IcebergResult<BatchDeletionVector> {
-    let file_io = FileIO::from_path(&puffin_blob_ref.puffin_filepath)?.build()?;
-    let puffin_blob = load_blob_from_puffin_file(file_io, &puffin_blob_ref.puffin_filepath).await?;
+    let cache_filepath = puffin_blob_ref
+        .puffin_file_cache_handle
+        .get_cache_filepath();
+    let file_io = FileIO::from_path(cache_filepath)?.build()?;
+    let puffin_blob = load_blob_from_puffin_file(file_io, cache_filepath).await?;
     let deletion_vector = DeletionVector::deserialize(puffin_blob)?;
     Ok(deletion_vector.take_as_batch_delete_vector())
 }

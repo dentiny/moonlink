@@ -21,7 +21,7 @@ pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
 use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
-use crate::storage::iceberg::table_manager::TableManager;
+use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 pub use crate::storage::mooncake_table::snapshot_read_output::ReadOutput as SnapshotReadOutput;
 #[cfg(test)]
@@ -464,6 +464,7 @@ impl MooncakeTable {
         });
         let iceberg_table_manager = Box::new(IcebergTableManager::new(
             metadata.clone(),
+            object_storage_cache.clone(),
             iceberg_table_config,
         )?);
         Self::new_with_table_manager(metadata, iceberg_table_manager, object_storage_cache).await
@@ -836,6 +837,7 @@ impl MooncakeTable {
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
         table_notify: Sender<TableNotify>,
+        table_auto_incr_id: u32,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
 
@@ -868,7 +870,10 @@ impl MooncakeTable {
             .old_file_indices_to_remove
             .clone();
 
-        let iceberg_persistence_res = iceberg_table_manager.sync_snapshot(snapshot_payload).await;
+        let persistence_file_params = PersistenceFileParams { table_auto_incr_id };
+        let iceberg_persistence_res = iceberg_table_manager
+            .sync_snapshot(snapshot_payload, persistence_file_params)
+            .await;
 
         // Notify on event error.
         if iceberg_persistence_res.is_err() {
@@ -945,11 +950,14 @@ impl MooncakeTable {
     pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
         // Create a detached task, whose completion will be notified separately.
+        let table_auto_incre_id = self.next_file_id;
+        self.next_file_id += 1;
         tokio::task::spawn(
             Self::persist_iceberg_snapshot_impl(
                 iceberg_table_manager,
                 snapshot_payload,
                 self.table_notify.as_ref().unwrap().clone(),
+                table_auto_incre_id,
             )
             .instrument(info_span!("persist_iceberg_snapshot")),
         );
