@@ -260,11 +260,7 @@ pub async fn check_read_snapshot(
     target_lsn: u64,
     expected_ids: &[i32],
 ) {
-    println!("before try read");
     let snapshot_read_output = read_manager.try_read(Some(target_lsn)).await.unwrap();
-    println!("after try read");
-
-
     let read_state = (*snapshot_read_output).clone().take_as_read_state().await;
     let (data_files, puffin_files, deletion_vectors, position_deletes) =
         decode_read_state_for_testing(&read_state);

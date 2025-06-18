@@ -440,12 +440,17 @@ async fn test_iceberg_drop_table_with_data() {
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
 
     // Write a few records to trigger mooncake and iceberg snapshot.
-    env.append_row(/*id=*/ 0, /*name=*/ "Bob", /*age=*/ 10, /*xact_id=*/ None).await;
+    env.append_row(
+        /*id=*/ 0, /*name=*/ "Bob", /*age=*/ 10, /*xact_id=*/ None,
+    )
+    .await;
     env.commit(/*lsn=*/ 1).await;
     env.flush_table(/*lsn=*/ 1).await;
+    env.set_readable_lsn(/*lsn=*/ 1);
 
-    println!("before wait read");
-
+    // Force mooncake and iceberg snapshot, and block wait until mooncake snapshot completion via getting a read state.
+    env.verify_snapshot(/*target_lsn=*/ 1, /*expected_ids=*/ &[0])
+        .await;
 
     // Drop table and block wait its completion, check whether error status is correctly propagated.
     env.drop_iceberg_table().await.unwrap();
