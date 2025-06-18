@@ -256,8 +256,8 @@ mod tests {
         // Look for any file in the Iceberg metadata dir.
         let meta_dir = tmp
             .path()
-            .join("default")
-            .join("public.snapshot_test")
+            .join("public")
+            .join("snapshot_test")
             .join("metadata");
         assert!(meta_dir.exists());
         assert!(meta_dir.read_dir().unwrap().next().is_some());

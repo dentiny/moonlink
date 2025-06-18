@@ -50,8 +50,8 @@ pub async fn build_table_components(
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri: base_path.to_str().unwrap().to_string(),
-        namespace: vec!["default".to_string()],
-        table_name: table_schema.table_name.to_string(),
+        namespace: vec![table_schema.table_name.schema.clone()],
+        table_name: table_schema.table_name.name.clone(),
     };
     let mooncake_table_config = TableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(
