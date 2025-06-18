@@ -109,6 +109,11 @@ impl TableHandler {
     ) {
         let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
 
+        // Last iceberg snapshot timestamp, used to perform deadline-based snapshot persistence.
+        const FORCE_ICEBERG_SNAPSHOT_INTERVAL: std::time::Duration =
+            std::time::Duration::from_secs(300);
+        let mut last_iceberg_timestamp = std::time::SystemTime::now();
+
         // Mooncake table directory.
         let table_directory = std::path::PathBuf::from(table.get_table_directory());
 
@@ -317,6 +322,7 @@ impl TableHandler {
                             if can_initiate_iceberg_snapshot(iceberg_snapshot_result_consumed, iceberg_snapshot_ongoing) {
                                 if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
                                     iceberg_snapshot_ongoing = true;
+                                    last_iceberg_timestamp = std::time::SystemTime::now();
                                     table.persist_iceberg_snapshot(iceberg_snapshot_payload);
                                 }
                             }
@@ -416,7 +422,13 @@ impl TableHandler {
                     }
 
                     // Check whether a flush and force snapshot is needed.
-                    if !force_snapshot_lsns.is_empty() {
+                    let force_snapshot = if !force_snapshot_lsns.is_empty() {
+                        true
+                    } else {
+                        std::time::SystemTime::now().duration_since(last_iceberg_timestamp).unwrap() >= FORCE_ICEBERG_SNAPSHOT_INTERVAL
+                    };
+
+                    if force_snapshot {
                         if let Some(commit_lsn) = table_consistent_view_lsn {
                             if *force_snapshot_lsns.iter().next().as_ref().unwrap().0 <= commit_lsn {
                                 table.flush(/*lsn=*/ commit_lsn).await.unwrap();
