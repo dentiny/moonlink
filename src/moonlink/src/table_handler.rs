@@ -11,7 +11,7 @@ use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
 use tracing::Instrument;
-use tracing::{error, info, info_span, warn};
+use tracing::{error, info, info_span};
 
 /// Event types that can be processed by the TableHandler
 #[derive(Debug)]
@@ -445,7 +445,7 @@ impl TableHandler {
                 // If all senders have been dropped, exit the loop
                 else => {
                     if let Err(e) = table.shutdown().await {
-                        warn!(error = %e, "failed to shutdown table");
+                        error!(error = %e, "failed to shutdown table");
                     }
                     info!("all event senders dropped, shutting down table handler");
                     break;
