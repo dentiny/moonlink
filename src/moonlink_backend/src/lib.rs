@@ -6,6 +6,7 @@ pub use moonlink::ReadState;
 use moonlink::Result as MoonlinkResult;
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink_connectors::ReplicationManager;
+use more_asserts as ma;
 use std::hash::Hash;
 use std::io::ErrorKind;
 use std::sync::Arc;
@@ -20,8 +21,8 @@ pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "/tmp/moonlink_temp_file";
 // Default data file cache directory.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
 pub const DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH: &str = "/tmp/moonlink_cache_file";
-// Default percentage of available disk space to use for on-disk cache for the filesystem which cache directory is mounted on.
-const DEFAULT_ON_DISK_CACHE_FS_SIZE_PERCENTAGE: f64 = 0.95;
+// Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
+const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
 
 /// Util function to delete and re-create the given directory.
 pub fn recreate_directory(dir: &str) -> Result<()> {
@@ -60,9 +61,11 @@ fn get_cache_filesystem_size(path: &str) -> u64 {
 
 /// Create default data file cache.
 fn create_default_data_file_cache() -> ObjectStorageCache {
+    let filesystem_size = get_cache_filesystem_size(DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH);
+    ma::assert_ge!(filesystem_size, MIN_DISK_SPACE_FOR_CACHE);
+
     let cache_config = ObjectStorageCacheConfig {
-        max_bytes: ((get_cache_filesystem_size(DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH) as f64)
-            * DEFAULT_ON_DISK_CACHE_FS_SIZE_PERCENTAGE) as u64,
+        max_bytes: filesystem_size - MIN_DISK_SPACE_FOR_CACHE,
         cache_directory: DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH.to_string(),
     };
     ObjectStorageCache::new(cache_config)

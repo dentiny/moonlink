@@ -2425,6 +2425,7 @@ dependencies = [
  "console-subscriber",
  "moonlink",
  "moonlink_connectors",
+ "more-asserts",
  "nix 0.27.1",
  "parquet",
  "serial_test",
