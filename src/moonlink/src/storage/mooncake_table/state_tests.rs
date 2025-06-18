@@ -1238,6 +1238,7 @@ async fn test_3_compact_3_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
+    let new_compacted_file_size = disk_file_entry.file_size;
 
     // Check cache state.
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
@@ -1279,6 +1280,11 @@ async fn test_3_compact_3_5() {
     expected_files_to_delete.sort();
     assert_eq!(actual_files_to_delete, expected_files_to_delete);
 
+    // Check cache status.
+    assert_eq!(
+        data_file_cache.cache.read().await.cur_bytes,
+        new_compacted_file_size as u64
+    );
     assert_eq!(data_file_cache.cache.read().await.evicted_entries.len(), 0);
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
@@ -1350,8 +1356,13 @@ async fn test_3_compact_1_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
+    let new_compacted_file_size = disk_file_entry.file_size;
 
     // Check cache state.
+    assert_eq!(
+        data_file_cache.cache.read().await.cur_bytes,
+        new_compacted_file_size as u64
+    );
     assert_eq!(data_file_cache.cache.read().await.evicted_entries.len(), 0);
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
@@ -1418,8 +1429,13 @@ async fn test_1_compact_1_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
+    let new_compacted_file_size = disk_file_entry.file_size;
 
     // Check cache state.
+    assert_eq!(
+        data_file_cache.cache.read().await.cur_bytes,
+        new_compacted_file_size as u64
+    );
     assert_eq!(data_file_cache.cache.read().await.evicted_entries.len(), 0);
     assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(

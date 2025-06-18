@@ -351,12 +351,13 @@ impl CacheTrait for ObjectStorageCache {
             cache_entry: cache_entry.clone(),
             reference_count: 1,
         };
+        let file_size = cache_entry.file_metadata.file_size;
         let non_evictable_handle =
             NonEvictableHandle::new(file_id, cache_entry.clone(), self.cache.clone());
 
         {
             let mut guard = self.cache.write().await;
-            guard.cur_bytes += cache_entry.file_metadata.file_size;
+            guard.cur_bytes += file_size;
 
             let (cache_succ, files_to_delete) = guard.insert_non_evictable(
                 file_id,
@@ -367,6 +368,11 @@ impl CacheTrait for ObjectStorageCache {
             if cache_succ {
                 return Ok((Some(non_evictable_handle), files_to_delete));
             }
+
+            // Otherwise, it means cache entry failed to insert.
+            ma::assert_ge!(guard.cur_bytes, file_size);
+            guard.cur_bytes -= file_size;
+
             Ok((None, files_to_delete))
         }
     }

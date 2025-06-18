@@ -72,6 +72,7 @@ async fn test_cache_state_1_create_snashot() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -102,6 +103,7 @@ async fn test_cache_1_requested_to_read() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -149,6 +151,7 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -201,6 +204,7 @@ async fn test_cache_2_requested_to_read_with_insufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -249,6 +253,7 @@ async fn test_cache_3_requested_to_read() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -307,6 +312,11 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(
+        &mut cache,
+        /*expected_bytes=*/ (CONTENT.len() * 2) as u64,
+    )
+    .await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
@@ -366,6 +376,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
     assert_eq!(files_to_evict, vec![cache_file_1]);
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -416,6 +427,7 @@ async fn test_cache_3_unpin_still_referenced() {
     assert!(evicted_files_to_delete.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -468,6 +480,7 @@ async fn test_cache_3_unpin_not_referenced() {
     assert!(evicted_files_to_delete.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
@@ -511,6 +524,7 @@ async fn test_cache_2_requested_to_delete_4() {
     assert_eq!(evicted_files, vec![test_file.to_str().unwrap().to_string()]);
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ 0).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -550,6 +564,7 @@ async fn test_cache_3_requested_to_delete_5() {
     assert!(evicted_files.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 1).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -602,6 +617,7 @@ async fn test_cache_5_usage_finish_and_still_referenced_5() {
     assert!(files_to_evict.is_empty());
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 1).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
@@ -660,6 +676,7 @@ async fn test_cache_5_usage_finish_and_not_referenced_4() {
     );
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ 0).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;

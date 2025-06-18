@@ -69,6 +69,12 @@ pub(crate) async fn assert_evictable_cache_size(
     assert_eq!(guard.evictable_cache.len(), expected_count);
 }
 
+/// Test util function to check the byte size for cache.
+pub(crate) async fn assert_cache_bytes_size(cache: &mut ObjectStorageCache, expected_bytes: u64) {
+    let guard = cache.cache.read().await;
+    assert_eq!(guard.cur_bytes, expected_bytes);
+}
+
 /// Test util function to check the number of entries pending to delete.
 pub(crate) async fn assert_pending_eviction_entries_size(
     cache: &mut ObjectStorageCache,

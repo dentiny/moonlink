@@ -52,8 +52,8 @@ pub trait CacheTrait {
     /// If the requested file is already pinned, cache handle will returned immediately without any IO operations.
     /// Otherwise, an IO operation might be performed, depending on whether the corresponding cache entry happens to be alive.
     /// If there's no sufficient disk space, return [`None`].
-    #[deny(unused_must_use)]
     #[must_use]
+    #[allow(async_fn_in_trait)]
     async fn get_cache_entry(
         &mut self,
         file_id: TableUniqueFileId,
