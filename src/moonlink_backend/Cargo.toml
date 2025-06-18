@@ -12,6 +12,7 @@ arrow-array.workspace = true
 console-subscriber = { workspace = true }
 moonlink = { path = "../moonlink", features = ["test-utils"] }
 moonlink_connectors = { path = "../moonlink_connectors" }
+nix = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }

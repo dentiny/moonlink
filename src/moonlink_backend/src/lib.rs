@@ -20,6 +20,8 @@ pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "/tmp/moonlink_temp_file";
 // Default data file cache directory.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
 pub const DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH: &str = "/tmp/moonlink_cache_file";
+// Default percentage of available disk space to use for on-disk cache for the filesystem which cache directory is mounted on.
+const DEFAULT_ON_DISK_CACHE_FS_SIZE_PERCENTAGE: f64 = 0.95;
 
 /// Util function to delete and re-create the given directory.
 pub fn recreate_directory(dir: &str) -> Result<()> {
@@ -47,11 +49,20 @@ impl<T: Eq + Hash + Clone> Default for MoonlinkBackend<T> {
     }
 }
 
+/// Util function to get filesystem size for cache directory
+fn get_cache_filesystem_size(path: &str) -> u64 {
+    let vfs_stat = nix::sys::statvfs::statvfs(path).unwrap();
+    let block_size = vfs_stat.block_size();
+    let avai_blocks = vfs_stat.files_available();
+
+    (block_size as u64).checked_mul(avai_blocks as u64).unwrap()
+}
+
 /// Create default data file cache.
-/// TODO(hjiang): Re-evaluate hard-coded cache size before official release.
 fn create_default_data_file_cache() -> ObjectStorageCache {
     let cache_config = ObjectStorageCacheConfig {
-        max_bytes: 10 * 1024 * 1024,
+        max_bytes: ((get_cache_filesystem_size(DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH) as f64)
+            * DEFAULT_ON_DISK_CACHE_FS_SIZE_PERCENTAGE) as u64,
         cache_directory: DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH.to_string(),
     };
     ObjectStorageCache::new(cache_config)
