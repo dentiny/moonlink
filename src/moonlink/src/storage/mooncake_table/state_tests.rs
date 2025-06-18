@@ -76,9 +76,9 @@ use crate::{
     ObjectStorageCacheConfig, ReadState,
 };
 
-/// Test constant to mimic an infinitely large data file cache.
-const INFINITE_LARGE_DATA_FILE_CACHE_SIZE: u64 = u64::MAX;
-/// Test constant to allow only one file in data file cache.
+/// Test constant to mimic an infinitely large object storage cache.
+const INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE: u64 = u64::MAX;
+/// Test constant to allow only one file in object storage cache.
 const ONE_FILE_CACHE_SIZE: u64 = 1 << 20;
 /// Iceberg test namespace and table name.
 const ICEBERG_TEST_NAMESPACE: &str = "namespace";
@@ -153,7 +153,7 @@ fn get_fake_file_path(temp_dir: &TempDir) -> String {
         .to_string()
 }
 
-/// Test util function to import a second data file cache entry.
+/// Test util function to import a second object storage cache entry.
 async fn import_fake_cache_entry(
     temp_dir: &TempDir,
     cache: &mut ObjectStorageCache,
@@ -172,15 +172,28 @@ async fn import_fake_cache_entry(
     cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
 }
 
-/// Test util function to check only fake file in data file cache.
-async fn check_only_fake_file_in_cache(data_file_cache: &ObjectStorageCache) {
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
+/// Test util function to check only fake file in object storage cache.
+async fn check_only_fake_file_in_cache(object_storage_cache: &ObjectStorageCache) {
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache.get_non_evictable_filenames().await,
+        object_storage_cache.get_non_evictable_filenames().await,
         vec![FAKE_FILE_ID]
     );
 }
@@ -192,7 +205,7 @@ async fn check_only_fake_file_in_cache(data_file_cache: &ObjectStorageCache) {
 /// Test util function to create mooncake table and table notify for read test.
 async fn create_mooncake_table_and_notify_for_read(
     temp_dir: &TempDir,
-    data_file_cache: ObjectStorageCache,
+    object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
@@ -221,7 +234,7 @@ async fn create_mooncake_table_and_notify_for_read(
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
-        data_file_cache,
+        object_storage_cache,
     )
     .await
     .unwrap();
@@ -236,10 +249,10 @@ async fn create_mooncake_table_and_notify_for_read(
 /// Rows are committed and flushed with LSN 1.
 async fn prepare_test_disk_file_for_read(
     temp_dir: &TempDir,
-    data_file_cache: ObjectStorageCache,
+    object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
-        create_mooncake_table_and_notify_for_read(temp_dir, data_file_cache).await;
+        create_mooncake_table_and_notify_for_read(temp_dir, object_storage_cache).await;
 
     let row = MoonlinkRow::new(vec![
         RowValue::Int32(1),
@@ -258,13 +271,13 @@ async fn prepare_test_disk_file_for_read(
 async fn test_shutdown_table() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -274,9 +287,22 @@ async fn test_shutdown_table() {
     table.shutdown().await.unwrap();
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -290,13 +316,13 @@ async fn test_shutdown_table() {
 async fn test_5_read_4() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -321,13 +347,26 @@ async fn test_5_read_4() {
     assert!(is_local_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         2
@@ -341,13 +380,26 @@ async fn test_5_read_4() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
@@ -359,13 +411,13 @@ async fn test_5_read_4() {
 async fn test_5_1() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
         .await
@@ -384,9 +436,22 @@ async fn test_5_1() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0
     );
 }
@@ -396,13 +461,13 @@ async fn test_5_1() {
 async fn test_4_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -430,13 +495,26 @@ async fn test_4_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
@@ -450,9 +528,22 @@ async fn test_4_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -462,13 +553,13 @@ async fn test_4_3() {
 async fn test_4_read_4() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -494,13 +585,26 @@ async fn test_4_read_4() {
     assert!(is_local_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         4,
@@ -514,13 +618,26 @@ async fn test_4_read_4() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
@@ -532,13 +649,13 @@ async fn test_4_read_4() {
 async fn test_4_read_and_read_over_4() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -564,13 +681,26 @@ async fn test_4_read_and_read_over_4() {
     assert!(is_local_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
@@ -582,13 +712,13 @@ async fn test_4_read_and_read_over_4() {
 async fn test_3_read_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -620,13 +750,26 @@ async fn test_3_read_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         2,
@@ -640,9 +783,22 @@ async fn test_3_read_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -652,13 +808,13 @@ async fn test_3_read_3() {
 async fn test_3_read_and_read_over_and_pinned_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -698,13 +854,26 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
@@ -718,9 +887,22 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -730,13 +912,13 @@ async fn test_3_read_and_read_over_and_pinned_3() {
 async fn test_3_read_and_read_over_and_unpinned_1() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -772,9 +954,22 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -784,13 +979,13 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
 async fn test_1_read_and_pinned_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -818,13 +1013,26 @@ async fn test_1_read_and_pinned_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
@@ -838,9 +1046,22 @@ async fn test_1_read_and_pinned_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -853,10 +1074,10 @@ async fn test_1_read_and_unpinned_3() {
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let mut data_file_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -873,7 +1094,7 @@ async fn test_1_read_and_unpinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
+    import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -887,11 +1108,11 @@ async fn test_1_read_and_unpinned_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    check_only_fake_file_in_cache(&data_file_cache).await;
+    check_only_fake_file_in_cache(&object_storage_cache).await;
 
     // Drop all read states and check reference count.
     drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    check_only_fake_file_in_cache(&data_file_cache).await;
+    check_only_fake_file_in_cache(&object_storage_cache).await;
 }
 
 /// Test scenario: remote, no local, in use + use & pinned => remote, local, in use
@@ -902,10 +1123,10 @@ async fn test_2_read_and_pinned_3() {
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let mut data_file_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -922,7 +1143,7 @@ async fn test_2_read_and_pinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
+    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -953,13 +1174,26 @@ async fn test_2_read_and_pinned_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1,
@@ -973,9 +1207,22 @@ async fn test_2_read_and_pinned_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 1);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         0,
     );
 }
@@ -988,10 +1235,10 @@ async fn test_2_read_and_unpinned_2() {
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let mut data_file_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -1008,7 +1255,7 @@ async fn test_2_read_and_unpinned_2() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
+    import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = table.request_read().await.unwrap();
@@ -1027,7 +1274,7 @@ async fn test_2_read_and_unpinned_2() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    check_only_fake_file_in_cache(&data_file_cache).await;
+    check_only_fake_file_in_cache(&object_storage_cache).await;
 
     // Drop all read states and check reference count; cache only manages fake file here.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -1037,7 +1284,7 @@ async fn test_2_read_and_unpinned_2() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    check_only_fake_file_in_cache(&data_file_cache).await;
+    check_only_fake_file_in_cache(&object_storage_cache).await;
 }
 
 /// Test scenario: remote, no local, in use + use over => remote, no local, not used
@@ -1048,10 +1295,10 @@ async fn test_2_read_over_1() {
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let mut data_file_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -1068,7 +1315,7 @@ async fn test_2_read_over_1() {
     assert!(files_to_delete.is_empty());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
+    import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1085,7 +1332,7 @@ async fn test_2_read_over_1() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    check_only_fake_file_in_cache(&data_file_cache).await;
+    check_only_fake_file_in_cache(&object_storage_cache).await;
 }
 
 /// There're two things different from use for read:
@@ -1106,7 +1353,7 @@ async fn test_2_read_over_1() {
 /// Test util function to create mooncake table and table notify for compaction test.
 async fn create_mooncake_table_and_notify_for_compaction(
     temp_dir: &TempDir,
-    data_file_cache: ObjectStorageCache,
+    object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
@@ -1140,7 +1387,7 @@ async fn create_mooncake_table_and_notify_for_compaction(
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
-        data_file_cache,
+        object_storage_cache,
     )
     .await
     .unwrap();
@@ -1157,10 +1404,10 @@ async fn create_mooncake_table_and_notify_for_compaction(
 /// TODO(hjiang): After puffin files integrate to cache, add deletion vector as well.
 async fn prepare_test_disk_files_for_compaction(
     temp_dir: &TempDir,
-    data_file_cache: ObjectStorageCache,
+    object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
-        create_mooncake_table_and_notify_for_compaction(temp_dir, data_file_cache).await;
+        create_mooncake_table_and_notify_for_compaction(temp_dir, object_storage_cache).await;
 
     // Append, commit and flush the first row.
     let row = MoonlinkRow::new(vec![
@@ -1194,13 +1441,13 @@ async fn prepare_test_disk_files_for_compaction(
 async fn test_3_compact_3_5() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_files_for_compaction(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_files_for_compaction(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -1241,13 +1488,26 @@ async fn test_3_compact_3_5() {
     let new_compacted_file_size = disk_file_entry.file_size;
 
     // Check cache state.
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         3,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
                 new_compacted_file.file_id()
             ))
@@ -1256,7 +1516,7 @@ async fn test_3_compact_3_5() {
     );
     for cur_old_compacted_file in old_compacted_files.iter() {
         assert_eq!(
-            data_file_cache
+            object_storage_cache
                 .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
                     cur_old_compacted_file.file_id()
                 ))
@@ -1282,13 +1542,34 @@ async fn test_3_compact_3_5() {
 
     // Check cache status.
     assert_eq!(
-        data_file_cache.cache.read().await.cur_bytes,
+        object_storage_cache.cache.read().await.cur_bytes,
         new_compacted_file_size as u64
     );
-    assert_eq!(data_file_cache.cache.read().await.evicted_entries.len(), 0);
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
 }
@@ -1298,13 +1579,13 @@ async fn test_3_compact_3_5() {
 async fn test_3_compact_1_5() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_DATA_FILE_CACHE_SIZE,
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let data_file_cache = ObjectStorageCache::new(cache_config);
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_files_for_compaction(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_files_for_compaction(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -1360,17 +1641,38 @@ async fn test_3_compact_1_5() {
 
     // Check cache state.
     assert_eq!(
-        data_file_cache.cache.read().await.cur_bytes,
+        object_storage_cache.cache.read().await.cur_bytes,
         new_compacted_file_size as u64
     );
-    assert_eq!(data_file_cache.cache.read().await.evicted_entries.len(), 0);
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
                 new_compacted_file.file_id()
             ))
@@ -1387,10 +1689,10 @@ async fn test_1_compact_1_5() {
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
     );
-    let mut data_file_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_files_for_compaction(&temp_dir, data_file_cache.clone()).await;
+        prepare_test_disk_files_for_compaction(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
@@ -1412,7 +1714,7 @@ async fn test_1_compact_1_5() {
     assert!(data_compaction_payload.is_some());
 
     // Import second data file into cache, so the cached entry will be evicted.
-    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut data_file_cache).await;
+    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
     let evicted_files_to_delete = fake_cache_handle.unreference().await;
     assert!(evicted_files_to_delete.is_empty());
 
@@ -1433,17 +1735,38 @@ async fn test_1_compact_1_5() {
 
     // Check cache state.
     assert_eq!(
-        data_file_cache.cache.read().await.cur_bytes,
+        object_storage_cache.cache.read().await.cur_bytes,
         new_compacted_file_size as u64
     );
-    assert_eq!(data_file_cache.cache.read().await.evicted_entries.len(), 0);
-    assert_eq!(data_file_cache.cache.read().await.evictable_cache.len(), 0);
     assert_eq!(
-        data_file_cache.cache.read().await.non_evictable_cache.len(),
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
         1,
     );
     assert_eq!(
-        data_file_cache
+        object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
                 new_compacted_file.file_id()
             ))

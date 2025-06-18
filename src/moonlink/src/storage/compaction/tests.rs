@@ -54,7 +54,7 @@ async fn test_data_file_compaction_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![get_single_file_to_compact(
             &data_file, /*deletion_vector=*/ None,
         )],
@@ -131,7 +131,7 @@ async fn test_data_file_compaction_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![get_single_file_to_compact(
             &data_file,
             Some(puffin_blob_ref),
@@ -212,7 +212,7 @@ async fn test_data_file_compaction_3() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![get_single_file_to_compact(
             &data_file,
             Some(puffin_blob_ref),
@@ -283,7 +283,7 @@ async fn test_data_file_compaction_4() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, /*deletion_vector=*/ None),
             get_single_file_to_compact(&data_file_2, /*deletion_vector=*/ None),
@@ -385,7 +385,7 @@ async fn test_data_file_compaction_5() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -494,7 +494,7 @@ async fn test_data_file_compaction_6() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -591,7 +591,7 @@ async fn test_multiple_compacted_data_files_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -713,7 +713,7 @@ async fn test_multiple_compacted_data_files_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        data_file_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),

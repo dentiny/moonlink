@@ -51,8 +51,8 @@ pub struct ReplicationConnection {
     source: PostgresSource,
     replication_started: bool,
     slot_name: String,
-    /// Data file cache.
-    data_file_cache: ObjectStorageCache,
+    /// Object storage cache.
+    object_storage_cache: ObjectStorageCache,
 }
 
 impl ReplicationConnection {
@@ -60,7 +60,7 @@ impl ReplicationConnection {
         uri: String,
         table_base_path: String,
         table_temp_files_directory: String,
-        data_file_cache: ObjectStorageCache,
+        object_storage_cache: ObjectStorageCache,
     ) -> Result<Self> {
         info!(%uri, "initializing replication connection");
 
@@ -119,7 +119,7 @@ impl ReplicationConnection {
             source: postgres_source,
             replication_started: false,
             slot_name,
-            data_file_cache,
+            object_storage_cache,
         })
     }
 
@@ -252,7 +252,7 @@ impl ReplicationConnection {
             Path::new(&self.table_base_path),
             self.table_temp_files_directory.clone(),
             &self.replication_state,
-            self.data_file_cache.clone(),
+            self.object_storage_cache.clone(),
         )
         .await?;
 

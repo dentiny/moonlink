@@ -32,9 +32,9 @@ pub(crate) struct ObjectStorageCacheInternal {
     pub(crate) cur_bytes: u64,
     /// Deleted entries, which should be evicted right away, and should never be referenced again.
     pub(crate) evicted_entries: HashSet<TableUniqueFileId>,
-    /// Evictable data file cache entries.
+    /// Evictable object storage cache entries.
     pub(crate) evictable_cache: LruCache<TableUniqueFileId, CacheEntryWrapper>,
-    /// Non-evictable data file cache entries.
+    /// Non-evictable object storage cache entries.
     pub(crate) non_evictable_cache: HashMap<TableUniqueFileId, CacheEntryWrapper>,
 }
 
@@ -185,7 +185,7 @@ impl ObjectStorageCacheInternal {
 pub struct ObjectStorageCache {
     /// Cache configs.
     config: ObjectStorageCacheConfig,
-    /// Data file caches.
+    /// Object storage caches.
     pub(crate) cache: Arc<RwLock<ObjectStorageCacheInternal>>,
 }
 
@@ -399,7 +399,7 @@ mod tests {
     use tempfile::tempdir;
 
     #[tokio::test]
-    async fn test_concurrent_data_file_cache() {
+    async fn test_concurrent_object_storage_cache() {
         const PARALLEL_TASK_NUM: usize = 10;
         let mut handle_futures = Vec::with_capacity(PARALLEL_TASK_NUM);
 

@@ -256,7 +256,7 @@ impl MooncakeTable {
 }
 
 impl SnapshotTableState {
-    /// Return files evicted from data file cache.
+    /// Return files evicted from object storage cache.
     pub(super) async fn apply_transaction_stream(
         &mut self,
         task: &mut SnapshotTask,
@@ -268,7 +268,7 @@ impl SnapshotTableState {
         for output in new_streaming_xact {
             match output {
                 TransactionStreamOutput::Commit(commit) => {
-                    // Integrate files into current snapshot and import into data file cache.
+                    // Integrate files into current snapshot and import into object storage cache.
                     for (file, mut disk_file_entry) in commit.flushed_files.into_iter() {
                         task.disk_file_lsn_map
                             .insert(file.file_id(), commit.commit_lsn);
@@ -277,7 +277,7 @@ impl SnapshotTableState {
                             file_id: file.file_id(),
                         };
                         let (cache_handle, cur_evicted_files) = self
-                            .data_file_cache
+                            .object_storage_cache
                             .import_cache_entry(
                                 file_id,
                                 CacheEntry {

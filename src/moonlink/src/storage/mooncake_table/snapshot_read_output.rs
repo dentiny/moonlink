@@ -47,8 +47,8 @@ pub struct ReadOutput {
     pub associated_files: Vec<String>,
     /// Table notifier for query completion; could be none for empty read output.
     pub table_notifier: Option<Sender<TableNotify>>,
-    /// Data file cache, to pin local file cache, could be none for empty read output.
-    pub data_file_cache: Option<ObjectStorageCache>,
+    /// Object storage cache, to pin local file cache, could be none for empty read output.
+    pub object_storage_cache: Option<ObjectStorageCache>,
 }
 
 impl ReadOutput {
@@ -65,7 +65,7 @@ impl ReadOutput {
                 DataFileForRead::RemoteFilePath((file_id, remote_filepath)) => {
                     // TODO(hjiang): Better error propagation.
                     let (cache_handle, files_to_delete) = self
-                        .data_file_cache
+                        .object_storage_cache
                         .as_mut()
                         .unwrap()
                         .get_cache_entry(file_id, &remote_filepath)

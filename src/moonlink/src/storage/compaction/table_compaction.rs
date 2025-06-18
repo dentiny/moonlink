@@ -11,7 +11,7 @@ use std::collections::HashSet;
 /// Single disk file and its deletion vector to apply.
 #[derive(Clone, Debug)]
 pub struct SingleFileToCompact {
-    /// Unique file id to lookup in the data file cache.
+    /// Unique file id to lookup in the object storage cache.
     pub(crate) file_id: TableUniqueFileId,
     /// Remote data file; only persisted data files will be compacted.
     pub(crate) filepath: String,
@@ -22,8 +22,8 @@ pub struct SingleFileToCompact {
 /// Payload to trigger a compaction operation.
 #[derive(Clone, Debug)]
 pub struct DataCompactionPayload {
-    /// Data file cache.
-    pub(crate) data_file_cache: ObjectStorageCache,
+    /// Object storage cache.
+    pub(crate) object_storage_cache: ObjectStorageCache,
     /// Disk files to compact, including their deletion vector to apply.
     pub(crate) disk_files: Vec<SingleFileToCompact>,
     /// File indices to compact and rewrite.
@@ -59,7 +59,7 @@ pub struct DataCompactionResult {
     pub(crate) old_file_indices: HashSet<FileIndex>,
     /// New compacted file indices.
     pub(crate) new_file_indices: Vec<FileIndex>,
-    /// Compaction interacts with data file cache, this field records evicted files to delete.
+    /// Compaction interacts with object storage cache, this field records evicted files to delete.
     pub(crate) evicted_files_to_delete: Vec<String>,
 }
 

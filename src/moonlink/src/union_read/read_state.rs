@@ -29,7 +29,7 @@ pub struct ReadState {
 
 impl Drop for ReadState {
     fn drop(&mut self) {
-        // Notify query completion for data file cache unreference.
+        // Notify query completion for object storage cache unreference.
         // Since we cannot rely on async function at `Drop` function, start a detech task immediately here.
         let cache_handles = std::mem::take(&mut self.cache_handles);
 

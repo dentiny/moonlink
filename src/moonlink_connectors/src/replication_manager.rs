@@ -21,22 +21,22 @@ pub struct ReplicationManager<T: Eq + Hash> {
     table_base_path: String,
     /// Base directory for temporary files used in union read.
     table_temp_files_directory: String,
-    /// Data file cache.
-    data_file_cache: ObjectStorageCache,
+    /// Object storage cache.
+    object_storage_cache: ObjectStorageCache,
 }
 
 impl<T: Eq + Hash> ReplicationManager<T> {
     pub fn new(
         table_base_path: String,
         table_temp_files_directory: String,
-        data_file_cache: ObjectStorageCache,
+        object_storage_cache: ObjectStorageCache,
     ) -> Self {
         Self {
             connections: HashMap::new(),
             table_info: HashMap::new(),
             table_base_path,
             table_temp_files_directory,
-            data_file_cache,
+            object_storage_cache,
         }
     }
 
@@ -65,7 +65,7 @@ impl<T: Eq + Hash> ReplicationManager<T> {
                 uri.to_owned(),
                 base_path.to_str().unwrap().to_string(),
                 self.table_temp_files_directory.clone(),
-                self.data_file_cache.clone(),
+                self.object_storage_cache.clone(),
             )
             .await?;
             self.connections

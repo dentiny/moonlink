@@ -1,4 +1,4 @@
-/// Possible states for data file cache entries:
+/// Possible states for object storage cache entries:
 /// (1) Not managed by cache
 /// (2) Imported into cache, no reference count, not requested to delete => can be evicted
 /// (3) Imported into cache, has reference count, not requested to delete => cannot be evicted
@@ -12,7 +12,7 @@
 /// - Usage finishes, thus release pinned cache files
 /// - Request to delete
 ///
-/// State transfer to data file cache entries:
+/// State transfer to object storage cache entries:
 /// (1) + create mooncake snapshot => (2)
 /// (1) + requested to read + sufficient space => (3)
 /// (2) + requested to read + sufficient space => (3)

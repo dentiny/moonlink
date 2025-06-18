@@ -23,7 +23,7 @@ pub enum TableNotify {
         data_compaction_payload: Option<DataCompactionPayload>,
         /// Payload used to trigger an index merge.
         file_indice_merge_payload: Option<FileIndiceMergePayload>,
-        /// Evicted data file cache to delete.
+        /// Evicted object storage cache to delete.
         evicted_data_files_to_delete: Vec<String>,
     },
     /// Iceberg snapshot completes.
@@ -48,7 +48,7 @@ pub enum TableNotify {
     },
     /// Evicted data files to delete.
     EvictedDataFilesToDelete {
-        /// Evicted data files by data file cache.
+        /// Evicted data files by object storage cache.
         evicted_data_files: Vec<String>,
     },
 }

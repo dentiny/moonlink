@@ -18,9 +18,9 @@ const DEFAULT_MOONLINK_TABLE_BASE_PATH: &str = "./mooncake/";
 // Default local filesystem directory where all temporary files (used for union read) will be stored under.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
 pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "/tmp/moonlink_temp_file";
-// Default data file cache directory.
+// Default object storage cache directory.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH: &str = "/tmp/moonlink_cache_file";
+pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "/tmp/moonlink_cache_file";
 // Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
 
@@ -59,14 +59,14 @@ fn get_cache_filesystem_size(path: &str) -> u64 {
     (block_size as u64).checked_mul(avai_blocks as u64).unwrap()
 }
 
-/// Create default data file cache.
-fn create_default_data_file_cache() -> ObjectStorageCache {
-    let filesystem_size = get_cache_filesystem_size(DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH);
+/// Create default object storage cache.
+fn create_default_object_storage_cache() -> ObjectStorageCache {
+    let filesystem_size = get_cache_filesystem_size(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH);
     ma::assert_ge!(filesystem_size, MIN_DISK_SPACE_FOR_CACHE);
 
     let cache_config = ObjectStorageCacheConfig {
         max_bytes: filesystem_size - MIN_DISK_SPACE_FOR_CACHE,
-        cache_directory: DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH.to_string(),
+        cache_directory: DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH.to_string(),
     };
     ObjectStorageCache::new(cache_config)
 }
@@ -76,13 +76,13 @@ impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
         logging::init_logging();
 
         recreate_directory(DEFAULT_MOONLINK_TEMP_FILE_PATH).unwrap();
-        recreate_directory(DEFAULT_MOONLINK_DATA_FILE_CACHE_PATH).unwrap();
+        recreate_directory(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH).unwrap();
 
         Self {
             replication_manager: RwLock::new(ReplicationManager::new(
                 base_path.clone(),
                 DEFAULT_MOONLINK_TEMP_FILE_PATH.to_string(),
-                create_default_data_file_cache(),
+                create_default_object_storage_cache(),
             )),
         }
     }

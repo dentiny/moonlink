@@ -172,7 +172,7 @@ impl TableHandler {
             tokio::task::spawn(async move {
                 for cur_data_file in evicted_file_to_delete.into_iter() {
                     if let Err(e) = tokio::fs::remove_file(&cur_data_file).await {
-                        error!("Failed to delete data file cache: {:?}", e);
+                        error!("Failed to delete object storage cache: {:?}", e);
                     }
                 }
             });
@@ -292,7 +292,7 @@ impl TableHandler {
                                 force_snapshot_lsns.entry(lsn).or_default().push(tx);
                             }
                         }
-                        // Branch to drop the iceberg table and clear pinned data files from the global data file cache, only used when the whole table requested to drop.
+                        // Branch to drop the iceberg table and clear pinned data files from the global object storage cache, only used when the whole table requested to drop.
                         // So we block wait for asynchronous request completion.
                         TableEvent::DropTable => {
                             if let Err(e) = table.shutdown().await {
@@ -307,7 +307,7 @@ impl TableHandler {
                 Some(event) = table_notify_rx.recv() => {
                     match event {
                         TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
-                            // Spawn a detached best-effort task to delete evicted data file cache.
+                            // Spawn a detached best-effort task to delete evicted object storage cache.
                             start_task_to_delete_evicted(evicted_data_files_to_delete);
 
                             // Notify read the mooncake table commit of LSN.

@@ -70,8 +70,8 @@ pub(crate) struct SnapshotTableState {
     /// Last commit point
     last_commit: RecordLocation,
 
-    /// Data file cache.
-    pub(super) data_file_cache: ObjectStorageCache,
+    /// Object storage cache.
+    pub(super) object_storage_cache: ObjectStorageCache,
 
     /// Table notifier.
     table_notify: Option<Sender<TableNotify>>,
@@ -144,7 +144,7 @@ pub(crate) struct MooncakeSnapshotOutput {
 impl SnapshotTableState {
     pub(super) async fn new(
         metadata: Arc<MooncakeTableMetadata>,
-        data_file_cache: ObjectStorageCache,
+        object_storage_cache: ObjectStorageCache,
         // TODO(hjiang): Used when recovery enabled.
         _iceberg_table_manager: &mut dyn TableManager,
     ) -> Result<Self> {
@@ -157,7 +157,7 @@ impl SnapshotTableState {
             batches,
             rows: None,
             last_commit: RecordLocation::MemoryBatch(0, 0),
-            data_file_cache,
+            object_storage_cache,
             table_notify: None,
             committed_deletion_log: Vec::new(),
             uncommitted_deletion_log: Vec::new(),
@@ -256,7 +256,7 @@ impl SnapshotTableState {
         }
     }
 
-    /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from data file cache.
+    /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from object storage cache.
     /// Return affected file indices, which are caused by data file updates, and will be removed.
     async fn update_data_files_to_persisted(
         &mut self,
@@ -344,7 +344,7 @@ impl SnapshotTableState {
 
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
     /// After a successful iceberg snapshot, update current snapshot's disk files and file indices to reference to remote paths,
-    /// also import local write through cache to globally managed data file cache, so they could be pinned and evicted when necessary.
+    /// also import local write through cache to globally managed object storage cache, so they could be pinned and evicted when necessary.
     ///
     /// Return evicted data files to delete when unreference existing disk file entries.
     async fn update_local_path_to_persisted_by_imported(
@@ -513,7 +513,7 @@ impl SnapshotTableState {
         }
 
         Some(DataCompactionPayload {
-            data_file_cache: self.data_file_cache.clone(),
+            object_storage_cache: self.object_storage_cache.clone(),
             disk_files: tentative_data_files_to_compact,
             file_indices: tentative_file_indices_to_compact,
         })
@@ -698,7 +698,7 @@ impl SnapshotTableState {
 
     // Update current snapshot's data files by adding and removing a few.
     // Here new data files are all local data files, which will be uploaded to remote by importing into iceberg table.
-    // Return evicted data files from the data file cache to delete.
+    // Return evicted data files from the object storage cache to delete.
     async fn update_data_files_to_mooncake_snapshot_impl(
         &mut self,
         old_data_files: HashSet<MooncakeDataFileRef>,
@@ -728,7 +728,7 @@ impl SnapshotTableState {
                 },
             };
             let (cache_handle, cur_evicted_files) = self
-                .data_file_cache
+                .object_storage_cache
                 .import_cache_entry(unique_file_id, cache_entry)
                 .await;
             evicted_data_files.extend(cur_evicted_files);
@@ -766,7 +766,7 @@ impl SnapshotTableState {
 
                 // The old entry is no longer needed for mooncake table, directly mark it deleted from cache, so we could reclaim the disk space back ASAP.
                 let cur_evicted_files = self
-                    .data_file_cache
+                    .object_storage_cache
                     .delete_cache_entry(unique_file_id)
                     .await;
                 evicted_data_files.extend(cur_evicted_files);
@@ -774,7 +774,7 @@ impl SnapshotTableState {
             // Even if there's no pinned cache handle within current snapshot (since it's persisted), still try to delete it from cache if exists.
             else {
                 let cur_evicted_files = self
-                    .data_file_cache
+                    .object_storage_cache
                     .try_delete_cache_entry(unique_file_id)
                     .await;
                 evicted_data_files.extend(cur_evicted_files);
@@ -1067,7 +1067,7 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
-        // All evicted data files by the data file cache.
+        // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
 
         // Reflect read request result to mooncake snapshot.
@@ -1291,7 +1291,7 @@ impl SnapshotTableState {
             }));
     }
 
-    /// Return files evicted from data file cache.
+    /// Return files evicted from object storage cache.
     async fn integrate_disk_slices(&mut self, task: &mut SnapshotTask) -> Vec<String> {
         // Aggregate evicted data cache files to delete.
         let mut evicted_files = vec![];
@@ -1309,7 +1309,7 @@ impl SnapshotTableState {
                     file_id: file.file_id(),
                 };
                 let (cache_handle, cur_evicted_files) = self
-                    .data_file_cache
+                    .object_storage_cache
                     .import_cache_entry(
                         unique_file_id,
                         DataFileCacheEntry {
@@ -1693,7 +1693,7 @@ impl SnapshotTableState {
                 deletion_vectors: deletion_vectors_at_read,
                 position_deletes,
                 associated_files,
-                data_file_cache: Some(self.data_file_cache.clone()),
+                object_storage_cache: Some(self.object_storage_cache.clone()),
                 table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
             });
         }
@@ -1757,7 +1757,7 @@ impl SnapshotTableState {
             deletion_vectors: deletion_vectors_at_read,
             position_deletes,
             associated_files,
-            data_file_cache: Some(self.data_file_cache.clone()),
+            object_storage_cache: Some(self.object_storage_cache.clone()),
             table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
         })
     }
