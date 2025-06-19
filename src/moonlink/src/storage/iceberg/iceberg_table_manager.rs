@@ -199,6 +199,7 @@ impl IcebergTableManager {
         &mut self,
         entry: &ManifestEntry,
         file_io: &FileIO,
+        next_file_id: &mut u64,
     ) -> IcebergResult<FileIndicesRecoveryResult> {
         if !utils::is_file_index(entry) {
             return Ok(FileIndicesRecoveryResult {
@@ -216,7 +217,7 @@ impl IcebergTableManager {
             HashMap::with_capacity(self.remote_data_file_to_file_id.len());
         for mut cur_iceberg_file_indice in file_index_blob.file_indices.into_iter() {
             let cur_mooncake_file_indice = cur_iceberg_file_indice
-                .as_mooncake_file_index(&self.remote_data_file_to_file_id)
+                .as_mooncake_file_index(&self.remote_data_file_to_file_id, next_file_id)
                 .await;
             file_indices.push(cur_mooncake_file_indice.clone());
 
@@ -597,11 +598,13 @@ impl IcebergTableManager {
             for cur_index_block in cur_file_index.index_blocks.iter() {
                 let remote_index_block = utils::upload_index_file(
                     self.iceberg_table.as_ref().unwrap(),
-                    &cur_index_block.file_path,
+                    &cur_index_block.data_file.file_path(),
                 )
                 .await?;
-                local_index_file_to_remote
-                    .insert(cur_index_block.file_path.clone(), remote_index_block);
+                local_index_file_to_remote.insert(
+                    cur_index_block.data_file.file_path().to_string(),
+                    remote_index_block,
+                );
             }
             self.persisted_file_indices
                 .insert(cur_file_index.clone(), puffin_filepath.clone());
@@ -621,6 +624,8 @@ impl IcebergTableManager {
             .await?;
 
         // Get file indices with remote file paths.
+        // TODO(hjiang): file indices will always be cached on disk, no need to transform to remote file path.
+        // Issue to track: https://github.com/Mooncake-Labs/moonlink/issues/518
         let mut remote_file_indices = Vec::with_capacity(file_index_blob.file_indices.len());
         for mut cur_file_index in file_index_blob.file_indices {
             let cur_remote_file_index = cur_file_index
@@ -786,7 +791,7 @@ impl TableManager for IcebergTableManager {
             }
             for entry in manifest_entries.iter() {
                 let recovered_file_indices = self
-                    .load_file_indices_from_manifest_entry(entry.as_ref(), &file_io)
+                    .load_file_indices_from_manifest_entry(entry.as_ref(), &file_io, &mut next_file_id)
                     .await?;
                 loaded_file_indices.extend(recovered_file_indices.file_indices);
                 file_id_to_file_indices.extend(recovered_file_indices.file_id_to_file_indices);

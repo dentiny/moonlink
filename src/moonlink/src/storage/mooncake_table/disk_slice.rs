@@ -96,8 +96,8 @@ impl DiskSliceWriter {
                 id += 1;
             }
         }
-        self.write_batch_to_parquet(&filtered_batches).await?;
-        self.remap_index().await?;
+        let data_file_num = self.write_batch_to_parquet(&filtered_batches).await?;
+        self.remap_index(data_file_num).await?;
         Ok(())
     }
 
@@ -123,12 +123,13 @@ impl DiskSliceWriter {
     }
 
     /// Write record batches to parquet files in synchronous mode.
+    /// Return total number of data files written.
     /// TODO(hjiang): Parallelize the parquet file write operations.
     #[tracing::instrument(name = "write_parquet_batches", skip_all)]
     async fn write_batch_to_parquet(
         &mut self,
         record_batches: &Vec<(usize, RecordBatch, Vec<usize>)>,
-    ) -> Result<()> {
+    ) -> Result<usize> {
         let mut files = Vec::new();
         let mut writer = None;
         let mut out_file_idx = 0;
@@ -191,22 +192,23 @@ impl DiskSliceWriter {
             ));
         }
         self.files = files;
-        Ok(())
+        Ok(out_file_idx)
     }
 
     #[tracing::instrument(name = "remap_disk_index", skip_all)]
-    async fn remap_index(&mut self) -> Result<()> {
+    async fn remap_index(&mut self, start_file_index: usize) -> Result<()> {
         if self.old_index().is_empty() {
             return Ok(());
         }
         let list = self
             .old_index
             .remap_into_vec(&self.batch_id_to_idx, &self.row_offset_mapping);
-
+        let file_id =
+            get_unique_file_id_for_flush(self.table_auto_incr_id as u64, start_file_index as u64);
         let mut index_builder = GlobalIndexBuilder::new();
         index_builder.set_files(self.files.iter().map(|(file, _)| file.clone()).collect());
         index_builder.set_directory(self.dir_path.clone());
-        self.new_index = Some(index_builder.build_from_flush(list).await);
+        self.new_index = Some(index_builder.build_from_flush(list, file_id).await);
         Ok(())
     }
 

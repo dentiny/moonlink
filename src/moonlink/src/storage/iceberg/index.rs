@@ -75,7 +75,7 @@ impl FileIndex {
                     bucket_end_idx: cur_index_block.bucket_end_idx,
                     bucket_start_offset: cur_index_block.bucket_start_offset,
                     filepath: local_index_file_to_remote
-                        .remove(&cur_index_block.file_path)
+                        .remove(cur_index_block.data_file.file_path())
                         .unwrap(),
                 })
                 .collect(),
@@ -93,13 +93,16 @@ impl FileIndex {
     pub(crate) async fn as_mooncake_file_index(
         &mut self,
         data_file_to_id: &HashMap<String, FileId>,
+        next_file_id: &mut u64,
     ) -> MooncakeFileIndex {
         let index_block_futures = self.index_block_files.iter().map(|cur_index_block| {
+            let cur_file_id = *next_file_id;
+            *next_file_id += 1;
             MooncakeIndexBlock::new(
                 cur_index_block.bucket_start_idx,
                 cur_index_block.bucket_end_idx,
                 cur_index_block.bucket_start_offset,
-                cur_index_block.filepath.clone(),
+                create_data_file(cur_file_id, cur_index_block.filepath.clone()),
             )
         });
         let index_blocks = futures::future::join_all(index_block_futures).await;

@@ -1,3 +1,4 @@
+use crate::create_data_file;
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use futures::executor::block_on;
 use memmap2::Mmap;
@@ -74,7 +75,7 @@ pub(crate) struct IndexBlock {
     pub(crate) bucket_start_idx: u32,
     pub(crate) bucket_end_idx: u32,
     pub(crate) bucket_start_offset: u64,
-    pub(crate) file_path: String,
+    pub(crate) data_file: MooncakeDataFileRef,
     /// File size for the index block file, used to decide whether to trigger merge index blocks merge.
     pub(crate) file_size: u64,
     data: Arc<Option<Mmap>>,
@@ -91,16 +92,16 @@ impl IndexBlock {
         bucket_start_idx: u32,
         bucket_end_idx: u32,
         bucket_start_offset: u64,
-        file_path: String,
+        data_file: MooncakeDataFileRef,
     ) -> Self {
-        let file = tokio::fs::File::open(file_path.clone()).await.unwrap();
+        let file = tokio::fs::File::open(data_file.file_path()).await.unwrap();
         let file_metadata = file.metadata().await.unwrap();
         let data = unsafe { Mmap::map(&file).unwrap() };
         Self {
             bucket_start_idx,
             bucket_end_idx,
             bucket_start_offset,
-            file_path,
+            data_file,
             file_size: file_metadata.len(),
             data: Arc::new(Some(data)),
         }
@@ -372,7 +373,7 @@ impl IndexBlockBuilder {
         self.current_entry += 1;
     }
 
-    pub async fn build(mut self, metadata: &GlobalIndex) -> IndexBlock {
+    pub async fn build(mut self, metadata: &GlobalIndex, file_id: u64) -> IndexBlock {
         for i in self.current_bucket + 1..self.bucket_end_idx {
             self.buckets[i as usize] = self.current_entry;
         }
@@ -392,7 +393,7 @@ impl IndexBlockBuilder {
             self.bucket_start_idx,
             self.bucket_end_idx,
             bucket_start_offset,
-            self.file_path.to_str().unwrap().to_string(),
+            create_data_file(file_id, self.file_path.to_str().unwrap().to_string()),
         )
         .await
     }
@@ -471,16 +472,24 @@ impl GlobalIndexBuilder {
     // ================================
     // Build from flush
     // ================================
-    pub async fn build_from_flush(mut self, mut entries: Vec<(u64, usize, usize)>) -> GlobalIndex {
+    pub async fn build_from_flush(
+        mut self,
+        mut entries: Vec<(u64, usize, usize)>,
+        file_id: u64,
+    ) -> GlobalIndex {
         self.num_rows = entries.len() as u32;
         for entry in &mut entries {
             entry.0 = splitmix64(entry.0);
         }
         entries.sort_by_key(|entry| entry.0);
-        self.build(entries.into_iter()).await
+        self.build(entries.into_iter(), file_id).await
     }
 
-    async fn build(mut self, iter: impl Iterator<Item = (u64, usize, usize)>) -> GlobalIndex {
+    async fn build(
+        mut self,
+        iter: impl Iterator<Item = (u64, usize, usize)>,
+        file_id: u64,
+    ) -> GlobalIndex {
         let (num_buckets, mut global_index) = self.create_global_index();
         let mut index_blocks = Vec::new();
         let mut index_block_builder =
@@ -490,7 +499,7 @@ impl GlobalIndexBuilder {
                 .write_entry(entry.0, entry.1, entry.2, &global_index)
                 .await;
         }
-        index_blocks.push(index_block_builder.build(&global_index).await);
+        index_blocks.push(index_block_builder.build(&global_index, file_id).await);
         global_index.index_blocks = index_blocks;
         global_index
     }
@@ -498,7 +507,11 @@ impl GlobalIndexBuilder {
     // ================================
     // Build from merge
     // ================================
-    pub async fn build_from_merge(mut self, indices: HashSet<GlobalIndex>) -> GlobalIndex {
+    pub async fn build_from_merge(
+        mut self,
+        indices: HashSet<GlobalIndex>,
+        file_id: u64,
+    ) -> GlobalIndex {
         self.num_rows = indices.iter().map(|index| index.num_rows).sum();
         self.files = indices
             .iter()
@@ -510,13 +523,14 @@ impl GlobalIndexBuilder {
             iters.push(index.create_iterator(&file_id_remaps[idx]).await);
         }
         let merge_iter = GlobalIndexMergingIterator::new(iters).await;
-        self.build_from_merging_iterator(merge_iter).await
+        self.build_from_merging_iterator(merge_iter, file_id).await
     }
 
     #[tracing::instrument(name = "index_merge", skip_all)]
     async fn build_from_merging_iterator(
         mut self,
         mut iter: GlobalIndexMergingIterator<'_>,
+        file_id: u64,
     ) -> GlobalIndex {
         let (num_buckets, mut global_index) = self.create_global_index();
         let mut index_block_builder =
@@ -528,7 +542,7 @@ impl GlobalIndexBuilder {
         }
 
         let mut index_blocks = Vec::new();
-        index_blocks.push(index_block_builder.build(&global_index).await);
+        index_blocks.push(index_block_builder.build(&global_index, file_id).await);
         global_index.index_blocks = index_blocks;
         global_index
     }
@@ -546,6 +560,7 @@ impl GlobalIndexBuilder {
     pub async fn build_from_merge_for_compaction<GetRemappedRecLoc, GetSegIdx>(
         mut self,
         num_rows: u32,
+        file_id: u64,
         indices: Vec<GlobalIndex>,
         new_data_files: Vec<MooncakeDataFileRef>,
         get_remapped_record_location: GetRemappedRecLoc,
@@ -569,6 +584,7 @@ impl GlobalIndexBuilder {
         }
         let merge_iter = GlobalIndexMergingIterator::new(iters).await;
         self.build_from_merging_iterator_with_predicate(
+            file_id,
             merge_iter,
             new_data_files,
             get_remapped_record_location,
@@ -580,6 +596,7 @@ impl GlobalIndexBuilder {
     #[tracing::instrument(name = "index_merge", skip_all)]
     async fn build_from_merging_iterator_with_predicate<GetRemappedRecLoc, GetSegIdx>(
         mut self,
+        file_id: u64,
         mut iter: GlobalIndexMergingIterator<'_>,
         new_data_files: Vec<MooncakeDataFileRef>,
         mut get_remapped_record_location: GetRemappedRecLoc,
@@ -610,7 +627,7 @@ impl GlobalIndexBuilder {
         }
 
         let mut index_blocks = Vec::new();
-        index_blocks.push(index_block_builder.build(&global_index).await);
+        index_blocks.push(index_block_builder.build(&global_index, file_id).await);
         global_index.index_blocks = index_blocks;
 
         // Now all the (hash, seg_idx, row_idx) points to the new files passed in.
@@ -900,7 +917,9 @@ mod tests {
         builder
             .set_files(files)
             .set_directory(tempfile::tempdir().unwrap().keep());
-        let index = builder.build_from_flush(hash_entries.clone()).await;
+        let index = builder
+            .build_from_flush(hash_entries.clone(), /*file_id=*/ 1)
+            .await;
 
         // Search for a non-existent key doesn't panic.
         assert!(index
@@ -944,23 +963,26 @@ mod tests {
         builder
             .set_files(files)
             .set_directory(tempfile::tempdir().unwrap().keep());
-        let index1 = builder.build_from_flush(vec).await;
+        let index1 = builder.build_from_flush(vec, /*file_id=*/ 4).await;
 
         let files = vec![
-            create_data_file(/*file_id=*/ 4, "4.parquet".to_string()),
-            create_data_file(/*file_id=*/ 5, "5.parquet".to_string()),
+            create_data_file(/*file_id=*/ 5, "4.parquet".to_string()),
+            create_data_file(/*file_id=*/ 6, "5.parquet".to_string()),
         ];
         let vec = (100..200).map(|i| (i as u64, i % 2, i)).collect::<Vec<_>>();
         let mut builder = GlobalIndexBuilder::new();
         builder
             .set_files(files)
             .set_directory(tempfile::tempdir().unwrap().keep());
-        let index2 = builder.build_from_flush(vec).await;
+        let index2 = builder.build_from_flush(vec, /*file_id=*/ 7).await;
 
         let mut builder = GlobalIndexBuilder::new();
         builder.set_directory(tempfile::tempdir().unwrap().keep());
         let merged = builder
-            .build_from_merge(HashSet::<GlobalIndex>::from([index1, index2]))
+            .build_from_merge(
+                HashSet::<GlobalIndex>::from([index1, index2]),
+                /*file_id=*/ 8,
+            )
             .await;
 
         let values = (0..200).collect::<Vec<_>>();

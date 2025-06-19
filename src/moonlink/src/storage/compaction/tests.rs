@@ -57,8 +57,12 @@ async fn test_data_file_compaction_1() {
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
     let record_batch = test_utils::create_test_batch_1();
     test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
-    let file_indice =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file.clone()).await;
+    let file_indice = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file.clone(),
+        /*start_file_id=*/ 1,
+    )
+    .await;
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
@@ -68,7 +72,7 @@ async fn test_data_file_compaction_1() {
         )],
         file_indices: vec![file_indice],
     };
-    let table_auto_incr_id: u64 = 1;
+    let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -124,8 +128,12 @@ async fn test_data_file_compaction_2() {
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
     let record_batch = test_utils::create_test_batch_1();
     test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
-    let file_indice =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file.clone()).await;
+    let file_indice = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file.clone(),
+        /*start_file_id=*/ 1,
+    )
+    .await;
 
     // Create deletion vector puffin file.
     let puffin_filepath = temp_dir.path().join("deletion-vector-1.bin");
@@ -149,7 +157,7 @@ async fn test_data_file_compaction_2() {
         )],
         file_indices: vec![file_indice.clone()],
     };
-    let table_auto_incr_id: u64 = 1;
+    let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -206,8 +214,12 @@ async fn test_data_file_compaction_3() {
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
     let record_batch = test_utils::create_test_batch_1();
     test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
-    let file_indice =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file.clone()).await;
+    let file_indice = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file.clone(),
+        /*start_file_id=*/ 1,
+    )
+    .await;
 
     // Create deletion vector puffin file.
     let puffin_filepath = temp_dir.path().join("deletion-vector-1.bin");
@@ -233,7 +245,7 @@ async fn test_data_file_compaction_3() {
         )],
         file_indices: vec![file_indice.clone()],
     };
-    let table_auto_incr_id: u64 = 1;
+    let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -290,10 +302,18 @@ async fn test_data_file_compaction_4() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file_1.clone()).await;
-    let file_indice_2 =
-        test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
+    let file_indice_1 = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file_1.clone(),
+        /*start_file_id=*/ 2,
+    )
+    .await;
+    let file_indice_2 = test_utils::create_file_indices_2(
+        temp_dir.path().to_path_buf(),
+        data_file_2.clone(),
+        /*start_file_id=*/ 3,
+    )
+    .await;
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
@@ -304,7 +324,7 @@ async fn test_data_file_compaction_4() {
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
-    let table_auto_incr_id: u64 = 2;
+    let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -371,10 +391,18 @@ async fn test_data_file_compaction_5() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file_1.clone()).await;
-    let file_indice_2 =
-        test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
+    let file_indice_1 = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file_1.clone(),
+        /*start_file_id=*/ 2,
+    )
+    .await;
+    let file_indice_2 = test_utils::create_file_indices_2(
+        temp_dir.path().to_path_buf(),
+        data_file_2.clone(),
+        /*start_file_id=*/ 3,
+    )
+    .await;
 
     // Create deletion vector puffin file.
     let puffin_filepath_1 = temp_dir.path().join("deletion-vector-1.bin");
@@ -411,7 +439,7 @@ async fn test_data_file_compaction_5() {
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
-    let table_auto_incr_id: u64 = 2;
+    let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -482,10 +510,18 @@ async fn test_data_file_compaction_6() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file_1.clone()).await;
-    let file_indice_2 =
-        test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
+    let file_indice_1 = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file_1.clone(),
+        /*start_file_id=*/ 2,
+    )
+    .await;
+    let file_indice_2 = test_utils::create_file_indices_2(
+        temp_dir.path().to_path_buf(),
+        data_file_2.clone(),
+        /*start_file_id=*/ 3,
+    )
+    .await;
 
     // Create deletion vector puffin file.
     let puffin_filepath_1 = temp_dir.path().join("deletion-vector-1.bin");
@@ -525,7 +561,7 @@ async fn test_data_file_compaction_6() {
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
-    let table_auto_incr_id: u64 = 2;
+    let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -587,10 +623,18 @@ async fn test_multiple_compacted_data_files_1() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file_1.clone()).await;
-    let file_indice_2 =
-        test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
+    let file_indice_1 = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file_1.clone(),
+        /*start_file_id=*/ 2,
+    )
+    .await;
+    let file_indice_2 = test_utils::create_file_indices_2(
+        temp_dir.path().to_path_buf(),
+        data_file_2.clone(),
+        /*start_file_id=*/ 3,
+    )
+    .await;
 
     // Create deletion vector puffin file.
     let puffin_filepath_1 = temp_dir.path().join("deletion-vector-1.bin");
@@ -627,7 +671,7 @@ async fn test_multiple_compacted_data_files_1() {
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
-    let table_auto_incr_id: u64 = 2;
+    let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,
@@ -711,10 +755,18 @@ async fn test_multiple_compacted_data_files_2() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 =
-        test_utils::create_file_indices_1(temp_dir.path().to_path_buf(), data_file_1.clone()).await;
-    let file_indice_2 =
-        test_utils::create_file_indices_2(temp_dir.path().to_path_buf(), data_file_2.clone()).await;
+    let file_indice_1 = test_utils::create_file_indices_1(
+        temp_dir.path().to_path_buf(),
+        data_file_1.clone(),
+        /*start_file_id=*/ 2,
+    )
+    .await;
+    let file_indice_2 = test_utils::create_file_indices_2(
+        temp_dir.path().to_path_buf(),
+        data_file_2.clone(),
+        /*start_file_id=*/ 3,
+    )
+    .await;
 
     // Create deletion vector puffin file.
     let puffin_filepath_1 = temp_dir.path().join("deletion-vector-1.bin");
@@ -754,7 +806,7 @@ async fn test_multiple_compacted_data_files_2() {
         ],
         file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
     };
-    let table_auto_incr_id: u64 = 2;
+    let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
         table_auto_incr_id: table_auto_incr_id as u32,

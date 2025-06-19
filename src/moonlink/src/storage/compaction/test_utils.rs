@@ -95,6 +95,7 @@ pub(crate) async fn dump_arrow_record_batches(
 pub(crate) async fn create_file_indices_1(
     directory: std::path::PathBuf,
     data_file: MooncakeDataFileRef,
+    start_file_id: u64,
 ) -> FileIndex {
     let entries = vec![
         (
@@ -117,11 +118,12 @@ pub(crate) async fn create_file_indices_1(
     let mut builder = GlobalIndexBuilder::new();
     builder.set_files(vec![data_file]);
     builder.set_directory(directory);
-    builder.build_from_flush(entries).await
+    builder.build_from_flush(entries, start_file_id).await
 }
 pub(crate) async fn create_file_indices_2(
     directory: std::path::PathBuf,
     data_file: MooncakeDataFileRef,
+    start_file_id: u64,
 ) -> FileIndex {
     let entries = vec![
         (
@@ -144,7 +146,7 @@ pub(crate) async fn create_file_indices_2(
     let mut builder = GlobalIndexBuilder::new();
     builder.set_files(vec![data_file]);
     builder.set_directory(directory);
-    builder.build_from_flush(entries).await
+    builder.build_from_flush(entries, start_file_id).await
 }
 
 /// Test util functions to dump deletion vector puffin file to local filesystem.

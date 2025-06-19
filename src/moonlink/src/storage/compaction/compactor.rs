@@ -289,11 +289,18 @@ impl CompactionBuilder {
             get_file_idx_from_flush_file_id(file_id, self.file_params.table_auto_incr_id as u64) as usize
         };
 
+        let file_id_for_index_file = get_unique_file_id_for_flush(
+            self.file_params.table_auto_incr_id as u64,
+            self.compacted_file_count,
+        );
+        self.compacted_file_count += 1;
+
         let mut global_index_builder = GlobalIndexBuilder::new();
         global_index_builder.set_directory(self.file_params.dir_path.clone());
         global_index_builder
             .build_from_merge_for_compaction(
                 /*num_rows=*/ old_to_new_remap.len() as u32,
+                /*file_id=*/ file_id_for_index_file,
                 old_file_indices,
                 /*new_data_files=*/ self.get_new_compacted_data_files(),
                 get_remapped_record_location,

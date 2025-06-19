@@ -22,6 +22,7 @@ pub(crate) use crate::storage::compaction::table_compaction::{
 };
 use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
+use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 pub use crate::storage::mooncake_table::snapshot_read_output::ReadOutput as SnapshotReadOutput;
 #[cfg(test)]
@@ -796,7 +797,35 @@ impl MooncakeTable {
         true
     }
 
-    /// Perform data compaction, whose complection will be notified separately.
+    /// Perform index merge, whose completion will be notified separately in async style.
+    pub(crate) fn perform_index_merge(
+        &mut self,
+        file_indice_merge_payload: FileIndiceMergePayload,
+    ) {
+        let cur_file_id = self.next_file_id as u64;
+        self.next_file_id += 1;
+        let table_directory = std::path::PathBuf::from(self.metadata.path.to_str().unwrap());
+        let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
+
+        // Create a detached task, whose completion will be notified separately.
+        tokio::task::spawn(async move {
+            let mut builder = GlobalIndexBuilder::new();
+            builder.set_directory(table_directory);
+            let merged = builder
+                .build_from_merge(file_indice_merge_payload.file_indices.clone(), cur_file_id)
+                .await;
+            let index_merge_result = FileIndiceMergeResult {
+                old_file_indices: file_indice_merge_payload.file_indices,
+                merged_file_indices: merged,
+            };
+            table_notify_tx_copy
+                .send(TableNotify::IndexMerge { index_merge_result })
+                .await
+                .unwrap();
+        });
+    }
+
+    /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
         let next_file_id = self.next_file_id;
         self.next_file_id += 1;
@@ -1074,6 +1103,16 @@ impl MooncakeTable {
     }
 
     #[cfg(test)]
+    async fn sync_index_merge(receiver: &mut Receiver<TableNotify>) -> FileIndiceMergeResult {
+        let notification = receiver.recv().await.unwrap();
+        if let TableNotify::IndexMerge { index_merge_result } = notification {
+            index_merge_result
+        } else {
+            panic!("Expected index merge completion notification, but get another one.");
+        }
+    }
+
+    #[cfg(test)]
     async fn sync_data_compaction(
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<DataCompactionResult> {
@@ -1272,8 +1311,6 @@ impl MooncakeTable {
         &mut self,
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
-        use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
-
         // Create mooncake snapshot.
         let force_snapshot_option = SnapshotOption {
             force_create: true,
@@ -1309,18 +1346,9 @@ impl MooncakeTable {
         assert!(iceberg_snapshot_payload.is_none());
         let file_indice_merge_payload = file_indice_merge_payload.unwrap();
 
-        let mut builder = GlobalIndexBuilder::new();
-        builder.set_directory(std::path::PathBuf::from(self.get_table_directory()));
-        let merged = builder
-            .build_from_merge(file_indice_merge_payload.file_indices.clone())
-            .await;
-        let file_indices_merge_result = FileIndiceMergeResult {
-            old_file_indices: file_indice_merge_payload.file_indices,
-            merged_file_indices: merged,
-        };
-
-        // Set index merge result and trigger another iceberg snapshot.
-        self.set_file_indices_merge_res(file_indices_merge_result);
+        self.perform_index_merge(file_indice_merge_payload);
+        let index_merge_result = Self::sync_index_merge(receiver).await;
+        self.set_file_indices_merge_res(index_merge_result);
         assert!(self.create_snapshot(SnapshotOption {
             force_create: true,
             skip_iceberg_snapshot: false,
