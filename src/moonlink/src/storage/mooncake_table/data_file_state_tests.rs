@@ -1,9 +1,8 @@
-use std::path::PathBuf;
-use std::sync::Arc;
 use tempfile::TempDir;
-use tokio::sync::mpsc::{self, Receiver};
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::Receiver;
 
-/// This file contains state-machine based unit test, which checks data file state transfer for a few operations, for example, compaction and request read.
+/// This file contains state-machine based unit test for data files, which checks data file state transfer for a few operations, for example, compaction and request read.
 ///
 /// remote storage state:
 /// - Has remote storage
@@ -65,138 +64,12 @@ use tokio::sync::mpsc::{self, Receiver};
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1f2d0E_Zi8FbR4QmW_YEhcZwMpua0_pgkaNdrqM1qh2E/edit?usp=sharing
 use crate::row::{MoonlinkRow, RowValue};
-use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
+use crate::storage::mooncake_table::state_test_utils::*;
 use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
-use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, TableId, TableUniqueFileId};
 use crate::table_notify::TableNotify;
-use crate::{
-    IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
-    ObjectStorageCacheConfig, ReadState,
-};
-
-/// Test constant to mimic an infinitely large object storage cache.
-const INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE: u64 = u64::MAX;
-/// Test constant to allow only one file in object storage cache.
-const ONE_FILE_CACHE_SIZE: u64 = 1 << 20;
-/// Iceberg test namespace and table name.
-const ICEBERG_TEST_NAMESPACE: &str = "namespace";
-const ICEBERG_TEST_TABLE: &str = "test_table";
-/// Test constant for table id.
-const TEST_TABLE_ID: TableId = TableId(0);
-/// File attributes for a fake file.
-///
-/// File id for the fake file.
-const FAKE_FILE_ID: TableUniqueFileId = TableUniqueFileId {
-    table_id: TEST_TABLE_ID,
-    file_id: FileId(100),
-};
-/// Fake file size.
-const FAKE_FILE_SIZE: u64 = ONE_FILE_CACHE_SIZE;
-/// Fake filename.
-const FAKE_FILE_NAME: &str = "fake-file-name";
-
-/// Test util function to get unique table file id.
-fn get_unique_table_file_id(file_id: FileId) -> TableUniqueFileId {
-    TableUniqueFileId {
-        table_id: TEST_TABLE_ID,
-        file_id,
-    }
-}
-
-/// Test util function to decide whether a given file is remote file.
-fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
-    // Local filesystem directory for iceberg warehouse.
-    let mut temp_pathbuf = temp_dir.path().to_path_buf();
-    temp_pathbuf.push(ICEBERG_TEST_NAMESPACE); // iceberg namespace
-    temp_pathbuf.push(ICEBERG_TEST_TABLE); // iceberg table name
-
-    file.file_path().starts_with(temp_pathbuf.to_str().unwrap())
-}
-
-/// Test util function to decide whether a given file is local file.
-fn is_local_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
-    !is_remote_file(file, temp_dir)
-}
-
-/// Test util function to drop read states, and apply the synchronized response to mooncake table.
-async fn drop_read_states(
-    read_states: Vec<Arc<ReadState>>,
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
-) {
-    for cur_read_state in read_states.into_iter() {
-        drop(cur_read_state);
-        table.sync_read_request(receiver).await;
-    }
-}
-/// Test util function to drop read states and create a mooncake snapshot to reflect.
-/// Return evicted files to delete.
-async fn drop_read_states_and_create_mooncake_snapshot(
-    read_states: Vec<Arc<ReadState>>,
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
-) -> Vec<String> {
-    drop_read_states(read_states, table, receiver).await;
-    let (_, _, _, files_to_delete) = table.create_mooncake_snapshot_for_test(receiver).await;
-    files_to_delete
-}
-
-/// Test util function to get fake file path.
-fn get_fake_file_path(temp_dir: &TempDir) -> String {
-    temp_dir
-        .path()
-        .join(FAKE_FILE_NAME)
-        .to_str()
-        .unwrap()
-        .to_string()
-}
-
-/// Test util function to import a second object storage cache entry.
-async fn import_fake_cache_entry(
-    temp_dir: &TempDir,
-    cache: &mut ObjectStorageCache,
-) -> NonEvictableHandle {
-    // Create a physical fake file, so later evicted files deletion won't fail.
-    let fake_filepath = get_fake_file_path(temp_dir);
-    let filepath = PathBuf::from(&fake_filepath);
-    tokio::fs::File::create(&filepath).await.unwrap();
-
-    let cache_entry = CacheEntry {
-        cache_filepath: fake_filepath,
-        file_metadata: FileMetadata {
-            file_size: FAKE_FILE_SIZE,
-        },
-    };
-    cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
-}
-
-/// Test util function to check only fake file in object storage cache.
-async fn check_only_fake_file_in_cache(object_storage_cache: &ObjectStorageCache) {
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .non_evictable_cache
-            .len(),
-        1,
-    );
-    assert_eq!(
-        object_storage_cache.get_non_evictable_filenames().await,
-        vec![FAKE_FILE_ID]
-    );
-}
+use crate::{IcebergTableConfig, MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig};
 
 /// ========================
 /// Test util function for read

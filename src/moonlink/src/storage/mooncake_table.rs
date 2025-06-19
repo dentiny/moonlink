@@ -1399,4 +1399,10 @@ mod tests;
 pub(crate) mod test_utils;
 
 #[cfg(test)]
-mod state_tests;
+pub(crate) mod state_test_utils;
+
+#[cfg(test)]
+mod data_file_state_tests;
+
+#[cfg(test)]
+mod deletion_vector_puffin_state_tests;
