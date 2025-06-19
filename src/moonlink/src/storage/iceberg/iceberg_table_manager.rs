@@ -304,7 +304,7 @@ impl IcebergTableManager {
         utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
 
         data_file_entry.persisted_deletion_vector = Some(PuffinBlobRef {
-            // Deletion vector cache should be pinned on cache.
+            // Deletion vector should be pinned on cache.
             puffin_file_cache_handle: cache_handle.unwrap(),
             start_offset: data_file.content_offset().unwrap() as u32,
             blob_size: data_file.content_size_in_bytes().unwrap() as u32,

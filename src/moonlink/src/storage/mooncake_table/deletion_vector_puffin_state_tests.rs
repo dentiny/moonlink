@@ -23,7 +23,7 @@ use crate::row::{MoonlinkRow, RowValue};
 /// State machine transfer:
 /// Initial state: no deletion vector
 /// - No deletion vector + persist => referenced, not requested to delete
-/// - No deletion vector + recover => referenced, not requested to delete // TODO(hjiang): Add unit test.
+/// - No deletion vector + recover => referenced, not requested to delete
 ///
 /// Initial state: referenced, not requested to delete
 /// - Referenced, no delete + use => referenced, no delete
@@ -35,10 +35,14 @@ use crate::row::{MoonlinkRow, RowValue};
 ///
 /// Initial state: referenced, requested to delete
 /// - Referenced, to delete + use over & referenced => referenced, to delete
-/// - Referenced, to delete + use over & unreferenced => no deletion vector
+/// - Referenced, to delete + use over & unreferenced => no entry
+///
+/// For more details, please refer to https://docs.google.com/document/d/1LDWLWhgFP5-da8P50t-uZIO6a4lK2Na5P70ibNOWu-g/edit?usp=sharing
 use crate::storage::mooncake_table::state_test_utils::*;
 use crate::table_notify::TableNotify;
-use crate::{MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig};
+use crate::{
+    IcebergTableManager, MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig, TableManager,
+};
 
 /// ========================
 /// Test util function for read
@@ -135,6 +139,82 @@ async fn test_1_persist_2() {
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1
+    );
+}
+
+/// Test scenario: no deletion vector + recover => referenced, not requested to delete
+#[tokio::test]
+async fn test_1_recover_2() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+    );
+
+    let (mut table, mut table_notify) =
+        prepare_test_deletion_vector_for_read(&temp_dir, ObjectStorageCache::new(cache_config))
+            .await;
+    table
+        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
+        .await
+        .unwrap();
+    let (_, _, _, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+
+    // Now the disk file and deletion vector has been persist into iceberg.
+    let object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
+        table.metadata.clone(),
+        object_storage_cache_for_recovery.clone(),
+        get_iceberg_table_config(&temp_dir),
+    )
+    .unwrap();
+    let mooncake_snapshot = iceberg_table_manager_to_recover
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = mooncake_snapshot.disk_files.clone();
+    assert_eq!(disk_files.len(), 1);
+    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
+
+    // Check cache state.
+    assert_eq!(
+        object_storage_cache_for_recovery
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache_for_recovery
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache_for_recovery
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
+        1, // Puffin file.
+    );
+    assert_eq!(
+        object_storage_cache_for_recovery
+            .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
+            .await,
+        1,
     );
 }
 

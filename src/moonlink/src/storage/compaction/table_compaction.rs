@@ -16,6 +16,7 @@ pub struct SingleFileToCompact {
     /// Remote data file; only persisted data files will be compacted.
     pub(crate) filepath: String,
     /// Deletion vector.
+    /// If assigned, the puffin file has been pinned so later accesses are valid.
     pub(crate) deletion_vector: Option<PuffinBlobRef>,
 }
 

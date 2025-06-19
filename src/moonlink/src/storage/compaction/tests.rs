@@ -36,7 +36,7 @@ fn get_single_file_to_compact(
     }
 }
 
-/// Test util function to get unique table file id for the given table id.
+/// Test util function to get unique table file id for the given file id.
 fn get_table_unique_table_id(file_id: u64) -> TableUniqueFileId {
     TableUniqueFileId {
         table_id: TEST_TABLE_ID,
