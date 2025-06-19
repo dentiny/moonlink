@@ -30,7 +30,8 @@ use crate::row::{MoonlinkRow, RowValue};
 /// - Referenced, no delete + use over => referenced, no delete
 ///
 /// Initial state: referenced, not requested to delete
-/// - Referenced, no delete + delete => referenced, requested to delete
+/// - Referenced, no delete + delete & referenced => referenced, requested to delete
+/// - Referenced, no delete + delete & unreferenced => no entry
 ///
 /// Initial state: referenced, requested to delete
 /// - Referenced, to delete + use over & referenced => referenced, to delete
@@ -102,6 +103,15 @@ async fn test_1_persist_2() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -199,6 +209,15 @@ async fn test_2_read() {
             .cache
             .read()
             .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
             .evictable_cache
             .len(),
         1, // data file
@@ -270,9 +289,10 @@ async fn prepare_test_disk_files_with_deletion_vector_for_compaction(
 /// Use by compaction
 /// ========================
 ///
-/// Test scenario: referenced, no delete + delete => referenced, requested to delete
+/// Test scenario: referenced, no delete + delete & referenced => referenced, requested to delete
+/// Test scenario: referenced, no delete + delete & unreferenced => no entry
 #[tokio::test]
-async fn test_2_compact_3() {
+async fn test_2_compact() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
@@ -298,34 +318,94 @@ async fn test_2_compact_3() {
     // Get old snapshot disk files.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
-    let mut old_compacted_puffin_files = disk_files
-        .iter()
-        .map(|(_, disk_entry)| {
+    let mut old_compacted_puffin_file_ids = vec![];
+    let mut old_compacted_puffin_files = vec![];
+    for (_, disk_entry) in disk_files.iter() {
+        old_compacted_puffin_file_ids.push(
+            disk_entry
+                .puffin_deletion_blob
+                .as_ref()
+                .unwrap()
+                .puffin_file_cache_handle
+                .file_id,
+        );
+        old_compacted_puffin_files.push(
             disk_entry
                 .puffin_deletion_blob
                 .as_ref()
                 .unwrap()
                 .puffin_file_cache_handle
                 .get_cache_filepath()
-                .to_string()
-        })
-        .collect::<Vec<_>>();
+                .to_string(),
+        );
+    }
+    assert_eq!(old_compacted_puffin_files.len(), 2);
+
+    // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        2, // Data files.
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
+        2, // Puffin files.
+    );
+    // Puffin file is referenced twice, one inside of current snapshot, another for compaction payload.
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[0])
+            .await,
+        2,
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[1])
+            .await,
+        2,
+    );
 
     // Use by compaction.
-    let mut evicted_files = table
+    let evicted_files = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
-    old_compacted_puffin_files.sort();
-    evicted_files.sort();
-    assert_eq!(evicted_files, old_compacted_puffin_files);
+    // Include both two data files and their puffin files.
+    assert_eq!(evicted_files.len(), 4);
+    assert!(evicted_files.contains(&old_compacted_puffin_files[0]));
+    assert!(evicted_files.contains(&old_compacted_puffin_files[1]));
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
-    assert_eq!(disk_files.len(), 1);
-    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.puffin_deletion_blob.is_none());
+    assert!(disk_files.is_empty());
 
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -342,6 +422,6 @@ async fn test_2_compact_3() {
             .await
             .non_evictable_cache
             .len(),
-        2, // Puffin file and data file.
+        0,
     );
 }

@@ -300,7 +300,7 @@ impl IcebergTableManager {
             .object_storage_cache
             .get_cache_entry(unique_file_id, data_file.file_path())
             .await
-            .map_err(|err| utils::to_iceberg_error(err))?;
+            .map_err(utils::to_iceberg_error)?;
         utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
 
         data_file_entry.persisted_deletion_vector = Some(PuffinBlobRef {
@@ -425,7 +425,7 @@ impl IcebergTableManager {
             .object_storage_cache
             .get_cache_entry(unique_file_id, &puffin_filepath)
             .await
-            .map_err(|err| utils::to_iceberg_error(err))?;
+            .map_err(utils::to_iceberg_error)?;
         utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
 
         let puffin_blob_ref = PuffinBlobRef {
@@ -553,7 +553,7 @@ impl IcebergTableManager {
                 .write_deletion_vector(
                     iceberg_data_file.to_string(),
                     entry.deletion_vector.clone(),
-                    &file_params,
+                    file_params,
                     puffin_index as u64,
                 )
                 .await?;

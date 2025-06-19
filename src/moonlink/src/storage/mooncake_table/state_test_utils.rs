@@ -14,7 +14,7 @@ use crate::table_notify::TableNotify;
 use crate::{IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState};
 
 /// This module contains util functions for state-based tests.
-
+///
 /// Test constant to mimic an infinitely large object storage cache.
 pub(super) const INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE: u64 = u64::MAX;
 /// Test constant to allow only one file in object storage cache.
