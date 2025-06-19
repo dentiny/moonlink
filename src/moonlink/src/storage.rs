@@ -2,6 +2,7 @@ pub(crate) mod cache;
 pub(crate) mod compaction;
 mod iceberg;
 pub(crate) mod index;
+pub(crate) mod io_utils;
 pub(crate) mod mooncake_table;
 pub(crate) mod parquet_utils;
 pub(crate) mod storage_utils;

@@ -275,22 +275,6 @@ pub(crate) fn to_iceberg_error<E: std::fmt::Debug>(err: E) -> IcebergError {
     IcebergError::new(iceberg::ErrorKind::Unexpected, format!("Error: {:?}", err))
 }
 
-/// Util function to delete local evicted file caches.
-pub(crate) async fn delete_evicted_cache_files(
-    evicted_files_to_delete: Vec<String>,
-) -> IcebergResult<()> {
-    let delete_futures = evicted_files_to_delete
-        .into_iter()
-        .map(|file_path| async move { tokio::fs::remove_file(file_path).await });
-    let delete_results = futures::future::join_all(delete_futures).await;
-    for cur_res in delete_results.into_iter() {
-        if let Err(e) = cur_res {
-            return Err(to_iceberg_error(e));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

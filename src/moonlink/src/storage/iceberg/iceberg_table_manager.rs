@@ -15,6 +15,7 @@ use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
+use crate::storage::io_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
@@ -301,7 +302,9 @@ impl IcebergTableManager {
             .get_cache_entry(unique_file_id, data_file.file_path())
             .await
             .map_err(utils::to_iceberg_error)?;
-        utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
+        io_utils::delete_local_files(evicted_files_to_delete)
+            .await
+            .map_err(utils::to_iceberg_error)?;
 
         data_file_entry.persisted_deletion_vector = Some(PuffinBlobRef {
             // Deletion vector should be pinned on cache.
@@ -426,7 +429,9 @@ impl IcebergTableManager {
             .get_cache_entry(unique_file_id, &puffin_filepath)
             .await
             .map_err(utils::to_iceberg_error)?;
-        utils::delete_evicted_cache_files(evicted_files_to_delete).await?;
+        io_utils::delete_local_files(evicted_files_to_delete)
+            .await
+            .map_err(utils::to_iceberg_error)?;
 
         let puffin_blob_ref = PuffinBlobRef {
             puffin_file_cache_handle: cache_handle.unwrap(),
