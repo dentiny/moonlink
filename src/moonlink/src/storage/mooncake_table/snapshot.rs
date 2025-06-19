@@ -1100,32 +1100,6 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
-    /// Pin deletion vector puffin file for data compaction to prevent file gets evicted and deleted by iceberg persistence.
-    async fn pin_deletion_vector_puffin_file_cache(
-        &mut self,
-        data_compaction_payload: &mut DataCompactionPayload,
-    ) {
-        for cur_disk_file in data_compaction_payload.disk_files.iter_mut() {
-            let puffin_blob = &mut cur_disk_file.deletion_vector;
-            if puffin_blob.is_none() {
-                continue;
-            }
-            let puffin_blob = puffin_blob.as_mut().unwrap();
-
-            // The puffin file is expected to exist and pinned in object storage cache, so no failure expected and no evicted files returned.
-            let (new_cache_handle, evicted_files) = self
-                .object_storage_cache
-                .get_cache_entry(
-                    puffin_blob.puffin_file_cache_handle.file_id,
-                    /*remote_filepath=*/ "",
-                )
-                .await
-                .unwrap();
-            assert!(evicted_files.is_empty());
-            puffin_blob.puffin_file_cache_handle = new_cache_handle.unwrap();
-        }
-    }
-
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
@@ -1237,11 +1211,10 @@ impl SnapshotTableState {
         // Decide whether to perform a data compaction.
         let mut data_compaction_payload: Option<DataCompactionPayload> = None;
         if !opt.skip_data_file_compaction {
+            // No need to pin puffin file during compaction:
+            // - only compaction deletes puffin file
+            // - there's no two ongoing compaction
             data_compaction_payload = self.get_payload_to_compact();
-            if let Some(data_compact_payload) = data_compaction_payload.as_mut() {
-                self.pin_deletion_vector_puffin_file_cache(data_compact_payload)
-                    .await;
-            }
         }
 
         // Decide whether to merge an index merge, which cannot be performed together with data compaction.

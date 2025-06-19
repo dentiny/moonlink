@@ -449,18 +449,17 @@ async fn test_2_compact() {
             .len(),
         2, // Puffin files.
     );
-    // Puffin file is referenced twice, one inside of current snapshot, another for compaction payload.
     assert_eq!(
         object_storage_cache
             .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[0])
             .await,
-        2,
+        1,
     );
     assert_eq!(
         object_storage_cache
             .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[1])
             .await,
-        2,
+        1,
     );
 
     // Use by compaction.
