@@ -1208,8 +1208,6 @@ impl MooncakeTable {
             self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
         }
 
-        println!("====iceberg snapshot finishes===");
-
         // Get data compaction payload.
         assert!(self.create_snapshot(force_snapshot_option.clone()));
         let (iceberg_snapshot_payload, _, data_compaction_payload, evicted_object_storage_cache) =
@@ -1222,14 +1220,10 @@ impl MooncakeTable {
         assert!(iceberg_snapshot_payload.is_none());
         let data_compaction_payload = data_compaction_payload.unwrap();
 
-        println!("====before compaction===");
-
         // Perform and block wait data compaction.
         self.perform_data_compaction(data_compaction_payload);
         let data_compaction_result = Self::sync_data_compaction(receiver).await;
         let data_compaction_result = data_compaction_result.unwrap();
-
-        println!("====compaction finishes===");
 
         // Before create snapshot for compaction results, perform another deletion operations.
         for (cur_row, lsn) in injected_committed_deletion_rows {
@@ -1255,8 +1249,6 @@ impl MooncakeTable {
             tokio::fs::remove_file(&cur_data_file).await.unwrap();
         }
 
-        println!("mooncake snapshot over, ready to do iceberg snaoshot");
-
         let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
         self.persist_iceberg_snapshot(iceberg_snapshot_payload);
         let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
@@ -1269,8 +1261,6 @@ impl MooncakeTable {
             skip_file_indices_merge: true,
             skip_data_file_compaction: true,
         }));
-
-        println!("everything done");
 
         Ok(())
     }

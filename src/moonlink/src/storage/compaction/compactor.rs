@@ -144,11 +144,6 @@ impl CompactionBuilder {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
-        println!(
-            "get data file cache entry : {:?}",
-            data_file_to_compact.file_id
-        );
-
         let (cache_handle, evicted_files) = self
             .compaction_payload
             .object_storage_cache
