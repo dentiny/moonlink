@@ -503,11 +503,6 @@ impl MooncakeTable {
         })
     }
 
-    /// Get mooncake table directory.
-    pub(crate) fn get_table_directory(&self) -> String {
-        self.metadata.path.to_str().unwrap().to_string()
-    }
-
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
     pub(crate) async fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {

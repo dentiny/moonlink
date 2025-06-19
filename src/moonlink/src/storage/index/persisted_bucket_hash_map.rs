@@ -75,6 +75,8 @@ pub(crate) struct IndexBlock {
     pub(crate) bucket_start_idx: u32,
     pub(crate) bucket_end_idx: u32,
     pub(crate) bucket_start_offset: u64,
+    /// Local index file path.
+    /// TODO(hjiang): Rename, to avoid confusion with "data file" concept.
     pub(crate) data_file: MooncakeDataFileRef,
     /// File size for the index block file, used to decide whether to trigger merge index blocks merge.
     pub(crate) file_size: u64,

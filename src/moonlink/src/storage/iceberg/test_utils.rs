@@ -97,7 +97,7 @@ pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_u
     for cur_file_index in snapshot.indices.file_indices.iter() {
         // Check index blocks are imported into the iceberg table.
         for cur_index_block in cur_file_index.index_blocks.iter() {
-            let index_pathbuf = std::path::PathBuf::from(&cur_index_block.file_path);
+            let index_pathbuf = std::path::PathBuf::from(&cur_index_block.data_file.file_path());
             assert!(index_pathbuf.starts_with(&warehouse_directory));
             assert!(tokio::fs::try_exists(&index_pathbuf).await.unwrap());
         }

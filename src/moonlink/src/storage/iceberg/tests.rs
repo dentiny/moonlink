@@ -152,7 +152,7 @@ fn get_file_indices_filepath_and_data_filepaths(
             cur_file_index
                 .index_blocks
                 .iter()
-                .map(|cur_index_block| cur_index_block.file_path.clone())
+                .map(|cur_index_block| cur_index_block.data_file.file_path().to_string())
                 .collect::<Vec<_>>(),
         );
     }

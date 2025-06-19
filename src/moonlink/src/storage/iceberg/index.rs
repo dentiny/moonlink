@@ -255,7 +255,8 @@ mod tests {
                     /*bucket_start_idx=*/ 0,
                     /*bucket_end_idx=*/ 3,
                     /*bucket_start_offset=*/ 10,
-                    /*filepath=*/ local_index_filepath.clone(),
+                    /*data_file=*/
+                    create_data_file(/*file_id=*/ 1, local_index_filepath.clone()),
                 )
                 .await,
             ],
@@ -284,7 +285,10 @@ mod tests {
 
         let data_file_to_id =
             HashMap::<String, FileId>::from([(remote_data_filepath.clone(), FileId(0))]);
-        let mooncake_file_index = file_index.as_mooncake_file_index(&data_file_to_id).await;
+        let mut next_file_id = 1;
+        let mooncake_file_index = file_index
+            .as_mooncake_file_index(&data_file_to_id, &mut next_file_id)
+            .await;
 
         // Check global index are equal before and after serde.
         assert_eq!(
