@@ -232,6 +232,15 @@ pub fn get_data_files_for_read(data_file_paths: &[DataFileForRead]) -> Vec<Strin
         .collect::<Vec<_>>()
 }
 
+pub fn get_deletion_puffin_files_for_read(
+    deletion_vector_puffins: &[NonEvictableHandle],
+) -> Vec<String> {
+    deletion_vector_puffins
+        .iter()
+        .map(|cache_handle| cache_handle.get_cache_filepath().to_string())
+        .collect::<Vec<_>>()
+}
+
 pub async fn verify_files_and_deletions(
     data_file_paths: &[String],
     puffin_file_paths: &[String],

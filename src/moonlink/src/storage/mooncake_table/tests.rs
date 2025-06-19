@@ -77,14 +77,14 @@ async fn test_delete_and_append(#[case] identity: IdentityProp) -> Result<()> {
     let mut snapshot = table.snapshot.write().await;
     let SnapshotReadOutput {
         data_file_paths,
-        puffin_file_paths,
+        puffin_cache_handles,
         position_deletes,
         deletion_vectors,
         ..
     } = snapshot.request_read().await?;
     verify_files_and_deletions(
         get_data_files_for_read(&data_file_paths).as_slice(),
-        &puffin_file_paths,
+        get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
         position_deletes,
         deletion_vectors,
         &[1, 3, 4],
@@ -180,14 +180,14 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             position_deletes,
             deletion_vectors,
             ..
         } = table_snapshot.request_read().await?;
         verify_files_and_deletions(
             get_data_files_for_read(&data_file_paths).as_slice(),
-            &puffin_file_paths,
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
             position_deletes,
             deletion_vectors,
             /*expected_ids=*/ &[1, 2, 3],
@@ -210,14 +210,14 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             position_deletes,
             deletion_vectors,
             ..
         } = table_snapshot.request_read().await?;
         verify_files_and_deletions(
             get_data_files_for_read(&data_file_paths).as_slice(),
-            &puffin_file_paths,
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
             position_deletes,
             deletion_vectors,
             /*expected_ids=*/ &[1, 2, 3, 4],
@@ -292,14 +292,14 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             position_deletes,
             deletion_vectors,
             ..
         } = table_snapshot.request_read().await?;
         verify_files_and_deletions(
             get_data_files_for_read(&data_file_paths).as_slice(),
-            &puffin_file_paths,
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
             position_deletes,
             deletion_vectors,
             &[1, 2, 2, 3, 3],
@@ -321,14 +321,14 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             position_deletes,
             deletion_vectors,
             ..
         } = table_snapshot.request_read().await?;
         verify_files_and_deletions(
             get_data_files_for_read(&data_file_paths).as_slice(),
-            &puffin_file_paths,
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
             position_deletes,
             deletion_vectors,
             &[1, 2, 3, 3],
@@ -345,14 +345,14 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             position_deletes,
             deletion_vectors,
             ..
         } = table_snapshot.request_read().await?;
         verify_files_and_deletions(
             get_data_files_for_read(&data_file_paths).as_slice(),
-            &puffin_file_paths,
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
             position_deletes,
             deletion_vectors,
             &[1, 2, 3],
@@ -393,14 +393,14 @@ async fn test_duplicate_deletion() -> Result<()> {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             position_deletes,
             deletion_vectors,
             ..
         } = table_snapshot.request_read().await?;
         verify_files_and_deletions(
             get_data_files_for_read(&data_file_paths).as_slice(),
-            &puffin_file_paths,
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
             position_deletes,
             deletion_vectors,
             &[1],

@@ -67,18 +67,18 @@ impl ReadState {
     pub fn new(
         // Data file and positional deletes for query.
         data_files: Vec<String>,
-        puffin_files: Vec<String>,
+        puffin_cache_handles: Vec<NonEvictableHandle>,
         mut deletion_vectors_at_read: Vec<PuffinDeletionBlobAtRead>,
         mut position_deletes: Vec<(u32 /*file_index*/, u32 /*row_index*/)>,
         // Fields used for read state cleanup after query completion.
         associated_files: Vec<String>,
-        cache_handles: Vec<NonEvictableHandle>,
+        mut cache_handles: Vec<NonEvictableHandle>, // Cache handles for data files.
         table_notify: Option<tokio::sync::mpsc::Sender<TableNotify>>,
     ) -> Self {
         // Check invariants.
         if table_notify.is_none() {
             assert!(data_files.is_empty());
-            assert!(puffin_files.is_empty());
+            assert!(puffin_cache_handles.is_empty());
             assert!(deletion_vectors_at_read.is_empty());
             assert!(associated_files.is_empty());
             assert!(cache_handles.is_empty());
@@ -93,6 +93,10 @@ impl ReadState {
         });
         position_deletes.sort();
 
+        let puffin_files = puffin_cache_handles
+            .iter()
+            .map(|handle| handle.cache_entry.cache_filepath.clone())
+            .collect::<Vec<_>>();
         let metadata = TableMetadata {
             data_files,
             puffin_files,
@@ -100,6 +104,8 @@ impl ReadState {
             position_deletes,
         };
         let data = bincode::encode_to_vec(metadata, BINCODE_CONFIG).unwrap(); // TODO
+
+        cache_handles.extend(puffin_cache_handles);
         Self {
             data,
             associated_files,

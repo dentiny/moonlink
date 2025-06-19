@@ -3,7 +3,7 @@ use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCa
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::storage::PuffinDeletionBlobAtRead;
 use crate::table_notify::TableNotify;
-use crate::ReadState;
+use crate::{NonEvictableHandle, ReadState};
 
 use std::sync::Arc;
 
@@ -37,8 +37,8 @@ pub struct ReadOutput {
     /// 1. Committed and persisted data files, which consists of file id and remote path (if any).
     /// 2. Associated files, which include committed but un-persisted records.
     pub data_file_paths: Vec<DataFileForRead>,
-    /// Puffin file paths.
-    pub puffin_file_paths: Vec<String>,
+    /// Puffin cache handles.
+    pub puffin_cache_handles: Vec<NonEvictableHandle>,
     /// Deletion vectors persisted in puffin files.
     pub deletion_vectors: Vec<PuffinDeletionBlobAtRead>,
     /// Committed but un-persisted positional deletion records.
@@ -96,7 +96,7 @@ impl ReadOutput {
         Arc::new(ReadState::new(
             // Data file and positional deletes for query.
             resolved_data_files,
-            self.puffin_file_paths,
+            self.puffin_cache_handles,
             self.deletion_vectors,
             self.position_deletes,
             // Fields used for read state cleanup after query completion.

@@ -32,6 +32,7 @@ use crate::storage::storage_utils::{
     RecordLocation,
 };
 use crate::table_notify::TableNotify;
+use crate::NonEvictableHandle;
 use more_asserts as ma;
 use parquet::arrow::AsyncArrowWriter;
 use parquet::basic::{Compression, Encoding};
@@ -1682,10 +1683,10 @@ impl SnapshotTableState {
     }
 
     /// Get committed deletion record for current snapshot.
-    fn get_deletion_records(
-        &self,
+    async fn get_deletion_records(
+        &mut self,
     ) -> (
-        Vec<String>,                   /*puffin filepaths*/
+        Vec<NonEvictableHandle>,       /*puffin file cache handles*/
         Vec<PuffinDeletionBlobAtRead>, /*deletion vector puffin*/
         Vec<(
             u32, /*index of disk file in snapshot*/
@@ -1693,7 +1694,7 @@ impl SnapshotTableState {
         )>,
     ) {
         // Get puffin blobs for deletion vector.
-        let mut puffin_filepaths = vec![];
+        let mut puffin_cache_handles = vec![];
         let mut deletion_vector_blob_at_read = vec![];
         for (idx, (_, disk_deletion_vector)) in self.current_snapshot.disk_files.iter().enumerate()
         {
@@ -1701,13 +1702,21 @@ impl SnapshotTableState {
                 continue;
             }
             let puffin_deletion_blob = disk_deletion_vector.puffin_deletion_blob.as_ref().unwrap();
-            puffin_filepaths.push(
-                puffin_deletion_blob
-                    .puffin_file_cache_handle
-                    .get_cache_filepath()
-                    .to_string(),
-            );
-            let puffin_file_index = puffin_filepaths.len() - 1;
+
+            // Add one more reference for puffin cache handle.
+            // There'll be no IO operations during cache access, thus no failure or evicted files expected.
+            let (new_puffin_cache_handle, cur_evicted) = self
+                .object_storage_cache
+                .get_cache_entry(
+                    puffin_deletion_blob.puffin_file_cache_handle.file_id,
+                    /*remote_filepath=*/ "",
+                )
+                .await
+                .unwrap();
+            assert!(cur_evicted.is_empty());
+            puffin_cache_handles.push(new_puffin_cache_handle.unwrap());
+
+            let puffin_file_index = puffin_cache_handles.len() - 1;
             deletion_vector_blob_at_read.push(PuffinDeletionBlobAtRead {
                 data_file_index: idx as u32,
                 puffin_file_index: puffin_file_index as u32,
@@ -1728,7 +1737,7 @@ impl SnapshotTableState {
                 }
             }
         }
-        (puffin_filepaths, deletion_vector_blob_at_read, ret)
+        (puffin_cache_handles, deletion_vector_blob_at_read, ret)
     }
 
     /// Util function to get read state, which returns all current data files information.
@@ -1753,8 +1762,8 @@ impl SnapshotTableState {
     pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {
         let mut data_file_paths = self.get_read_files_for_read().await;
         let mut associated_files = Vec::new();
-        let (puffin_file_paths, deletion_vectors_at_read, position_deletes) =
-            self.get_deletion_records();
+        let (puffin_cache_handles, deletion_vectors_at_read, position_deletes) =
+            self.get_deletion_records().await;
 
         // For committed but not persisted records, we create a temporary file for them, which gets deleted after query completion.
         let file_path = self.current_snapshot.get_name_for_inmemory_file();
@@ -1766,7 +1775,7 @@ impl SnapshotTableState {
             associated_files.push(file_path.to_string_lossy().to_string());
             return Ok(SnapshotReadOutput {
                 data_file_paths,
-                puffin_file_paths,
+                puffin_cache_handles,
                 deletion_vectors: deletion_vectors_at_read,
                 position_deletes,
                 associated_files,
@@ -1830,7 +1839,7 @@ impl SnapshotTableState {
         }
         Ok(SnapshotReadOutput {
             data_file_paths,
-            puffin_file_paths,
+            puffin_cache_handles,
             deletion_vectors: deletion_vectors_at_read,
             position_deletes,
             associated_files,
