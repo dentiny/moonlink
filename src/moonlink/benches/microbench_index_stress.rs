@@ -18,7 +18,7 @@ fn bench_index_stress(c: &mut Criterion) {
         .set_files(files)
         .set_directory(tempfile::tempdir().unwrap().keep());
     let rt = Runtime::new().unwrap();
-    let index = rt.block_on(builder.build_from_flush(vec));
+    let index = rt.block_on(builder.build_from_flush(vec, /*file_id=*/ 1));
 
     group.bench_function("search_10m_entries", |b| {
         b.iter(|| {

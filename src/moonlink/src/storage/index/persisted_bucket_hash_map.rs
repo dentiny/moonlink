@@ -998,12 +998,14 @@ mod tests {
                 panic!("No record location found for {}", value);
             };
             // Check for the first file indice.
+            // The second batch of data file ids starts with 1.
             if *value < 100 {
                 assert_eq!(*file_id, *value % 3 + 1);
             }
             // Check for the second file indice.
+            // The second batch of data file ids starts with 5.
             else {
-                assert_eq!(*file_id, (*value - 100) % 2 + 4);
+                assert_eq!(*file_id, (*value - 100) % 2 + 5);
             }
         }
     }

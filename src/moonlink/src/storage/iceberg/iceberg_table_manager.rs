@@ -490,7 +490,7 @@ impl IcebergTableManager {
                 )
                 .is_none());
 
-            // Record all imported iceberg data files.
+            // Record all imported iceberg data files, with file id unchanged.
             new_remote_data_files.push(create_data_file(
                 local_data_file.file_id().0,
                 iceberg_data_file.file_path().to_string(),
@@ -571,6 +571,10 @@ impl IcebergTableManager {
     }
 
     /// Update data file path pointed by file indices, from local filepath to remote, with file id unchanged.
+    ///
+    /// # Arguments:
+    ///
+    /// * local_data_file_to_remote: contains mapps from newly imported data files to remote paths.
     fn get_updated_file_indices_at_import(
         old_file_index: &MooncakeFileIndex,
         local_data_file_to_remote: &HashMap<String, String>,
@@ -579,7 +583,7 @@ impl IcebergTableManager {
         for cur_data_file in new_file_index.files.iter_mut() {
             let remote_data_file = local_data_file_to_remote
                 .get(cur_data_file.file_path())
-                .unwrap()
+                .unwrap_or(cur_data_file.file_path())
                 .clone();
             *cur_data_file = create_data_file(cur_data_file.file_id().0, remote_data_file);
         }
@@ -614,7 +618,7 @@ impl IcebergTableManager {
             for cur_index_block in cur_file_index.index_blocks.iter() {
                 let remote_index_block = utils::upload_index_file(
                     self.iceberg_table.as_ref().unwrap(),
-                    &cur_index_block.data_file.file_path(),
+                    cur_index_block.data_file.file_path(),
                 )
                 .await?;
                 local_index_file_to_remote.insert(
@@ -644,6 +648,10 @@ impl IcebergTableManager {
 
     /// Dump file indices into the iceberg table, only new file indices will be persisted into the table.
     /// Return file index ids which should be added into iceberg table.
+    ///
+    /// # Arguments:
+    ///
+    /// * local_data_file_to_remote: contains mapps from newly imported data files to remote paths.
     ///
     /// TODO(hjiang): Need to configure (1) the number of blobs in a puffin file; and (2) the number of file index in a puffin blob.
     /// For implementation simpicity, put everything in a single file and a single blob.

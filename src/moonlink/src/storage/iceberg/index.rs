@@ -137,7 +137,7 @@ pub(crate) struct FileIndexBlob {
 impl FileIndexBlob {
     pub fn new(
         file_indices: Vec<&MooncakeFileIndex>,
-        mut local_index_file_to_remote: HashMap<String, String>, // TODO(hjiang): Check whether we could use mooncake file ref.
+        mut local_index_file_to_remote: HashMap<String, String>,
         mut local_data_file_to_remote: HashMap<String, String>,
     ) -> Self {
         Self {
