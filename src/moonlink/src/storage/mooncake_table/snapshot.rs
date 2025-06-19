@@ -262,7 +262,6 @@ impl SnapshotTableState {
                 let cur_evicted_files =
                     old_puffin_blob.puffin_file_cache_handle.unreference().await;
                 assert!(cur_evicted_files.is_empty());
-
                 let unique_file_id = old_puffin_blob.puffin_file_cache_handle.file_id;
                 let cur_evicted_files = self
                     .object_storage_cache
@@ -820,14 +819,6 @@ impl SnapshotTableState {
                     .object_storage_cache
                     .delete_cache_entry(puffin_deletion_blob.puffin_file_cache_handle.file_id)
                     .await;
-                assert_eq!(cur_evicted_files.len(), 1);
-                assert_eq!(
-                    cur_evicted_files[0],
-                    puffin_deletion_blob
-                        .puffin_file_cache_handle
-                        .get_cache_filepath()
-                );
-
                 evicted_files_to_delete.extend(cur_evicted_files);
             }
 
@@ -1246,8 +1237,10 @@ impl SnapshotTableState {
         let mut data_compaction_payload: Option<DataCompactionPayload> = None;
         if !opt.skip_data_file_compaction {
             data_compaction_payload = self.get_payload_to_compact();
-            self.pin_deletion_vector_puffin_file_cache(data_compaction_payload.as_mut().unwrap())
-                .await;
+            if let Some(data_compact_payload) = data_compaction_payload.as_mut() {
+                self.pin_deletion_vector_puffin_file_cache(data_compact_payload)
+                    .await;
+            }
         }
 
         // Decide whether to merge an index merge, which cannot be performed together with data compaction.

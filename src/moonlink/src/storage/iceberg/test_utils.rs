@@ -47,11 +47,12 @@ async fn check_deletion_vector_consistency(disk_file_entry: &DiskFileEntry) {
     let local_fileio = FileIOBuilder::new_fs_io().build().unwrap();
     let blob = puffin_utils::load_blob_from_puffin_file(
         local_fileio,
-        &disk_file_entry
+        disk_file_entry
             .puffin_deletion_blob
             .as_ref()
             .unwrap()
-            .puffin_filepath,
+            .puffin_file_cache_handle
+            .get_cache_filepath(),
     )
     .await
     .unwrap();
@@ -82,13 +83,12 @@ pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_u
         if cur_deletion_vector.puffin_deletion_blob.is_none() {
             continue;
         }
-        let puffin_filepath = &cur_deletion_vector
+        let puffin_filepath = cur_deletion_vector
             .puffin_deletion_blob
             .as_ref()
             .unwrap()
-            .puffin_filepath;
-        let puffin_pathbuf = std::path::PathBuf::from(puffin_filepath);
-        assert!(puffin_pathbuf.starts_with(&warehouse_directory));
+            .puffin_file_cache_handle
+            .get_cache_filepath();
         assert!(tokio::fs::try_exists(puffin_filepath).await.unwrap());
     }
 
@@ -162,7 +162,7 @@ pub(crate) async fn load_arrow_batch(
     Ok(batch)
 }
 
-/// Util function to create mooncake table and iceberg table manager.
+/// Util function to create mooncake table and iceberg table manager; object storage cache will be created internally.
 ///
 /// Iceberg snapshot will be created whenever `create_snapshot` is called.
 pub(crate) async fn create_table_and_iceberg_manager(
@@ -182,6 +182,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
     data_compaction_config: DataCompactionConfig,
 ) -> (MooncakeTable, IcebergTableManager, Receiver<TableNotify>) {
     let path = temp_dir.path().to_path_buf();
+    let object_storage_cache = ObjectStorageCache::default_for_test(temp_dir);
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
         create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
@@ -209,13 +210,14 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
-        ObjectStorageCache::default_for_test(temp_dir),
+        object_storage_cache.clone(),
     )
     .await
     .unwrap();
 
     let iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
+        object_storage_cache.clone(),
         iceberg_table_config.clone(),
     )
     .unwrap();

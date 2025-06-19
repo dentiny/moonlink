@@ -3,6 +3,7 @@ use iceberg::io::FileIOBuilder;
 use iceberg::puffin::CompressionCodec;
 use parquet::arrow::AsyncArrowWriter;
 
+use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
@@ -18,9 +19,10 @@ use crate::storage::index::persisted_bucket_hash_map::{
 };
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::{FileId, TableUniqueFileId};
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use crate::storage::PuffinBlobRef;
+use crate::ObjectStorageCache;
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -151,6 +153,8 @@ pub(crate) async fn dump_deletion_vector_puffin(
     data_file: String,
     puffin_filepath: String,
     batch_deletion_vector: BatchDeletionVector,
+    mut object_storage_cache: ObjectStorageCache,
+    table_unique_file_id: TableUniqueFileId,
 ) -> PuffinBlobRef {
     let deleted_rows = batch_deletion_vector.collect_deleted_rows();
     let deleted_rows_num = deleted_rows.len();
@@ -184,8 +188,14 @@ pub(crate) async fn dump_deletion_vector_puffin(
         .await
         .unwrap();
 
+    // Download and pin the puffin blob in the object storage cache.
+    let (cache_handle, _) = object_storage_cache
+        .get_cache_entry(table_unique_file_id, &puffin_filepath)
+        .await
+        .unwrap();
+
     PuffinBlobRef {
-        puffin_filepath,
+        puffin_file_cache_handle: cache_handle.unwrap(),
         start_offset: 4_u32, // Puffin file starts with 4 magic bytes.
         blob_size: blob_size as u32,
     }

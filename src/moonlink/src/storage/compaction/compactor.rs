@@ -144,6 +144,11 @@ impl CompactionBuilder {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
+        println!(
+            "get data file cache entry : {:?}",
+            data_file_to_compact.file_id
+        );
+
         let (cache_handle, evicted_files) = self
             .compaction_payload
             .object_storage_cache
@@ -161,12 +166,18 @@ impl CompactionBuilder {
         let builder = ParquetRecordBatchStreamBuilder::new(file).await?;
         let mut reader = builder.build().unwrap();
 
-        let batch_deletion_vector =
-            if let Some(puffin_blob_ref) = data_file_to_compact.deletion_vector {
-                puffin_utils::load_deletion_vector_from_blob(&puffin_blob_ref).await?
-            } else {
-                BatchDeletionVector::new(/*max_rows=*/ 0)
-            };
+        let batch_deletion_vector = if let Some(mut puffin_blob_ref) =
+            data_file_to_compact.deletion_vector
+        {
+            let batch_deletion_vector =
+                puffin_utils::load_deletion_vector_from_blob(&puffin_blob_ref).await?;
+            // Puffin file has been used over, unpin for later deletion.
+            let cur_evicted_files = puffin_blob_ref.puffin_file_cache_handle.unreference().await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+            batch_deletion_vector
+        } else {
+            BatchDeletionVector::new(/*max_rows=*/ 0)
+        };
 
         let get_filtered_record_batch = |record_batch: RecordBatch, start_row_idx: usize| {
             if batch_deletion_vector.is_empty() {

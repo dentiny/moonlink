@@ -66,6 +66,7 @@ pub struct TestEnvironment {
     last_commit_tx: watch::Sender<u64>,
     pub(crate) iceberg_table_event_manager: IcebergTableEventManager,
     pub(crate) temp_dir: TempDir,
+    pub(crate) object_storage_cache: ObjectStorageCache,
 }
 
 impl TestEnvironment {
@@ -102,6 +103,8 @@ impl TestEnvironment {
             IcebergTableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
         let event_sender = handler.get_event_sender();
 
+        let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+
         Self {
             handler,
             event_sender,
@@ -110,6 +113,7 @@ impl TestEnvironment {
             last_commit_tx,
             iceberg_table_event_manager,
             temp_dir,
+            object_storage_cache,
         }
     }
 
@@ -153,7 +157,12 @@ impl TestEnvironment {
             table_name.to_string(),
             self.temp_dir.path().to_str().unwrap().to_string(),
         );
-        IcebergTableManager::new(mooncake_table_metadata, iceberg_table_config).unwrap()
+        IcebergTableManager::new(
+            mooncake_table_metadata,
+            self.object_storage_cache.clone(),
+            iceberg_table_config,
+        )
+        .unwrap()
     }
 
     async fn send_event(&self, event: TableEvent) {
@@ -311,11 +320,12 @@ pub(crate) async fn check_deletion_vector_consistency(disk_file_entry: &DiskFile
     let local_fileio = FileIOBuilder::new_fs_io().build().unwrap();
     let blob = load_blob_from_puffin_file(
         local_fileio,
-        &disk_file_entry
+        disk_file_entry
             .puffin_deletion_blob
             .as_ref()
             .unwrap()
-            .puffin_filepath,
+            .puffin_file_cache_handle
+            .get_cache_filepath(),
     )
     .await
     .unwrap();

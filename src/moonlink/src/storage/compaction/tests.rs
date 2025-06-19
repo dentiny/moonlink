@@ -36,6 +36,14 @@ fn get_single_file_to_compact(
     }
 }
 
+/// Test util function to get unique table file id for the given table id.
+fn get_table_unique_table_id(file_id: u64) -> TableUniqueFileId {
+    TableUniqueFileId {
+        table_id: TEST_TABLE_ID,
+        file_id: FileId(file_id),
+    }
+}
+
 /// ============================
 /// Compact to single file
 /// ============================
@@ -110,6 +118,7 @@ async fn test_data_file_compaction_1() {
 async fn test_data_file_compaction_2() {
     // Create data file and file indices.
     let temp_dir = tempfile::tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let data_file = temp_dir.path().join("test-1.parquet");
 
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
@@ -126,6 +135,8 @@ async fn test_data_file_compaction_2() {
         data_file.file_path().clone(),
         puffin_filepath.to_str().unwrap().to_string(),
         batch_deletion_vector,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 1),
     )
     .await;
 
@@ -188,6 +199,7 @@ async fn test_data_file_compaction_2() {
 async fn test_data_file_compaction_3() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let data_file = temp_dir.path().join("test-1.parquet");
 
     // Create data file and file indices.
@@ -207,6 +219,8 @@ async fn test_data_file_compaction_3() {
         data_file.file_path().clone(),
         puffin_filepath.to_str().unwrap().to_string(),
         batch_deletion_vector,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 1),
     )
     .await;
 
@@ -340,6 +354,7 @@ async fn test_data_file_compaction_4() {
 async fn test_data_file_compaction_5() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -369,6 +384,8 @@ async fn test_data_file_compaction_5() {
         data_file_1.file_path().clone(),
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
 
@@ -380,6 +397,8 @@ async fn test_data_file_compaction_5() {
         data_file_2.file_path().clone(),
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
 
@@ -446,6 +465,7 @@ async fn test_data_file_compaction_5() {
 async fn test_data_file_compaction_6() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -477,6 +497,8 @@ async fn test_data_file_compaction_6() {
         data_file_1.file_path().clone(),
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
 
@@ -489,6 +511,8 @@ async fn test_data_file_compaction_6() {
         data_file_2.file_path().clone(),
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
 
@@ -546,6 +570,7 @@ async fn test_data_file_compaction_6() {
 async fn test_multiple_compacted_data_files_1() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -575,6 +600,8 @@ async fn test_multiple_compacted_data_files_1() {
         data_file_1.file_path().clone(),
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
 
@@ -586,6 +613,8 @@ async fn test_multiple_compacted_data_files_1() {
         data_file_2.file_path().clone(),
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
 
@@ -665,6 +694,7 @@ async fn test_multiple_compacted_data_files_1() {
 async fn test_multiple_compacted_data_files_2() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -696,6 +726,8 @@ async fn test_multiple_compacted_data_files_2() {
         data_file_1.file_path().clone(),
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
 
@@ -708,6 +740,8 @@ async fn test_multiple_compacted_data_files_2() {
         data_file_2.file_path().clone(),
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
+        object_storage_cache.clone(),
+        get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
 
