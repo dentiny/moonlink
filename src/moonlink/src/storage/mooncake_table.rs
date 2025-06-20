@@ -182,11 +182,15 @@ pub(crate) struct DiskFileEntry {
 pub struct Snapshot {
     /// table metadata
     pub(crate) metadata: Arc<TableMetadata>,
-    /// datafile and their deletion vector.
+    /// Data files and their corresponding entries.
     ///
-    /// TODO(hjiang):
-    /// 1. For the initial release and before we figure out a cache design, disk files are always local ones.
-    /// 2. Add corresponding file indices into the value part, so when data file gets compacted, we make sure all related file indices get rewritten and compacted as well.
+    /// File indices are stored in two places, one corresponds to its referenced data files, another stored in global index files.
+    /// - The global index one is used to lookup deletion records;
+    /// - The data file mapped one is used to get all corresponding file indices for compaction, otherwise it's a O(N^2) search.
+    ///  
+    /// Invariant:
+    /// - Both [`disk_files`] and [`indices`] store the same mapping from data files to file indices.
+    /// - Only file indice within [`disk_files`] has cache handle assigned.
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, DiskFileEntry>,
     /// Current snapshot version, which is the mooncake table commit point.
     pub(crate) snapshot_version: u64,

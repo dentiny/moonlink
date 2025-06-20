@@ -1428,19 +1428,20 @@ impl SnapshotTableState {
             let lsn = write_lsn.expect("commited datafile should have a valid LSN");
 
             // Register new files into mooncake snapshot, add it into cache, and record LSN map.
-            for (file, file_attrs) in slice.output_files().iter() {
+            for (data_file, file_attrs) in slice.output_files().iter() {
                 ma::assert_gt!(file_attrs.file_size, 0);
-                task.disk_file_lsn_map.insert(file.file_id(), lsn);
+                task.disk_file_lsn_map.insert(data_file.file_id(), lsn);
                 let unique_file_id = TableUniqueFileId {
                     table_id: TableId(self.mooncake_table_metadata.id),
-                    file_id: file.file_id(),
+                    file_id: data_file.file_id(),
                 };
+                // Import data file into object storage cache.
                 let (cache_handle, cur_evicted_files) = self
                     .object_storage_cache
                     .import_cache_entry(
                         unique_file_id,
                         DataFileCacheEntry {
-                            cache_filepath: file.file_path().clone(),
+                            cache_filepath: data_file.file_path().clone(),
                             file_metadata: FileMetadata {
                                 file_size: file_attrs.file_size as u64,
                             },
@@ -1448,12 +1449,19 @@ impl SnapshotTableState {
                     )
                     .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
+
+                // Import file indice into object storage cache.
+                let mut new_file_indice = slice.get_file_indice().as_ref().unwrap().clone();
+                let cur_evicted_files = self.import_file_index_into_cache(&mut new_file_indice).await;
+                evicted_files_to_delete.extend(cur_evicted_files);
+            
+                // Import disk files mapping into current snapshot.
                 self.current_snapshot.disk_files.insert(
-                    file.clone(),
+                    data_file.clone(),
                     DiskFileEntry {
                         file_size: file_attrs.file_size,
                         cache_handle: Some(cache_handle),
-                        file_indice: Some(slice.get_file_indice().as_ref().unwrap().clone()),
+                        file_indice: Some(new_file_indice),
                         batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                         puffin_deletion_blob: None,
                     },
@@ -1478,9 +1486,9 @@ impl SnapshotTableState {
                 .for_each(|d| slice.remap_deletion_if_needed(d));
 
             // swap indices and drop in-memory batches that were flushed
-            if let Some(mut on_disk_index) = slice.take_index() {
-                let cur_evicted_files = self.import_file_index_into_cache(&mut on_disk_index).await;
-                evicted_files_to_delete.extend(cur_evicted_files);
+            if let Some(on_disk_index) = slice.take_index() {
+                // Only file indices stored in [`disk_files`] have cache handle assigned.
+                assert!(on_disk_index.index_blocks.iter().all(|cur_index_block| cur_index_block.cache_handle.is_none()));
 
                 self.current_snapshot
                     .indices
