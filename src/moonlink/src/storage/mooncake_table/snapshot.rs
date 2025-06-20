@@ -383,7 +383,8 @@ impl SnapshotTableState {
     }
 
     /// Update unpersisted data files from successful iceberg snapshot operation.
-    fn prune_persisted_data_files(&mut self, persisted_new_data_files: Vec<MooncakeDataFileRef>) {
+    fn prune_persisted_data_files(&mut self, task: &SnapshotTask) {
+        let persisted_new_data_files = &task.iceberg_persisted_records.data_files;
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .unpersisted_data_files
@@ -396,7 +397,8 @@ impl SnapshotTableState {
     }
 
     /// Update unpersisted file indices from successful iceberg snapshot operation.
-    fn prune_persisted_file_indices(&mut self, persisted_new_file_indices: Vec<FileIndex>) {
+    fn prune_persisted_file_indices(&mut self, task: &SnapshotTask) {
+        let persisted_new_file_indices = &task.iceberg_persisted_records.file_indices;
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .unpersisted_file_indices
@@ -541,7 +543,7 @@ impl SnapshotTableState {
 
     /// Util function to decide whether and what to merge index.
     /// To simplify states (aka, avoid merging file indices already in iceberg with those not), only merge those already persisted.
-    fn get_file_indices_to_merge(&self) -> HashSet<FileIndex> {
+    fn get_file_indices_to_merge(&self) -> Option<FileIndiceMergePayload> {
         // Fast-path: not enough file indices to trigger index merge.
         let mut file_indices_to_merge = HashSet::new();
         let all_file_indices = &self.current_snapshot.indices.file_indices;
@@ -552,7 +554,7 @@ impl SnapshotTableState {
                 .file_index_config
                 .file_indices_to_merge as usize
         {
-            return file_indices_to_merge;
+            return None;
         }
 
         // To simplify state management, only compact data files which have been persisted into iceberg table.
@@ -588,16 +590,15 @@ impl SnapshotTableState {
                 .file_index_config
                 .file_indices_to_merge as usize
         {
-            return file_indices_to_merge;
+            return Some(FileIndiceMergePayload {
+                file_indices: file_indices_to_merge,
+            });
         }
-        HashSet::new()
+        None
     }
 
-    fn prune_persisted_merged_indices(
-        &mut self,
-        old_merged_file_indices: &[FileIndex],
-        new_merged_file_indices: &[FileIndex],
-    ) {
+    fn prune_persisted_merged_indices(&mut self, task: &SnapshotTask) {
+        let old_merged_file_indices = &task.iceberg_persisted_records.old_merged_file_indices;
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .merged_file_indices_to_remove
@@ -608,6 +609,7 @@ impl SnapshotTableState {
             .merged_file_indices_to_remove
             .drain(0..old_merged_file_indices.len());
 
+        let new_merged_file_indices = &task.iceberg_persisted_records.new_merged_file_indices;
         ma::assert_ge!(
             self.unpersisted_iceberg_records
                 .merged_file_indices_to_add
@@ -1100,6 +1102,23 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
+    /// Prune persisted records.
+    fn prune_persisted_records(&mut self, task: &SnapshotTask) {
+        self.prune_committed_deletion_logs(task);
+        self.prune_persisted_data_files(task);
+        self.prune_persisted_file_indices(task);
+        self.prune_persisted_merged_indices(task);
+        self.prune_persisted_compacted_data(task);
+    }
+
+    /// Buffer unpersisted records.
+    fn buffer_unpersisted_records(&mut self, task: &SnapshotTask) {
+        self.buffer_unpersisted_iceberg_new_data_files(task);
+        self.buffer_unpersisted_iceberg_new_file_indices(task);
+        self.buffer_unpersisted_iceberg_merged_file_indices(task);
+        self.buffer_unpersisted_iceberg_compaction_data(task);
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
@@ -1148,24 +1167,10 @@ impl SnapshotTableState {
         evicted_data_files_to_delete.extend(compaction_evicted_data_files);
 
         // Prune unpersisted records.
-        self.prune_committed_deletion_logs(&task);
-        self.prune_persisted_data_files(std::mem::take(
-            &mut task.iceberg_persisted_records.data_files,
-        ));
-        self.prune_persisted_file_indices(std::mem::take(
-            &mut task.iceberg_persisted_records.file_indices,
-        ));
-        self.prune_persisted_merged_indices(
-            &task.iceberg_persisted_records.old_merged_file_indices,
-            &task.iceberg_persisted_records.new_merged_file_indices,
-        );
-        self.prune_persisted_compacted_data(&task);
+        self.prune_persisted_records(&task);
 
         // Sync buffer snapshot states into unpersisted iceberg content.
-        self.buffer_unpersisted_iceberg_new_data_files(&task);
-        self.buffer_unpersisted_iceberg_new_file_indices(&task);
-        self.buffer_unpersisted_iceberg_merged_file_indices(&task);
-        self.buffer_unpersisted_iceberg_compaction_data(&task);
+        self.buffer_unpersisted_records(&task);
 
         // Apply buffered change to current mooncake snapshot.
         let stream_evicted_cache_files = self.apply_transaction_stream(&mut task).await;
@@ -1220,12 +1225,7 @@ impl SnapshotTableState {
         // Decide whether to merge an index merge, which cannot be performed together with data compaction.
         let mut file_indices_merge_payload: Option<FileIndiceMergePayload> = None;
         if !opt.skip_file_indices_merge && data_compaction_payload.is_none() {
-            let file_indices_to_merge = self.get_file_indices_to_merge();
-            if !file_indices_to_merge.is_empty() {
-                file_indices_merge_payload = Some(FileIndiceMergePayload {
-                    file_indices: file_indices_to_merge,
-                });
-            }
+            file_indices_merge_payload = self.get_file_indices_to_merge();
         }
 
         // TODO(hjiang): Add whether to flush based on merged file indices.
