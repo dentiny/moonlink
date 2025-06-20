@@ -23,6 +23,8 @@ pub(crate) use crate::storage::compaction::table_compaction::{
 use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
+#[cfg(test)]
+use crate::storage::io_utils;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 pub use crate::storage::mooncake_table::snapshot_read_output::ReadOutput as SnapshotReadOutput;
 #[cfg(test)]
@@ -1153,6 +1155,8 @@ impl MooncakeTable {
         &mut self,
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
+        use crate::storage::io_utils;
+
         // Create mooncake snapshot.
         let mooncake_snapshot_created = self.create_snapshot(SnapshotOption {
             force_create: true,
@@ -1165,11 +1169,10 @@ impl MooncakeTable {
         }
         let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
             Self::sync_mooncake_snapshot(receiver).await;
-
         // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        for cur_data_file in evicted_data_files_to_delete.into_iter() {
-            tokio::fs::remove_file(&cur_data_file).await.unwrap();
-        }
+        io_utils::delete_local_files(evicted_data_files_to_delete)
+            .await
+            .unwrap();
 
         // Create iceberg snapshot if possible.
         if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
@@ -1203,9 +1206,10 @@ impl MooncakeTable {
         }));
         let (_, _, _, evicted_data_files_to_delete) = Self::sync_mooncake_snapshot(receiver).await;
         // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        for cur_data_file in evicted_data_files_to_delete.iter() {
-            tokio::fs::remove_file(cur_data_file).await.unwrap();
-        }
+        io_utils::delete_local_files(evicted_data_files_to_delete.clone())
+            .await
+            .unwrap();
+
         evicted_data_files_to_delete
     }
 
@@ -1248,12 +1252,12 @@ impl MooncakeTable {
 
         // Get data compaction payload.
         assert!(self.create_snapshot(force_snapshot_option.clone()));
-        let (iceberg_snapshot_payload, _, data_compaction_payload, evicted_object_storage_cache) =
+        let (iceberg_snapshot_payload, _, data_compaction_payload, evicted_files_to_delete) =
             Self::sync_mooncake_snapshot(receiver).await;
         // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        for cur_data_file in evicted_object_storage_cache.into_iter() {
-            tokio::fs::remove_file(&cur_data_file).await.unwrap();
-        }
+        io_utils::delete_local_files(evicted_files_to_delete.clone())
+            .await
+            .unwrap();
 
         assert!(iceberg_snapshot_payload.is_none());
         let data_compaction_payload = data_compaction_payload.unwrap();
@@ -1335,12 +1339,12 @@ impl MooncakeTable {
 
         // Perform index merge.
         assert!(self.create_snapshot(force_snapshot_option.clone()));
-        let (iceberg_snapshot_payload, file_indice_merge_payload, _, evicted_object_storage_cache) =
+        let (iceberg_snapshot_payload, file_indice_merge_payload, _, evicted_files_to_delete) =
             Self::sync_mooncake_snapshot(receiver).await;
         // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        for cur_data_file in evicted_object_storage_cache.into_iter() {
-            tokio::fs::remove_file(&cur_data_file).await.unwrap();
-        }
+        io_utils::delete_local_files(evicted_files_to_delete.clone())
+            .await
+            .unwrap();
 
         assert!(iceberg_snapshot_payload.is_none());
         let file_indice_merge_payload = file_indice_merge_payload.unwrap();

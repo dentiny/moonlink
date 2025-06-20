@@ -23,6 +23,7 @@ use crate::storage::mooncake_table::snapshot_read_output::{
 use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
 };
+use crate::storage::mooncake_table::transaction_stream::TransactionStreamOutput;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
@@ -283,8 +284,8 @@ impl SnapshotTableState {
         &mut self,
         task: &SnapshotTask,
     ) -> (
-        HashSet<FileIndex>,
-        Vec<String>, /*evicted files to delete*/
+        HashSet<FileIndex>, /*file indices to remove*/
+        Vec<String>,        /*evicted files to delete*/
     ) {
         if task.iceberg_persisted_records.data_files.is_empty() {
             return (HashSet::new(), Vec::new());
@@ -327,6 +328,7 @@ impl SnapshotTableState {
     ///
     /// # Arguments
     ///
+    /// * new_file_indices: file indices which have been persisted, and with index block cache handle.
     /// * affected_file_indices: file indices affected by data files update, used to identify which file indices to remove.
     fn update_file_indices_to_persisted(
         &mut self,
@@ -347,11 +349,23 @@ impl SnapshotTableState {
                 updated_file_indices.push(cur_file_index);
             }
         }
-        updated_file_indices.extend(new_file_indices.clone());
+        // Add new file indices with no index block cache handle.
+        let mut new_file_indices_with_no_cache_handle = new_file_indices.clone();
+        for cur_new_file_index in new_file_indices_with_no_cache_handle.iter_mut() {
+            cur_new_file_index
+                .index_blocks
+                .iter_mut()
+                .for_each(|cur_index_block| {
+                    assert!(cur_index_block.cache_handle.is_some());
+                    cur_index_block.cache_handle = None;
+                });
+        }
+        updated_file_indices.extend(new_file_indices_with_no_cache_handle);
         self.current_snapshot.indices.file_indices = updated_file_indices;
 
         // Update disk file map to the updated file indices.
-        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
+        let mut new_file_indices_with_cache_handle = new_file_indices;
+        for cur_file_index in new_file_indices_with_cache_handle.iter_mut() {
             let cur_data_files = &cur_file_index.files;
             for cur_data_file in cur_data_files {
                 self.current_snapshot
@@ -668,10 +682,17 @@ impl SnapshotTableState {
         &mut self,
         mut old_file_indices: HashSet<FileIndex>,
         mut new_file_indices: Vec<FileIndex>,
-    ) {
+    ) -> Vec<String> {
         if old_file_indices.is_empty() {
             assert!(new_file_indices.is_empty());
-            return;
+            return vec![];
+        }
+
+        // Precondition: all new file indices already have cache handle with their index blocks.
+        for cur_file_index in new_file_indices.iter() {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_index_block.cache_handle.is_some());
+            }
         }
 
         // Aggregate object storage cache evicted files to delete.
@@ -697,6 +718,7 @@ impl SnapshotTableState {
                     .await;
                     evicted_files_to_delete.extend(cur_evicted_files);
 
+                    // Unset file index for later overwrite.
                     disk_file_entry.file_indice = None;
                 }
             }
@@ -704,19 +726,15 @@ impl SnapshotTableState {
 
         // Process new file indices.
         // Precondition: if any, data files have already been updated to disk files, so all data files referenced by new file indices already exists.
-        for cur_file_index in new_file_indices.iter_mut() {
-            // Import current file index into object storage cache.
-            let cur_evicted_files = self.import_file_index_into_cache(cur_file_index).await;
-            evicted_files_to_delete.extend(cur_evicted_files);
-
+        for file_index_with_cache_handle in new_file_indices.clone().iter_mut() {
             // Update referenced data files to the new file indices.
-            for cur_data_file in cur_file_index.files.iter() {
+            for cur_data_file in file_index_with_cache_handle.files.iter() {
                 let data_file_entry = self
                     .current_snapshot
                     .disk_files
                     .get_mut(cur_data_file)
                     .unwrap();
-                data_file_entry.file_indice = Some(cur_file_index.clone());
+                data_file_entry.file_indice = Some(file_index_with_cache_handle.clone());
             }
         }
 
@@ -733,11 +751,20 @@ impl SnapshotTableState {
             }
             updated_file_indices.push(cur_file_indice);
         }
+
+        // File indices within indices field don't have cache handle assigned.
+        for cur_file_index in new_file_indices.iter_mut() {
+            for cur_index_block in cur_file_index.index_blocks.iter_mut() {
+                cur_index_block.cache_handle = None;
+            }
+        }
         updated_file_indices.extend(new_file_indices);
         self.current_snapshot.indices.file_indices = updated_file_indices;
 
         // Check all file indices to remove comes from current file indices.
         assert!(old_file_indices.is_empty());
+
+        evicted_files_to_delete
     }
 
     // Update current snapshot's data files by adding and removing a few, generated by data compaction.
@@ -803,8 +830,12 @@ impl SnapshotTableState {
                 file_id: cur_old_data_file.file_id(),
             };
 
+            // ====================================
+            // Process data file
+            // ====================================
+            //
             // If the old entry is pinned cache handle, unreference.
-            let old_entry = old_entry.unwrap();
+            let mut old_entry = old_entry.unwrap();
             if let Some(mut cache_handle) = old_entry.cache_handle {
                 let cur_evicted_files = cache_handle.unreference().await;
                 evicted_files_to_delete.extend(cur_evicted_files);
@@ -825,6 +856,23 @@ impl SnapshotTableState {
                 evicted_files_to_delete.extend(cur_evicted_files);
             }
 
+            // ====================================
+            // Process index block
+            // ====================================
+            //
+            let file_index_with_cache_handle = old_entry.file_indice.as_mut().unwrap().clone();
+            let cur_evicted_files = Self::unreference_and_delete_file_index_from_cache(
+                self.object_storage_cache.clone(),
+                TableId(self.mooncake_table_metadata.id),
+                file_index_with_cache_handle,
+            )
+            .await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+
+            // ====================================
+            // Process deletion vector
+            // ====================================
+            //
             // If no deletion record for this file, directly remove it, no need to do remapping.
             if old_entry.batch_deletion_vector.is_empty() {
                 assert!(old_entry.puffin_deletion_blob.is_none());
@@ -894,23 +942,30 @@ impl SnapshotTableState {
             return vec![];
         }
 
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
         // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.
         let data_compaction_res = task.data_compaction_result.clone();
-        let mut evicted_data_files = self
+        let cur_evicted_files = self
             .update_data_files_to_mooncake_snapshot_impl(
                 data_compaction_res.old_data_files,
                 data_compaction_res.new_data_files,
                 data_compaction_res.remapped_data_files,
             )
             .await;
-        self.update_file_indices_to_mooncake_snapshot_impl(
-            data_compaction_res.old_file_indices,
-            data_compaction_res.new_file_indices,
-        )
-        .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+
+        let cur_evicted_files = self
+            .update_file_indices_to_mooncake_snapshot_impl(
+                data_compaction_res.old_file_indices,
+                data_compaction_res.new_file_indices,
+            )
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
 
         // Apply evicted data files to delete within data compaction process.
-        evicted_data_files.extend(
+        evicted_files_to_delete.extend(
             task.data_compaction_result
                 .evicted_files_to_delete
                 .iter()
@@ -918,7 +973,7 @@ impl SnapshotTableState {
                 .to_owned(),
         );
 
-        evicted_data_files
+        evicted_files_to_delete
     }
 
     fn buffer_unpersisted_iceberg_new_data_files(&mut self, task: &SnapshotTask) {
@@ -1041,6 +1096,37 @@ impl SnapshotTableState {
         flush_lsn: u64,
         new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     ) -> IcebergSnapshotPayload {
+        // Precondition: file indices already have cache handle.
+        for cur_file_index in self
+            .unpersisted_iceberg_records
+            .unpersisted_file_indices
+            .iter()
+        {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_index_block.cache_handle.is_some());
+            }
+        }
+        for cur_file_index in self
+            .unpersisted_iceberg_records
+            .merged_file_indices_to_add
+            .iter()
+        {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_index_block.cache_handle.is_some());
+            }
+        }
+        for cur_file_index in self
+            .unpersisted_iceberg_records
+            .compacted_file_indices_to_add
+            .iter()
+        {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_index_block.cache_handle.is_some());
+            }
+        }
+
+        ///////////////
+
         IcebergSnapshotPayload {
             flush_lsn,
             import_payload: IcebergSnapshotImportPayload {
@@ -1126,11 +1212,52 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
+    /// Import new file indices into cache.
+    /// Return evicted files to delete.
+    async fn import_new_file_indices_to_cache(&mut self, task: &mut SnapshotTask) -> Vec<String> {
+        let table_id = TableId(self.mooncake_table_metadata.id);
+        let mut evicted_files_to_delete = vec![];
+
+        // Import disk slice into cache.
+        for cur_disk_slice in task.new_disk_slices.iter_mut() {
+            let cur_evicted_files = cur_disk_slice
+                .import_file_indices_to_cache(self.object_storage_cache.clone(), table_id)
+                .await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+        }
+
+        // Import committed stream transaction file indices into cache.
+        for cur_streaming_txn in task.new_streaming_xact.iter_mut() {
+            if let TransactionStreamOutput::Commit(cur_stream_commit) = cur_streaming_txn {
+                let cur_evicted_files = cur_stream_commit
+                    .import_file_index_into_cache(self.object_storage_cache.clone(), table_id)
+                    .await;
+                evicted_files_to_delete.extend(cur_evicted_files);
+            }
+        }
+
+        // Import new file indices by index merge into cache.
+        for cur_file_index in task.new_merged_file_indices.iter_mut() {
+            let cur_evicted_files = self.import_file_index_into_cache(cur_file_index).await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+        }
+
+        // Import new file indices by data compaction into cache.
+        for cur_file_index in task.data_compaction_result.new_file_indices.iter_mut() {
+            let cur_evicted_files = self.import_file_index_into_cache(cur_file_index).await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+        }
+
+        evicted_files_to_delete
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
+        // TODO(hjiang): Add sanity check for input tasks invariants.
+
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
 
@@ -1144,10 +1271,10 @@ impl SnapshotTableState {
         //
         // There're a few things to do:
         // 1. Prune unpersisted fields.
-        // 2. Update persisted data files and index blocks from local path to remote path, and import into cache.
+        // 2. Update persisted data files from local path to remote path, and update to cache.
         // 3. Update mooncake snapshot with index merge and data compaction results.
         //
-        // Update data files and file indices' local file path to remote file path, it only applies to newly imported data files and file indices,
+        // Update data files local file path to remote file path, it only applies to newly imported data files,
         // because both index merge and data compaction only apply to those already persisted into iceberg table.
         let persistence_evicted_data_files =
             self.update_local_path_to_persisted_by_imported(&task).await;
@@ -1160,6 +1287,10 @@ impl SnapshotTableState {
             ))
             .await;
         evicted_data_files_to_delete.extend(puffin_evicted_data_files);
+
+        // Import file indices into cache.
+        let new_file_indices_evicted_files = self.import_new_file_indices_to_cache(&mut task).await;
+        evicted_data_files_to_delete.extend(new_file_indices_evicted_files);
 
         // Update disk files' disk entries and file indices from merged indices.
         self.update_file_indices_merge_to_mooncake_snapshot(
@@ -1190,7 +1321,7 @@ impl SnapshotTableState {
 
         // Sync buffer snapshot states into unpersisted iceberg content.
         self.buffer_unpersisted_iceberg_new_data_files(&task);
-        self.buffer_unpersisted_iceberg_new_file_indices(&task);
+        self.buffer_unpersisted_iceberg_new_file_indices(&task); // <---
         self.buffer_unpersisted_iceberg_merged_file_indices(&task);
         self.buffer_unpersisted_iceberg_compaction_data(&task);
 
@@ -1340,6 +1471,25 @@ impl SnapshotTableState {
         }
     }
 
+    // Check index blocks within [`disk_files`] have cache handle, while the one within [`indices`] don't.
+    #[cfg(test)]
+    fn assert_index_block_cache_handles(&self) {
+        // Check all index blocks in disk files have cache handle.
+        for (_, disk_file_entry) in self.current_snapshot.disk_files.iter() {
+            let cur_file_index = disk_file_entry.file_indice.as_ref().unwrap();
+            for cur_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_block.cache_handle.is_some());
+            }
+        }
+
+        // Check all index blocks in file indices field don't have cache handle.
+        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
+            for cur_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_block.cache_handle.is_none());
+            }
+        }
+    }
+
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
     fn assert_current_snapshot_consistent(&self) {
@@ -1347,6 +1497,8 @@ impl SnapshotTableState {
         self.assert_data_files_and_file_indices_consistent();
         // Check file ids don't have duplicate.
         self.assert_file_ids_no_duplicate();
+        // Check index blocks within [`disk_files`] have cache handle, while the one within [`indices`] don't.
+        self.assert_index_block_cache_handles();
     }
 
     fn merge_mem_indices(&mut self, task: &mut SnapshotTask) {
@@ -1443,6 +1595,7 @@ impl SnapshotTableState {
                 .object_storage_cache
                 .import_cache_entry(table_unique_file_id, cache_entry)
                 .await;
+            assert!(cur_index_block.cache_handle.is_none());
             cur_index_block.cache_handle = Some(cache_handle);
             evicted_files_to_delete.extend(cur_evicted_files);
         }
@@ -1481,13 +1634,7 @@ impl SnapshotTableState {
                     )
                     .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
-
-                // Import file indice into object storage cache.
-                let mut new_file_indice = slice.get_file_indice().as_ref().unwrap().clone();
-                let cur_evicted_files = self
-                    .import_file_index_into_cache(&mut new_file_indice)
-                    .await;
-                evicted_files_to_delete.extend(cur_evicted_files);
+                let new_file_indice = slice.get_file_indice().as_ref().unwrap().clone();
 
                 // Import disk files mapping into current snapshot.
                 self.current_snapshot.disk_files.insert(
@@ -1520,12 +1667,12 @@ impl SnapshotTableState {
                 .for_each(|d| slice.remap_deletion_if_needed(d));
 
             // swap indices and drop in-memory batches that were flushed
-            if let Some(on_disk_index) = slice.take_index() {
+            if let Some(mut on_disk_index) = slice.take_index() {
                 // Only file indices stored in [`disk_files`] have cache handle assigned.
-                assert!(on_disk_index
+                on_disk_index
                     .index_blocks
-                    .iter()
-                    .all(|cur_index_block| cur_index_block.cache_handle.is_none()));
+                    .iter_mut()
+                    .for_each(|cur_index_block| cur_index_block.cache_handle = None);
 
                 self.current_snapshot
                     .indices

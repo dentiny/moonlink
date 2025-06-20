@@ -272,6 +272,7 @@ impl CompactionBuilder {
     }
 
     /// Util function to merge all given file indices into one.
+    /// The return
     async fn compact_file_indices(
         &mut self,
         old_file_indices: Vec<FileIndex>,
@@ -349,7 +350,7 @@ impl CompactionBuilder {
         }
 
         // Perform compaction on file indices.
-        let new_file_indices = self
+        let new_file_index = self
             .compact_file_indices(
                 self.compaction_payload.file_indices.clone(),
                 &old_to_new_remap,
@@ -361,7 +362,7 @@ impl CompactionBuilder {
             old_data_files,
             old_file_indices,
             new_data_files: self.new_data_files,
-            new_file_indices: vec![new_file_indices],
+            new_file_indices: vec![new_file_index],
             evicted_files_to_delete,
         })
     }

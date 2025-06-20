@@ -672,6 +672,14 @@ impl IcebergTableManager {
             return Ok(vec![]);
         }
 
+        ///////////////////////////
+        for cur_file_index in file_indices_to_import.iter() {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_index_block.cache_handle.is_some());
+            }
+        }
+        ///////////////////////////
+
         // Update local file indices pointing from local data file path to remote one.
         let remote_file_indices = file_indices_to_import
             .iter()
@@ -728,6 +736,7 @@ impl TableManager for IcebergTableManager {
             .sync_deletion_vector(new_deletion_vector, &file_params)
             .await?;
 
+        // TODO(hjiang): Rename, they no longer store remote file path.
         let remote_file_indices = self
             .sync_file_indices(
                 &new_file_indices,

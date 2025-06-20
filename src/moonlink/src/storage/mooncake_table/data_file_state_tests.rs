@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use tempfile::TempDir;
 use tokio::sync::mpsc::Receiver;
 
@@ -6,7 +8,7 @@ use tokio::sync::mpsc::Receiver;
 /// ====================================
 /// State machine for data file
 /// ====================================
-/// 
+///
 /// remote storage state:
 /// - Has remote storage
 /// - no remote storage
@@ -66,11 +68,11 @@ use tokio::sync::mpsc::Receiver;
 /// - remote, no local, in use + use over => remote, no local, not used
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1f2d0E_Zi8FbR4QmW_YEhcZwMpua0_pgkaNdrqM1qh2E/edit?usp=sharing
-/// 
+///
 /// ====================================
 /// State machine for file indices
 /// ====================================
-/// 
+///
 /// Possible states:
 /// - No file index
 /// - No remote, local
@@ -82,7 +84,7 @@ use tokio::sync::mpsc::Receiver;
 /// Difference with data files:
 /// - File index always sits on-disk
 /// - Data file has an extra state: not referenced but not requested to deleted
-/// - Current usage include only compaction and index merge; after all usage for file indices, they are requested to delete 
+/// - Current usage include only compaction and index merge; after all usage for file indices, they are requested to delete
 /// - File indices won’t be used by both compaction and index merge, so no need to pin before usage
 ///
 /// State transition input:
@@ -96,16 +98,15 @@ use tokio::sync::mpsc::Receiver;
 /// Initial state: no file index
 /// - No file index + import => no remote, local
 /// - No file index + recover => no remote, local
-/// 
+///
 /// Initial state: no remote, local
 /// - No remote, local + persist => remote, local
-/// 
+///
 /// Initial state: Remote, local
 /// - Remote, local + use => remote, local
 /// - Remote, local + use over + request delete => no file index
-/// 
+///
 /// For more details, please refer to https://docs.google.com/document/d/1Q8zJqxwM9Gc5foX2ela8aAbW4bmWV8wBRkDSh86vvAY/edit?usp=sharing
-
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::state_test_utils::*;
 use crate::table_notify::TableNotify;
@@ -1418,10 +1419,29 @@ async fn test_3_compact_1_5() {
     // Get old compacted files before compaction.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
-    let mut old_compacted_files = disk_files
+    let mut old_compacted_data_files = disk_files
         .keys()
         .map(|f| f.file_path().clone())
         .collect::<Vec<_>>();
+    old_compacted_data_files.sort();
+
+    let mut old_compacted_index_block_files = HashSet::new();
+    for (_, cur_disk_file_entry) in disk_files.iter() {
+        for cur_index_block in cur_disk_file_entry
+            .file_indice
+            .as_ref()
+            .unwrap()
+            .index_blocks
+            .iter()
+        {
+            old_compacted_index_block_files.insert(cur_index_block.index_file.file_path().clone());
+        }
+    }
+    let mut old_compacted_index_block_files = old_compacted_index_block_files
+        .iter()
+        .cloned()
+        .collect::<Vec<_>>();
+    old_compacted_index_block_files.sort();
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1439,10 +1459,11 @@ async fn test_3_compact_1_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    let evicted_files_to_delete = table
+    let mut evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
-    assert!(evicted_files_to_delete.is_empty());
+    evicted_files_to_delete.sort();
+    assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
     // Drop read state, so old data files are unreferenced any more.
     let mut files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -1452,8 +1473,7 @@ async fn test_3_compact_1_5() {
     )
     .await;
     files_to_delete.sort();
-    old_compacted_files.sort();
-    assert_eq!(files_to_delete, old_compacted_files);
+    assert_eq!(files_to_delete, old_compacted_data_files);
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -1495,7 +1515,7 @@ async fn test_3_compact_1_5() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block.
     );
     assert_eq!(
         object_storage_cache
@@ -1600,3 +1620,5 @@ async fn test_1_compact_1_5() {
         1,
     );
 }
+
+// TODO(hjiang): Add unit tests for index merge.
