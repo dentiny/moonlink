@@ -618,11 +618,11 @@ impl IcebergTableManager {
             for cur_index_block in cur_file_index.index_blocks.iter() {
                 let remote_index_block = utils::upload_index_file(
                     self.iceberg_table.as_ref().unwrap(),
-                    cur_index_block.data_file.file_path(),
+                    cur_index_block.index_file.file_path(),
                 )
                 .await?;
                 local_index_file_to_remote.insert(
-                    cur_index_block.data_file.file_path().to_string(),
+                    cur_index_block.index_file.file_path().to_string(),
                     remote_index_block,
                 );
             }

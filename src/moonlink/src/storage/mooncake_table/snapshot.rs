@@ -1308,7 +1308,7 @@ impl SnapshotTableState {
         }
         for cur_file_indices in &self.current_snapshot.indices.file_indices {
             for cur_index_block in &cur_file_indices.index_blocks {
-                assert!(file_ids.insert(cur_index_block.data_file.file_id()));
+                assert!(file_ids.insert(cur_index_block.index_file.file_id()));
             }
         }
     }

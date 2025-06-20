@@ -75,7 +75,7 @@ impl FileIndex {
                     bucket_end_idx: cur_index_block.bucket_end_idx,
                     bucket_start_offset: cur_index_block.bucket_start_offset,
                     filepath: local_index_file_to_remote
-                        .remove(cur_index_block.data_file.file_path())
+                        .remove(cur_index_block.index_file.file_path())
                         .unwrap(),
                 })
                 .collect(),
@@ -102,6 +102,7 @@ impl FileIndex {
                 cur_index_block.bucket_start_idx,
                 cur_index_block.bucket_end_idx,
                 cur_index_block.bucket_start_offset,
+                /*index_file=*/
                 create_data_file(cur_file_id, cur_index_block.filepath.clone()),
             )
         });
@@ -255,7 +256,7 @@ mod tests {
                     /*bucket_start_idx=*/ 0,
                     /*bucket_end_idx=*/ 3,
                     /*bucket_start_offset=*/ 10,
-                    /*data_file=*/
+                    /*index_file=*/
                     create_data_file(/*file_id=*/ 1, local_index_filepath.clone()),
                 )
                 .await,

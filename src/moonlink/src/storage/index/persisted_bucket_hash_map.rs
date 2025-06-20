@@ -76,8 +76,7 @@ pub(crate) struct IndexBlock {
     pub(crate) bucket_end_idx: u32,
     pub(crate) bucket_start_offset: u64,
     /// Local index file path.
-    /// TODO(hjiang): Rename, to avoid confusion with "data file" concept.
-    pub(crate) data_file: MooncakeDataFileRef,
+    pub(crate) index_file: MooncakeDataFileRef,
     /// File size for the index block file, used to decide whether to trigger merge index blocks merge.
     pub(crate) file_size: u64,
     data: Arc<Option<Mmap>>,
@@ -94,16 +93,16 @@ impl IndexBlock {
         bucket_start_idx: u32,
         bucket_end_idx: u32,
         bucket_start_offset: u64,
-        data_file: MooncakeDataFileRef,
+        index_file: MooncakeDataFileRef,
     ) -> Self {
-        let file = tokio::fs::File::open(data_file.file_path()).await.unwrap();
+        let file = tokio::fs::File::open(index_file.file_path()).await.unwrap();
         let file_metadata = file.metadata().await.unwrap();
         let data = unsafe { Mmap::map(&file).unwrap() };
         Self {
             bucket_start_idx,
             bucket_end_idx,
             bucket_start_offset,
-            data_file,
+            index_file,
             file_size: file_metadata.len(),
             data: Arc::new(Some(data)),
         }
@@ -395,6 +394,7 @@ impl IndexBlockBuilder {
             self.bucket_start_idx,
             self.bucket_end_idx,
             bucket_start_offset,
+            /*index_file=*/
             create_data_file(file_id, self.file_path.to_str().unwrap().to_string()),
         )
         .await
