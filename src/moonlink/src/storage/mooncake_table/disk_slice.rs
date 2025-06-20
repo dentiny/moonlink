@@ -96,8 +96,8 @@ impl DiskSliceWriter {
                 id += 1;
             }
         }
-        let data_file_num = self.write_batch_to_parquet(&filtered_batches).await?;
-        self.remap_index(data_file_num).await?;
+        self.write_batch_to_parquet(&filtered_batches).await?;
+        self.remap_index().await?;
         Ok(())
     }
 
@@ -196,7 +196,7 @@ impl DiskSliceWriter {
     }
 
     #[tracing::instrument(name = "remap_disk_index", skip_all)]
-    async fn remap_index(&mut self, start_file_index: usize) -> Result<()> {
+    async fn remap_index(&mut self) -> Result<()> {
         if self.old_index().is_empty() {
             return Ok(());
         }
@@ -204,7 +204,7 @@ impl DiskSliceWriter {
             .old_index
             .remap_into_vec(&self.batch_id_to_idx, &self.row_offset_mapping);
         let file_id =
-            get_unique_file_id_for_flush(self.table_auto_incr_id as u64, start_file_index as u64);
+            get_unique_file_id_for_flush(self.table_auto_incr_id as u64, self.files.len() as u64);
         let mut index_builder = GlobalIndexBuilder::new();
         index_builder.set_files(self.files.iter().map(|(file, _)| file.clone()).collect());
         index_builder.set_directory(self.dir_path.clone());

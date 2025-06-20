@@ -1296,11 +1296,30 @@ impl SnapshotTableState {
         assert_eq!(data_file_to_file_indices_1, data_file_to_file_indices_2);
     }
 
+    /// Test util function to validate file ids don't have duplicates.
+    #[cfg(test)]
+    fn assert_file_ids_no_duplicate(&self) {
+        let mut file_ids = HashSet::new();
+        for (cur_data_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
+            assert!(file_ids.insert(cur_data_file.file_id()));
+            if let Some(puffin_blob_file) = &cur_disk_file_entry.puffin_deletion_blob {
+                assert!(file_ids.insert(puffin_blob_file.puffin_file_cache_handle.file_id.file_id));
+            }
+        }
+        for cur_file_indices in &self.current_snapshot.indices.file_indices {
+            for cur_index_block in &cur_file_indices.index_blocks {
+                assert!(file_ids.insert(cur_index_block.data_file.file_id()));
+            }
+        }
+    }
+
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
     fn assert_current_snapshot_consistent(&self) {
         // Check file indices and disk files are consistent.
         self.assert_data_files_and_file_indices_consistent();
+        // Check file ids don't have duplicate.
+        self.assert_file_ids_no_duplicate();
     }
 
     fn merge_mem_indices(&mut self, task: &mut SnapshotTask) {
