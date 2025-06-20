@@ -208,6 +208,7 @@ impl IcebergTableManager {
             });
         }
 
+        // Load mooncake file indices from iceberg file index blobs.
         let file_index_blob =
             FileIndexBlob::load_from_index_blob(file_io.clone(), entry.data_file()).await?;
         self.persisted_file_indices
@@ -216,10 +217,15 @@ impl IcebergTableManager {
         let mut file_id_to_file_indices =
             HashMap::with_capacity(self.remote_data_file_to_file_id.len());
         for mut cur_iceberg_file_indice in file_index_blob.file_indices.into_iter() {
+            let table_id = TableId(self.mooncake_table_metadata.id);
             let cur_mooncake_file_indice = cur_iceberg_file_indice
-                .as_mooncake_file_index(&self.remote_data_file_to_file_id, next_file_id)
-                .await;
-            file_indices.push(cur_mooncake_file_indice.clone());
+                .as_mooncake_file_index(
+                    &self.remote_data_file_to_file_id,
+                    self.object_storage_cache.clone(),
+                    table_id,
+                    next_file_id,
+                )
+                .await?;
 
             for cur_data_file in cur_mooncake_file_indice.files.iter() {
                 let old_entry = file_id_to_file_indices
@@ -227,6 +233,7 @@ impl IcebergTableManager {
                 assert!(old_entry.is_none());
             }
 
+            file_indices.push(cur_mooncake_file_indice.clone());
             self.persisted_file_indices.insert(
                 cur_mooncake_file_indice,
                 entry.data_file().file_path().to_string(),

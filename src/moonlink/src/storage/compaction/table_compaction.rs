@@ -48,6 +48,8 @@ pub(crate) struct RemappedRecordLocation {
 }
 
 /// Result for a compaction operation.
+///
+/// TODO(hjiang): No need to pass evicted filed out, could directly delete in compaction process.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.

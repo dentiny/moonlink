@@ -295,14 +295,15 @@ impl SnapshotTableState {
                             .insert(file, disk_file_entry);
                     }
 
-                    // add index
-                    commit
-                        .flushed_file_index
-                        .file_indices
-                        .into_iter()
-                        .for_each(|file_index| {
-                            self.current_snapshot.indices.insert_file_index(file_index);
-                        });
+                    // Integrate file indices into current snapshot and import into object storage cache.
+                    for mut cur_file_index in commit.flushed_file_index.file_indices.into_iter() {
+                        let cur_evicted_files =
+                            self.import_file_index_into_cache(&mut cur_file_index).await;
+                        evicted_files.extend(cur_evicted_files);
+                        self.current_snapshot
+                            .indices
+                            .insert_file_index(cur_file_index);
+                    }
                     // add local deletions
                     self.committed_deletion_log
                         .extend(commit.local_deletions.into_iter());
