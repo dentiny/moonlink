@@ -574,7 +574,7 @@ impl IcebergTableManager {
     ///
     /// # Arguments:
     ///
-    /// * local_data_file_to_remote: contains mapps from newly imported data files to remote paths.
+    /// * local_data_file_to_remote: contains mappings from newly imported data files to remote paths.
     fn get_updated_file_indices_at_import(
         old_file_index: &MooncakeFileIndex,
         local_data_file_to_remote: &HashMap<String, String>,
@@ -651,7 +651,7 @@ impl IcebergTableManager {
     ///
     /// # Arguments:
     ///
-    /// * local_data_file_to_remote: contains mapps from newly imported data files to remote paths.
+    /// * local_data_file_to_remote: contains mappings from newly imported data files to remote paths.
     ///
     /// TODO(hjiang): Need to configure (1) the number of blobs in a puffin file; and (2) the number of file index in a puffin blob.
     /// For implementation simpicity, put everything in a single file and a single blob.

@@ -123,13 +123,12 @@ impl DiskSliceWriter {
     }
 
     /// Write record batches to parquet files in synchronous mode.
-    /// Return total number of data files written.
     /// TODO(hjiang): Parallelize the parquet file write operations.
     #[tracing::instrument(name = "write_parquet_batches", skip_all)]
     async fn write_batch_to_parquet(
         &mut self,
         record_batches: &Vec<(usize, RecordBatch, Vec<usize>)>,
-    ) -> Result<usize> {
+    ) -> Result<()> {
         let mut files = Vec::new();
         let mut writer = None;
         let mut out_file_idx = 0;
@@ -192,7 +191,7 @@ impl DiskSliceWriter {
             ));
         }
         self.files = files;
-        Ok(out_file_idx)
+        Ok(())
     }
 
     #[tracing::instrument(name = "remap_disk_index", skip_all)]
