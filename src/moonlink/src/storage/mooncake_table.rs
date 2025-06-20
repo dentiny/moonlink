@@ -1194,6 +1194,15 @@ impl MooncakeTable {
         let data_compaction_result = Self::sync_data_compaction(receiver).await;
         let data_compaction_result = data_compaction_result.unwrap();
 
+        println!(
+            "old file indice = {}",
+            data_compaction_result.old_file_indices.len()
+        );
+        println!(
+            "new file indice = {}",
+            data_compaction_result.new_file_indices.len()
+        );
+
         self.set_data_compaction_res(data_compaction_result);
         assert!(self.create_snapshot(SnapshotOption {
             force_create: true,
