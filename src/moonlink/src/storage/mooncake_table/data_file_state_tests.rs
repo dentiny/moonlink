@@ -129,7 +129,7 @@ async fn test_shutdown_table() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -189,7 +189,7 @@ async fn test_5_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -222,7 +222,7 @@ async fn test_5_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -278,7 +278,7 @@ async fn test_5_1() {
             .await
             .non_evictable_cache
             .len(),
-        0
+        1, // index block
     );
 }
 
@@ -337,7 +337,7 @@ async fn test_4_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -370,7 +370,7 @@ async fn test_4_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -427,7 +427,7 @@ async fn test_4_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -460,7 +460,7 @@ async fn test_4_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -523,7 +523,7 @@ async fn test_4_read_and_read_over_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -592,7 +592,7 @@ async fn test_3_read_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -625,7 +625,7 @@ async fn test_3_read_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -696,7 +696,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -729,7 +729,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -796,7 +796,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -855,7 +855,7 @@ async fn test_1_read_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -888,7 +888,7 @@ async fn test_1_read_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -1261,7 +1261,9 @@ async fn test_3_compact_3_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_file_size = disk_file_entry.file_size;
+    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let new_compacted_index_block_size =
+        disk_file_entry.file_indice.as_ref().unwrap().index_blocks[0].file_size;
 
     // Check cache state.
     assert_eq!(
@@ -1273,6 +1275,8 @@ async fn test_3_compact_3_5() {
             .len(),
         0
     );
+    // Two old compacted data files, one new compacted data file
+    // Two old compacted index block, one new compacted index block
     assert_eq!(
         object_storage_cache
             .cache
@@ -1280,7 +1284,7 @@ async fn test_3_compact_3_5() {
             .await
             .non_evictable_cache
             .len(),
-        3,
+        6,
     );
     assert_eq!(
         object_storage_cache
@@ -1319,7 +1323,7 @@ async fn test_3_compact_3_5() {
     // Check cache status.
     assert_eq!(
         object_storage_cache.cache.read().await.cur_bytes,
-        new_compacted_file_size as u64
+        (new_compacted_data_file_size as u64) + new_compacted_index_block_size,
     );
     assert_eq!(
         object_storage_cache
@@ -1413,12 +1417,14 @@ async fn test_3_compact_1_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_file_size = disk_file_entry.file_size;
+    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let new_compacted_file_index_size =
+        disk_file_entry.file_indice.as_ref().unwrap().index_blocks[0].file_size;
 
     // Check cache state.
     assert_eq!(
         object_storage_cache.cache.read().await.cur_bytes,
-        new_compacted_file_size as u64
+        (new_compacted_data_file_size as u64) + new_compacted_file_index_size,
     );
     assert_eq!(
         object_storage_cache

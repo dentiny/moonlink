@@ -132,7 +132,7 @@ async fn test_1_persist_2() {
             .await
             .non_evictable_cache
             .len(),
-        1, // Puffin file.
+        2, // Puffin file and index block.
     );
     assert_eq!(
         object_storage_cache
@@ -208,7 +208,7 @@ async fn test_1_recover_2() {
             .await
             .non_evictable_cache
             .len(),
-        1, // Puffin file.
+        2, // Puffin file and index block.
     );
     assert_eq!(
         object_storage_cache_for_recovery
@@ -267,7 +267,7 @@ async fn test_2_read() {
             .await
             .non_evictable_cache
             .len(),
-        2, // Puffin file and data file.
+        3, // Puffin file, data file, and index block.
     );
     assert_eq!(
         object_storage_cache
@@ -309,7 +309,7 @@ async fn test_2_read() {
             .await
             .non_evictable_cache
             .len(),
-        1, // puffin file
+        2, // puffin file and index block.
     );
     assert_eq!(
         object_storage_cache
@@ -447,7 +447,7 @@ async fn test_2_compact() {
             .await
             .non_evictable_cache
             .len(),
-        2, // Puffin files.
+        4, // Puffin files and index blocks.
     );
     assert_eq!(
         object_storage_cache
