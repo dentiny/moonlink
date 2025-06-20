@@ -1214,7 +1214,7 @@ impl SnapshotTableState {
 
     /// Import new file indices into cache.
     /// Return evicted files to delete.
-    async fn import_new_file_indices_to_cache(&mut self, task: &mut SnapshotTask) -> Vec<String> {
+    pub(super) async fn import_new_file_indices_to_cache(&mut self, task: &mut SnapshotTask) -> Vec<String> {
         let table_id = TableId(self.mooncake_table_metadata.id);
         let mut evicted_files_to_delete = vec![];
 

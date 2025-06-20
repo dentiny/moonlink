@@ -51,7 +51,8 @@ impl TransactionStreamCommit {
     ) -> Vec<String> {
         let mut evicted_files_to_delete = vec![];
 
-        for cur_file_index in self.flushed_file_index.file_indices.iter_mut() {
+        for (_, cur_disk_file_entry) in self.flushed_file_index.iter_mut() {
+            let cur_file_index = cur_disk_file_entry.file_indice.as_mut().unwrap();
             for cur_index_block in cur_file_index.index_blocks.iter_mut() {
                 let table_unique_file_id = TableUniqueFileId {
                     table_id,
@@ -303,6 +304,8 @@ impl SnapshotTableState {
                     for (file, mut disk_file_entry) in commit.flushed_files.into_iter() {
                         task.disk_file_lsn_map
                             .insert(file.file_id(), commit.commit_lsn);
+
+                        // Import data files into cache.
                         let file_id = TableUniqueFileId {
                             table_id: TableId(self.mooncake_table_metadata.id),
                             file_id: file.file_id(),
@@ -321,6 +324,8 @@ impl SnapshotTableState {
                             .await;
                         disk_file_entry.cache_handle = Some(cache_handle);
                         evicted_files.extend(cur_evicted_files);
+                        assert!(disk_file_entry.file_indice.is_some());
+                        
                         self.current_snapshot
                             .disk_files
                             .insert(file, disk_file_entry);
@@ -328,9 +333,9 @@ impl SnapshotTableState {
 
                     // Integrate file indices into current snapshot and import into object storage cache.
                     for mut cur_file_index in commit.flushed_file_index.file_indices.into_iter() {
-                        let cur_evicted_files =
-                            self.import_file_index_into_cache(&mut cur_file_index).await;
-                        evicted_files.extend(cur_evicted_files);
+                        for cur_index_block in cur_file_index.index_blocks.iter_mut() {
+                            cur_index_block.cache_handle = None;
+                        }
                         self.current_snapshot
                             .indices
                             .insert_file_index(cur_file_index);

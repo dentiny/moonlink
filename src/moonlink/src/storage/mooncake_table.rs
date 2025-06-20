@@ -169,9 +169,6 @@ pub(crate) struct DiskFileEntry {
     pub(crate) cache_handle: Option<NonEvictableHandle>,
     /// File size.
     pub(crate) file_size: usize,
-    /// File indices.
-    /// Invariant: in a consistent snapshot, disk file entry has its file indice assigned.
-    pub(crate) file_indice: Option<FileIndex>,
     /// In-memory deletion vector, used for new deletion records in-memory processing.
     pub(crate) batch_deletion_vector: BatchDeletionVector,
     /// Persisted iceberg deletion vector puffin blob.
@@ -185,14 +182,6 @@ pub struct Snapshot {
     /// table metadata
     pub(crate) metadata: Arc<TableMetadata>,
     /// Data files and their corresponding entries.
-    ///
-    /// File indices are stored in two places, one corresponds to its referenced data files, another stored in global index files.
-    /// - The global index one is used to lookup deletion records;
-    /// - The data file mapped one is used to get all corresponding file indices for compaction, otherwise it's a O(N^2) search.
-    ///  
-    /// Invariant:
-    /// - Both [`disk_files`] and [`indices`] store the same mapping from data files to file indices.
-    /// - Only file indice within [`disk_files`] has cache handle assigned.
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, DiskFileEntry>,
     /// Current snapshot version, which is the mooncake table commit point.
     pub(crate) snapshot_version: u64,

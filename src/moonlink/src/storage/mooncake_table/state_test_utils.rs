@@ -1,5 +1,7 @@
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use parquet::file::page_index::index;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
@@ -8,7 +10,7 @@ use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
-use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
+use crate::storage::mooncake_table::{DiskFileEntry, TableConfig as MooncakeTableConfig};
 use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, TableId, TableUniqueFileId};
 use crate::table_notify::TableNotify;
 use crate::{IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState};
@@ -230,4 +232,17 @@ pub(super) async fn create_mooncake_table_and_notify_for_compaction(
     table.register_table_notify(notify_tx).await;
 
     (table, notify_rx)
+}
+
+/// Test util function to get sorted index block files.
+pub(crate) fn get_index_block_files(disk_files: &HashMap<MooncakeDataFileRef, DiskFileEntry>) -> Vec<String> {
+    let mut index_block_files = HashSet::new();
+    for (_, cur_disk_file_entry) in disk_files.iter() {
+        for cur_index_block in cur_disk_file_entry.file_indice.as_ref().unwrap().index_blocks.iter() {
+            index_block_files.insert(cur_index_block.index_file.file_path().clone());
+        }
+    }
+    let mut index_block_files = index_block_files.iter().cloned().collect::<Vec<_>>();
+    index_block_files.sort();
+    index_block_files
 }

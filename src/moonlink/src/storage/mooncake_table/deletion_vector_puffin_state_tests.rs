@@ -420,6 +420,8 @@ async fn test_2_compact() {
         );
     }
     assert_eq!(old_compacted_puffin_files.len(), 2);
+    let old_compacted_index_block_files = get_index_block_files(&disk_files);
+    assert_eq!(old_compacted_index_block_files.len(), 2);
 
     // Check cache state.
     assert_eq!(
@@ -466,10 +468,12 @@ async fn test_2_compact() {
     let evicted_files = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
-    // Include both two data files and their puffin files.
-    assert_eq!(evicted_files.len(), 4);
+    // Include both two data files and their puffin files, index blocks.
+    assert_eq!(evicted_files.len(), 6);
     assert!(evicted_files.contains(&old_compacted_puffin_files[0]));
     assert!(evicted_files.contains(&old_compacted_puffin_files[1]));
+    assert!(evicted_files.contains(&old_compacted_index_block_files[0]));
+    assert!(evicted_files.contains(&old_compacted_index_block_files[1]));
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
