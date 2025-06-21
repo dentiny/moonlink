@@ -277,16 +277,19 @@ impl SnapshotTableState {
     }
 
     /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from object storage cache.
+    /// Returned updated data file ids, and cache evicted files to delete.
     async fn update_data_files_to_persisted(
         &mut self,
         task: &SnapshotTask,
-    ) -> Vec<String> {
-        if task.iceberg_persisted_records.data_files.is_empty() {
-            return Vec::new();
-        }
-
+    ) -> (HashSet<FileId>, Vec<String>) {
+        // Updated data file ids.
+        let mut updated_file_ids = HashSet::new();
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
+
+        if task.iceberg_persisted_records.data_files.is_empty() {
+            return (updated_file_ids, evicted_files_to_delete);
+        }
 
         // Update disk file from local write through cache to iceberg persisted remote path.
         let persisted_data_files = &task.iceberg_persisted_records.data_files;
@@ -305,13 +308,58 @@ impl SnapshotTableState {
             evicted_files_to_delete.extend(cur_evicted_files);
             disk_file_entry.cache_handle = None;
 
-            // Use old disk entry for now, file indices will be updated to remote paths.
             self.current_snapshot
                 .disk_files
                 .insert(cur_data_file.clone(), disk_file_entry);
+
+            assert!(updated_file_ids.insert(cur_data_file.file_id()));
         }
 
-        evicted_files_to_delete
+        (updated_file_ids, evicted_files_to_delete)
+    }
+
+    /// Update file indices in the current snapshot from local data files to remote ones.
+    ///
+    /// # Arguments
+    ///
+    /// * updated_file_ids: file ids which are updated by data files update, used to identify which file indices to remove.
+    fn update_file_indices_to_persisted(
+        &mut self,
+        new_file_indices: Vec<FileIndex>,
+        updated_file_ids: HashSet<FileId>,
+    ) {
+        if new_file_indices.is_empty() && updated_file_ids.is_empty() {
+            return;
+        }
+
+        // Update file indice from local write through cache to iceberg persisted remote path.
+        // TODO(hjiang): For better update performance, we might need to use hash set instead vector to store file indices.
+        let cur_file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
+        let mut updated_file_indices = Vec::with_capacity(cur_file_indices.len());
+        for cur_file_index in cur_file_indices.into_iter() {
+            let mut skip = false;
+            let referenced_data_files = &cur_file_index.files;
+            for cur_data_file in referenced_data_files.iter() {
+                if updated_file_ids.contains(&cur_data_file.file_id()) {
+                    skip = true;
+                    break;
+                }
+            }
+
+            // If one referenced file gets updated, all others should get updated.
+            #[cfg(test)]
+            if skip {
+                for cur_data_file in referenced_data_files.iter() {
+                    assert!(updated_file_ids.contains(&cur_data_file.file_id()));
+                }
+            }
+
+            if !skip {
+                updated_file_indices.push(cur_file_index);
+            }
+        }
+        updated_file_indices.extend(new_file_indices.clone());
+        self.current_snapshot.indices.file_indices = updated_file_indices;
     }
 
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
@@ -324,9 +372,12 @@ impl SnapshotTableState {
         task: &SnapshotTask,
     ) -> Vec<String> {
         // Handle imported new data files and file indices.
-        let evicted_files_to_delete =
+        let (updated_file_ids, evicted_files_to_delete) =
             self.update_data_files_to_persisted(task).await;
-        self.current_snapshot.indices.file_indices.extend(task.iceberg_persisted_records.file_indices.clone());
+        self.update_file_indices_to_persisted(
+            task.iceberg_persisted_records.file_indices.clone(),
+            updated_file_ids,
+        );
 
         evicted_files_to_delete
     }
@@ -474,7 +525,10 @@ impl SnapshotTableState {
 
         // Calculate related file indices to compact.
         let mut file_indices_to_compact = vec![];
-        let file_ids_to_compact = tentative_data_files_to_compact.iter().map(|single_file_to_compact| single_file_to_compact.file_id.file_id).collect::<HashSet<_>>();
+        let file_ids_to_compact = tentative_data_files_to_compact
+            .iter()
+            .map(|single_file_to_compact| single_file_to_compact.file_id.file_id)
+            .collect::<HashSet<_>>();
         for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
             for cur_file in cur_file_index.files.iter() {
                 if file_ids_to_compact.contains(&cur_file.file_id()) {
@@ -482,11 +536,6 @@ impl SnapshotTableState {
                     break;
                 }
             }
-        }
-
-        println!("files to compact {:?}", tentative_data_files_to_compact);
-        for cur_file_index in file_indices_to_compact.iter() {
-            println!("index -> files: {:?}", cur_file_index.files);
         }
 
         Some(DataCompactionPayload {
@@ -1201,30 +1250,26 @@ impl SnapshotTableState {
         }
     }
 
-    // /// Test util function to assert the mapping between data files and file indices are consistent.
-    // #[cfg(test)]
-    // fn assert_data_files_and_file_indices_consistent(&self) {
-    //     // (1) Get data file to file indices mapping from [`disk_files`].
-    //     let mut data_file_to_file_indices_1 =
-    //         HashMap::with_capacity(self.current_snapshot.disk_files.len());
-    //     for (cur_disk_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
-    //         let cur_file_index = cur_disk_file_entry.file_indice.as_ref().unwrap().clone();
-    //         data_file_to_file_indices_1.insert(cur_disk_file.clone(), cur_file_index);
-    //     }
-    //     // (2) Get data file to file indices mapping from [`file_indices`].
-    //     let mut data_file_to_file_indices_2 =
-    //         HashMap::with_capacity(self.current_snapshot.disk_files.len());
-    //     let file_indices = &self.current_snapshot.indices.file_indices;
-    //     for cur_file_index in file_indices {
-    //         for cur_data_file in cur_file_index.files.iter() {
-    //             let old_entry = data_file_to_file_indices_2
-    //                 .insert(cur_data_file.clone(), cur_file_index.clone());
-    //             assert!(old_entry.is_none());
-    //         }
-    //     }
-    //     // Assert mapping inferred from disk files and file indices are the same.
-    //     assert_eq!(data_file_to_file_indices_1, data_file_to_file_indices_2);
-    // }
+    /// Test util function to validate one data file is referenced by exactly one file index.
+    #[cfg(test)]
+    fn assert_file_indices_no_duplicate(&self) {
+        // Get referenced data files by file indices.
+        let mut referenced_data_files = HashSet::new();
+        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
+            for cur_data_file in cur_file_index.files.iter() {
+                assert!(referenced_data_files.insert(cur_data_file.file_id()));
+            }
+        }
+
+        // Get all data files, and assert they're equal.
+        let data_files = self
+            .current_snapshot
+            .disk_files
+            .keys()
+            .map(|f| f.file_id())
+            .collect::<HashSet<_>>();
+        assert_eq!(data_files, referenced_data_files);
+    }
 
     /// Test util function to validate file ids don't have duplicates.
     #[cfg(test)]
@@ -1246,8 +1291,8 @@ impl SnapshotTableState {
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
     fn assert_current_snapshot_consistent(&self) {
-        // Check file indices and disk files are consistent.
-        // self.assert_data_files_and_file_indices_consistent();
+        // Check one data file is only pointed by one file index.
+        self.assert_file_indices_no_duplicate();
         // Check file ids don't have duplicate.
         self.assert_file_ids_no_duplicate();
     }

@@ -13,7 +13,6 @@ use crate::storage::iceberg::table_manager::{
 };
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
-use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
 use crate::storage::io_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -826,10 +825,7 @@ impl TableManager for IcebergTableManager {
             }
         }
 
-        let mooncake_snapshot = self.transform_to_mooncake_snapshot(
-            loaded_file_indices,
-            flush_lsn,
-        );
+        let mooncake_snapshot = self.transform_to_mooncake_snapshot(loaded_file_indices, flush_lsn);
         Ok(mooncake_snapshot)
     }
 
