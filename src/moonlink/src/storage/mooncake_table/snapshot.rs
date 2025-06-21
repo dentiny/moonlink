@@ -869,14 +869,37 @@ impl SnapshotTableState {
 
     /// Unreference all pinned data files.
     /// Return all evicted files to evict
-    pub(crate) async fn unreference_all_cache_handles(&mut self) -> Vec<String> {
+    pub(crate) async fn unreference_and_delete_all_cache_handles(&mut self) -> Vec<String> {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
+        // Unreference and delete data files and puffin files.
         for (_, disk_file_entry) in self.current_snapshot.disk_files.iter_mut() {
+            // Handle data files.
             let cache_handle = &mut disk_file_entry.cache_handle;
             if let Some(cache_handle) = cache_handle {
-                let cur_evicted_files = cache_handle.unreference().await;
+                let cur_evicted_files = cache_handle.unreference_and_delete().await;
+                evicted_files_to_delete.extend(cur_evicted_files);
+            }
+            // Handle puffin files.
+            if let Some(puffin_file) = &mut disk_file_entry.puffin_deletion_blob {
+                let cur_evicted_files = puffin_file
+                    .puffin_file_cache_handle
+                    .unreference_and_delete()
+                    .await;
+                evicted_files_to_delete.extend(cur_evicted_files);
+            }
+        }
+
+        // Unreference and delete file indices.
+        for cur_file_index in self.current_snapshot.indices.file_indices.iter_mut() {
+            for cur_index_block in cur_file_index.index_blocks.iter_mut() {
+                let cur_evicted_files = cur_index_block
+                    .cache_handle
+                    .as_mut()
+                    .unwrap()
+                    .unreference_and_delete()
+                    .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
             }
         }
