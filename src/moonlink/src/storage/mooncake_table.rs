@@ -2,6 +2,7 @@ mod data_batches;
 pub(crate) mod delete_vector;
 mod disk_slice;
 mod mem_slice;
+mod persistence_buffer;
 mod shared_array;
 mod snapshot;
 pub mod snapshot_read_output;
