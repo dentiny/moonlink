@@ -669,7 +669,7 @@ impl MooncakeTable {
     pub async fn shutdown(&mut self) -> Result<()> {
         let evicted_files_to_delete = {
             let mut guard = self.snapshot.write().await;
-            guard.unreference_all_cache_handles().await
+            guard.unreference_and_delete_all_cache_handles().await
         };
 
         for cur_file in evicted_files_to_delete.into_iter() {

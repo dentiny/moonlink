@@ -3,10 +3,6 @@ use tokio::sync::mpsc::Receiver;
 
 /// This file contains state-machine based unit test for data files and file index, which checks their state transfer for a few operations, for example, compaction and request read.
 ///
-/// ====================================
-/// State machine for data file
-/// ====================================
-///
 /// remote storage state:
 /// - Has remote storage
 /// - no remote storage
@@ -126,9 +122,18 @@ async fn test_shutdown_table() {
             .cache
             .read()
             .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
             .evictable_cache
             .len(),
-        1
+        0,
     );
     assert_eq!(
         object_storage_cache
@@ -137,7 +142,7 @@ async fn test_shutdown_table() {
             .await
             .non_evictable_cache
             .len(),
-        1, // index block
+        0,
     );
 }
 

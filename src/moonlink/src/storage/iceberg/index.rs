@@ -102,7 +102,9 @@ impl FileIndex {
         next_file_id: &mut u64,
     ) -> IcebergResult<MooncakeFileIndex> {
         // All mooncake index blocks.
-        let mut mooncake_index_blocks = vec![];
+        let mut mooncake_index_blocks = Vec::with_capacity(self.index_block_files.len());
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
 
         for cur_index_block in self.index_block_files.iter() {
             let cur_file_id = *next_file_id;
@@ -118,9 +120,7 @@ impl FileIndex {
                 )
                 .await
                 .map_err(to_iceberg_error)?;
-            io_utils::delete_local_files(cur_evicted_files)
-                .await
-                .map_err(to_iceberg_error)?;
+            evicted_files_to_delete.extend(cur_evicted_files);
 
             // File indices should always reside in on-disk cache.
             let cache_handle = cache_handle.unwrap();
@@ -154,6 +154,11 @@ impl FileIndex {
             bucket_bits: self.bucket_bits,
             index_blocks: mooncake_index_blocks,
         };
+
+        // Delete all evicted files inline.
+        io_utils::delete_local_files(evicted_files_to_delete)
+            .await
+            .map_err(to_iceberg_error)?;
 
         Ok(file_indice)
     }
