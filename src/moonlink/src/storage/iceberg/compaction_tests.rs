@@ -183,13 +183,13 @@ async fn check_loaded_arrow_batches(data_file: &str, row_indices: Vec<usize>) {
 }
 
 /// Test util function to check loaded file indices are expected.
-async fn check_loaded_file_indices(file_indice: FileIndex, row_indices: Vec<usize>) {
-    assert_eq!(row_indices.len(), file_indice.num_rows as usize);
-    let row_num = file_indice.num_rows;
+async fn check_loaded_file_index(file_index: FileIndex, row_indices: Vec<usize>) {
+    assert_eq!(row_indices.len(), file_index.num_rows as usize);
+    let row_num = file_index.num_rows;
 
     let row_identity = IdentityProp::FullRow;
     let mut mooncake_index = MooncakeIndex::new();
-    mooncake_index.insert_file_index(file_indice);
+    mooncake_index.insert_file_index(file_index);
 
     let mut result_row_indices = vec![];
     for cur_row_index in row_indices {
@@ -236,7 +236,7 @@ async fn check_loaded_snapshot(
     let file_indice = snapshot.indices.file_indices.clone();
     assert_eq!(file_indice.len(), 1);
     assert_eq!(file_indice[0].files, vec![data_file.clone()]);
-    check_loaded_file_indices(file_indice[0].clone(), row_indices.clone()).await;
+    check_loaded_file_index(file_indice[0].clone(), row_indices.clone()).await;
 
     data_file.clone()
 }

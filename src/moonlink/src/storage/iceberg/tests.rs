@@ -70,7 +70,7 @@ fn test_committed_deletion_log_2(
 }
 
 /// Test util function to create file indices.
-fn test_global_index(data_files: Vec<MooncakeDataFileRef>) -> GlobalIndex {
+fn create_file_index(data_files: Vec<MooncakeDataFileRef>) -> GlobalIndex {
     GlobalIndex {
         files: data_files,
         num_rows: 0,
@@ -201,14 +201,14 @@ async fn test_store_and_load_snapshot_impl(
     );
     write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_1)
         .await?;
-    let file_indice_1 = test_global_index(vec![data_file_1.clone()]);
+    let file_index_1 = create_file_index(vec![data_file_1.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_1.clone()],
             new_deletion_vector: test_committed_deletion_log_1(data_file_1.clone()),
-            file_indices: vec![file_indice_1.clone()],
+            file_indices: vec![file_index_1.clone()],
         },
         index_merge_payload: IcebergSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
@@ -251,14 +251,14 @@ async fn test_store_and_load_snapshot_impl(
     );
     write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_2)
         .await?;
-    let file_indice_2 = test_global_index(vec![data_file_2.clone()]);
+    let file_index_2 = create_file_index(vec![data_file_2.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 1,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_2.clone()],
             new_deletion_vector: test_committed_deletion_log_2(data_file_2.clone()),
-            file_indices: vec![file_indice_2.clone()],
+            file_indices: vec![file_index_2.clone()],
         },
         index_merge_payload: IcebergSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
@@ -325,7 +325,7 @@ async fn test_store_and_load_snapshot_impl(
     // ==============
     //
     // Write third snapshot to iceberg table, with file indices to add and remove.
-    let merged_file_index = test_global_index(remote_data_files.clone());
+    let merged_file_index = create_file_index(remote_data_files.clone());
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 2,
         import_payload: IcebergSnapshotImportPayload {
@@ -335,7 +335,7 @@ async fn test_store_and_load_snapshot_impl(
         },
         index_merge_payload: IcebergSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![merged_file_index.clone()],
-            old_file_indices_to_remove: vec![file_indice_1.clone(), file_indice_2.clone()],
+            old_file_indices_to_remove: vec![file_index_1.clone(), file_index_2.clone()],
         },
         data_compaction_payload: IcebergSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
@@ -388,7 +388,7 @@ async fn test_store_and_load_snapshot_impl(
         &compacted_batch,
     )
     .await?;
-    let compacted_file_index = test_global_index(vec![compacted_data_file.clone()]);
+    let compacted_file_index = create_file_index(vec![compacted_data_file.clone()]);
 
     // ==============
     // Step 4

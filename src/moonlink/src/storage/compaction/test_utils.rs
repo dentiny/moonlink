@@ -91,8 +91,8 @@ pub(crate) async fn dump_arrow_record_batches(
     writer.close().await.unwrap();
 }
 
-/// Test util function to create and dump file indices, which correspond to test record batch.
-pub(crate) async fn create_file_indices_1(
+/// Test util function to create and dump file index, which correspond to test record batch.
+pub(crate) async fn create_file_index_1(
     directory: std::path::PathBuf,
     data_file: MooncakeDataFileRef,
     start_file_id: u64,
@@ -120,7 +120,7 @@ pub(crate) async fn create_file_indices_1(
     builder.set_directory(directory);
     builder.build_from_flush(entries, start_file_id).await
 }
-pub(crate) async fn create_file_indices_2(
+pub(crate) async fn create_file_index_2(
     directory: std::path::PathBuf,
     data_file: MooncakeDataFileRef,
     start_file_id: u64,
@@ -412,9 +412,9 @@ pub(crate) async fn check_file_indices_compaction_for_multiple_compacted_files(
 
     // File indices are compacted into one.
     assert_eq!(file_indices.len(), 1);
-    let compacted_file_indice = file_indices[0].clone();
+    let compacted_file_index = file_indices[0].clone();
     assert_eq!(
-        compacted_file_indice.num_rows as usize,
+        compacted_file_index.num_rows as usize,
         old_row_indices.len()
     );
 
@@ -425,7 +425,7 @@ pub(crate) async fn check_file_indices_compaction_for_multiple_compacted_files(
             NAME_VALUES[*old_row_idx],
             AGE_VALUES[*old_row_idx],
         );
-        let locs = compacted_file_indice
+        let locs = compacted_file_index
             .search_values(&test_get_hashes_for_index(&[hash_value]))
             .await;
         assert_eq!(locs.len(), 1);
@@ -456,15 +456,15 @@ pub(crate) async fn check_file_indices_compaction(
 
     // File indices are compacted into one.
     assert_eq!(file_indices.len(), 1);
-    let compacted_file_indice = file_indices[0].clone();
+    let compacted_file_index = file_indices[0].clone();
     assert_eq!(
-        compacted_file_indice.num_rows as usize,
+        compacted_file_index.num_rows as usize,
         old_row_indices.len()
     );
 
     // In the unit test, we check whether we've iterated through all row indices from [0, num_rows).
     let mut new_row_indices: HashSet<u32> =
-        (0..compacted_file_indice.num_rows).collect::<HashSet<_>>();
+        (0..compacted_file_index.num_rows).collect::<HashSet<_>>();
 
     for old_row_idx in old_row_indices.iter() {
         let hash_value = get_hash_for_row(
@@ -472,7 +472,7 @@ pub(crate) async fn check_file_indices_compaction(
             NAME_VALUES[*old_row_idx],
             AGE_VALUES[*old_row_idx],
         );
-        let locs = compacted_file_indice
+        let locs = compacted_file_index
             .search_values(&test_get_hashes_for_index(&[hash_value]))
             .await;
         assert_eq!(

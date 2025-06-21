@@ -57,7 +57,7 @@ async fn test_data_file_compaction_1() {
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
     let record_batch = test_utils::create_test_batch_1();
     test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
-    let file_indice = test_utils::create_file_indices_1(
+    let file_index = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file.clone(),
         /*start_file_id=*/ 1,
@@ -70,7 +70,7 @@ async fn test_data_file_compaction_1() {
         disk_files: vec![get_single_file_to_compact(
             &data_file, /*deletion_vector=*/ None,
         )],
-        file_indices: vec![file_indice],
+        file_indices: vec![file_index],
     };
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
@@ -128,7 +128,7 @@ async fn test_data_file_compaction_2() {
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
     let record_batch = test_utils::create_test_batch_1();
     test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
-    let file_indice = test_utils::create_file_indices_1(
+    let file_index = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file.clone(),
         /*start_file_id=*/ 1,
@@ -155,7 +155,7 @@ async fn test_data_file_compaction_2() {
             &data_file,
             Some(puffin_blob_ref),
         )],
-        file_indices: vec![file_indice.clone()],
+        file_indices: vec![file_index.clone()],
     };
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
@@ -214,7 +214,7 @@ async fn test_data_file_compaction_3() {
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
     let record_batch = test_utils::create_test_batch_1();
     test_utils::dump_arrow_record_batches(vec![record_batch], data_file.clone()).await;
-    let file_indice = test_utils::create_file_indices_1(
+    let file_index = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file.clone(),
         /*start_file_id=*/ 1,
@@ -243,7 +243,7 @@ async fn test_data_file_compaction_3() {
             &data_file,
             Some(puffin_blob_ref),
         )],
-        file_indices: vec![file_indice.clone()],
+        file_indices: vec![file_index.clone()],
     };
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
@@ -302,13 +302,13 @@ async fn test_data_file_compaction_4() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 = test_utils::create_file_indices_1(
+    let file_index_1 = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file_1.clone(),
         /*start_file_id=*/ 2,
     )
     .await;
-    let file_indice_2 = test_utils::create_file_indices_2(
+    let file_index_2 = test_utils::create_file_index_2(
         temp_dir.path().to_path_buf(),
         data_file_2.clone(),
         /*start_file_id=*/ 3,
@@ -322,7 +322,7 @@ async fn test_data_file_compaction_4() {
             get_single_file_to_compact(&data_file_1, /*deletion_vector=*/ None),
             get_single_file_to_compact(&data_file_2, /*deletion_vector=*/ None),
         ],
-        file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
+        file_indices: vec![file_index_1.clone(), file_index_2.clone()],
     };
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
@@ -391,13 +391,13 @@ async fn test_data_file_compaction_5() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 = test_utils::create_file_indices_1(
+    let file_index_1 = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file_1.clone(),
         /*start_file_id=*/ 2,
     )
     .await;
-    let file_indice_2 = test_utils::create_file_indices_2(
+    let file_index_2 = test_utils::create_file_index_2(
         temp_dir.path().to_path_buf(),
         data_file_2.clone(),
         /*start_file_id=*/ 3,
@@ -437,7 +437,7 @@ async fn test_data_file_compaction_5() {
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
-        file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
+        file_indices: vec![file_index_1.clone(), file_index_2.clone()],
     };
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
@@ -510,13 +510,13 @@ async fn test_data_file_compaction_6() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 = test_utils::create_file_indices_1(
+    let file_index_1 = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file_1.clone(),
         /*start_file_id=*/ 2,
     )
     .await;
-    let file_indice_2 = test_utils::create_file_indices_2(
+    let file_index_2 = test_utils::create_file_index_2(
         temp_dir.path().to_path_buf(),
         data_file_2.clone(),
         /*start_file_id=*/ 3,
@@ -559,7 +559,7 @@ async fn test_data_file_compaction_6() {
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
-        file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
+        file_indices: vec![file_index_1.clone(), file_index_2.clone()],
     };
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
@@ -623,13 +623,13 @@ async fn test_multiple_compacted_data_files_1() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 = test_utils::create_file_indices_1(
+    let file_index_1 = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file_1.clone(),
         /*start_file_id=*/ 2,
     )
     .await;
-    let file_indice_2 = test_utils::create_file_indices_2(
+    let file_index_2 = test_utils::create_file_index_2(
         temp_dir.path().to_path_buf(),
         data_file_2.clone(),
         /*start_file_id=*/ 3,
@@ -669,7 +669,7 @@ async fn test_multiple_compacted_data_files_1() {
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
-        file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
+        file_indices: vec![file_index_1.clone(), file_index_2.clone()],
     };
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
@@ -755,13 +755,13 @@ async fn test_multiple_compacted_data_files_2() {
     test_utils::dump_arrow_record_batches(vec![record_batch_1], data_file_1.clone()).await;
     test_utils::dump_arrow_record_batches(vec![record_batch_2], data_file_2.clone()).await;
 
-    let file_indice_1 = test_utils::create_file_indices_1(
+    let file_index_1 = test_utils::create_file_index_1(
         temp_dir.path().to_path_buf(),
         data_file_1.clone(),
         /*start_file_id=*/ 2,
     )
     .await;
-    let file_indice_2 = test_utils::create_file_indices_2(
+    let file_index_2 = test_utils::create_file_index_2(
         temp_dir.path().to_path_buf(),
         data_file_2.clone(),
         /*start_file_id=*/ 3,
@@ -804,7 +804,7 @@ async fn test_multiple_compacted_data_files_2() {
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
         ],
-        file_indices: vec![file_indice_1.clone(), file_indice_2.clone()],
+        file_indices: vec![file_index_1.clone(), file_index_2.clone()],
     };
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {

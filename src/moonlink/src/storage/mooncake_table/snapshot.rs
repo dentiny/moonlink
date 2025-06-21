@@ -1021,8 +1021,8 @@ impl SnapshotTableState {
                 assert!(file_ids.insert(puffin_blob_file.puffin_file_cache_handle.file_id.file_id));
             }
         }
-        for cur_file_indices in &self.current_snapshot.indices.file_indices {
-            for cur_index_block in &cur_file_indices.index_blocks {
+        for cur_file_index in &self.current_snapshot.indices.file_indices {
+            for cur_index_block in &cur_file_index.index_blocks {
                 assert!(file_ids.insert(cur_index_block.index_file.file_id()));
             }
         }

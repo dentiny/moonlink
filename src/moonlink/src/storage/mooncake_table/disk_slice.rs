@@ -114,7 +114,7 @@ impl DiskSliceWriter {
     }
 
     /// Get the list of files in the DiskSlice
-    pub(crate) fn get_file_indice(&self) -> Option<FileIndex> {
+    pub(crate) fn get_file_index(&self) -> Option<FileIndex> {
         self.new_index.clone()
     }
 

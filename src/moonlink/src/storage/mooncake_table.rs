@@ -349,9 +349,9 @@ impl SnapshotTask {
 
         // Batch write file indices.
         for cur_disk_slice in self.new_disk_slices.iter() {
-            let file_indice = cur_disk_slice.get_file_indice();
-            if let Some(file_indice) = file_indice {
-                new_file_indices.push(file_indice);
+            let file_index = cur_disk_slice.get_file_index();
+            if let Some(file_index) = file_index {
+                new_file_indices.push(file_index);
             }
         }
 
