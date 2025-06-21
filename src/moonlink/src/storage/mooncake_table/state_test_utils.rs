@@ -17,8 +17,10 @@ use crate::{IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorage
 ///
 /// Test constant to mimic an infinitely large object storage cache.
 pub(super) const INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE: u64 = u64::MAX;
-/// Test constant to allow only one file in object storage cache.
-pub(super) const ONE_FILE_CACHE_SIZE: u64 = 1 << 20;
+/// File index blocks are always pinned at cache, whose size is much less than data file.
+/// Test constant to allow only one data file and multiple index block files in object storage cache.
+const INDEX_BLOCK_FILES_SIZE_UPPER_BOUND: u64 = 100;
+pub(super) const ONE_FILE_CACHE_SIZE: u64 = FAKE_FILE_SIZE + INDEX_BLOCK_FILES_SIZE_UPPER_BOUND;
 /// Iceberg test namespace and table name.
 pub(super) const ICEBERG_TEST_NAMESPACE: &str = "namespace";
 pub(super) const ICEBERG_TEST_TABLE: &str = "test_table";
@@ -32,7 +34,7 @@ pub(super) const FAKE_FILE_ID: TableUniqueFileId = TableUniqueFileId {
     file_id: FileId(100),
 };
 /// Fake file size.
-pub(super) const FAKE_FILE_SIZE: u64 = ONE_FILE_CACHE_SIZE;
+pub(super) const FAKE_FILE_SIZE: u64 = 1 << 30; // 1GiB
 /// Fake filename.
 pub(super) const FAKE_FILE_NAME: &str = "fake-file-name";
 
@@ -111,30 +113,21 @@ pub(super) async fn import_fake_cache_entry(
     cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
 }
 
-/// Test util function to check only fake file in object storage cache.
-pub(super) async fn check_only_fake_file_in_cache(object_storage_cache: &ObjectStorageCache) {
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .non_evictable_cache
-            .len(),
-        1,
-    );
-    assert_eq!(
-        object_storage_cache.get_non_evictable_filenames().await,
-        vec![FAKE_FILE_ID]
-    );
+/// Test util function to check certain data file doesn't exist in non evictable cache.
+pub(super) async fn check_file_not_pinned(
+    object_storage_cache: &ObjectStorageCache,
+    file_id: FileId,
+) {
+    let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
+    let table_unique_file_id = get_unique_table_file_id(file_id);
+    assert!(!non_evicted_file_ids.contains(&table_unique_file_id));
+}
+
+/// Test util function to check certain data file exists in non evictable cache.
+pub(super) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache, file_id: FileId) {
+    let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
+    let table_unique_file_id = get_unique_table_file_id(file_id);
+    assert!(non_evicted_file_ids.contains(&table_unique_file_id));
 }
 
 /// Test util function to get iceberg table config.
