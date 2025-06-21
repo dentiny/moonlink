@@ -134,6 +134,14 @@ impl SnapshotTableState {
         })
     }
 
+    /// Util function to get table unique file id.
+    fn get_table_unique_file_id(&self, file_id: FileId) -> TableUniqueFileId {
+        TableUniqueFileId {
+            table_id: TableId(self.mooncake_table_metadata.id),
+            file_id,
+        }
+    }
+
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
     pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
@@ -580,10 +588,7 @@ impl SnapshotTableState {
         ma::assert_ge!(self.current_snapshot.disk_files.len(), old_data_files.len());
         for (cur_new_data_file, cur_entry) in new_data_files.iter() {
             ma::assert_gt!(cur_entry.file_size, 0);
-            let unique_file_id = TableUniqueFileId {
-                table_id: TableId(self.mooncake_table_metadata.id),
-                file_id: cur_new_data_file.file_id(),
-            };
+            let unique_file_id = self.get_table_unique_file_id(cur_new_data_file.file_id());
             let cache_entry = DataFileCacheEntry {
                 cache_filepath: cur_new_data_file.file_path().clone(),
                 file_metadata: FileMetadata {
@@ -613,11 +618,7 @@ impl SnapshotTableState {
         for cur_old_data_file in old_data_files.into_iter() {
             let old_entry = self.current_snapshot.disk_files.remove(&cur_old_data_file);
             assert!(old_entry.is_some());
-
-            let unique_file_id = TableUniqueFileId {
-                table_id: TableId(self.mooncake_table_metadata.id),
-                file_id: cur_old_data_file.file_id(),
-            };
+            let unique_file_id = self.get_table_unique_file_id(cur_old_data_file.file_id());
 
             // ====================================
             // Process data file
@@ -887,12 +888,9 @@ impl SnapshotTableState {
     /// Return evicted files to delete.
     async fn import_file_index_into_cache(&mut self, file_index: &mut FileIndex) -> Vec<String> {
         let mut evicted_fils_to_delete = vec![];
-        let table_id = TableId(self.mooncake_table_metadata.id);
         for cur_index_block in file_index.index_blocks.iter_mut() {
-            let table_unique_file_id = TableUniqueFileId {
-                table_id,
-                file_id: cur_index_block.index_file.file_id(),
-            };
+            let table_unique_file_id =
+                self.get_table_unique_file_id(cur_index_block.index_file.file_id());
             let cache_entry = CacheEntry {
                 cache_filepath: cur_index_block.index_file.file_path().clone(),
                 file_metadata: FileMetadata {
@@ -1205,10 +1203,7 @@ impl SnapshotTableState {
             for (file, file_attrs) in slice.output_files().iter() {
                 ma::assert_gt!(file_attrs.file_size, 0);
                 task.disk_file_lsn_map.insert(file.file_id(), lsn);
-                let unique_file_id = TableUniqueFileId {
-                    table_id: TableId(self.mooncake_table_metadata.id),
-                    file_id: file.file_id(),
-                };
+                let unique_file_id = self.get_table_unique_file_id(file.file_id());
                 let (cache_handle, cur_evicted_files) = self
                     .object_storage_cache
                     .import_cache_entry(
@@ -1571,14 +1566,10 @@ impl SnapshotTableState {
     /// If a data file already has a pinned reference, increment the reference count directly to avoid unnecessary IO.
     async fn get_read_files_for_read(&mut self) -> Vec<DataFileForRead> {
         let mut data_files_for_read = Vec::with_capacity(self.current_snapshot.disk_files.len());
-
         for (file, _) in self.current_snapshot.disk_files.iter() {
-            let file_id = TableUniqueFileId {
-                table_id: TableId(self.mooncake_table_metadata.id),
-                file_id: file.file_id(),
-            };
+            let unique_table_file_id = self.get_table_unique_file_id(file.file_id());
             data_files_for_read.push(DataFileForRead::RemoteFilePath((
-                file_id,
+                unique_table_file_id,
                 file.file_path().to_string(),
             )));
         }
