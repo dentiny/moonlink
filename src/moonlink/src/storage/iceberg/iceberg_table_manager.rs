@@ -324,7 +324,6 @@ impl IcebergTableManager {
         &self,
         persisted_file_indices: Vec<MooncakeFileIndex>,
         flush_lsn: Option<u64>,
-        mut file_id_to_file_indices: HashMap<FileId, GlobalIndex>,
     ) -> MooncakeSnapshot {
         let mut mooncake_snapshot = MooncakeSnapshot::new(self.mooncake_table_metadata.clone());
 
@@ -342,20 +341,17 @@ impl IcebergTableManager {
         for (file_id, data_file_entry) in self.persisted_data_files.iter() {
             let data_file =
                 create_data_file(file_id.0, data_file_entry.data_file.file_path().to_string());
-            let file_indice = file_id_to_file_indices.remove(file_id).unwrap();
 
             mooncake_snapshot.disk_files.insert(
                 data_file,
                 DiskFileEntry {
                     file_size: data_file_entry.data_file.file_size_in_bytes() as usize,
-                    file_indice: Some(file_indice),
                     cache_handle: None,
                     puffin_deletion_blob: data_file_entry.persisted_deletion_vector.clone(),
                     batch_deletion_vector: data_file_entry.deletion_vector.clone(),
                 },
             );
         }
-        assert!(file_id_to_file_indices.is_empty());
         // UNDONE:
         // 1. Update file id in persisted_file_indices.
 
@@ -833,7 +829,6 @@ impl TableManager for IcebergTableManager {
         let mooncake_snapshot = self.transform_to_mooncake_snapshot(
             loaded_file_indices,
             flush_lsn,
-            file_id_to_file_indices,
         );
         Ok(mooncake_snapshot)
     }

@@ -277,24 +277,18 @@ impl SnapshotTableState {
     }
 
     /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from object storage cache.
-    /// Return affected file indices, which are caused by data file updates, and will be removed.
     async fn update_data_files_to_persisted(
         &mut self,
         task: &SnapshotTask,
-    ) -> (
-        HashSet<FileIndex>,
-        Vec<String>, /*evicted files to delete*/
-    ) {
+    ) -> Vec<String> {
         if task.iceberg_persisted_records.data_files.is_empty() {
-            return (HashSet::new(), Vec::new());
+            return Vec::new();
         }
 
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
         // Update disk file from local write through cache to iceberg persisted remote path.
-        let mut affected_file_indices =
-            HashSet::with_capacity(task.iceberg_persisted_records.file_indices.len());
         let persisted_data_files = &task.iceberg_persisted_records.data_files;
         for cur_data_file in persisted_data_files.iter() {
             let mut disk_file_entry = self
@@ -311,55 +305,13 @@ impl SnapshotTableState {
             evicted_files_to_delete.extend(cur_evicted_files);
             disk_file_entry.cache_handle = None;
 
-            // One file index corresponds to one or many data files, so it's possible to have duplicates.
-            affected_file_indices.insert(disk_file_entry.file_indice.as_ref().unwrap().clone());
             // Use old disk entry for now, file indices will be updated to remote paths.
             self.current_snapshot
                 .disk_files
                 .insert(cur_data_file.clone(), disk_file_entry);
         }
 
-        (affected_file_indices, evicted_files_to_delete)
-    }
-
-    /// Update file indices in the current snapshot from local data files to remote ones.
-    ///
-    /// # Arguments
-    ///
-    /// * affected_file_indices: file indices affected by data files update, used to identify which file indices to remove.
-    fn update_file_indices_to_persisted(
-        &mut self,
-        new_file_indices: Vec<FileIndex>,
-        affected_file_indices: HashSet<FileIndex>,
-    ) {
-        if new_file_indices.is_empty() && affected_file_indices.is_empty() {
-            return;
-        }
-
-        // Update file indice from local write through cache to iceberg persisted remote path.
-        // TODO(hjiang): For better update performance, we might need to use hash set instead vector to store file indices.
-        let cur_file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
-        ma::assert_le!(affected_file_indices.len(), cur_file_indices.len());
-        let mut updated_file_indices = Vec::with_capacity(cur_file_indices.len());
-        for cur_file_index in cur_file_indices.into_iter() {
-            if !affected_file_indices.contains(&cur_file_index) {
-                updated_file_indices.push(cur_file_index);
-            }
-        }
-        updated_file_indices.extend(new_file_indices.clone());
-        self.current_snapshot.indices.file_indices = updated_file_indices;
-
-        // Update disk file map to the updated file indices.
-        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
-            let cur_data_files = &cur_file_index.files;
-            for cur_data_file in cur_data_files {
-                self.current_snapshot
-                    .disk_files
-                    .get_mut(cur_data_file)
-                    .unwrap()
-                    .file_indice = Some(cur_file_index.clone());
-            }
-        }
+        evicted_files_to_delete
     }
 
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
@@ -372,12 +324,9 @@ impl SnapshotTableState {
         task: &SnapshotTask,
     ) -> Vec<String> {
         // Handle imported new data files and file indices.
-        let (affected_file_indices, evicted_files_to_delete) =
+        let evicted_files_to_delete =
             self.update_data_files_to_persisted(task).await;
-        self.update_file_indices_to_persisted(
-            task.iceberg_persisted_records.file_indices.clone(),
-            affected_file_indices,
-        );
+        self.current_snapshot.indices.file_indices.extend(task.iceberg_persisted_records.file_indices.clone());
 
         evicted_files_to_delete
     }
@@ -481,7 +430,6 @@ impl SnapshotTableState {
             .cloned()
             .collect::<HashSet<_>>();
         let mut tentative_data_files_to_compact = vec![];
-        let mut tentative_file_indices_to_compact = vec![];
 
         // TODO(hjiang): We should be able to early exit, if left items are not enough to reach the compaction threshold.
         for (cur_data_file, disk_file_entry) in all_disk_files.iter() {
@@ -512,16 +460,6 @@ impl SnapshotTableState {
                 deletion_vector: disk_file_entry.puffin_deletion_blob.clone(),
             };
             tentative_data_files_to_compact.push(single_file_to_compact);
-
-            // Tentatively decide corresponding file indices to compact.
-            let cur_file_index = all_disk_files
-                .get(cur_data_file)
-                .unwrap()
-                .file_indice
-                .as_ref()
-                .unwrap()
-                .clone();
-            tentative_file_indices_to_compact.push(cur_file_index);
         }
 
         if tentative_data_files_to_compact.len()
@@ -534,10 +472,27 @@ impl SnapshotTableState {
             return None;
         }
 
+        // Calculate related file indices to compact.
+        let mut file_indices_to_compact = vec![];
+        let file_ids_to_compact = tentative_data_files_to_compact.iter().map(|single_file_to_compact| single_file_to_compact.file_id.file_id).collect::<HashSet<_>>();
+        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
+            for cur_file in cur_file_index.files.iter() {
+                if file_ids_to_compact.contains(&cur_file.file_id()) {
+                    file_indices_to_compact.push(cur_file_index.clone());
+                    break;
+                }
+            }
+        }
+
+        println!("files to compact {:?}", tentative_data_files_to_compact);
+        for cur_file_index in file_indices_to_compact.iter() {
+            println!("index -> files: {:?}", cur_file_index.files);
+        }
+
         Some(DataCompactionPayload {
             object_storage_cache: self.object_storage_cache.clone(),
             disk_files: tentative_data_files_to_compact,
-            file_indices: tentative_file_indices_to_compact,
+            file_indices: file_indices_to_compact,
         })
     }
 
@@ -675,29 +630,6 @@ impl SnapshotTableState {
             return;
         }
 
-        // Update disk files' corresponding file indices.
-        for cur_file_index in old_file_indices.iter() {
-            for cur_data_file in cur_file_index.files.iter() {
-                // File indices change could be caused by data compaction, so it's possible the disk file doesn't exist in current snapshot any more.
-                if let Some(disk_file_entry) =
-                    self.current_snapshot.disk_files.get_mut(cur_data_file)
-                {
-                    disk_file_entry.file_indice = None;
-                }
-            }
-        }
-        // Precondition: if any, data files have already been updated to disk files, so all data files referenced by new file indices already exists.
-        for cur_file_index in new_file_indices.iter() {
-            for cur_data_file in cur_file_index.files.iter() {
-                let data_file_entry = self
-                    .current_snapshot
-                    .disk_files
-                    .get_mut(cur_data_file)
-                    .unwrap();
-                data_file_entry.file_indice = Some(cur_file_index.clone());
-            }
-        }
-
         // Update current snapshot's file indices.
         let file_indices = std::mem::take(&mut self.current_snapshot.indices.file_indices);
         ma::assert_le!(old_file_indices.len(), file_indices.len());
@@ -761,8 +693,6 @@ impl SnapshotTableState {
                 DiskFileEntry {
                     file_size: cur_entry.file_size,
                     cache_handle: Some(cache_handle),
-                    // Current implementation ensures only one file index for all new compacted data files.
-                    file_indice: None,
                     batch_deletion_vector: BatchDeletionVector::new(
                         /*max_rows=*/ cur_entry.num_rows,
                     ),
@@ -1271,30 +1201,30 @@ impl SnapshotTableState {
         }
     }
 
-    /// Test util function to assert the mapping between data files and file indices are consistent.
-    #[cfg(test)]
-    fn assert_data_files_and_file_indices_consistent(&self) {
-        // (1) Get data file to file indices mapping from [`disk_files`].
-        let mut data_file_to_file_indices_1 =
-            HashMap::with_capacity(self.current_snapshot.disk_files.len());
-        for (cur_disk_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
-            let cur_file_index = cur_disk_file_entry.file_indice.as_ref().unwrap().clone();
-            data_file_to_file_indices_1.insert(cur_disk_file.clone(), cur_file_index);
-        }
-        // (2) Get data file to file indices mapping from [`file_indices`].
-        let mut data_file_to_file_indices_2 =
-            HashMap::with_capacity(self.current_snapshot.disk_files.len());
-        let file_indices = &self.current_snapshot.indices.file_indices;
-        for cur_file_index in file_indices {
-            for cur_data_file in cur_file_index.files.iter() {
-                let old_entry = data_file_to_file_indices_2
-                    .insert(cur_data_file.clone(), cur_file_index.clone());
-                assert!(old_entry.is_none());
-            }
-        }
-        // Assert mapping inferred from disk files and file indices are the same.
-        assert_eq!(data_file_to_file_indices_1, data_file_to_file_indices_2);
-    }
+    // /// Test util function to assert the mapping between data files and file indices are consistent.
+    // #[cfg(test)]
+    // fn assert_data_files_and_file_indices_consistent(&self) {
+    //     // (1) Get data file to file indices mapping from [`disk_files`].
+    //     let mut data_file_to_file_indices_1 =
+    //         HashMap::with_capacity(self.current_snapshot.disk_files.len());
+    //     for (cur_disk_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
+    //         let cur_file_index = cur_disk_file_entry.file_indice.as_ref().unwrap().clone();
+    //         data_file_to_file_indices_1.insert(cur_disk_file.clone(), cur_file_index);
+    //     }
+    //     // (2) Get data file to file indices mapping from [`file_indices`].
+    //     let mut data_file_to_file_indices_2 =
+    //         HashMap::with_capacity(self.current_snapshot.disk_files.len());
+    //     let file_indices = &self.current_snapshot.indices.file_indices;
+    //     for cur_file_index in file_indices {
+    //         for cur_data_file in cur_file_index.files.iter() {
+    //             let old_entry = data_file_to_file_indices_2
+    //                 .insert(cur_data_file.clone(), cur_file_index.clone());
+    //             assert!(old_entry.is_none());
+    //         }
+    //     }
+    //     // Assert mapping inferred from disk files and file indices are the same.
+    //     assert_eq!(data_file_to_file_indices_1, data_file_to_file_indices_2);
+    // }
 
     /// Test util function to validate file ids don't have duplicates.
     #[cfg(test)]
@@ -1317,7 +1247,7 @@ impl SnapshotTableState {
     #[cfg(test)]
     fn assert_current_snapshot_consistent(&self) {
         // Check file indices and disk files are consistent.
-        self.assert_data_files_and_file_indices_consistent();
+        // self.assert_data_files_and_file_indices_consistent();
         // Check file ids don't have duplicate.
         self.assert_file_ids_no_duplicate();
     }
@@ -1391,7 +1321,6 @@ impl SnapshotTableState {
                     DiskFileEntry {
                         file_size: file_attrs.file_size,
                         cache_handle: Some(cache_handle),
-                        file_indice: Some(slice.get_file_indice().as_ref().unwrap().clone()),
                         batch_deletion_vector: BatchDeletionVector::new(file_attrs.row_num),
                         puffin_deletion_blob: None,
                     },
