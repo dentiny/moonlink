@@ -442,6 +442,7 @@ impl SnapshotTableState {
 
     /// Util function to decide whether and what to merge index.
     /// To simplify states (aka, avoid merging file indices already in iceberg with those not), only merge those already persisted.
+    #[allow(clippy::mutable_key_type)]
     fn get_file_indices_to_merge(&self) -> Option<FileIndiceMergePayload> {
         // Fast-path: not enough file indices to trigger index merge.
         let mut file_indices_to_merge = HashSet::new();
@@ -512,6 +513,7 @@ impl SnapshotTableState {
     }
 
     /// Update current snapshot's file indices by adding and removing a few.
+    #[allow(clippy::mutable_key_type)]
     async fn update_file_indices_to_mooncake_snapshot_impl(
         &mut self,
         mut old_file_indices: HashSet<FileIndex>,

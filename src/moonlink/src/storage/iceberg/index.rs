@@ -117,10 +117,10 @@ impl FileIndex {
                     /*remote_filepath=*/ &cur_index_block.filepath,
                 )
                 .await
-                .map_err(|err| to_iceberg_error(err))?;
+                .map_err(to_iceberg_error)?;
             io_utils::delete_local_files(cur_evicted_files)
                 .await
-                .map_err(|err| to_iceberg_error(err))?;
+                .map_err(to_iceberg_error)?;
 
             // File indices should always reside in on-disk cache.
             let cache_handle = cache_handle.unwrap();

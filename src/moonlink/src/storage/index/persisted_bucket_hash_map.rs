@@ -514,6 +514,7 @@ impl GlobalIndexBuilder {
     // ================================
     // Build from merge
     // ================================
+    #[allow(clippy::mutable_key_type)]
     pub async fn build_from_merge(
         mut self,
         indices: HashSet<GlobalIndex>,
