@@ -103,7 +103,7 @@ impl ObjectStorageCacheInternal {
     }
 
     /// Mark the requested cache entry as deleted, and return evicted files.
-    fn delete_cache_entry(
+    pub(super) fn delete_cache_entry(
         &mut self,
         file_id: TableUniqueFileId,
         panic_if_non_existent: bool,
@@ -375,11 +375,6 @@ impl CacheTrait for ObjectStorageCache {
 
             Ok((None, files_to_delete))
         }
-    }
-
-    async fn delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
-        let mut guard = self.cache.write().await;
-        guard.delete_cache_entry(file_id, /*panic_if_non_existent=*/ true)
     }
 
     async fn try_delete_cache_entry(&mut self, file_id: TableUniqueFileId) -> Vec<String> {

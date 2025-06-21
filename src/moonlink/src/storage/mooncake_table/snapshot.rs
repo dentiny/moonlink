@@ -226,13 +226,9 @@ impl SnapshotTableState {
             // Unreference and delete old cache handle if any.
             let old_puffin_blob = entry.puffin_deletion_blob.take();
             if let Some(mut old_puffin_blob) = old_puffin_blob {
-                let cur_evicted_files =
-                    old_puffin_blob.puffin_file_cache_handle.unreference().await;
-                assert!(cur_evicted_files.is_empty());
-                let unique_file_id = old_puffin_blob.puffin_file_cache_handle.file_id;
-                let cur_evicted_files = self
-                    .object_storage_cache
-                    .delete_cache_entry(unique_file_id)
+                let cur_evicted_files = old_puffin_blob
+                    .puffin_file_cache_handle
+                    .unreference_and_delete()
                     .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
             }
@@ -588,14 +584,8 @@ impl SnapshotTableState {
             // If the old entry is pinned cache handle, unreference.
             let old_entry = old_entry.unwrap();
             if let Some(mut cache_handle) = old_entry.cache_handle {
-                let cur_evicted_files = cache_handle.unreference().await;
-                evicted_files_to_delete.extend(cur_evicted_files);
-
                 // The old entry is no longer needed for mooncake table, directly mark it deleted from cache, so we could reclaim the disk space back ASAP.
-                let cur_evicted_files = self
-                    .object_storage_cache
-                    .delete_cache_entry(unique_file_id)
-                    .await;
+                let cur_evicted_files = cache_handle.unreference_and_delete().await;
                 evicted_files_to_delete.extend(cur_evicted_files);
             }
             // Even if there's no pinned cache handle within current snapshot (since it's persisted), still try to delete it from cache if exists.
@@ -615,16 +605,9 @@ impl SnapshotTableState {
 
             // Unpin and request to delete all cached puffin files.
             if let Some(mut puffin_deletion_blob) = old_entry.puffin_deletion_blob {
-                // Puffin file cache entry is still pinned, which shouldn't be evicted.
                 let cur_evicted_files = puffin_deletion_blob
                     .puffin_file_cache_handle
-                    .unreference()
-                    .await;
-                assert!(cur_evicted_files.is_empty());
-                // Request to delete should succeed.
-                let cur_evicted_files = self
-                    .object_storage_cache
-                    .delete_cache_entry(puffin_deletion_blob.puffin_file_cache_handle.file_id)
+                    .unreference_and_delete()
                     .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
             }

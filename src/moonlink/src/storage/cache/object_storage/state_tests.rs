@@ -515,12 +515,8 @@ async fn test_cache_2_requested_to_delete_4() {
     .await;
     assert!(files_to_evict.is_empty());
 
-    // Unreference cache handle, so requested cache handle is not referenced.
-    let files_to_evict = cache_handle.unreference().await;
-    assert!(files_to_evict.is_empty());
-
-    // Request to delete.
-    let evicted_files = cache.delete_cache_entry(get_table_unique_file_id(0)).await;
+    // Unreference and delete cache handle, so requested cache handle is not referenced.
+    let evicted_files = cache_handle.unreference_and_delete().await;
     assert_eq!(evicted_files, vec![test_file.to_str().unwrap().to_string()]);
 
     // Check cache status.
@@ -560,7 +556,9 @@ async fn test_cache_3_requested_to_delete_5() {
     assert!(files_to_evict.is_empty());
 
     // Request to delete.
-    let evicted_files = cache.delete_cache_entry(get_table_unique_file_id(0)).await;
+    let evicted_files = cache
+        .try_delete_cache_entry(get_table_unique_file_id(0))
+        .await;
     assert!(evicted_files.is_empty());
 
     // Check cache status.
@@ -600,7 +598,9 @@ async fn test_cache_5_usage_finish_and_still_referenced_5() {
     assert!(files_to_evict.is_empty());
 
     // Request to delete.
-    let evicted_files = cache.delete_cache_entry(get_table_unique_file_id(0)).await;
+    let evicted_files = cache
+        .try_delete_cache_entry(get_table_unique_file_id(0))
+        .await;
     assert!(evicted_files.is_empty());
 
     // Reference one more time, which leads to two reference count.
@@ -653,7 +653,9 @@ async fn test_cache_5_usage_finish_and_not_referenced_4() {
     assert!(files_to_evict.is_empty());
 
     // Request to delete.
-    let evicted_files = cache.delete_cache_entry(get_table_unique_file_id(0)).await;
+    let evicted_files = cache
+        .try_delete_cache_entry(get_table_unique_file_id(0))
+        .await;
     assert!(evicted_files.is_empty());
 
     // Reference one more time, which leads to two reference count.

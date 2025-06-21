@@ -50,4 +50,17 @@ impl NonEvictableHandle {
         let mut guard = self.cache.write().await;
         guard.unreference(self.file_id)
     }
+
+    /// Unreference and pinned cache file and mark it as deleted.
+    #[must_use]
+    pub(crate) async fn unreference_and_delete(&mut self) -> Vec<String> {
+        let mut guard = self.cache.write().await;
+
+        // Total bytes within cache doesn't change, so current cache entry not evicted.
+        let cur_evicted_files = guard.unreference(self.file_id);
+        assert!(cur_evicted_files.is_empty());
+
+        // The cache entry could be held elsewhere.
+        guard.delete_cache_entry(self.file_id, /*panic_if_non_existent=*/ true)
+    }
 }
