@@ -117,12 +117,23 @@ pub struct FileIndiceMergePayload {
     pub(crate) file_indices: HashSet<GlobalIndex>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FileIndiceMergeResult {
-    /// File indices merged.
+    /// Old file indices being merged.
     pub(crate) old_file_indices: HashSet<GlobalIndex>,
-    /// Merged file indices.
-    pub(crate) merged_file_indices: GlobalIndex,
+    /// New file indice merged.
+    pub(crate) new_file_indices: Vec<GlobalIndex>,
+}
+
+impl FileIndiceMergeResult {
+    /// Return whether the merge result is not assigned and is empty.
+    pub fn is_empty(&self) -> bool {
+        if self.old_file_indices.is_empty() {
+            assert!(self.new_file_indices.is_empty());
+            return true;
+        }
+        false
+    }
 }
 
 /// Util functions to take all data files to import.

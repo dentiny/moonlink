@@ -654,14 +654,10 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
-    fn update_file_indices_merge_to_mooncake_snapshot(
-        &mut self,
-        old_merged_file_indices: HashSet<FileIndex>,
-        new_merged_file_indices: Vec<FileIndex>,
-    ) {
+    fn update_file_indices_merge_to_mooncake_snapshot(&mut self, task: &SnapshotTask) {
         self.update_file_indices_to_mooncake_snapshot_impl(
-            old_merged_file_indices,
-            new_merged_file_indices,
+            task.index_merge_result.old_file_indices.clone(),
+            task.index_merge_result.new_file_indices.clone(),
         );
     }
 
@@ -881,10 +877,7 @@ impl SnapshotTableState {
         evicted_data_files_to_delete.extend(puffin_evicted_data_files);
 
         // Update disk files' disk entries and file indices from merged indices.
-        self.update_file_indices_merge_to_mooncake_snapshot(
-            task.old_merged_file_indices.clone(),
-            task.new_merged_file_indices.clone(),
-        );
+        self.update_file_indices_merge_to_mooncake_snapshot(&task);
         // Update disk file's disk entries and file indices from compacted data files and file indices.
         // Also remap committed deletion logs if applicable.
         let compaction_evicted_data_files = self

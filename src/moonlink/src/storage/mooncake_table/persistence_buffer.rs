@@ -112,10 +112,11 @@ impl UnpersistedRecords {
         self.unpersisted_file_indices.extend(new_file_indices);
     }
     fn buffer_unpersisted_iceberg_merged_file_indices(&mut self, task: &SnapshotTask) {
+        let index_merge_result = &task.index_merge_result;
         self.merged_file_indices_to_add
-            .extend(task.new_merged_file_indices.to_owned());
+            .extend(index_merge_result.new_file_indices.to_owned());
         self.merged_file_indices_to_remove
-            .extend(task.old_merged_file_indices.to_owned());
+            .extend(index_merge_result.old_file_indices.to_owned());
     }
 
     fn buffer_unpersisted_iceberg_compaction_data(&mut self, task: &SnapshotTask) {

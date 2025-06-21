@@ -39,8 +39,7 @@ use crate::storage::storage_utils::ProcessedDeletionRecord;
 use crate::storage::storage_utils::{FileId, TableId};
 use crate::table_notify::TableNotify;
 use crate::NonEvictableHandle;
-use std::collections::{HashMap, HashSet};
-use std::mem::take;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
@@ -277,11 +276,7 @@ pub struct SnapshotTask {
 
     /// --- States related to file indices merge operation ---
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
-    ///
-    /// Old file indices which have been merged.
-    old_merged_file_indices: HashSet<FileIndex>,
-    /// New merged file indices, which should be imported to iceberg tables.
-    new_merged_file_indices: Vec<FileIndex>,
+    index_merge_result: FileIndiceMergeResult,
 
     /// --- States related to data compaction operation ---
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
@@ -309,8 +304,7 @@ impl SnapshotTask {
             // Read request related fields.
             read_cache_handles: Vec::new(),
             // Index merge related fields.
-            old_merged_file_indices: HashSet::new(),
-            new_merged_file_indices: Vec::new(),
+            index_merge_result: FileIndiceMergeResult::default(),
             // Data compaction related fields.
             data_compaction_result: DataCompactionResult::default(),
             // Iceberg persistence result.
@@ -615,13 +609,8 @@ impl MooncakeTable {
     /// Set file indices merge result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
     pub(crate) fn set_file_indices_merge_res(&mut self, file_indices_res: FileIndiceMergeResult) {
         // TODO(hjiang): Should be able to use HashSet at beginning so no need to convert.
-        assert!(self.next_snapshot_task.old_merged_file_indices.is_empty());
-        self.next_snapshot_task.old_merged_file_indices = file_indices_res.old_file_indices;
-
-        assert!(self.next_snapshot_task.new_merged_file_indices.is_empty());
-        self.next_snapshot_task
-            .new_merged_file_indices
-            .push(file_indices_res.merged_file_indices);
+        assert!(self.next_snapshot_task.index_merge_result.is_empty());
+        self.next_snapshot_task.index_merge_result = file_indices_res;
     }
 
     /// Set data compaction result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
@@ -766,7 +755,7 @@ impl MooncakeTable {
     // Create a snapshot of the last committed version, return current snapshot's version and payload to perform iceberg snapshot.
     fn create_snapshot_impl(&mut self, opt: SnapshotOption) {
         self.next_snapshot_task.new_rows = Some(self.mem_slice.get_latest_rows());
-        let next_snapshot_task = take(&mut self.next_snapshot_task);
+        let next_snapshot_task = std::mem::take(&mut self.next_snapshot_task);
         self.next_snapshot_task = SnapshotTask::new(self.metadata.config.clone());
         let cur_snapshot = self.snapshot.clone();
         // Create a detached task, whose completion will be notified separately.
@@ -809,7 +798,7 @@ impl MooncakeTable {
                 .await;
             let index_merge_result = FileIndiceMergeResult {
                 old_file_indices: file_indice_merge_payload.file_indices,
-                merged_file_indices: merged,
+                new_file_indices: vec![merged],
             };
             table_notify_tx_copy
                 .send(TableNotify::IndexMerge { index_merge_result })
