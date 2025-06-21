@@ -6,7 +6,6 @@ use crate::storage::storage_utils::TableUniqueFileId;
 
 use tokio::sync::RwLock;
 
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct NonEvictableHandle {
     /// File id for the mooncake table data file.

@@ -180,7 +180,6 @@ impl ObjectStorageCacheInternal {
 }
 
 // TODO(hjiang): Add stats for cache, like cache hit/miss rate, cache size, etc.
-#[allow(dead_code)]
 #[derive(Clone)]
 pub struct ObjectStorageCache {
     /// Cache configs.
