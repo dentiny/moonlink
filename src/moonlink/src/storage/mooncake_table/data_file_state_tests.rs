@@ -1,7 +1,7 @@
 use tempfile::TempDir;
 use tokio::sync::mpsc::Receiver;
 
-/// This file contains state-machine based unit test for data files, which checks data file state transfer for a few operations, for example, compaction and request read.
+/// This file contains state-machine based unit test for data files and file index, which checks their state transfer for a few operations, for example, compaction and request read.
 ///
 /// remote storage state:
 /// - Has remote storage
@@ -62,6 +62,10 @@ use tokio::sync::mpsc::Receiver;
 /// - remote, no local, in use + use over => remote, no local, not used
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1f2d0E_Zi8FbR4QmW_YEhcZwMpua0_pgkaNdrqM1qh2E/edit?usp=sharing
+///
+/// File indices share most of the operations with data files;
+/// for example, they're created at disk slice / stream transaction, persist to iceberg, perform data compaction, etc;
+/// so we combine the test state-machine for file indices and data files.
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::state_test_utils::*;
 use crate::table_notify::TableNotify;
@@ -118,9 +122,18 @@ async fn test_shutdown_table() {
             .cache
             .read()
             .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
             .evictable_cache
             .len(),
-        1
+        0,
     );
     assert_eq!(
         object_storage_cache
@@ -189,7 +202,7 @@ async fn test_5_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -222,7 +235,7 @@ async fn test_5_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -278,7 +291,7 @@ async fn test_5_1() {
             .await
             .non_evictable_cache
             .len(),
-        0
+        1, // index block
     );
 }
 
@@ -337,7 +350,7 @@ async fn test_4_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -370,7 +383,7 @@ async fn test_4_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -427,7 +440,7 @@ async fn test_4_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -460,7 +473,7 @@ async fn test_4_read_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -523,7 +536,7 @@ async fn test_4_read_and_read_over_4() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -592,7 +605,7 @@ async fn test_3_read_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -625,7 +638,7 @@ async fn test_3_read_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -696,7 +709,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -729,7 +742,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -796,7 +809,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -855,7 +868,7 @@ async fn test_1_read_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -888,7 +901,7 @@ async fn test_1_read_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -934,11 +947,13 @@ async fn test_1_read_and_unpinned_3() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    check_only_fake_file_in_cache(&object_storage_cache).await;
+    check_file_not_pinned(&object_storage_cache, file.file_id()).await;
+    check_file_pinned(&object_storage_cache, FAKE_FILE_ID.file_id).await;
 
     // Drop all read states and check reference count.
     drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    check_only_fake_file_in_cache(&object_storage_cache).await;
+    check_file_not_pinned(&object_storage_cache, file.file_id()).await;
+    check_file_pinned(&object_storage_cache, FAKE_FILE_ID.file_id).await;
 }
 
 /// Test scenario: remote, no local, in use + use & pinned => remote, local, in use
@@ -1016,7 +1031,7 @@ async fn test_2_read_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
@@ -1040,7 +1055,7 @@ async fn test_2_read_and_pinned_3() {
             .await
             .evictable_cache
             .len(),
-        1
+        1, // data file
     );
     assert_eq!(
         object_storage_cache
@@ -1049,7 +1064,7 @@ async fn test_2_read_and_pinned_3() {
             .await
             .non_evictable_cache
             .len(),
-        0,
+        1, // index block
     );
 }
 
@@ -1100,7 +1115,8 @@ async fn test_2_read_and_unpinned_2() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    check_only_fake_file_in_cache(&object_storage_cache).await;
+    check_file_not_pinned(&object_storage_cache, file.file_id()).await;
+    check_file_pinned(&object_storage_cache, FAKE_FILE_ID.file_id).await;
 
     // Drop all read states and check reference count; cache only manages fake file here.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -1110,7 +1126,8 @@ async fn test_2_read_and_unpinned_2() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    check_only_fake_file_in_cache(&object_storage_cache).await;
+    check_file_not_pinned(&object_storage_cache, file.file_id()).await;
+    check_file_pinned(&object_storage_cache, FAKE_FILE_ID.file_id).await;
 }
 
 /// Test scenario: remote, no local, in use + use over => remote, no local, not used
@@ -1158,7 +1175,8 @@ async fn test_2_read_over_1() {
     assert!(is_remote_file(file, &temp_dir));
 
     // Check cache state.
-    check_only_fake_file_in_cache(&object_storage_cache).await;
+    check_file_not_pinned(&object_storage_cache, file.file_id()).await;
+    check_file_pinned(&object_storage_cache, FAKE_FILE_ID.file_id).await;
 }
 
 /// There're two things different from use for read:
@@ -1232,7 +1250,8 @@ async fn test_3_compact_3_5() {
     // Get old compacted files before compaction.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
-    let old_compacted_files = disk_files.keys().cloned().collect::<Vec<_>>();
+    let old_compacted_data_files = disk_files.keys().cloned().collect::<Vec<_>>();
+    let old_compacted_index_block_files = table.get_index_block_files().await;
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1250,10 +1269,11 @@ async fn test_3_compact_3_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    let evicted_files_to_delete = table
+    let mut evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
-    assert!(evicted_files_to_delete.is_empty());
+    evicted_files_to_delete.sort();
+    assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -1261,7 +1281,8 @@ async fn test_3_compact_3_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_file_size = disk_file_entry.file_size;
+    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let new_compacted_index_block_size = table.get_index_block_files_size().await;
 
     // Check cache state.
     assert_eq!(
@@ -1273,6 +1294,7 @@ async fn test_3_compact_3_5() {
             .len(),
         0
     );
+    // Two old compacted data files, one new compacted data file, and one new compacted index block
     assert_eq!(
         object_storage_cache
             .cache
@@ -1280,7 +1302,7 @@ async fn test_3_compact_3_5() {
             .await
             .non_evictable_cache
             .len(),
-        3,
+        4,
     );
     assert_eq!(
         object_storage_cache
@@ -1290,7 +1312,7 @@ async fn test_3_compact_3_5() {
             .await,
         1,
     );
-    for cur_old_compacted_file in old_compacted_files.iter() {
+    for cur_old_compacted_file in old_compacted_data_files.iter() {
         assert_eq!(
             object_storage_cache
                 .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
@@ -1309,7 +1331,7 @@ async fn test_3_compact_3_5() {
     )
     .await;
     actual_files_to_delete.sort();
-    let mut expected_files_to_delete = old_compacted_files
+    let mut expected_files_to_delete = old_compacted_data_files
         .iter()
         .map(|f| f.file_path().clone())
         .collect::<Vec<_>>();
@@ -1319,7 +1341,7 @@ async fn test_3_compact_3_5() {
     // Check cache status.
     assert_eq!(
         object_storage_cache.cache.read().await.cur_bytes,
-        new_compacted_file_size as u64
+        (new_compacted_data_file_size as u64) + new_compacted_index_block_size,
     );
     assert_eq!(
         object_storage_cache
@@ -1346,7 +1368,7 @@ async fn test_3_compact_3_5() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
 }
 
@@ -1370,10 +1392,14 @@ async fn test_3_compact_1_5() {
     // Get old compacted files before compaction.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
-    let mut old_compacted_files = disk_files
+    let mut old_compacted_data_files = disk_files
         .keys()
         .map(|f| f.file_path().clone())
         .collect::<Vec<_>>();
+    old_compacted_data_files.sort();
+
+    let mut old_compacted_index_block_files = table.get_index_block_files().await;
+    old_compacted_index_block_files.sort();
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1391,10 +1417,11 @@ async fn test_3_compact_1_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    let evicted_files_to_delete = table
+    let mut evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
-    assert!(evicted_files_to_delete.is_empty());
+    evicted_files_to_delete.sort();
+    assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
     // Drop read state, so old data files are unreferenced any more.
     let mut files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -1404,8 +1431,7 @@ async fn test_3_compact_1_5() {
     )
     .await;
     files_to_delete.sort();
-    old_compacted_files.sort();
-    assert_eq!(files_to_delete, old_compacted_files);
+    assert_eq!(files_to_delete, old_compacted_data_files);
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -1413,12 +1439,13 @@ async fn test_3_compact_1_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_file_size = disk_file_entry.file_size;
+    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let new_compacted_file_index_size = table.get_index_block_files_size().await;
 
     // Check cache state.
     assert_eq!(
         object_storage_cache.cache.read().await.cur_bytes,
-        new_compacted_file_size as u64
+        (new_compacted_data_file_size as u64) + new_compacted_file_index_size,
     );
     assert_eq!(
         object_storage_cache
@@ -1445,7 +1472,7 @@ async fn test_3_compact_1_5() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block.
     );
     assert_eq!(
         object_storage_cache
@@ -1498,8 +1525,8 @@ async fn test_1_compact_1_5() {
     let evicted_files_to_delete = table
         .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
         .await;
-    // It contains one fake file, and two downloaded local file.
-    assert_eq!(evicted_files_to_delete.len(), 3);
+    // It contains one fake file, and two downloaded local file and their file indices.
+    assert_eq!(evicted_files_to_delete.len(), 5);
 
     // Check data file has been pinned in mooncake table.
     let disk_files = table.get_disk_files_for_snapshot().await;
@@ -1507,12 +1534,15 @@ async fn test_1_compact_1_5() {
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_file_size = disk_file_entry.file_size;
+    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let file_indices = table.get_index_block_files().await;
+    assert_eq!(file_indices.len(), 1);
+    let new_compacted_index_block_size = table.get_index_block_files_size().await;
 
     // Check cache state.
     assert_eq!(
         object_storage_cache.cache.read().await.cur_bytes,
-        new_compacted_file_size as u64
+        (new_compacted_data_file_size as u64) + new_compacted_index_block_size,
     );
     assert_eq!(
         object_storage_cache
@@ -1539,7 +1569,7 @@ async fn test_1_compact_1_5() {
             .await
             .non_evictable_cache
             .len(),
-        1,
+        2, // data file and index block
     );
     assert_eq!(
         object_storage_cache
