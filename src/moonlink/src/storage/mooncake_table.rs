@@ -1434,3 +1434,6 @@ mod data_file_state_tests;
 
 #[cfg(test)]
 mod deletion_vector_puffin_state_tests;
+
+#[cfg(test)]
+mod file_index_state_tests;

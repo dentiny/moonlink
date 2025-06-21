@@ -67,44 +67,9 @@ use tokio::sync::mpsc::Receiver;
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1f2d0E_Zi8FbR4QmW_YEhcZwMpua0_pgkaNdrqM1qh2E/edit?usp=sharing
 ///
-/// ====================================
-/// State machine for file indices
-/// ====================================
-///
-/// Possible states:
-/// - No file index
-/// - No remote, local
-/// - Remote, local
-///
-/// Constraint:
-/// Only perform index merge when has remote path
-///
-/// Difference with data files:
-/// - File index always sits on-disk
-/// - Data file has an extra state: not referenced but not requested to deleted
-/// - Current usage include only compaction and index merge; after all usage for file indices, they are requested to delete
-/// - File indices won’t be used by both compaction and index merge, so no need to pin before usage
-///
-/// State transition input:
-/// - Import into mooncake snapshot
-/// - Persist into iceberg table
-/// - Recover from iceberg table
-/// - Use file index (i.e. index merge, compaction)
-/// - Usage finishes + request to delete
-///
-/// State machine transfer:
-/// Initial state: no file index
-/// - No file index + import => no remote, local
-/// - No file index + recover => no remote, local
-///
-/// Initial state: no remote, local
-/// - No remote, local + persist => remote, local
-///
-/// Initial state: Remote, local
-/// - Remote, local + use => remote, local
-/// - Remote, local + use over + request delete => no file index
-///
-/// For more details, please refer to https://docs.google.com/document/d/1Q8zJqxwM9Gc5foX2ela8aAbW4bmWV8wBRkDSh86vvAY/edit?usp=sharing
+/// File indices share most of the operations with data files;
+/// for example, they're created at disk slice / stream transaction, persist to iceberg, perform data compaction, etc;
+/// so we combine the test state-machine for file indices and data files.
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::state_test_utils::*;
 use crate::table_notify::TableNotify;
@@ -1610,5 +1575,3 @@ async fn test_1_compact_1_5() {
         1,
     );
 }
-
-// TODO(hjiang): Add unit tests for index merge.
