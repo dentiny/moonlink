@@ -96,6 +96,31 @@ async fn prepare_test_disk_file_for_read(
     (table, table_notify)
 }
 
+/// Prepare persisted data files in mooncake table.
+/// Rows are committed and flushed with LSN 1.
+async fn prepare_test_disk_file_by_stream_write(
+    temp_dir: &TempDir,
+    object_storage_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableNotify>) {
+    let (mut table, table_notify) =
+        create_mooncake_table_and_notify_for_read(temp_dir, object_storage_cache).await;
+
+    let row = MoonlinkRow::new(vec![
+        RowValue::Int32(1),
+        RowValue::ByteArray("John".as_bytes().to_vec()),
+        RowValue::Int32(30),
+    ]);
+    table
+        .append_in_stream_batch(row.clone(), /*xact_id=*/ 0)
+        .unwrap();
+    table
+        .commit_transaction_stream(/*xact_id-*/ 0, /*lsn=*/ 1)
+        .await
+        .unwrap();
+
+    (table, table_notify)
+}
+
 /// Test scenario: when shutdown table, all cache entries should be unpinned.
 #[tokio::test]
 async fn test_shutdown_table() {
@@ -152,7 +177,7 @@ async fn test_shutdown_table() {
 ///
 /// Test scenario: no remote, local, not used + use => no remote, local, in use
 #[tokio::test]
-async fn test_5_read_4() {
+async fn test_5_read_4_by_batch_write() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
@@ -162,6 +187,136 @@ async fn test_5_read_4() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file_for_read(&temp_dir, object_storage_cache.clone()).await;
+    let (_, _, _, files_to_delete) = table
+        .create_mooncake_snapshot_for_test(&mut table_notify)
+        .await;
+    assert!(files_to_delete.is_empty());
+    let snapshot_read_output = table.request_read().await.unwrap();
+    let read_state = snapshot_read_output.take_as_read_state().await;
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = table.get_disk_files_for_snapshot().await;
+    assert_eq!(disk_files.len(), 1);
+    let (file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.cache_handle.is_some());
+
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
+    assert_eq!(
+        file.file_path(),
+        &disk_file_entry
+            .cache_handle
+            .as_ref()
+            .unwrap()
+            .cache_entry
+            .cache_filepath
+    );
+    assert!(is_local_file(file, &temp_dir));
+
+    // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
+        2, // data file and index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
+            .await,
+        2
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
+
+    // Drop all read states and check reference count.
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evictable_cache
+            .len(),
+        0
+    );
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .non_evictable_cache
+            .len(),
+        2, // data file and index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
+            .await,
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
+}
+
+/// Same state machine with [`test_5_read_4_by_batch_write`], but with stream write.
+/// Test scenario: no remote, local, not used + use => no remote, local, in use
+#[tokio::test]
+async fn test_5_read_4_by_stream_write() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+    );
+    let object_storage_cache = ObjectStorageCache::new(cache_config);
+
+    let (mut table, mut table_notify) =
+        prepare_test_disk_file_by_stream_write(&temp_dir, object_storage_cache.clone()).await;
     let (_, _, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
