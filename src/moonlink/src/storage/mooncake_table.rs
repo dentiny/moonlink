@@ -1414,6 +1414,19 @@ impl MooncakeTable {
         guard.current_snapshot.disk_files.clone()
     }
 
+    /// Test util function to get all index block file ids.
+    #[cfg(test)]
+    pub(crate) async fn get_index_block_file_ids(&mut self) -> Vec<FileId> {
+        let guard = self.snapshot.read().await;
+        let mut index_block_files = vec![];
+        for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                index_block_files.push(cur_index_block.index_file.file_id());
+            }
+        }
+        index_block_files
+    }
+
     /// Test util function to get all index block files.
     #[cfg(test)]
     pub(crate) async fn get_index_block_files(&mut self) -> Vec<String> {

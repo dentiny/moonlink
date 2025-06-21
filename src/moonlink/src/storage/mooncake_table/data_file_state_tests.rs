@@ -174,6 +174,10 @@ async fn test_5_read_4() {
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
+
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     assert_eq!(
         file.file_path(),
         &disk_file_entry
@@ -186,6 +190,15 @@ async fn test_5_read_4() {
     assert!(is_local_file(file, &temp_dir));
 
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -210,6 +223,12 @@ async fn test_5_read_4() {
             .await,
         2
     );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
 
     // Drop all read states and check reference count.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -219,6 +238,15 @@ async fn test_5_read_4() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -242,6 +270,12 @@ async fn test_5_read_4() {
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -274,7 +308,19 @@ async fn test_5_1() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -292,6 +338,12 @@ async fn test_5_1() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -333,7 +385,19 @@ async fn test_4_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -358,6 +422,12 @@ async fn test_4_3() {
             .await,
         1
     );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
 
     // Drop all read states and check reference count.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -367,6 +437,15 @@ async fn test_4_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -384,6 +463,12 @@ async fn test_4_3() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -423,7 +508,19 @@ async fn test_4_read_4() {
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -447,6 +544,12 @@ async fn test_4_read_4() {
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         4,
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 
     // Drop all read states and check reference count.
@@ -519,7 +622,19 @@ async fn test_4_read_and_read_over_4() {
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -543,6 +658,12 @@ async fn test_4_read_and_read_over_4() {
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
             .await,
         1
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -588,7 +709,19 @@ async fn test_3_read_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -613,6 +746,12 @@ async fn test_3_read_3() {
             .await,
         2,
     );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
 
     // Drop all read states and check reference count.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -622,6 +761,15 @@ async fn test_3_read_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -639,6 +787,12 @@ async fn test_3_read_3() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -692,7 +846,19 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -717,6 +883,12 @@ async fn test_3_read_and_read_over_and_pinned_3() {
             .await,
         1,
     );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
 
     // Drop all read states and check reference count.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -726,6 +898,15 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -743,6 +924,12 @@ async fn test_3_read_and_read_over_and_pinned_3() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -792,7 +979,19 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -810,6 +1009,12 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -851,7 +1056,19 @@ async fn test_1_read_and_pinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -876,6 +1093,12 @@ async fn test_1_read_and_pinned_3() {
             .await,
         1,
     );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
 
     // Drop all read states and check reference count.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -885,6 +1108,15 @@ async fn test_1_read_and_pinned_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -902,6 +1134,12 @@ async fn test_1_read_and_pinned_3() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -945,6 +1183,9 @@ async fn test_1_read_and_unpinned_3() {
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
+
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
     check_file_not_pinned(&object_storage_cache, file.file_id()).await;
@@ -1014,7 +1255,19 @@ async fn test_2_read_and_pinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
+
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -1039,6 +1292,12 @@ async fn test_2_read_and_pinned_3() {
             .await,
         1,
     );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
 
     // Drop all read states and check reference count.
     let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
@@ -1048,6 +1307,15 @@ async fn test_2_read_and_pinned_3() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        0,
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -1065,6 +1333,12 @@ async fn test_2_read_and_pinned_3() {
             .non_evictable_cache
             .len(),
         1, // index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
     );
 }
 
@@ -1113,6 +1387,9 @@ async fn test_2_read_and_unpinned_2() {
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
+
+    let index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
     check_file_not_pinned(&object_storage_cache, file.file_id()).await;
@@ -1252,6 +1529,8 @@ async fn test_3_compact_3_5() {
     assert_eq!(disk_files.len(), 2);
     let old_compacted_data_files = disk_files.keys().cloned().collect::<Vec<_>>();
     let old_compacted_index_block_files = table.get_index_block_files().await;
+    let old_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(old_compacted_index_block_file_ids.len(), 2);
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1283,8 +1562,19 @@ async fn test_3_compact_3_5() {
     assert!(is_local_file(new_compacted_file, &temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
     let new_compacted_index_block_size = table.get_index_block_files_size().await;
+    let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.
+    assert_eq!(
+        object_storage_cache
+            .cache
+            .read()
+            .await
+            .evicted_entries
+            .len(),
+        2, // data files
+    );
     assert_eq!(
         object_storage_cache
             .cache
@@ -1312,11 +1602,11 @@ async fn test_3_compact_3_5() {
             .await,
         1,
     );
-    for cur_old_compacted_file in old_compacted_data_files.iter() {
+    for cur_old_compacted_data_file in old_compacted_data_files.iter() {
         assert_eq!(
             object_storage_cache
                 .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                    cur_old_compacted_file.file_id()
+                    cur_old_compacted_data_file.file_id()
                 ))
                 .await,
             1,
@@ -1368,7 +1658,23 @@ async fn test_3_compact_3_5() {
             .await
             .non_evictable_cache
             .len(),
-        2, // data file and index block
+        2, // compacted data file and compacted index block
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_file.file_id()
+            ))
+            .await,
+        1
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_index_block_file_ids[0]
+            ))
+            .await,
+        1,
     );
 }
 
@@ -1400,6 +1706,8 @@ async fn test_3_compact_1_5() {
 
     let mut old_compacted_index_block_files = table.get_index_block_files().await;
     old_compacted_index_block_files.sort();
+    let old_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(old_compacted_index_block_file_ids.len(), 2);
 
     // Read and increment reference count.
     let snapshot_read_output = table.request_read().await.unwrap();
@@ -1441,6 +1749,8 @@ async fn test_3_compact_1_5() {
     assert!(is_local_file(new_compacted_file, &temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
     let new_compacted_file_index_size = table.get_index_block_files_size().await;
+    let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.
     assert_eq!(
@@ -1478,6 +1788,14 @@ async fn test_3_compact_1_5() {
         object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
                 new_compacted_file.file_id()
+            ))
+            .await,
+        1,
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_index_block_file_ids[0]
             ))
             .await,
         1,
@@ -1538,6 +1856,8 @@ async fn test_1_compact_1_5() {
     let file_indices = table.get_index_block_files().await;
     assert_eq!(file_indices.len(), 1);
     let new_compacted_index_block_size = table.get_index_block_files_size().await;
+    let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.
     assert_eq!(
@@ -1575,6 +1895,14 @@ async fn test_1_compact_1_5() {
         object_storage_cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
                 new_compacted_file.file_id()
+            ))
+            .await,
+        1,
+    );
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
+                new_compacted_index_block_file_ids[0]
             ))
             .await,
         1,
