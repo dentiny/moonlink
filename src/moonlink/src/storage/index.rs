@@ -1,3 +1,4 @@
+pub mod cache_utils;
 pub mod hash_index;
 pub mod index_merge_config;
 pub mod mem_index;

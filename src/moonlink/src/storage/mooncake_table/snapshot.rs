@@ -5,7 +5,6 @@ use super::{
     TableMetadata as MooncakeTableMetadata,
 };
 use crate::error::Result;
-use crate::storage::cache::object_storage::base_cache::CacheEntry;
 use crate::storage::cache::object_storage::base_cache::{
     CacheEntry as DataFileCacheEntry, CacheTrait, FileMetadata,
 };
@@ -15,7 +14,7 @@ use crate::storage::compaction::table_compaction::{
 };
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::TableManager;
-use crate::storage::index::FileIndex;
+use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::snapshot_read_output::{
@@ -910,31 +909,6 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
-    /// Import the given file index into cache.
-    /// Return evicted files to delete.
-    async fn import_file_index_into_cache(&mut self, file_index: &mut FileIndex) -> Vec<String> {
-        let mut evicted_fils_to_delete = vec![];
-        for cur_index_block in file_index.index_blocks.iter_mut() {
-            let table_unique_file_id =
-                self.get_table_unique_file_id(cur_index_block.index_file.file_id());
-            let cache_entry = CacheEntry {
-                cache_filepath: cur_index_block.index_file.file_path().clone(),
-                file_metadata: FileMetadata {
-                    file_size: cur_index_block.file_size,
-                },
-            };
-            assert!(cur_index_block.cache_handle.is_none());
-            let (cache_handle, cur_evicted_files) = self
-                .object_storage_cache
-                .import_cache_entry(table_unique_file_id, cache_entry)
-                .await;
-            cur_index_block.cache_handle = Some(cache_handle);
-            evicted_fils_to_delete.extend(cur_evicted_files);
-        }
-
-        evicted_fils_to_delete
-    }
-
     /// Import batch write and stream file indices into cache.
     /// Return evicted files to delete.
     async fn import_file_indices_into_cache(&mut self, task: &mut SnapshotTask) -> Vec<String> {
@@ -962,16 +936,24 @@ impl SnapshotTableState {
         }
 
         // Import new compacted file indices.
-        for cur_file_index in task.index_merge_result.new_file_indices.iter_mut() {
-            let cur_evicted_files = self.import_file_index_into_cache(cur_file_index).await;
-            evicted_files_to_delete.extend(cur_evicted_files);
-        }
+        let new_file_indices_by_index_merge = &mut task.index_merge_result.new_file_indices;
+        let cur_evicted_files = index_cache_utils::import_file_indices_to_cache(
+            new_file_indices_by_index_merge,
+            self.object_storage_cache.clone(),
+            table_id,
+        )
+        .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
 
         // Import new merged file indices.
-        for cur_file_index in task.data_compaction_result.new_file_indices.iter_mut() {
-            let cur_evicted_files = self.import_file_index_into_cache(cur_file_index).await;
-            evicted_files_to_delete.extend(cur_evicted_files);
-        }
+        let new_file_indices_by_data_compaction = &mut task.data_compaction_result.new_file_indices;
+        let cur_evicted_files = index_cache_utils::import_file_indices_to_cache(
+            new_file_indices_by_data_compaction,
+            self.object_storage_cache.clone(),
+            table_id,
+        )
+        .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
 
         evicted_files_to_delete
     }
