@@ -54,6 +54,26 @@ pub async fn import_file_indices_to_cache(
     evicted_files_to_delete
 }
 
+/// Unreference and delete all cache handles within the given file index, and return evicted files to delete.
+/// Precondition: all index blocks should have been imported into cache, otherwise panics.
+pub async fn unreference_and_delete_file_index_from_cache(
+    file_index: &mut GlobalIndex,
+) -> Vec<String> {
+    let mut evicted_files_to_delete = vec![];
+    for cur_index_block in file_index.index_blocks.iter_mut() {
+        assert!(cur_index_block.cache_handle.is_some());
+        let cur_evicted_files = cur_index_block
+            .cache_handle
+            .as_mut()
+            .unwrap()
+            .unreference_and_delete()
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+        cur_index_block.cache_handle = None;
+    }
+    evicted_files_to_delete
+}
+
 #[cfg(test)]
 mod tests {
     use crate::create_data_file;
@@ -90,9 +110,14 @@ mod tests {
             .build_from_flush(/*hash_entries=*/ vec![(2, 0, 0)], /*file_id=*/ 3)
             .await;
 
-        let mut file_indices = vec![file_index_1, file_index_2];
+        let mut file_indices = vec![file_index_1.clone(), file_index_2.clone()];
         import_file_indices_to_cache(&mut file_indices, object_storage_cache.clone(), TableId(0))
             .await;
+        let mut index_block_files = vec![
+            file_index_1.index_blocks[0].index_file.file_path().clone(),
+            file_index_2.index_blocks[0].index_file.file_path().clone(),
+        ];
+        index_block_files.sort();
 
         // Check both file indices are pinned in cache.
         assert_eq!(
@@ -126,5 +151,48 @@ mod tests {
         // Check cache handle is assigned to the file indice.
         assert!(file_indices[0].index_blocks[0].cache_handle.is_some());
         assert!(file_indices[1].index_blocks[0].cache_handle.is_some());
+
+        // Unreference and delete all file indices.
+        let mut evicted_files_to_delete = vec![];
+        for cur_file_index in file_indices.iter_mut() {
+            let cur_evicted_files =
+                unreference_and_delete_file_index_from_cache(cur_file_index).await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+        }
+        evicted_files_to_delete.sort();
+        assert_eq!(evicted_files_to_delete, index_block_files);
+
+        // Check both file indices are pinned in cache.
+        assert_eq!(
+            object_storage_cache
+                .cache
+                .read()
+                .await
+                .non_evictable_cache
+                .len(),
+            0
+        );
+        assert_eq!(
+            object_storage_cache
+                .cache
+                .read()
+                .await
+                .evictable_cache
+                .len(),
+            0
+        );
+        assert_eq!(
+            object_storage_cache
+                .cache
+                .read()
+                .await
+                .evicted_entries
+                .len(),
+            0
+        );
+
+        // Check cache handle is assigned to the file indice.
+        assert!(file_indices[0].index_blocks[0].cache_handle.is_none());
+        assert!(file_indices[1].index_blocks[0].cache_handle.is_none());
     }
 }

@@ -502,26 +502,6 @@ impl SnapshotTableState {
         None
     }
 
-    /// Unreference and delete the given file indices cache.
-    /// Return evicted files to delete.
-    async fn unreference_and_delete_file_indices_cache(
-        &mut self,
-        file_index: &mut FileIndex,
-    ) -> Vec<String> {
-        let mut evicted_files_to_delete = vec![];
-        for cur_index_block in file_index.index_blocks.iter_mut() {
-            let cur_evicted_files = cur_index_block
-                .cache_handle
-                .as_mut()
-                .unwrap()
-                .unreference_and_delete()
-                .await;
-            evicted_files_to_delete.extend(cur_evicted_files);
-            cur_index_block.cache_handle = None;
-        }
-        evicted_files_to_delete
-    }
-
     /// Update current snapshot's file indices by adding and removing a few.
     #[allow(clippy::mutable_key_type)]
     async fn update_file_indices_to_mooncake_snapshot_impl(
@@ -539,9 +519,11 @@ impl SnapshotTableState {
 
         // Unreference all old file indices.
         for cur_file_index in old_file_indices.iter() {
-            let mut cur_file_index_copy = cur_file_index.clone();
-            let cur_evicted_files = self
-                .unreference_and_delete_file_indices_cache(&mut cur_file_index_copy)
+            let mut file_index_copy = cur_file_index.clone();
+            let cur_evicted_files =
+                index_cache_utils::unreference_and_delete_file_index_from_cache(
+                    &mut file_index_copy,
+                )
                 .await;
             evicted_files_to_delete.extend(cur_evicted_files);
         }
