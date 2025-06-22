@@ -1,15 +1,15 @@
 use crate::error::Error;
 use crate::error::Result;
 use crate::storage::MooncakeTable;
-use crate::storage::SnapshotReadOutput;
 use crate::storage::SnapshotTableState;
+use crate::ReadState;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 
 pub struct ReadStateManager {
     last_read_lsn: AtomicU64,
-    last_read_snapshot_output: RwLock<Arc<SnapshotReadOutput>>,
+    last_read_state: RwLock<Arc<ReadState>>,
     table_snapshot: Arc<RwLock<SnapshotTableState>>,
     table_snapshot_watch_receiver: watch::Receiver<u64>,
     replication_lsn_rx: watch::Receiver<u64>,
@@ -25,7 +25,7 @@ impl ReadStateManager {
         let (table_snapshot, table_snapshot_watch_receiver) = table.get_state_for_reader();
         ReadStateManager {
             last_read_lsn: AtomicU64::new(0),
-            last_read_snapshot_output: RwLock::new(Arc::new(SnapshotReadOutput::default())),
+            last_read_state: RwLock::new(Arc::new(ReadState::default())),
             table_snapshot,
             table_snapshot_watch_receiver,
             replication_lsn_rx,
@@ -56,7 +56,7 @@ impl ReadStateManager {
     /// • ≤ `requested_lsn` when `requested_lsn` is supplied, or
     /// • the latest snapshot when `requested_lsn` is `None`.
     #[tracing::instrument(name = "read_state_try_read", skip_all)]
-    pub async fn try_read(&self, requested_lsn: Option<u64>) -> Result<Arc<SnapshotReadOutput>> {
+    pub async fn try_read(&self, requested_lsn: Option<u64>) -> Result<Arc<ReadState>> {
         // fast-path: reuse cached snapshot only when its still the tables latest and not newer than the callers LSN
         let cached_lsn = self.last_read_lsn.load(Ordering::Relaxed);
         let snapshot_lsn_now = *self.table_snapshot_watch_receiver.borrow();
@@ -66,7 +66,7 @@ impl ReadStateManager {
             Self::should_use_cache(requested_lsn, cached_lsn, snapshot_lsn_now, commit_lsn_now);
 
         if use_cache {
-            return Ok(self.last_read_snapshot_output.read().await.clone());
+            return Ok(self.last_read_state.read().await.clone());
         }
 
         let mut table_snapshot_rx = self.table_snapshot_watch_receiver.clone();
@@ -130,9 +130,9 @@ impl ReadStateManager {
         current_snapshot_lsn: u64,
         current_replication_lsn: u64,
         current_commit_lsn: u64,
-    ) -> Result<Arc<SnapshotReadOutput>> {
+    ) -> Result<Arc<ReadState>> {
         let mut table_state_snapshot = self.table_snapshot.write().await;
-        let mut last_read_snapshot_output_guard = self.last_read_snapshot_output.write().await;
+        let mut last_read_state_guard = self.last_read_state.write().await;
         let is_snapshot_clean = current_snapshot_lsn == current_commit_lsn;
 
         if self.last_read_lsn.load(Ordering::Acquire) < current_snapshot_lsn {
@@ -145,12 +145,12 @@ impl ReadStateManager {
                     current_snapshot_lsn
                 };
 
-            let read_output = table_state_snapshot.request_read().await?;
+            let snapshot_read_output = table_state_snapshot.request_read().await?;
 
             self.last_read_lsn.store(effective_lsn, Ordering::Release);
-            *last_read_snapshot_output_guard = Arc::new(read_output);
+            *last_read_state_guard = snapshot_read_output.take_as_read_state().await;
         }
-        Ok(last_read_snapshot_output_guard.clone())
+        Ok(last_read_state_guard.clone())
     }
 
     #[tracing::instrument(name = "wait_for_lsn", skip_all)]

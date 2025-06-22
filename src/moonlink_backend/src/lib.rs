@@ -100,14 +100,13 @@ impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
     }
 
     pub async fn scan_table(&self, table_id: &T, lsn: Option<u64>) -> Result<Arc<ReadState>> {
-        let snapshot_read_output = {
+        let read_state = {
             let manager = self.replication_manager.read().await;
             let table_reader = manager.get_table_reader(table_id);
             table_reader.try_read(lsn).await?
         };
 
-        let snapshot_read_output = (*snapshot_read_output.clone()).clone();
-        Ok(snapshot_read_output.take_as_read_state().await)
+        Ok(read_state.clone())
     }
 
     /// Gracefully shutdown a replication connection identified by its URI.
