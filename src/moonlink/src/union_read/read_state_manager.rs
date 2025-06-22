@@ -25,7 +25,15 @@ impl ReadStateManager {
         let (table_snapshot, table_snapshot_watch_receiver) = table.get_state_for_reader();
         ReadStateManager {
             last_read_lsn: AtomicU64::new(0),
-            last_read_state: RwLock::new(Arc::new(ReadState::default())),
+            last_read_state: RwLock::new(Arc::new(ReadState::new(
+                /*data_files=*/ Vec::new(),
+                /*puffin_cache_handles=*/ Vec::new(),
+                /*deletion_vectors_at_read=*/ Vec::new(),
+                /*position_deletes=*/ Vec::new(),
+                /*associated_files=*/ Vec::new(),
+                /*cache_handles=*/ Vec::new(),
+                /*table_notify=*/ None,
+            ))),
             table_snapshot,
             table_snapshot_watch_receiver,
             replication_lsn_rx,

@@ -15,7 +15,7 @@ use tracing::{info_span, warn};
 const BINCODE_CONFIG: config::Configuration = config::standard();
 
 // TODO(hjiang): A better solution might be wrap clean up in a functor.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ReadState {
     /// Serialized data files and positional deletes for query.
     pub data: Vec<u8>,
