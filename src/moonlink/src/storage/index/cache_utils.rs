@@ -4,7 +4,7 @@ use crate::storage::storage_utils::{TableId, TableUniqueFileId};
 use crate::ObjectStorageCache;
 
 /// Util functions for index integration with cache.
-
+///
 /// Import the given file index into cache, and return evicted files to delete.
 pub async fn import_file_index_to_cache(
     file_index: &mut GlobalIndex,
@@ -37,7 +37,7 @@ pub async fn import_file_index_to_cache(
 
 /// Import the given file indices into cache, and return evicted files to delete.
 pub async fn import_file_indices_to_cache(
-    file_indices: &mut Vec<GlobalIndex>,
+    file_indices: &mut [GlobalIndex],
     object_storage_cache: ObjectStorageCache,
     table_id: TableId,
 ) -> Vec<String> {
@@ -52,4 +52,79 @@ pub async fn import_file_indices_to_cache(
     }
 
     evicted_files_to_delete
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::create_data_file;
+    use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn test_import_index_to_cache() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+
+        // Create first file index.
+        let mut builder = GlobalIndexBuilder::new();
+        builder
+            .set_files(vec![create_data_file(
+                /*file_id=*/ 0,
+                "a.parquet".to_string(),
+            )])
+            .set_directory(tempfile::tempdir().unwrap().keep());
+        let file_index_1 = builder
+            .build_from_flush(/*hash_entries=*/ vec![(1, 0, 0)], /*file_id=*/ 1)
+            .await;
+
+        // Create second file index.
+        let mut builder = GlobalIndexBuilder::new();
+        builder
+            .set_files(vec![create_data_file(
+                /*file_id=*/ 2,
+                "b.parquet".to_string(),
+            )])
+            .set_directory(tempfile::tempdir().unwrap().keep());
+        let file_index_2 = builder
+            .build_from_flush(/*hash_entries=*/ vec![(2, 0, 0)], /*file_id=*/ 3)
+            .await;
+
+        let mut file_indices = vec![file_index_1, file_index_2];
+        import_file_indices_to_cache(&mut file_indices, object_storage_cache.clone(), TableId(0))
+            .await;
+
+        // Check both file indices are pinned in cache.
+        assert_eq!(
+            object_storage_cache
+                .cache
+                .read()
+                .await
+                .non_evictable_cache
+                .len(),
+            2
+        );
+        assert_eq!(
+            object_storage_cache
+                .cache
+                .read()
+                .await
+                .evictable_cache
+                .len(),
+            0
+        );
+        assert_eq!(
+            object_storage_cache
+                .cache
+                .read()
+                .await
+                .evicted_entries
+                .len(),
+            0
+        );
+
+        // Check cache handle is assigned to the file indice.
+        assert!(file_indices[0].index_blocks[0].cache_handle.is_some());
+        assert!(file_indices[1].index_blocks[0].cache_handle.is_some());
+    }
 }
