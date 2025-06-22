@@ -35,8 +35,8 @@ use std::vec;
 use async_trait::async_trait;
 use iceberg::io::FileIO;
 use iceberg::puffin::CompressionCodec;
-use iceberg::spec::DataFileFormat;
 use iceberg::spec::{DataFile, ManifestEntry};
+use iceberg::spec::{DataFileFormat, ManifestContentType};
 use iceberg::table::Table as IcebergTable;
 use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
@@ -87,8 +87,6 @@ struct DataFileImportResult {
 struct FileIndicesRecoveryResult {
     /// All file indices recovered from iceberg table.
     file_indices: Vec<MooncakeFileIndex>,
-    /// Maps from data files' file id to file indices.
-    file_id_to_file_indices: HashMap<FileId, MooncakeFileIndex>,
 }
 
 #[derive(Debug)]
@@ -202,7 +200,6 @@ impl IcebergTableManager {
     ) -> IcebergResult<FileIndicesRecoveryResult> {
         if !utils::is_file_index(entry) {
             return Ok(FileIndicesRecoveryResult {
-                file_id_to_file_indices: HashMap::new(),
                 file_indices: Vec::new(),
             });
         }
@@ -210,11 +207,12 @@ impl IcebergTableManager {
         // Load mooncake file indices from iceberg file index blobs.
         let file_index_blob =
             FileIndexBlob::load_from_index_blob(file_io.clone(), entry.data_file()).await?;
+        let new_file_indices_count = file_index_blob.file_indices.len();
+        let expected_file_indices_count =
+            self.persisted_file_indices.len() + new_file_indices_count;
         self.persisted_file_indices
-            .reserve(file_index_blob.file_indices.len());
-        let mut file_indices = Vec::with_capacity(file_index_blob.file_indices.len());
-        let mut file_id_to_file_indices =
-            HashMap::with_capacity(self.remote_data_file_to_file_id.len());
+            .reserve(expected_file_indices_count);
+        let mut file_indices = Vec::with_capacity(new_file_indices_count);
         for mut cur_iceberg_file_indice in file_index_blob.file_indices.into_iter() {
             let table_id = TableId(self.mooncake_table_metadata.id);
             let cur_mooncake_file_indice = cur_iceberg_file_indice
@@ -227,22 +225,13 @@ impl IcebergTableManager {
                 .await?;
             file_indices.push(cur_mooncake_file_indice.clone());
 
-            for cur_data_file in cur_mooncake_file_indice.files.iter() {
-                let old_entry = file_id_to_file_indices
-                    .insert(cur_data_file.file_id(), cur_mooncake_file_indice.clone());
-                assert!(old_entry.is_none());
-            }
-
             self.persisted_file_indices.insert(
                 cur_mooncake_file_indice,
                 entry.data_file().file_path().to_string(),
             );
         }
 
-        Ok(FileIndicesRecoveryResult {
-            file_id_to_file_indices,
-            file_indices,
-        })
+        Ok(FileIndicesRecoveryResult { file_indices })
     }
 
     /// Load data file into table manager from the current manifest entry.
@@ -796,25 +785,43 @@ impl TableManager for IcebergTableManager {
             )
             .await?;
 
-        // Maps from file id to corresponding file indices.
-        let mut file_id_to_file_indices = HashMap::new();
-
         let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
         let mut loaded_file_indices = vec![];
+
+        // On load, we do two passes on all entries.
+        // Data files are loaded first, because we need to get <data file, file id> mapping, which is used for later deletion vector and file indices recovery.
+        // Deletion vector puffin and file indices have no dependency, and could be loaded in parallel.
+        //
+        // Attempt to load data files first.
         for manifest_file in manifest_list.entries().iter() {
             let manifest = manifest_file.load_manifest(&file_io).await?;
+            if *manifest.metadata().content() != ManifestContentType::Data {
+                continue;
+            }
             let (manifest_entries, _) = manifest.into_parts();
             assert!(!manifest_entries.is_empty());
 
-            // On load, we do three pass on all entries.
-            // Data files are loaded first, because we need to get <data file, file id> mapping, which is used for later deletion vector and file indices recovery.
-            //
-            // TODO(hjiang): Check whether we could load deletion vector and file indices in one pass.
+            // One manifest file only store one type of entities (i.e. data file, deletion vector, file indices).
+            if !utils::is_data_file_entry(&manifest_entries[0]) {
+                continue;
+            }
             for entry in manifest_entries.iter() {
                 self.load_data_file_from_manifest_entry(entry.as_ref(), &mut next_file_id)
                     .await?;
             }
+        }
+
+        // Attempt to load file indices and deletion vector.
+        for manifest_file in manifest_list.entries().iter() {
+            let manifest = manifest_file.load_manifest(&file_io).await?;
+            let (manifest_entries, _) = manifest.into_parts();
+            assert!(!manifest_entries.is_empty());
+            if utils::is_data_file_entry(&manifest_entries[0]) {
+                continue;
+            }
+
             for entry in manifest_entries.iter() {
+                // Load file indices.
                 let recovered_file_indices = self
                     .load_file_indices_from_manifest_entry(
                         entry.as_ref(),
@@ -823,9 +830,8 @@ impl TableManager for IcebergTableManager {
                     )
                     .await?;
                 loaded_file_indices.extend(recovered_file_indices.file_indices);
-                file_id_to_file_indices.extend(recovered_file_indices.file_id_to_file_indices);
-            }
-            for entry in manifest_entries.into_iter() {
+
+                // Load deletion vector puffin.
                 self.load_deletion_vector_from_manifest_entry(
                     entry.as_ref(),
                     &file_io,
