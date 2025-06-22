@@ -63,6 +63,7 @@ pub struct IcebergSnapshotPayload {
 ////////////////////////////
 ///
 /// Iceberg snapshot import result.
+#[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotImportResult {
     /// Persisted data files.
     pub(crate) new_data_files: Vec<MooncakeDataFileRef>,
@@ -72,7 +73,17 @@ pub struct IcebergSnapshotImportResult {
     pub(crate) imported_file_indices: Vec<MooncakeFileIndex>,
 }
 
+impl IcebergSnapshotImportResult {
+    /// Return whether import result is empty.
+    pub fn is_empty(&self) -> bool {
+        self.new_data_files.is_empty()
+            && self.puffin_blob_ref.is_empty()
+            && self.imported_file_indices.is_empty()
+    }
+}
+
 /// Iceberg snapshot index merge result.
+#[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotIndexMergeResult {
     /// New file indices to import to the iceberg table.
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
@@ -80,8 +91,21 @@ pub struct IcebergSnapshotIndexMergeResult {
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
 }
 
+impl IcebergSnapshotIndexMergeResult {
+    /// Return whether index merge result is empty.
+    pub fn is_empty(&self) -> bool {
+        if self.new_file_indices_to_import.is_empty() {
+            assert!(self.old_file_indices_to_remove.is_empty());
+            return true;
+        }
+
+        assert!(!self.old_file_indices_to_remove.is_empty());
+        false
+    }
+}
+
 /// Iceberg snapshot data file compaction result.
-#[allow(dead_code)]
+#[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotDataCompactionResult {
     /// New data files to import to the iceberg table.
     pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,
@@ -91,6 +115,21 @@ pub struct IcebergSnapshotDataCompactionResult {
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
     /// Old data files to remove from the iceberg table.
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+}
+
+impl IcebergSnapshotDataCompactionResult {
+    /// Return whether data compaction result is empty.
+    pub fn is_empty(&self) -> bool {
+        if self.old_data_files_to_remove.is_empty() {
+            assert!(self.new_data_files_to_import.is_empty());
+            assert!(self.new_file_indices_to_import.is_empty());
+            assert!(self.old_file_indices_to_remove.is_empty());
+            return true;
+        }
+
+        assert!(!self.old_file_indices_to_remove.is_empty());
+        false
+    }
 }
 
 pub struct IcebergSnapshotResult {
@@ -103,7 +142,6 @@ pub struct IcebergSnapshotResult {
     /// Iceberg index merge result.
     pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
     /// Iceberg data file compaction result.
-    #[allow(dead_code)]
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
 }
 

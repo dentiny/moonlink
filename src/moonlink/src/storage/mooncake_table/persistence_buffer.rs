@@ -158,7 +158,7 @@ impl UnpersistedRecords {
     ///
     /// Update unpersisted data files from successful iceberg snapshot operation.
     fn prune_persisted_data_files(&mut self, task: &SnapshotTask) {
-        let persisted_new_data_files = &task.iceberg_persisted_records.data_files;
+        let persisted_new_data_files = &task.iceberg_persisted_records.import_result.new_data_files;
         ma::assert_ge!(
             self.unpersisted_data_files.len(),
             persisted_new_data_files.len()
@@ -169,7 +169,10 @@ impl UnpersistedRecords {
 
     /// Update unpersisted file indices from successful iceberg snapshot operation.
     fn prune_persisted_file_indices(&mut self, task: &SnapshotTask) {
-        let persisted_new_file_indices = &task.iceberg_persisted_records.file_indices;
+        let persisted_new_file_indices = &task
+            .iceberg_persisted_records
+            .import_result
+            .imported_file_indices;
         ma::assert_ge!(
             self.unpersisted_file_indices.len(),
             persisted_new_file_indices.len()
@@ -179,7 +182,10 @@ impl UnpersistedRecords {
     }
 
     fn prune_persisted_merged_indices(&mut self, task: &SnapshotTask) {
-        let old_merged_file_indices = &task.iceberg_persisted_records.old_merged_file_indices;
+        let old_merged_file_indices = &task
+            .iceberg_persisted_records
+            .index_merge_result
+            .old_file_indices_to_remove;
         ma::assert_ge!(
             self.merged_file_indices_to_remove.len(),
             old_merged_file_indices.len()
@@ -187,7 +193,10 @@ impl UnpersistedRecords {
         self.merged_file_indices_to_remove
             .drain(0..old_merged_file_indices.len());
 
-        let new_merged_file_indices = &task.iceberg_persisted_records.new_merged_file_indices;
+        let new_merged_file_indices = &task
+            .iceberg_persisted_records
+            .index_merge_result
+            .new_file_indices_to_import;
         ma::assert_ge!(
             self.merged_file_indices_to_add.len(),
             new_merged_file_indices.len()
@@ -197,34 +206,34 @@ impl UnpersistedRecords {
     }
 
     fn prune_persisted_compacted_data(&mut self, task: &SnapshotTask) {
-        let persisted_compaction_res = &task.iceberg_persisted_records;
+        let persisted_compaction_res = &task.iceberg_persisted_records.data_compaction_result;
         ma::assert_ge!(
             self.compacted_data_files_to_add.len(),
-            persisted_compaction_res.new_compacted_data_files.len()
+            persisted_compaction_res.new_data_files_to_import.len()
         );
         self.compacted_data_files_to_add
-            .drain(0..persisted_compaction_res.new_compacted_data_files.len());
+            .drain(0..persisted_compaction_res.new_data_files_to_import.len());
 
         ma::assert_ge!(
             self.compacted_data_files_to_remove.len(),
-            persisted_compaction_res.old_compacted_data_files.len()
+            persisted_compaction_res.old_data_files_to_remove.len()
         );
         self.compacted_data_files_to_remove
-            .drain(0..persisted_compaction_res.old_compacted_data_files.len());
+            .drain(0..persisted_compaction_res.old_data_files_to_remove.len());
 
         ma::assert_ge!(
             self.compacted_file_indices_to_add.len(),
-            persisted_compaction_res.new_compacted_file_indices.len()
+            persisted_compaction_res.new_file_indices_to_import.len()
         );
         self.compacted_file_indices_to_add
-            .drain(0..persisted_compaction_res.new_compacted_file_indices.len());
+            .drain(0..persisted_compaction_res.new_file_indices_to_import.len());
 
         ma::assert_ge!(
             self.compacted_file_indices_to_remove.len(),
-            persisted_compaction_res.old_compacted_file_indices.len()
+            persisted_compaction_res.old_file_indices_to_remove.len()
         );
         self.compacted_file_indices_to_remove
-            .drain(0..persisted_compaction_res.old_compacted_file_indices.len());
+            .drain(0..persisted_compaction_res.old_file_indices_to_remove.len());
     }
 
     /// Prune persisted records.

@@ -259,12 +259,12 @@ impl SnapshotTableState {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
-        if task.iceberg_persisted_records.data_files.is_empty() {
+        if task.iceberg_persisted_records.import_result.is_empty() {
             return (updated_file_ids, evicted_files_to_delete);
         }
 
         // Update disk file from local write through cache to iceberg persisted remote path.
-        let persisted_data_files = &task.iceberg_persisted_records.data_files;
+        let persisted_data_files = &task.iceberg_persisted_records.import_result.new_data_files;
         for cur_data_file in persisted_data_files.iter() {
             let mut disk_file_entry = self
                 .current_snapshot
@@ -347,7 +347,10 @@ impl SnapshotTableState {
         let (updated_file_ids, evicted_files_to_delete) =
             self.update_data_files_to_persisted(task).await;
         self.update_file_indices_to_persisted(
-            task.iceberg_persisted_records.file_indices.clone(),
+            task.iceberg_persisted_records
+                .import_result
+                .imported_file_indices
+                .clone(),
             updated_file_ids,
         );
 
@@ -1003,7 +1006,7 @@ impl SnapshotTableState {
         // Update deletion vector puffin persisted in the iceberg table.
         let puffin_evicted_data_files = self
             .update_current_snapshot_with_iceberg_snapshot(std::mem::take(
-                &mut task.iceberg_persisted_records.puffin_blob,
+                &mut task.iceberg_persisted_records.import_result.puffin_blob_ref,
             ))
             .await;
         evicted_data_files_to_delete.extend(puffin_evicted_data_files);
