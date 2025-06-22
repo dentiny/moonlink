@@ -2,8 +2,6 @@ use crate::storage::SnapshotTableState;
 #[cfg(test)]
 use std::collections::HashSet;
 
-/// Validate snapshot invariants.
-
 impl SnapshotTableState {
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
