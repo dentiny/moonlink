@@ -6,6 +6,7 @@ mod persistence_buffer;
 mod shared_array;
 mod snapshot;
 pub mod snapshot_read_output;
+mod snapshot_validation;
 mod table_snapshot;
 mod transaction_stream;
 
