@@ -249,7 +249,8 @@ async fn test_state_1_1() -> IcebergResult<()> {
     assert!(!table.create_snapshot(SnapshotOption::default()));
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -280,7 +281,8 @@ async fn test_state_1_2() -> IcebergResult<()> {
     assert!(!table.create_snapshot(SnapshotOption::default()));
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -317,7 +319,8 @@ async fn test_state_1_3() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -356,7 +359,8 @@ async fn test_state_1_4() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -394,7 +398,8 @@ async fn test_state_1_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one puffin blob
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -434,7 +439,8 @@ async fn test_state_1_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one puffin blob
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -467,7 +473,8 @@ async fn test_state_2_1() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -502,7 +509,8 @@ async fn test_state_2_2() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -540,7 +548,8 @@ async fn test_state_2_3() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -580,7 +589,8 @@ async fn test_state_2_4() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -619,7 +629,8 @@ async fn test_state_2_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -660,7 +671,8 @@ async fn test_state_2_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -694,7 +706,8 @@ async fn test_state_3_1() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
@@ -730,7 +743,8 @@ async fn test_state_3_2() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
@@ -769,7 +783,8 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -813,7 +828,8 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -859,7 +875,8 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -905,7 +922,8 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -950,7 +968,8 @@ async fn test_state_3_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -997,7 +1016,8 @@ async fn test_state_3_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1042,7 +1062,8 @@ async fn test_state_4_1() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -1084,7 +1105,8 @@ async fn test_state_4_2() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -1129,7 +1151,8 @@ async fn test_state_4_3() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -1176,7 +1199,8 @@ async fn test_state_4_4() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -1222,7 +1246,8 @@ async fn test_state_4_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -1270,7 +1295,8 @@ async fn test_state_4_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -1312,7 +1338,8 @@ async fn test_state_5_1() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
@@ -1356,7 +1383,8 @@ async fn test_state_5_2() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
@@ -1403,7 +1431,8 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1455,7 +1484,8 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1509,7 +1539,8 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1563,7 +1594,8 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1616,7 +1648,8 @@ async fn test_state_5_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1671,7 +1704,8 @@ async fn test_state_5_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1725,7 +1759,8 @@ async fn test_state_6_1() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
@@ -1776,7 +1811,8 @@ async fn test_state_6_2() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
@@ -1830,7 +1866,8 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1889,7 +1926,8 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -1949,7 +1987,8 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -2010,7 +2049,8 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -2070,7 +2110,8 @@ async fn test_state_6_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -2132,7 +2173,8 @@ async fn test_state_6_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
         &snapshot,
         &iceberg_table_manager,
@@ -2161,7 +2203,8 @@ async fn test_state_7_1() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
@@ -2190,7 +2233,8 @@ async fn test_state_7_2() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -2220,7 +2264,8 @@ async fn test_state_7_3() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -2253,7 +2298,8 @@ async fn test_state_7_4() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
@@ -2284,7 +2330,8 @@ async fn test_state_7_5() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
@@ -2317,7 +2364,8 @@ async fn test_state_7_6() -> IcebergResult<()> {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);

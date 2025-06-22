@@ -106,10 +106,11 @@ async fn test_1_recover_3() {
         get_iceberg_table_config(&temp_dir),
     )
     .unwrap();
-    let mooncake_snapshot = iceberg_table_manager_to_recover
+    let (next_file_id, mooncake_snapshot) = iceberg_table_manager_to_recover
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 2); // one data file, one index block file
 
     // Check data file has been pinned in mooncake table.
     let file_indices = mooncake_snapshot.indices.file_indices.clone();

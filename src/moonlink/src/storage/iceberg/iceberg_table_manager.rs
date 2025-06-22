@@ -758,14 +758,19 @@ impl TableManager for IcebergTableManager {
         })
     }
 
-    async fn load_snapshot_from_table(&mut self) -> IcebergResult<MooncakeSnapshot> {
+    async fn load_snapshot_from_table(&mut self) -> IcebergResult<(u32, MooncakeSnapshot)> {
         assert!(!self.snapshot_loaded);
         self.snapshot_loaded = true;
+
+        // Unique file id to assign to every data file.
+        let mut next_file_id = 0;
 
         // Handle cases which iceberg table doesn't exist.
         self.initialize_iceberg_table_if_exists().await?;
         if self.iceberg_table.is_none() {
-            return Ok(MooncakeSnapshot::new(self.mooncake_table_metadata.clone()));
+            let empty_mooncake_snapshot =
+                MooncakeSnapshot::new(self.mooncake_table_metadata.clone());
+            return Ok((next_file_id as u32, empty_mooncake_snapshot));
         }
 
         let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
@@ -776,7 +781,10 @@ impl TableManager for IcebergTableManager {
 
         // There's nothing stored in iceberg table.
         if table_metadata.current_snapshot().is_none() {
-            return Ok(MooncakeSnapshot::new(self.mooncake_table_metadata.clone()));
+            let mut empty_mooncake_snapshot =
+                MooncakeSnapshot::new(self.mooncake_table_metadata.clone());
+            empty_mooncake_snapshot.data_file_flush_lsn = flush_lsn;
+            return Ok((next_file_id as u32, empty_mooncake_snapshot));
         }
 
         // Load table state into iceberg table manager.
@@ -788,8 +796,6 @@ impl TableManager for IcebergTableManager {
             )
             .await?;
 
-        // Unique file id to assign to every data file.
-        let mut next_file_id = 0;
         // Maps from file id to corresponding file indices.
         let mut file_id_to_file_indices = HashMap::new();
 
@@ -830,7 +836,7 @@ impl TableManager for IcebergTableManager {
         }
 
         let mooncake_snapshot = self.transform_to_mooncake_snapshot(loaded_file_indices, flush_lsn);
-        Ok(mooncake_snapshot)
+        Ok((next_file_id as u32, mooncake_snapshot))
     }
 
     async fn drop_table(&mut self) -> IcebergResult<()> {

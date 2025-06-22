@@ -285,11 +285,12 @@ async fn test_compaction_1_1_1() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -342,11 +343,12 @@ async fn test_compaction_1_1_2() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -420,11 +422,12 @@ async fn test_compaction_1_2_1() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -497,11 +500,12 @@ async fn test_compaction_1_2_2() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -586,11 +590,12 @@ async fn test_compaction_2_2_1() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -664,11 +669,12 @@ async fn test_compaction_2_2_2() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -755,11 +761,12 @@ async fn test_compaction_2_3_1() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 5);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -821,11 +828,12 @@ async fn test_compaction_2_3_2() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 5);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![1, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -915,11 +923,12 @@ async fn test_compaction_3_2_1() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 2); // one compacted data file, one compacted index block file
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 1);
     check_loaded_snapshot(&snapshot, /*row_indices=*/ vec![0, 1, 2, 3]).await;
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -995,11 +1004,12 @@ async fn test_compaction_3_3_1() {
         .unwrap();
 
     // Check iceberg snapshot status.
-    let snapshot = iceberg_table_manager_to_load
+    let (next_file_id, snapshot) = iceberg_table_manager_to_load
         .load_snapshot_from_table()
         .await
         .unwrap();
 
+    assert_eq!(next_file_id, 0);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 7);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());

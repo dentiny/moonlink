@@ -50,10 +50,12 @@ pub trait TableManager: Send {
         file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult>;
 
-    /// Load the latest snapshot from iceberg table. Used for recovery and initialization.
+    /// Load the latest snapshot from iceberg table, and return next file id for the current mooncake table.
     /// Notice this function is supposed to call **only once**.
     #[allow(async_fn_in_trait)]
-    async fn load_snapshot_from_table(&mut self) -> IcebergResult<MooncakeSnapshot>;
+    async fn load_snapshot_from_table(
+        &mut self,
+    ) -> IcebergResult<(u32 /*next file id*/, MooncakeSnapshot)>;
 
     /// Drop the current iceberg table.
     #[allow(async_fn_in_trait)]

@@ -510,10 +510,11 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
 
     // Load from iceberg table manager to check snapshot status.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 2); // one for data file, one for index block file
     assert_eq!(snapshot.disk_files.len(), 1);
     let (cur_data_file, cur_deletion_vector) = snapshot.disk_files.into_iter().next().unwrap();
     // Check data file.
@@ -553,10 +554,11 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
 
     // Load from iceberg table manager to check snapshot status.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     assert_eq!(snapshot.disk_files.len(), 2);
     for (cur_data_file, cur_deletion_vector) in snapshot.disk_files.into_iter() {
         // Check the first data file.
@@ -608,10 +610,11 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
 
     // Load from iceberg table manager to check snapshot status.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 6); // two data files, two index block files, two deletion vector puffin
     assert_eq!(snapshot.disk_files.len(), 2);
     for (cur_data_file, cur_deletion_vector) in snapshot.disk_files.into_iter() {
         // Check the first data file.
@@ -710,10 +713,11 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
 
     // Load from iceberg table manager to check snapshot status.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     assert_eq!(snapshot.disk_files.len(), 1);
     let (cur_data_file, cur_deletion_vector) = snapshot.disk_files.into_iter().next().unwrap();
     // Check data file.
@@ -759,10 +763,11 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
 
     // Load from iceberg table manager to check snapshot status.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     assert_eq!(snapshot.disk_files.len(), 2);
     for (cur_data_file, cur_deletion_vector) in snapshot.disk_files.into_iter() {
         // Check the first data file.
@@ -817,10 +822,11 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
 
     // Load from iceberg table manager to check snapshot status.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 6); // two data files, two index block files, two deletion vector puffins
     assert_eq!(snapshot.disk_files.len(), 2);
     for (cur_data_file, cur_deletion_vector) in snapshot.disk_files.into_iter() {
         // Check the first data file.
@@ -969,10 +975,11 @@ async fn test_multiple_snapshot_requests() {
 
     // Check iceberg snapshot content.
     let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config.clone());
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 4); // two data files, two index block files
     assert_eq!(snapshot.disk_files.len(), 2);
 
     let mut visited = [false, false]; // Check both row flushed.

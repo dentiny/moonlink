@@ -36,7 +36,7 @@ pub(crate) struct FileIndex {
     /// Data file paths at iceberg table.
     data_files: Vec<String>,
     /// Corresponds to [storage::index::IndexBlock].
-    index_block_files: Vec<IndexBlock>,
+    pub index_block_files: Vec<IndexBlock>, // TODO
     /// Hash related fields.
     num_rows: u32,
     hash_bits: u32,

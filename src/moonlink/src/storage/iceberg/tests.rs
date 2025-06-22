@@ -70,6 +70,7 @@ fn test_committed_deletion_log_2(
 }
 
 /// Test util function to create file indices.
+/// NOTICE: The util function does write index block file.
 fn create_file_index(data_files: Vec<MooncakeDataFileRef>) -> GlobalIndex {
     GlobalIndex {
         files: data_files,
@@ -358,7 +359,7 @@ async fn test_store_and_load_snapshot_impl(
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager_for_load
+    let (_, snapshot) = iceberg_table_manager_for_load
         .load_snapshot_from_table()
         .await?;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
@@ -426,7 +427,7 @@ async fn test_store_and_load_snapshot_impl(
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager_for_load
+    let (_, snapshot) = iceberg_table_manager_for_load
         .load_snapshot_from_table()
         .await?;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
@@ -482,7 +483,7 @@ async fn test_store_and_load_snapshot_impl(
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager_for_load
+    let (_, snapshot) = iceberg_table_manager_for_load
         .load_snapshot_from_table()
         .await?;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 4);
@@ -565,7 +566,8 @@ async fn test_empty_snapshot_load() -> IcebergResult<()> {
         object_storage_cache.clone(),
         config.clone(),
     )?;
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_table_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_table_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
@@ -685,10 +687,11 @@ async fn test_index_merge_and_create_snapshot() {
         config.clone(),
     )
     .unwrap();
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 3); // two data files, one index block file
     assert_eq!(snapshot.disk_files.len(), 2);
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
@@ -751,11 +754,12 @@ async fn test_empty_content_snapshot_creation() -> IcebergResult<()> {
         object_storage_cache.clone(),
         config.clone(),
     )?;
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
-    assert!(snapshot.data_file_flush_lsn.is_none());
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 0);
     Ok(())
 }
 
@@ -918,10 +922,11 @@ async fn test_small_batch_size_and_large_parquet_size() {
         iceberg_table_config.clone(),
     )
     .unwrap();
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     assert_eq!(snapshot.disk_files.len(), 1);
     let deletion_vector = snapshot.disk_files.iter().next().unwrap().1.clone();
     assert_eq!(
@@ -966,7 +971,7 @@ async fn test_async_iceberg_snapshot() {
     let file_io = FileIOBuilder::new_fs_io().build().unwrap();
 
     let temp_dir = tempfile::tempdir().unwrap();
-    let (mut table, mut iceberg_table_manager, mut notify_rx) =
+    let (mut table, mut iceberg_table_manager_for_recovery, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Operation group 1: Append new rows and create mooncake snapshot.
@@ -991,10 +996,11 @@ async fn test_async_iceberg_snapshot() {
     table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
-    let snapshot = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     assert_eq!(snapshot.disk_files.len(), 1);
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 10);
@@ -1027,10 +1033,11 @@ async fn test_async_iceberg_snapshot() {
 
     // Load and check iceberg snapshot.
     let (_, mut iceberg_table_manager, _) = create_table_and_iceberg_manager(&temp_dir).await;
-    let mut snapshot = iceberg_table_manager
+    let (next_file_id, mut snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 7); // three data files, three index block files, one deletion vector puffin
     assert_eq!(snapshot.disk_files.len(), 3);
     assert_eq!(snapshot.indices.file_indices.len(), 3);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 40);
@@ -1213,13 +1220,13 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     })?;
     // First deletion of row1, which happens in MemSlice.
     table.delete(row1.clone(), /*flush_lsn=*/ 100).await;
+    table.commit(/*flush_lsn=*/ 200);
     table.flush(/*flush_lsn=*/ 200).await.map_err(|e| {
         IcebergError::new(
             iceberg::ErrorKind::Unexpected,
             format!("Failed to flush records to mooncake table because {:?}", e),
         )
     })?;
-    table.commit(/*flush_lsn=*/ 200);
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
@@ -1231,7 +1238,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 2); // one data file, one index block file
     assert_eq!(
         snapshot.disk_files.len(),
         1,
@@ -1285,6 +1293,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     // Operation series 2: no more additional rows appended, only to delete the first row in the table.
     // Expects to see a new deletion vector, because its corresponding data file has been persisted.
     table.delete(row2.clone(), /*flush_lsn=*/ 300).await;
+    table.commit(/*flush_lsn=*/ 300);
     table.flush(/*flush_lsn=*/ 300).await.map_err(|e| {
         IcebergError::new(
             iceberg::ErrorKind::Unexpected,
@@ -1294,7 +1303,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
             ),
         )
     })?;
-    table.commit(/*flush_lsn=*/ 300);
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
@@ -1306,7 +1314,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     assert_eq!(
         snapshot.disk_files.len(),
         1,
@@ -1372,7 +1381,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     assert_eq!(
         snapshot.disk_files.len(),
         1,
@@ -1432,13 +1442,14 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
             ),
         )
     })?;
+    table.commit(/*flush_lsn=*/ 500);
     table.flush(/*flush_lsn=*/ 500).await.map_err(|e| {
         IcebergError::new(
             iceberg::ErrorKind::Unexpected,
             format!("Failed to flush records to mooncake table because {:?}", e),
         )
     })?;
-    table.commit(/*flush_lsn=*/ 500);
+
     table
         .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
         .await
@@ -1450,7 +1461,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
     )?;
-    let mut snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, mut snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 5); // two data file, two index block file, one deletion vector puffin
     assert_eq!(
         snapshot.disk_files.len(),
         2,
@@ -1561,7 +1573,8 @@ async fn test_drop_table_at_creation() -> IcebergResult<()> {
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
     )?;
-    let snapshot = iceberg_table_manager.load_snapshot_from_table().await?;
+    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
