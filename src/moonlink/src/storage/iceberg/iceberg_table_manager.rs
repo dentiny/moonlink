@@ -35,8 +35,7 @@ use std::vec;
 use async_trait::async_trait;
 use iceberg::io::FileIO;
 use iceberg::puffin::CompressionCodec;
-use iceberg::spec::{DataFile, ManifestEntry};
-use iceberg::spec::{DataFileFormat, ManifestContentType};
+use iceberg::spec::{DataFile, DataFileFormat, ManifestEntry};
 use iceberg::table::Table as IcebergTable;
 use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
@@ -792,12 +791,15 @@ impl TableManager for IcebergTableManager {
         // Data files are loaded first, because we need to get <data file, file id> mapping, which is used for later deletion vector and file indices recovery.
         // Deletion vector puffin and file indices have no dependency, and could be loaded in parallel.
         //
+        // Cache manifest file by manifest filepath to avoid repeated IO.
+        let mut manifest_file_cache = HashMap::new();
+
         // Attempt to load data files first.
         for manifest_file in manifest_list.entries().iter() {
             let manifest = manifest_file.load_manifest(&file_io).await?;
-            if *manifest.metadata().content() != ManifestContentType::Data {
-                continue;
-            }
+            assert!(manifest_file_cache
+                .insert(manifest_file.manifest_path.clone(), manifest.clone())
+                .is_none());
             let (manifest_entries, _) = manifest.into_parts();
             assert!(!manifest_entries.is_empty());
 
@@ -813,7 +815,9 @@ impl TableManager for IcebergTableManager {
 
         // Attempt to load file indices and deletion vector.
         for manifest_file in manifest_list.entries().iter() {
-            let manifest = manifest_file.load_manifest(&file_io).await?;
+            let manifest = manifest_file_cache
+                .remove(&manifest_file.manifest_path)
+                .unwrap();
             let (manifest_entries, _) = manifest.into_parts();
             assert!(!manifest_entries.is_empty());
             if utils::is_data_file_entry(&manifest_entries[0]) {
