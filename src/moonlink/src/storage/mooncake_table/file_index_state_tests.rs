@@ -276,7 +276,7 @@ async fn test_3_index_merge() {
     let index_merge_payload = index_merge_payload.unwrap();
 
     // Get data files and old merged index block files.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut old_compacted_index_block_files = get_index_block_filepaths(&table).await;
     assert_eq!(old_compacted_index_block_files.len(), 2);

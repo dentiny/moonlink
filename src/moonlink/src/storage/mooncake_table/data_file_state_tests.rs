@@ -195,7 +195,7 @@ async fn test_5_read_4_by_batch_write() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -325,7 +325,7 @@ async fn test_5_read_4_by_stream_write() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -457,7 +457,7 @@ async fn test_5_1() {
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -534,7 +534,7 @@ async fn test_4_3() {
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -657,7 +657,7 @@ async fn test_4_read_4() {
     let read_state_3 = snapshot_read_output_2_clone.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -771,7 +771,7 @@ async fn test_4_read_and_read_over_4() {
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -858,7 +858,7 @@ async fn test_3_read_3() {
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -995,7 +995,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1128,7 +1128,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1205,7 +1205,7 @@ async fn test_1_read_and_pinned_3() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1333,7 +1333,7 @@ async fn test_1_read_and_unpinned_3() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1404,7 +1404,7 @@ async fn test_2_read_and_pinned_3() {
         .await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1537,7 +1537,7 @@ async fn test_2_read_and_unpinned_2() {
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1600,7 +1600,7 @@ async fn test_2_read_over_1() {
     drop(read_state);
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1680,7 +1680,7 @@ async fn test_3_compact_3_5() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
     let old_compacted_data_files = disk_files.keys().cloned().collect::<Vec<_>>();
     let old_compacted_index_block_files = get_index_block_filepaths(&table).await;
@@ -1710,7 +1710,7 @@ async fn test_3_compact_3_5() {
     assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -1851,7 +1851,7 @@ async fn test_3_compact_1_5() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut old_compacted_data_files = disk_files
         .keys()
@@ -1897,7 +1897,7 @@ async fn test_3_compact_1_5() {
     assert_eq!(files_to_delete, old_compacted_data_files);
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -1975,7 +1975,7 @@ async fn test_1_compact_1_5() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
@@ -2002,7 +2002,7 @@ async fn test_1_compact_1_5() {
     assert_eq!(evicted_files_to_delete.len(), 5);
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());

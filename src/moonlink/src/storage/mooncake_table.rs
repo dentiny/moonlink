@@ -1373,15 +1373,6 @@ impl MooncakeTable {
         )
     }
 
-    /// Test util function to get all disk files and their deletion vector.
-    #[cfg(test)]
-    pub(crate) async fn get_disk_files_for_snapshot(
-        &mut self,
-    ) -> HashMap<MooncakeDataFileRef, DiskFileEntry> {
-        let guard = self.snapshot.read().await;
-        guard.current_snapshot.disk_files.clone()
-    }
-
     /// Test util function to get snapshot read output.
     #[cfg(test)]
     pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {

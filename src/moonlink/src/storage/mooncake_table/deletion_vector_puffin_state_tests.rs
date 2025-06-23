@@ -101,7 +101,7 @@ async fn test_1_persist_2() {
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (_, disk_file_entry) = disk_files.iter().next().unwrap();
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
@@ -246,7 +246,7 @@ async fn test_2_read() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (_, disk_file_entry) = disk_files.iter().next().unwrap();
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
@@ -397,7 +397,7 @@ async fn test_2_compact() {
     assert!(files_to_delete.is_empty());
 
     // Get old snapshot disk files.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut old_compacted_puffin_file_ids = vec![];
     let mut old_compacted_puffin_files = vec![];
@@ -477,7 +477,7 @@ async fn test_2_compact() {
     assert!(evicted_files.contains(&old_compacted_index_block_files[1]));
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = table.get_disk_files_for_snapshot().await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
     assert!(disk_files.is_empty());
 
     // Check cache state.
