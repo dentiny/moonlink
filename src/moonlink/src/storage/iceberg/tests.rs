@@ -13,6 +13,7 @@ use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::mooncake_table::state_test_utils::*;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
@@ -38,7 +39,6 @@ use std::sync::Arc;
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::io::FileIOBuilder;
-use iceberg::Error as IcebergError;
 use iceberg::Result as IcebergResult;
 use parquet::arrow::AsyncArrowWriter;
 use tempfile::tempdir;
@@ -675,10 +675,11 @@ async fn test_index_merge_and_create_snapshot() {
     mooncake_table.flush(/*lsn=*/ 2).await.unwrap();
 
     // Attempt index merge and flush to iceberg table.
-    mooncake_table
-        .create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(
+        &mut mooncake_table,
+        &mut notify_rx,
+    )
+    .await;
 
     // Create a new iceberg table manager and check states.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -703,10 +704,7 @@ async fn test_index_merge_and_create_snapshot() {
     mooncake_table.delete(row_2.clone(), /*lsn=*/ 4).await;
     mooncake_table.commit(/*lsn=*/ 5);
     mooncake_table.flush(/*lsn=*/ 5).await.unwrap();
-    mooncake_table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut mooncake_table, &mut notify_rx).await;
 }
 
 /// Testing scenario: attempt an iceberg snapshot when no data file, deletion vector or index files generated.
@@ -795,10 +793,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Second time snapshot check, committed deletion logs haven't reached flush LSN.
     table.delete(row.clone(), /*lsn=*/ 20).await;
@@ -902,19 +897,13 @@ async fn test_small_batch_size_and_large_parquet_size() {
     // Commit, flush and create snapshots.
     table.commit(/*lsn=*/ 1);
     table.flush(/*lsn=*/ 1).await.unwrap();
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Delete the second record.
     table.delete(/*row=*/ row_2.clone(), /*lsn=*/ 2).await;
     table.commit(/*lsn=*/ 3);
     table.flush(/*lsn=*/ 3).await.unwrap();
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
@@ -1181,56 +1170,24 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         RowValue::ByteArray("John".as_bytes().to_vec()),
         RowValue::Int32(30),
     ]);
-    table.append(row1.clone()).map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!(
-                "Failed to append row1 {:?} to mooncake table because {:?}",
-                row1, e
-            ),
-        )
-    })?;
+    table.append(row1.clone()).unwrap();
     let row2 = MoonlinkRow::new(vec![
         RowValue::Int32(2),
         RowValue::ByteArray("Alice".as_bytes().to_vec()),
         RowValue::Int32(10),
     ]);
-    table.append(row2.clone()).map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!(
-                "Failed to append row2 {:?} to mooncake table because {:?}",
-                row2, e
-            ),
-        )
-    })?;
+    table.append(row2.clone()).unwrap();
     let row3 = MoonlinkRow::new(vec![
         RowValue::Int32(3),
         RowValue::ByteArray("Bob".as_bytes().to_vec()),
         RowValue::Int32(50),
     ]);
-    table.append(row3.clone()).map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!(
-                "Failed to append row3 {:?} to mooncake table because {:?}",
-                row3, e
-            ),
-        )
-    })?;
+    table.append(row3.clone()).unwrap();
     // First deletion of row1, which happens in MemSlice.
     table.delete(row1.clone(), /*flush_lsn=*/ 100).await;
     table.commit(/*flush_lsn=*/ 200);
-    table.flush(/*flush_lsn=*/ 200).await.map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!("Failed to flush records to mooncake table because {:?}", e),
-        )
-    })?;
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    table.flush(/*flush_lsn=*/ 200).await.unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1294,19 +1251,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     // Expects to see a new deletion vector, because its corresponding data file has been persisted.
     table.delete(row2.clone(), /*flush_lsn=*/ 300).await;
     table.commit(/*flush_lsn=*/ 300);
-    table.flush(/*flush_lsn=*/ 300).await.map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!(
-                "Failed to flush records {:?} to mooncake table because {:?}",
-                row2, e
-            ),
-        )
-    })?;
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    table.flush(/*flush_lsn=*/ 300).await.unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1363,17 +1309,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     // Operation series 3: no more additional rows appended, only to delete the last row in the table.
     // Expects to see the existing deletion vector updated, because its corresponding data file has been persisted.
     table.delete(row3.clone(), /*flush_lsn=*/ 400).await;
-    table.flush(/*flush_lsn=*/ 400).await.map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!("Failed to flush records to mooncake table because {:?}", e),
-        )
-    })?;
+    table.flush(/*flush_lsn=*/ 400).await.unwrap();
     table.commit(/*flush_lsn=*/ 400);
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1433,27 +1371,10 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         RowValue::ByteArray("Tom".as_bytes().to_vec()),
         RowValue::Int32(40),
     ]);
-    table.append(row4.clone()).map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!(
-                "Failed to append row4 {:?} to mooncake table because {:?}",
-                row4, e
-            ),
-        )
-    })?;
+    table.append(row4.clone()).unwrap();
     table.commit(/*flush_lsn=*/ 500);
-    table.flush(/*flush_lsn=*/ 500).await.map_err(|e| {
-        IcebergError::new(
-            iceberg::ErrorKind::Unexpected,
-            format!("Failed to flush records to mooncake table because {:?}", e),
-        )
-    })?;
-
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut notify_rx)
-        .await
-        .unwrap();
+    table.flush(/*flush_lsn=*/ 500).await.unwrap();
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(

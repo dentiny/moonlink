@@ -276,14 +276,13 @@ async fn test_compaction_1_1_1() {
     let _ = prepare_committed_and_flushed_data_files(&mut table).await;
 
     // Perform mooncake and iceberg snapshot, and data compaction.
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            /*injected_committed_deletion_rows=*/ vec![],
-            /*injected_uncommitted_deletion_rows=*/ vec![],
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -334,14 +333,13 @@ async fn test_compaction_1_1_2() {
     let injected_uncommitted_deletion_rows = vec![
         (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
     ];
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            injected_committed_deletion_rows,
-            injected_uncommitted_deletion_rows,
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        injected_committed_deletion_rows,
+        injected_uncommitted_deletion_rows,
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -412,15 +410,13 @@ async fn test_compaction_1_2_1() {
     // Delete one row and commit.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await;
     table.commit(/*lsn=*/ 3);
-
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            /*injected_committed_deletion_rows=*/ vec![],
-            /*injected_uncommitted_deletion_rows=*/ vec![],
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -491,14 +487,13 @@ async fn test_compaction_1_2_2() {
     let injected_uncommitted_deletion_rows = vec![
         (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
     ];
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            injected_committed_deletion_rows,
-            injected_uncommitted_deletion_rows,
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        injected_committed_deletion_rows,
+        injected_uncommitted_deletion_rows,
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -581,14 +576,13 @@ async fn test_compaction_2_2_1() {
     table.commit(/*lsn=*/ 5);
 
     // Perform mooncake and iceberg snapshot, and data compaction.
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            /*injected_committed_deletion_rows=*/ vec![],
-            /*injected_uncommitted_deletion_rows=*/ vec![],
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -660,14 +654,13 @@ async fn test_compaction_2_2_2() {
     let injected_uncommitted_deletion_rows = vec![
         (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
     ];
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            injected_committed_deletion_rows,
-            injected_uncommitted_deletion_rows,
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        injected_committed_deletion_rows,
+        injected_uncommitted_deletion_rows,
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -752,14 +745,13 @@ async fn test_compaction_2_3_1() {
     table.flush(/*lsn=*/ 5).await.unwrap();
 
     // Perform mooncake and iceberg snapshot, and data compaction.
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            /*injected_committed_deletion_rows=*/ vec![],
-            /*injected_uncommitted_deletion_rows=*/ vec![],
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -819,14 +811,13 @@ async fn test_compaction_2_3_2() {
     let injected_uncommitted_deletion_rows = vec![
         (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
     ];
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            injected_committed_deletion_rows,
-            injected_uncommitted_deletion_rows,
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        injected_committed_deletion_rows,
+        injected_uncommitted_deletion_rows,
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -914,14 +905,13 @@ async fn test_compaction_3_2_1() {
     table.commit(/*lsn=*/ 9);
 
     // Perform mooncake and iceberg snapshot, and data compaction.
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            /*injected_committed_deletion_rows=*/ vec![],
-            /*injected_uncommitted_deletion_rows=*/ vec![],
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -995,14 +985,13 @@ async fn test_compaction_3_3_1() {
     table.flush(/*lsn=*/ 7).await.unwrap();
 
     // Perform mooncake and iceberg snapshot, and data compaction.
-    table
-        .create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
-            &mut receiver,
-            /*injected_committed_deletion_rows=*/ vec![],
-            /*injected_uncommitted_deletion_rows=*/ vec![],
-        )
-        .await
-        .unwrap();
+    create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+        &mut table,
+        &mut receiver,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load

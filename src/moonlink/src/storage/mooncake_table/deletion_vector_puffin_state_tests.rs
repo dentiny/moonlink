@@ -91,13 +91,9 @@ async fn test_1_persist_2() {
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
-        .await
-        .unwrap();
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let (_, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
 
     // Check data file has been pinned in mooncake table.
@@ -154,13 +150,9 @@ async fn test_1_recover_2() {
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, ObjectStorageCache::new(cache_config))
             .await;
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
-        .await
-        .unwrap();
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let (_, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
 
     // Now the disk file and deletion vector has been persist into iceberg.
@@ -232,13 +224,9 @@ async fn test_2_read() {
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
-        .await
-        .unwrap();
-    let (_, _, _, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let (_, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
 
     // Use by read.
@@ -387,13 +375,9 @@ async fn test_2_compact() {
             object_storage_cache.clone(),
         )
         .await;
-    table
-        .create_mooncake_and_iceberg_snapshot_for_test(&mut table_notify)
-        .await
-        .unwrap();
-    let (_, _, data_compaction_payload, files_to_delete) = table
-        .create_mooncake_snapshot_for_test(&mut table_notify)
-        .await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let (_, _, data_compaction_payload, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
 
     // Get old snapshot disk files.
