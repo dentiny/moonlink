@@ -35,8 +35,6 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
-#[cfg(test)]
-use crate::storage::storage_utils::ProcessedDeletionRecord;
 use crate::storage::storage_utils::{FileId, TableId};
 use crate::table_notify::TableNotify;
 use crate::NonEvictableHandle;
@@ -1356,21 +1354,6 @@ impl MooncakeTable {
         }));
 
         Ok(())
-    }
-
-    /// Test util function to get committed and uncommitted deletion logs states.
-    #[cfg(test)]
-    pub(crate) async fn get_deletion_logs_for_snapshot(
-        &mut self,
-    ) -> (
-        Vec<ProcessedDeletionRecord>,
-        Vec<Option<ProcessedDeletionRecord>>,
-    ) {
-        let guard = self.snapshot.read().await;
-        (
-            guard.committed_deletion_log.clone(),
-            guard.uncommitted_deletion_log.clone(),
-        )
     }
 
     /// Test util function to get snapshot read output.

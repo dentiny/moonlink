@@ -311,7 +311,7 @@ async fn test_compaction_1_1_1() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
     assert!(committed_deletion_log.is_empty());
     assert!(uncommitted_deletion_log.is_empty());
 }
@@ -374,7 +374,7 @@ async fn test_compaction_1_1_2() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
 
     // Check committed deletion logs.
     assert_eq!(committed_deletion_log.len(), 1);
@@ -453,7 +453,7 @@ async fn test_compaction_1_2_1() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
 
     // Check committed deletion logs.
     assert_eq!(committed_deletion_log.len(), 1);
@@ -531,7 +531,7 @@ async fn test_compaction_1_2_2() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
 
     // Check committed deletion logs.
     assert_eq!(committed_deletion_log.len(), 2);
@@ -621,7 +621,7 @@ async fn test_compaction_2_2_1() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
     assert!(uncommitted_deletion_log.is_empty());
 
     assert_eq!(committed_deletion_log.len(), 1);
@@ -701,7 +701,7 @@ async fn test_compaction_2_2_2() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
 
     // Check committed deletion logs.
     assert_eq!(committed_deletion_log.len(), 2);
@@ -787,7 +787,7 @@ async fn test_compaction_2_3_1() {
 
     // Check deletion log for current snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
     assert!(committed_deletion_log.is_empty());
     assert!(uncommitted_deletion_log.is_empty());
 }
@@ -868,7 +868,7 @@ async fn test_compaction_2_3_2() {
 
     // Check comitted deletion logs.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
 
     assert_eq!(committed_deletion_log.len(), 1);
     let (file_id_1, row_idx_1) = parse_processed_deletion_log(&committed_deletion_log[0]);
@@ -950,7 +950,7 @@ async fn test_compaction_3_2_1() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
     assert!(uncommitted_deletion_log.is_empty());
 
     assert_eq!(committed_deletion_log.len(), 4);
@@ -1027,7 +1027,7 @@ async fn test_compaction_3_3_1() {
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
-        table.get_deletion_logs_for_snapshot().await;
+        get_deletion_logs_for_snapshot(&table).await;
     assert!(committed_deletion_log.is_empty());
     assert!(uncommitted_deletion_log.is_empty());
 }

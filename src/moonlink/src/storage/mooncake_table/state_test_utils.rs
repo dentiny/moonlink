@@ -11,7 +11,9 @@ use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::mooncake_table::{DiskFileEntry, TableConfig as MooncakeTableConfig};
-use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, TableId, TableUniqueFileId};
+use crate::storage::storage_utils::{
+    FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
+};
 use crate::table_notify::TableNotify;
 use crate::{IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState};
 
@@ -243,7 +245,7 @@ pub(super) fn get_index_block_files(
 }
 
 /// ===================================
-/// Utils for mooncake table
+/// Accessors for mooncake table
 /// ===================================
 ///
 /// Test util function to get disk files for the given mooncake table.
@@ -252,6 +254,20 @@ pub(crate) async fn get_disk_files_for_snapshot(
 ) -> HashMap<MooncakeDataFileRef, DiskFileEntry> {
     let guard = table.snapshot.read().await;
     guard.current_snapshot.disk_files.clone()
+}
+
+/// Test util function to get committed and uncommitted deletion logs states.
+pub(crate) async fn get_deletion_logs_for_snapshot(
+    table: &MooncakeTable,
+) -> (
+    Vec<ProcessedDeletionRecord>,
+    Vec<Option<ProcessedDeletionRecord>>,
+) {
+    let guard = table.snapshot.read().await;
+    (
+        guard.committed_deletion_log.clone(),
+        guard.uncommitted_deletion_log.clone(),
+    )
 }
 
 /// Test util function to get all index block filepaths from the given mooncake table.
