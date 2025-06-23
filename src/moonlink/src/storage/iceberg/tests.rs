@@ -39,7 +39,6 @@ use std::sync::Arc;
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::io::FileIOBuilder;
-use iceberg::Result as IcebergResult;
 use parquet::arrow::AsyncArrowWriter;
 use tempfile::tempdir;
 use tokio::sync::mpsc;
@@ -122,12 +121,11 @@ async fn write_arrow_record_batch_to_local<P: AsRef<std::path::Path>>(
     path: P,
     schema: Arc<ArrowSchema>,
     batch: &RecordBatch,
-) -> IcebergResult<()> {
-    let file = tokio::fs::File::create(&path).await?;
-    let mut writer = AsyncArrowWriter::try_new(file, schema, None)?;
-    writer.write(batch).await?;
-    writer.close().await?;
-    Ok(())
+) {
+    let file = tokio::fs::File::create(&path).await.unwrap();
+    let mut writer = AsyncArrowWriter::try_new(file, schema, None).unwrap();
+    writer.write(batch).await.unwrap();
+    writer.close().await.unwrap();
 }
 
 /// Test util to get file indices filepaths and their corresponding data filepaths.
@@ -165,8 +163,8 @@ fn get_file_indices_filepath_and_data_filepaths(
 async fn test_store_and_load_snapshot_impl(
     mooncake_table_metadata: Arc<MooncakeTableMetadata>,
     iceberg_table_config: IcebergTableConfig,
-) -> IcebergResult<()> {
-    let tmp_dir = tempdir()?;
+) {
+    let tmp_dir = tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
 
     // ==============
@@ -178,7 +176,8 @@ async fn test_store_and_load_snapshot_impl(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
-    )?;
+    )
+    .unwrap();
     assert!(iceberg_table_manager.persisted_data_files.is_empty());
 
     // Create arrow schema and table.
@@ -200,8 +199,7 @@ async fn test_store_and_load_snapshot_impl(
         /*file_id=*/ 0,
         parquet_path.to_str().unwrap().to_string(),
     );
-    write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_1)
-        .await?;
+    write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_1).await;
     let file_index_1 = create_file_index(vec![data_file_1.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
@@ -228,7 +226,8 @@ async fn test_store_and_load_snapshot_impl(
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
-        .await?;
+        .await
+        .unwrap();
 
     // ==============
     // Step 2
@@ -250,8 +249,7 @@ async fn test_store_and_load_snapshot_impl(
         /*file_id=*/ 2,
         parquet_path.to_str().unwrap().to_string(),
     );
-    write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_2)
-        .await?;
+    write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_2).await;
     let file_index_2 = create_file_index(vec![data_file_2.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
@@ -278,7 +276,8 @@ async fn test_store_and_load_snapshot_impl(
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
-        .await?;
+        .await
+        .unwrap();
 
     // Check persisted items in the iceberg table.
     assert_eq!(
@@ -300,7 +299,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut remote_data_files = vec![];
     for (file_id, data_entry) in iceberg_table_manager.persisted_data_files.iter() {
         let file_path = data_entry.data_file.file_path();
-        let loaded_arrow_batch = load_arrow_batch(&file_io, file_path).await?;
+        let loaded_arrow_batch = load_arrow_batch(&file_io, file_path).await.unwrap();
         let deleted_rows = data_entry.deletion_vector.collect_deleted_rows();
         assert_eq!(*loaded_arrow_batch.schema_ref(), arrow_schema);
         remote_data_files.push(create_data_file(
@@ -350,7 +349,8 @@ async fn test_store_and_load_snapshot_impl(
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
-        .await?;
+        .await
+        .unwrap();
     assert_eq!(iceberg_table_manager.persisted_file_indices.len(), 1);
 
     // Create a new iceberg table manager and check persisted content.
@@ -358,10 +358,12 @@ async fn test_store_and_load_snapshot_impl(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
-    )?;
+    )
+    .unwrap();
     let (_, snapshot) = iceberg_table_manager_for_load
         .load_snapshot_from_table()
-        .await?;
+        .await
+        .unwrap();
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert_eq!(snapshot.indices.file_indices.len(), 1);
@@ -388,7 +390,7 @@ async fn test_store_and_load_snapshot_impl(
         arrow_schema.clone(),
         &compacted_batch,
     )
-    .await?;
+    .await;
     let compacted_file_index = create_file_index(vec![compacted_data_file.clone()]);
 
     // ==============
@@ -419,17 +421,20 @@ async fn test_store_and_load_snapshot_impl(
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
-        .await?;
+        .await
+        .unwrap();
 
     // Create a new iceberg table manager and check persisted content.
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
-    )?;
+    )
+    .unwrap();
     let (_, snapshot) = iceberg_table_manager_for_load
         .load_snapshot_from_table()
-        .await?;
+        .await
+        .unwrap();
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 3);
     assert_eq!(snapshot.disk_files.len(), 1);
     let (data_file, batch_deletion_vector) = snapshot.disk_files.iter().next().unwrap();
@@ -440,7 +445,9 @@ async fn test_store_and_load_snapshot_impl(
         .collect_deleted_rows()
         .is_empty());
     // Check data file.
-    let loaded_arrow_batch = load_arrow_batch(&file_io, data_file.file_path()).await?;
+    let loaded_arrow_batch = load_arrow_batch(&file_io, data_file.file_path())
+        .await
+        .unwrap();
     assert_eq!(loaded_arrow_batch, compacted_batch);
     // Check file indices.
     assert!(snapshot.indices.in_memory_index.is_empty());
@@ -475,31 +482,32 @@ async fn test_store_and_load_snapshot_impl(
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
-        .await?;
+        .await
+        .unwrap();
 
     // Create a new iceberg table manager and check persisted content.
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
-    )?;
+    )
+    .unwrap();
     let (_, snapshot) = iceberg_table_manager_for_load
         .load_snapshot_from_table()
-        .await?;
+        .await
+        .unwrap();
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 4);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
-
-    Ok(())
 }
 
 /// Basic iceberg snapshot sync and load test via iceberg table manager.
 #[tokio::test]
-async fn test_sync_snapshots() -> IcebergResult<()> {
+async fn test_sync_snapshots() {
     // Create arrow schema and table.
-    let tmp_dir = tempdir()?;
+    let tmp_dir = tempdir().unwrap();
     let mooncake_table_metadata =
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
     let iceberg_table_config = IcebergTableConfig {
@@ -511,8 +519,7 @@ async fn test_sync_snapshots() -> IcebergResult<()> {
         mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
     )
-    .await?;
-    Ok(())
+    .await;
 }
 
 /// Test iceberg table manager drop table.
@@ -553,8 +560,8 @@ async fn test_drop_table() {
 
 /// Testing scenario: attempt an iceberg snapshot load with no preceding store.
 #[tokio::test]
-async fn test_empty_snapshot_load() -> IcebergResult<()> {
-    let tmp_dir = tempdir()?;
+async fn test_empty_snapshot_load() {
+    let tmp_dir = tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
     let mooncake_table_metadata =
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
@@ -565,22 +572,24 @@ async fn test_empty_snapshot_load() -> IcebergResult<()> {
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         config.clone(),
-    )?;
-    let (next_table_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_table_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_table_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     validate_recovered_snapshot(&snapshot, &config.warehouse_uri).await;
-
-    Ok(())
 }
 
 /// Testing scenario: iceberg snapshot should be loaded only once at recovery, otherwise it panics.
 #[tokio::test]
-async fn test_snapshot_load_for_multiple_times() -> IcebergResult<()> {
-    let tmp_dir = tempdir()?;
+async fn test_snapshot_load_for_multiple_times() {
+    let tmp_dir = tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
     let mooncake_table_metadata =
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
@@ -589,9 +598,13 @@ async fn test_snapshot_load_for_multiple_times() -> IcebergResult<()> {
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         config.clone(),
-    )?;
+    )
+    .unwrap();
 
-    iceberg_table_manager.load_snapshot_from_table().await?;
+    iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         tokio::runtime::Handle::current().block_on(async {
             iceberg_table_manager
@@ -601,8 +614,6 @@ async fn test_snapshot_load_for_multiple_times() -> IcebergResult<()> {
         });
     }));
     assert!(result.is_err());
-
-    Ok(())
 }
 
 /// Testing scenario: create iceberg snapshot for index merge.
@@ -709,8 +720,8 @@ async fn test_index_merge_and_create_snapshot() {
 
 /// Testing scenario: attempt an iceberg snapshot when no data file, deletion vector or index files generated.
 #[tokio::test]
-async fn test_empty_content_snapshot_creation() -> IcebergResult<()> {
-    let tmp_dir = tempdir()?;
+async fn test_empty_content_snapshot_creation() {
+    let tmp_dir = tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
     let mooncake_table_metadata =
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
@@ -719,7 +730,8 @@ async fn test_empty_content_snapshot_creation() -> IcebergResult<()> {
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         config.clone(),
-    )?;
+    )
+    .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
         import_payload: IcebergSnapshotImportPayload {
@@ -744,21 +756,25 @@ async fn test_empty_content_snapshot_creation() -> IcebergResult<()> {
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
-        .await?;
+        .await
+        .unwrap();
 
     // Recover from iceberg snapshot, and check mooncake table snapshot version.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         config.clone(),
-    )?;
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 0);
-    Ok(())
 }
 
 /// Testing scenario: when mooncake snapshot is created periodically, there're no committed deletion logs later than flush LSN.
@@ -1129,7 +1145,7 @@ async fn check_row_index_on_disk(snapshot: &Snapshot, row: &MoonlinkRow) {
     }
 }
 
-async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergResult<()> {
+async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     // For the ease of testing, we use different directories for mooncake table and iceberg warehouse uri.
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
@@ -1194,8 +1210,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
-    )?;
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_file_id, 2); // one data file, one index block file
     assert_eq!(
         snapshot.disk_files.len(),
@@ -1223,7 +1243,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         .unwrap()
         .file_io();
     let (loaded_path, deletion_vector) = snapshot.disk_files.iter().next().unwrap();
-    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str()).await?;
+    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str())
+        .await
+        .unwrap();
     let expected_arrow_batch = RecordBatch::try_new(
         schema.clone(),
         // row2 and row3
@@ -1259,8 +1281,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
-    )?;
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     assert_eq!(
         snapshot.disk_files.len(),
@@ -1290,7 +1316,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         .unwrap()
         .file_io();
     let (loaded_path, deletion_vector) = snapshot.disk_files.iter().next().unwrap();
-    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str()).await?;
+    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str())
+        .await
+        .unwrap();
     assert_eq!(
         loaded_arrow_batch, expected_arrow_batch,
         "Expected arrow data is {:?}, actual data is {:?}",
@@ -1318,8 +1346,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
-    )?;
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     assert_eq!(
         snapshot.disk_files.len(),
@@ -1338,7 +1370,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
     check_row_index_on_disk(&snapshot, &row2).await;
     check_row_index_on_disk(&snapshot, &row3).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await; // <---
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
 
     // Check the loaded data file is of the expected format and content.
@@ -1348,7 +1380,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         .unwrap()
         .file_io();
     let (loaded_path, deletion_vector) = snapshot.disk_files.iter().next().unwrap();
-    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str()).await?;
+    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str())
+        .await
+        .unwrap();
     assert_eq!(
         loaded_arrow_batch, expected_arrow_batch,
         "Expected arrow data is {:?}, actual data is {:?}",
@@ -1381,8 +1415,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
         iceberg_table_config.clone(),
-    )?;
-    let (next_file_id, mut snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_file_id, mut snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_file_id, 5); // two data file, two index block file, one deletion vector puffin
     assert_eq!(
         snapshot.disk_files.len(),
@@ -1411,7 +1449,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
 
     // Check new data file is correctly managed by iceberg table with no deletion vector.
     let (loaded_path, deletion_vector) = snapshot.disk_files.iter().next().unwrap();
-    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str()).await?;
+    let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str())
+        .await
+        .unwrap();
 
     let expected_arrow_batch = RecordBatch::try_new(
         schema.clone(),
@@ -1435,12 +1475,10 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) -> IcebergR
         "The new appended data file should have no deletion vector aside, but actually it contains deletion vector {:?}",
         deleted_rows
     );
-
-    Ok(())
 }
 
 #[tokio::test]
-async fn test_filesystem_sync_snapshots() -> IcebergResult<()> {
+async fn test_filesystem_sync_snapshots() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_str().unwrap().to_string();
     mooncake_table_snapshot_persist_impl(path).await
@@ -1448,16 +1486,19 @@ async fn test_filesystem_sync_snapshots() -> IcebergResult<()> {
 
 #[tokio::test]
 #[cfg(feature = "storage-s3")]
-async fn test_object_storage_sync_snapshots() -> IcebergResult<()> {
+async fn test_object_storage_sync_snapshots() {
     let (bucket_name, warehouse_uri) = s3_test_utils::get_test_minio_bucket_and_warehouse();
-    s3_test_utils::object_store_test_utils::create_test_s3_bucket(bucket_name.clone()).await?;
-    mooncake_table_snapshot_persist_impl(warehouse_uri).await?;
-    s3_test_utils::object_store_test_utils::delete_test_s3_bucket(bucket_name.clone()).await?;
-    Ok(())
+    s3_test_utils::object_store_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
+    s3_test_utils::object_store_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
-async fn test_drop_table_at_creation() -> IcebergResult<()> {
+async fn test_drop_table_at_creation() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_str().unwrap().to_string();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
@@ -1493,12 +1534,14 @@ async fn test_drop_table_at_creation() -> IcebergResult<()> {
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         iceberg_table_config.clone(),
-    )?;
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
+    )
+    .unwrap();
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
-
-    Ok(())
 }
