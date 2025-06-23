@@ -75,7 +75,7 @@ impl NonEvictableHandle {
     /// - Moonlink process restarts and recreates the cache directory.
     #[must_use]
     #[allow(dead_code)]
-    pub(crate) async fn unreference_and_replace_remote(
+    pub(crate) async fn unreference_and_replace_with_remote(
         &mut self,
         remote_filepath: &str,
     ) -> Vec<String> {

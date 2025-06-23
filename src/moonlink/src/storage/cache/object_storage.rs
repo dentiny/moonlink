@@ -7,4 +7,7 @@ pub mod object_storage_cache;
 mod state_tests;
 
 #[cfg(test)]
+mod local_file_optimization_state_tests;
+
+#[cfg(test)]
 mod test_utils;
