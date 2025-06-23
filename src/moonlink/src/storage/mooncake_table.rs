@@ -1096,6 +1096,33 @@ impl MooncakeTable {
         Ok(())
     }
 
+    // Test util to block wait current mooncake snapshot completion, get the iceberg persistence payload, and perform a new mooncake snapshot and wait completion.
+    #[cfg(test)]
+    async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
+        &mut self,
+        receiver: &mut Receiver<TableNotify>,
+    ) {
+        let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
+            Self::sync_mooncake_snapshot(receiver).await;
+        // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
+        io_utils::delete_local_files(evicted_data_files_to_delete)
+            .await
+            .unwrap();
+
+        let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
+        self.persist_iceberg_snapshot(iceberg_snapshot_payload);
+        let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
+        self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+
+        // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
+        assert!(self.create_snapshot(SnapshotOption {
+            force_create: true,
+            skip_iceberg_snapshot: true,
+            skip_file_indices_merge: true,
+            skip_data_file_compaction: true,
+        }));
+    }
+
     // Test util function, which does the following things in serial fashion.
     // (1) updates mooncake table snapshot, (2) create iceberg snapshot, (3) trigger data compaction, (4) perform data compaction, (5) another mooncake and iceberg snapshot.
     //
@@ -1147,8 +1174,7 @@ impl MooncakeTable {
 
         // Perform and block wait data compaction.
         self.perform_data_compaction(data_compaction_payload);
-        let data_compaction_result = Self::sync_data_compaction(receiver).await;
-        let data_compaction_result = data_compaction_result.unwrap();
+        let data_compaction_result = Self::sync_data_compaction(receiver).await.unwrap();
 
         // Before create snapshot for compaction results, perform another deletion operations.
         for (cur_row, lsn) in injected_committed_deletion_rows {
@@ -1167,25 +1193,7 @@ impl MooncakeTable {
             skip_file_indices_merge: true,
             skip_data_file_compaction: false,
         }));
-        let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
-            Self::sync_mooncake_snapshot(receiver).await;
-        // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        io_utils::delete_local_files(evicted_data_files_to_delete)
-            .await
-            .unwrap();
-
-        let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
-        self.persist_iceberg_snapshot(iceberg_snapshot_payload);
-        let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
-        self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
-
-        // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
-        assert!(self.create_snapshot(SnapshotOption {
-            force_create: true,
-            skip_iceberg_snapshot: true,
-            skip_file_indices_merge: true,
-            skip_data_file_compaction: true,
-        }));
+        self.sync_mooncake_snapshot_and_create_new_by_iceberg_payload(receiver).await;
 
         Ok(())
     }
@@ -1241,25 +1249,7 @@ impl MooncakeTable {
             skip_file_indices_merge: false,
             skip_data_file_compaction: false,
         }));
-        let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
-            Self::sync_mooncake_snapshot(receiver).await;
-        // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        io_utils::delete_local_files(evicted_data_files_to_delete)
-            .await
-            .unwrap();
-
-        let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
-        self.persist_iceberg_snapshot(iceberg_snapshot_payload);
-        let iceberg_snapshot_result = Self::sync_iceberg_snapshot(receiver).await;
-        self.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
-
-        // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
-        assert!(self.create_snapshot(SnapshotOption {
-            force_create: true,
-            skip_iceberg_snapshot: true,
-            skip_file_indices_merge: true,
-            skip_data_file_compaction: true,
-        }));
+        self.sync_mooncake_snapshot_and_create_new_by_iceberg_payload(receiver).await;
 
         Ok(())
     }
