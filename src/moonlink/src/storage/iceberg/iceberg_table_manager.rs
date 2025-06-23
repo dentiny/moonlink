@@ -724,7 +724,7 @@ impl TableManager for IcebergTableManager {
         if !data_file_import_result.new_iceberg_data_files.is_empty() {
             let action = txn.fast_append();
             let action = action.add_data_files(data_file_import_result.new_iceberg_data_files);
-            txn = action.apply(txn).unwrap();
+            txn = action.apply(txn)?;
         }
 
         // Persist flush lsn at table property
@@ -732,7 +732,7 @@ impl TableManager for IcebergTableManager {
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),
             snapshot_payload.flush_lsn.to_string(),
         );
-        txn = action.apply(txn).unwrap();
+        txn = action.apply(txn)?;
 
         self.iceberg_table = Some(txn.commit(&*self.catalog).await?);
         self.catalog.clear_puffin_metadata();
