@@ -8,13 +8,16 @@ pub struct ObjectStorageCacheConfig {
     pub max_bytes: u64,
     /// Directory to store local cache files.
     pub cache_directory: String,
+    // Option to optimize cases where persistent table also sits at local filesystem cases, so only one copy will be stored.
+    pub optimize_local_filesystem: bool,
 }
 
 impl ObjectStorageCacheConfig {
-    pub fn new(max_bytes: u64, cache_directory: String) -> Self {
+    pub fn new(max_bytes: u64, cache_directory: String, optimize_local_filesystem: bool) -> Self {
         Self {
             max_bytes,
             cache_directory,
+            optimize_local_filesystem,
         }
     }
 
@@ -26,6 +29,8 @@ impl ObjectStorageCacheConfig {
         Self {
             max_bytes: DEFAULT_MAX_BYTES_FOR_TEST,
             cache_directory: temp_dir.path().to_str().unwrap().to_string(),
+            // By default disable local filesystem optimization, to mimic production use case where there's remote storage.
+            optimize_local_filesystem: false,
         }
     }
 
@@ -49,6 +54,7 @@ impl ObjectStorageCacheConfig {
         Self {
             max_bytes: DEFAULT_MAX_BYTES_FOR_TEST,
             cache_directory: DEFAULT_CACHE_DIRECTORY.to_string(),
+            optimize_local_filesystem: true,
         }
     }
 }

@@ -65,6 +65,7 @@ fn create_default_object_storage_cache() -> ObjectStorageCache {
     let cache_config = ObjectStorageCacheConfig {
         max_bytes: filesystem_size - MIN_DISK_SPACE_FOR_CACHE,
         cache_directory: DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH.to_string(),
+        optimize_local_filesystem: true,
     };
     ObjectStorageCache::new(cache_config)
 }

@@ -38,6 +38,7 @@ pub(crate) fn get_test_cache_config(tmp_dir: &TempDir) -> ObjectStorageCacheConf
         // Set max bytes larger than one file, but less than two files.
         max_bytes: 15,
         cache_directory: tmp_dir.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     }
 }
 

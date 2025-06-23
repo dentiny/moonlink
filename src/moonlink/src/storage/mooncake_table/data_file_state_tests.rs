@@ -128,6 +128,7 @@ async fn test_shutdown_table() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -181,6 +182,7 @@ async fn test_5_read_4_by_batch_write() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -310,6 +312,7 @@ async fn test_5_read_4_by_stream_write() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -438,6 +441,7 @@ async fn test_5_1() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -502,6 +506,7 @@ async fn test_4_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -622,6 +627,7 @@ async fn test_4_read_4() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -735,6 +741,7 @@ async fn test_4_read_and_read_over_4() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -814,6 +821,7 @@ async fn test_3_read_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -938,6 +946,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1069,6 +1078,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1148,6 +1158,7 @@ async fn test_1_read_and_pinned_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1268,6 +1279,7 @@ async fn test_1_read_and_unpinned_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1317,6 +1329,7 @@ async fn test_2_read_and_pinned_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1456,6 +1469,7 @@ async fn test_2_read_and_unpinned_2() {
     let cache_config = ObjectStorageCacheConfig::new(
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1516,6 +1530,7 @@ async fn test_2_read_over_1() {
     let cache_config = ObjectStorageCacheConfig::new(
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1611,6 +1626,7 @@ async fn test_3_compact_3_5() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1780,6 +1796,7 @@ async fn test_3_compact_1_5() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -1902,6 +1919,7 @@ async fn test_1_compact_1_5() {
     let cache_config = ObjectStorageCacheConfig::new(
         ONE_FILE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 

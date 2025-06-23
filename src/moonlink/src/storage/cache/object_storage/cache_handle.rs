@@ -62,4 +62,37 @@ impl NonEvictableHandle {
         // The cache entry could be held elsewhere.
         guard.delete_cache_entry(self.file_id, /*panic_if_non_existent=*/ true)
     }
+
+    /// Unreference and try import remote files, could be optimized if local filesystem optimization enabled.
+    ///
+    /// This is an optimization for cases where both cache files and persisted files live on local filesystem, so we don't need to store the same files twice.
+    /// The idea way, from users's perspective, is to switch from local filepath to remote if possible, but that leads to state machine being over-complicated.
+    /// For example, we need to keep another pending state in cache, to record file paths requested to replace with remote, when they're (1) in use, or (2) in use and requested to delete.
+    /// To make implementation easy, the implementation here only attempt once at unreference; if it fails, the replacement will never happen.
+    /// But local cache files are still subject to eviction and deletion, for example, when
+    /// - Object storage cache goes out of space;
+    /// - Maintainance job like compaction kicks in and requests to delete old compacted files;
+    /// - Moonlink process restarts and recreates the cache directory.
+    #[must_use]
+    #[allow(dead_code)]
+    pub(crate) async fn unreference_and_replace_remote(
+        &mut self,
+        remote_filepath: &str,
+    ) -> Vec<String> {
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
+        let mut guard = self.cache.write().await;
+
+        // First unreference the cache handle as usual.
+        let cur_evicted_files = guard.unreference(self.file_id);
+        assert!(cur_evicted_files.is_empty());
+
+        // Then try to replace cache filepath with remote file, if applicable.
+        let cur_evicted_files =
+            guard.try_replace_evictable_with_remote(&self.file_id, remote_filepath);
+        evicted_files_to_delete.extend(cur_evicted_files);
+
+        evicted_files_to_delete
+    }
 }

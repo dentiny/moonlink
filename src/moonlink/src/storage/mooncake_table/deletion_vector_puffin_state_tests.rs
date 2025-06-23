@@ -86,6 +86,7 @@ async fn test_1_persist_2() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -145,6 +146,7 @@ async fn test_1_recover_2() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
@@ -219,6 +221,7 @@ async fn test_2_read() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -366,6 +369,7 @@ async fn test_2_compact() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 

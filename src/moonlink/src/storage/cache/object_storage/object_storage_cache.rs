@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, FileMetadata};
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::cache_handle::NonEvictableHandle;
+use crate::storage::path_utils;
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::Result;
 
@@ -21,6 +22,9 @@ pub(crate) struct CacheEntryWrapper {
     pub(crate) cache_entry: CacheEntry,
     /// Reference count.
     pub(crate) reference_count: u32,
+    /// Whether the cache file could be deleted.
+    /// It's set to false when local filesystem optimization turned on, and we use remote file as local cache at the same time.
+    pub(crate) deletable: bool,
 }
 
 /// A cache entry could be either evictable or non-evictable.
@@ -28,9 +32,12 @@ pub(crate) struct CacheEntryWrapper {
 /// (1) fetch and mark as non-evictable on access
 /// (2) dereference after usage, down-level to evictable when it's unreferenced
 pub(crate) struct ObjectStorageCacheInternal {
+    /// Cache configuration.
+    #[allow(dead_code)]
+    config: ObjectStorageCacheConfig,
     /// Current number of bytes of all cache entries, which only accounts overall bytes for evictable cache and non-evictable cache.
     pub(crate) cur_bytes: u64,
-    /// Deleted entries, which should be evicted right away, and should never be referenced again.
+    /// Deleted entries, which should be evicted right away after no reference count, and should never be referenced again.
     pub(crate) evicted_entries: HashSet<TableUniqueFileId>,
     /// Evictable object storage cache entries.
     pub(crate) evictable_cache: LruCache<TableUniqueFileId, CacheEntryWrapper>,
@@ -164,6 +171,31 @@ impl ObjectStorageCacheInternal {
         entries_to_delete
     }
 
+    /// Attempt to replace an evictable cache entry with remote path, if the filepath lives on local filesystem.
+    /// Return evicted files to delete.
+    #[allow(dead_code)]
+    pub(super) fn try_replace_evictable_with_remote(
+        &mut self,
+        file_id: &TableUniqueFileId,
+        remote_path: &str,
+    ) -> Vec<String> {
+        // Local filesystem optimization is not enabled, or remote path doesn't lives on local filesystem, fallback to normal unreference logic.
+        if !self.config.optimize_local_filesystem {
+            return vec![];
+        }
+        if !path_utils::is_local_filepath(remote_path) {
+            return vec![];
+        }
+
+        // Only replace with remote filepath when requested file lives at evictable cache.
+        let cache_entry_wrapper = self.evictable_cache.get_mut(&file_id).unwrap();
+        let old_cache_filepath = cache_entry_wrapper.cache_entry.cache_filepath.clone();
+        cache_entry_wrapper.cache_entry.cache_filepath = remote_path.to_string();
+        cache_entry_wrapper.deletable = true;
+
+        vec![old_cache_filepath]
+    }
+
     /// ================================
     /// Test util functions
     /// ================================
@@ -201,8 +233,9 @@ impl ObjectStorageCache {
     pub fn new(config: ObjectStorageCacheConfig) -> Self {
         let evictable_cache = LruCache::unbounded();
         Self {
-            config,
+            config: config.clone(),
             cache: Arc::new(RwLock::new(ObjectStorageCacheInternal {
+                config,
                 cur_bytes: 0,
                 evicted_entries: HashSet::new(),
                 evictable_cache,
@@ -278,6 +311,7 @@ impl CacheTrait for ObjectStorageCache {
         let cache_entry_wrapper = CacheEntryWrapper {
             cache_entry: cache_entry.clone(),
             reference_count: 1,
+            deletable: false,
         };
         let file_size = cache_entry.file_metadata.file_size;
         let non_evictable_handle =
@@ -349,6 +383,7 @@ impl CacheTrait for ObjectStorageCache {
         let cache_entry_wrapper = CacheEntryWrapper {
             cache_entry: cache_entry.clone(),
             reference_count: 1,
+            deletable: false,
         };
         let file_size = cache_entry.file_metadata.file_size;
         let non_evictable_handle =
@@ -404,6 +439,7 @@ mod tests {
             // Set max bytes larger than one file, but less than two files.
             max_bytes: (CONTENT.len() * PARALLEL_TASK_NUM) as u64,
             cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+            optimize_local_filesystem: false,
         };
         let cache = ObjectStorageCache::new(config);
 

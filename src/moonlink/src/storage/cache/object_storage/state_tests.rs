@@ -118,6 +118,7 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import into cache first.
@@ -268,6 +269,7 @@ async fn test_cache_2_new_entry_with_sufficient_space() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: (CONTENT.len() * 2) as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import the first cache file.
@@ -331,6 +333,7 @@ async fn test_cache_2_new_entry_with_insufficient_space() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import the first cache file.
@@ -495,6 +498,7 @@ async fn test_cache_2_requested_to_delete_4() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import into cache first.
@@ -535,6 +539,7 @@ async fn test_cache_3_requested_to_delete_5() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import into cache first.
@@ -577,6 +582,7 @@ async fn test_cache_5_usage_finish_and_still_referenced_5() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import into cache first.
@@ -632,6 +638,7 @@ async fn test_cache_5_usage_finish_and_not_referenced_4() {
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
         max_bytes: CONTENT.len() as u64,
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: false,
     });
 
     // Import into cache first.

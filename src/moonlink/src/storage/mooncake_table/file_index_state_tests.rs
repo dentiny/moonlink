@@ -85,6 +85,7 @@ async fn test_1_recover_3() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
@@ -256,6 +257,7 @@ async fn test_3_index_merge() {
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
