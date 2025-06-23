@@ -1396,12 +1396,11 @@ async fn test_2_read_and_pinned_3() {
 
     // Check fake file has been evicted.
     let fake_filepath = temp_dir.path().join(FAKE_FILE_NAME);
-    table
-        .sync_delete_evicted_files(
-            &mut table_notify,
-            vec![fake_filepath.to_str().unwrap().to_string()],
-        )
-        .await;
+    sync_delete_evicted_files(
+        &mut table_notify,
+        vec![fake_filepath.to_str().unwrap().to_string()],
+    )
+    .await;
 
     // Check data file has been pinned in mooncake table.
     let disk_files = get_disk_files_for_snapshot(&table).await;

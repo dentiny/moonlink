@@ -1010,24 +1010,6 @@ impl MooncakeTable {
         }
     }
 
-    /// Test util function to block wait evicted data file to delete request, and check whether matches expected data files.
-    #[cfg(test)]
-    pub(crate) async fn sync_delete_evicted_files(
-        &mut self,
-        receiver: &mut Receiver<TableNotify>,
-        mut expected_files_to_delete: Vec<String>,
-    ) {
-        let notification = receiver.recv().await.unwrap();
-        if let TableNotify::EvictedDataFilesToDelete {
-            mut evicted_data_files,
-        } = notification
-        {
-            evicted_data_files.sort();
-            expected_files_to_delete.sort();
-            assert_eq!(evicted_data_files, expected_files_to_delete);
-        }
-    }
-
     #[cfg(test)]
     async fn sync_iceberg_snapshot(
         receiver: &mut Receiver<TableNotify>,

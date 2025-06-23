@@ -317,6 +317,26 @@ pub(super) async fn get_index_block_file_ids(table: &MooncakeTable) -> Vec<FileI
 /// Operation for mooncake table
 /// ===================================
 ///
+/// -------- Delete evicted files --------
+/// Test util function to block wait delete request, and check whether matches expected data files.
+#[cfg(test)]
+pub(crate) async fn sync_delete_evicted_files(
+    receiver: &mut Receiver<TableNotify>,
+    mut expected_files_to_delete: Vec<String>,
+) {
+    let notification = receiver.recv().await.unwrap();
+    if let TableNotify::EvictedDataFilesToDelete {
+        mut evicted_data_files,
+    } = notification
+    {
+        evicted_data_files.sort();
+        expected_files_to_delete.sort();
+        assert_eq!(evicted_data_files, expected_files_to_delete);
+    } else {
+        panic!("Receive other notifications other than delete evicted files")
+    }
+}
+
 /// -------- Request read --------
 /// Perform a read request for the given table.
 pub(super) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> SnapshotReadOutput {
