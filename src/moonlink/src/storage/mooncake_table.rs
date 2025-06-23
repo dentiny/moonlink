@@ -1395,19 +1395,6 @@ impl MooncakeTable {
         index_block_files
     }
 
-    /// Test util function to get all index block files size.
-    #[cfg(test)]
-    pub(crate) async fn get_index_block_files_size(&mut self) -> u64 {
-        let guard = self.snapshot.read().await;
-        let mut index_blocks_file_size = 0;
-        for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-            for cur_index_block in cur_file_index.index_blocks.iter() {
-                index_blocks_file_size += cur_index_block.file_size;
-            }
-        }
-        index_blocks_file_size
-    }
-
     /// Test util function to get snapshot read output.
     #[cfg(test)]
     pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {

@@ -1716,7 +1716,7 @@ async fn test_3_compact_3_5() {
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
-    let new_compacted_index_block_size = table.get_index_block_files_size().await;
+    let new_compacted_index_block_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
@@ -1903,7 +1903,7 @@ async fn test_3_compact_1_5() {
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(new_compacted_file, &temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
-    let new_compacted_file_index_size = table.get_index_block_files_size().await;
+    let new_compacted_file_index_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
@@ -2010,7 +2010,7 @@ async fn test_1_compact_1_5() {
     let new_compacted_data_file_size = disk_file_entry.file_size;
     let file_indices = get_index_block_filepaths(&table).await;
     assert_eq!(file_indices.len(), 1);
-    let new_compacted_index_block_size = table.get_index_block_files_size().await;
+    let new_compacted_index_block_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 

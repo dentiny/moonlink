@@ -256,3 +256,15 @@ pub(super) async fn get_index_block_filepaths(table: &MooncakeTable) -> Vec<Stri
     }
     index_block_files
 }
+
+/// Test util function to get overall file size for all index block files from the given mooncake table.
+pub(super) async fn get_index_block_files_size(table: &MooncakeTable) -> u64 {
+    let guard = table.snapshot.read().await;
+    let mut index_blocks_file_size = 0;
+    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
+        for cur_index_block in cur_file_index.index_blocks.iter() {
+            index_blocks_file_size += cur_index_block.file_size;
+        }
+    }
+    index_blocks_file_size
+}
