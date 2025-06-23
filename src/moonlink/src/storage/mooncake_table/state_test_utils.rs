@@ -15,7 +15,10 @@ use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
 };
 use crate::table_notify::TableNotify;
-use crate::{IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState};
+use crate::{
+    IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState,
+    SnapshotReadOutput,
+};
 
 /// This module contains util functions for state-based tests.
 ///
@@ -73,7 +76,7 @@ pub(super) async fn drop_read_states(
 ) {
     for cur_read_state in read_states.into_iter() {
         drop(cur_read_state);
-        table.sync_read_request(receiver).await;
+        sync_read_request_for_test(table, receiver).await;
     }
 }
 /// Test util function to drop read states and create a mooncake snapshot to reflect.
@@ -304,4 +307,29 @@ pub(super) async fn get_index_block_file_ids(table: &MooncakeTable) -> Vec<FileI
         }
     }
     index_block_files
+}
+
+/// ===================================
+/// Operation for mooncake table
+/// ===================================
+///
+/// -------- Request read --------
+/// Perform a read request for the given table.
+pub(super) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> SnapshotReadOutput {
+    let mut guard = table.snapshot.write().await;
+    guard.request_read().await.unwrap()
+}
+
+/// Block wait read request to finish, and set the result to the snapshot buffer.
+/// Precondition: there's ongoing read request.
+pub(super) async fn sync_read_request_for_test(
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+) {
+    let notification = receiver.recv().await.unwrap();
+    if let TableNotify::ReadRequest { cache_handles } = notification {
+        table.set_read_request_res(cache_handles);
+    } else {
+        panic!("Receive other notifications other than read request")
+    }
 }

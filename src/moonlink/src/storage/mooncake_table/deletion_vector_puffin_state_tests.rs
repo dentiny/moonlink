@@ -242,7 +242,7 @@ async fn test_2_read() {
     assert!(files_to_delete.is_empty());
 
     // Use by read.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.

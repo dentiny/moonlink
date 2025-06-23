@@ -191,7 +191,7 @@ async fn test_5_read_4_by_batch_write() {
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
     assert!(files_to_delete.is_empty());
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
@@ -321,7 +321,7 @@ async fn test_5_read_4_by_stream_write() {
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
     assert!(files_to_delete.is_empty());
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
@@ -520,7 +520,7 @@ async fn test_4_3() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
@@ -645,11 +645,11 @@ async fn test_4_read_4() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count for the first time.
-    let snapshot_read_output_1 = table.request_read().await.unwrap();
+    let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Read and increment reference count for the second time.
-    let snapshot_read_output_2 = table.request_read().await.unwrap();
+    let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let snapshot_read_output_2_clone = snapshot_read_output_2.clone();
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
@@ -759,10 +759,10 @@ async fn test_4_read_and_read_over_4() {
     assert!(files_to_delete.is_empty());
 
     // Read, increment reference count and drop to declare finish.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
     drop(read_state);
-    table.sync_read_request(&mut table_notify).await;
+    sync_read_request_for_test(&mut table, &mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
     let (_, _, _, files_to_delete) = table
@@ -840,7 +840,7 @@ async fn test_3_read_3() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output_1 = table.request_read().await.unwrap();
+    let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
@@ -854,7 +854,7 @@ async fn test_3_read_3() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output_2 = table.request_read().await.unwrap();
+    let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
@@ -969,7 +969,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output_1 = table.request_read().await.unwrap();
+    let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
@@ -983,10 +983,10 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output_2 = table.request_read().await.unwrap();
+    let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
     drop(read_state_2);
-    table.sync_read_request(&mut table_notify).await;
+    sync_read_request_for_test(&mut table, &mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
     let (_, _, _, files_to_delete) = table
@@ -1116,10 +1116,10 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
     drop(read_state);
-    table.sync_read_request(&mut table_notify).await;
+    sync_read_request_for_test(&mut table, &mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
     let (_, _, _, files_to_delete) = table
@@ -1201,7 +1201,7 @@ async fn test_1_read_and_pinned_3() {
     assert!(files_to_delete.is_empty());
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
@@ -1329,7 +1329,7 @@ async fn test_1_read_and_unpinned_3() {
     import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
@@ -1383,7 +1383,7 @@ async fn test_2_read_and_pinned_3() {
     let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read, but no reference count hold within read state.
-    let snapshot_read_output_1 = table.request_read().await.unwrap();
+    let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
     // Till now, the state is (remote, no local, in use).
 
@@ -1391,7 +1391,7 @@ async fn test_2_read_and_pinned_3() {
     let evicted_files_to_delete = fake_cache_handle.unreference().await;
     assert!(evicted_files_to_delete.is_empty());
 
-    let snapshot_read_output_2 = table.request_read().await.unwrap();
+    let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check fake file has been evicted.
@@ -1528,12 +1528,12 @@ async fn test_2_read_and_unpinned_2() {
     import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read, but no reference count hold within read state.
-    let snapshot_read_output_1 = table.request_read().await.unwrap();
+    let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
     // Till now, the state is (remote, no local, in use).
 
     // Read, but no reference count hold within read state.
-    let snapshot_read_output_2 = table.request_read().await.unwrap();
+    let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check data file has been pinned in mooncake table.
@@ -1593,7 +1593,7 @@ async fn test_2_read_over_1() {
     import_fake_cache_entry(&temp_dir, &mut object_storage_cache).await;
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
     // Till now, the state is (remote, no local, in use).
 
@@ -1688,7 +1688,7 @@ async fn test_3_compact_3_5() {
     assert_eq!(old_compacted_index_block_file_ids.len(), 2);
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
@@ -1865,7 +1865,7 @@ async fn test_3_compact_1_5() {
     assert_eq!(old_compacted_index_block_file_ids.len(), 2);
 
     // Read and increment reference count.
-    let snapshot_read_output = table.request_read().await.unwrap();
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.

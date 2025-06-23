@@ -1010,15 +1010,6 @@ impl MooncakeTable {
         }
     }
 
-    /// Test util function to sync on completed read request.
-    #[cfg(test)]
-    pub(crate) async fn sync_read_request(&mut self, receiver: &mut Receiver<TableNotify>) {
-        let notification = receiver.recv().await.unwrap();
-        if let TableNotify::ReadRequest { cache_handles } = notification {
-            self.set_read_request_res(cache_handles);
-        }
-    }
-
     /// Test util function to block wait evicted data file to delete request, and check whether matches expected data files.
     #[cfg(test)]
     pub(crate) async fn sync_delete_evicted_files(
@@ -1354,13 +1345,6 @@ impl MooncakeTable {
         }));
 
         Ok(())
-    }
-
-    /// Test util function to get snapshot read output.
-    #[cfg(test)]
-    pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {
-        let mut guard = self.snapshot.write().await;
-        guard.request_read().await
     }
 }
 
