@@ -722,10 +722,9 @@ impl TableManager for IcebergTableManager {
         // Only start append action when there're new data files.
         let mut txn = Transaction::new(self.iceberg_table.as_ref().unwrap());
         if !data_file_import_result.new_iceberg_data_files.is_empty() {
-            let mut action =
-                txn.fast_append(/*commit_uuid=*/ None, /*key_metadata=*/ vec![])?;
-            action.add_data_files(data_file_import_result.new_iceberg_data_files)?;
-            txn = action.apply().await?;
+            let action = txn.fast_append();
+            let action = action.add_data_files(data_file_import_result.new_iceberg_data_files);
+            txn = action.apply(txn).unwrap();
         }
 
         // Persist flush lsn at table property

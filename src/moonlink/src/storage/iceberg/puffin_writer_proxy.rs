@@ -327,7 +327,7 @@ fn create_manifest_writer_builder(
             Uuid::now_v7()
         ))?,
         table_metadata.current_snapshot_id(),
-        /*key_metadata=*/ vec![],
+        /*key_metadata=*/ None,
         table_metadata.current_schema().clone(),
         table_metadata.default_partition_spec().as_ref().clone(),
     );
