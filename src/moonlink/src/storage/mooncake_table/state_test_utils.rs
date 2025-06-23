@@ -268,3 +268,15 @@ pub(super) async fn get_index_block_files_size(table: &MooncakeTable) -> u64 {
     }
     index_blocks_file_size
 }
+
+/// Test util function to get index block file ids for the given mooncake table.
+pub(super) async fn get_index_block_file_ids(table: &MooncakeTable) -> Vec<FileId> {
+    let guard = table.snapshot.read().await;
+    let mut index_block_files = vec![];
+    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
+        for cur_index_block in cur_file_index.index_blocks.iter() {
+            index_block_files.push(cur_index_block.index_file.file_id());
+        }
+    }
+    index_block_files
+}

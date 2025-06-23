@@ -200,7 +200,7 @@ async fn test_5_read_4_by_batch_write() {
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     assert_eq!(
@@ -330,7 +330,7 @@ async fn test_5_read_4_by_stream_write() {
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     assert_eq!(
@@ -463,7 +463,7 @@ async fn test_5_1() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -540,7 +540,7 @@ async fn test_4_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -663,7 +663,7 @@ async fn test_4_read_4() {
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -777,7 +777,7 @@ async fn test_4_read_and_read_over_4() {
     assert!(disk_file_entry.cache_handle.is_some());
     assert!(is_local_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -864,7 +864,7 @@ async fn test_3_read_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1001,7 +1001,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1134,7 +1134,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1211,7 +1211,7 @@ async fn test_1_read_and_pinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1339,7 +1339,7 @@ async fn test_1_read_and_unpinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1410,7 +1410,7 @@ async fn test_2_read_and_pinned_3() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1543,7 +1543,7 @@ async fn test_2_read_and_unpinned_2() {
     assert!(disk_file_entry.cache_handle.is_none());
     assert!(is_remote_file(file, &temp_dir));
 
-    let index_block_file_ids = table.get_index_block_file_ids().await;
+    let index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1684,7 +1684,7 @@ async fn test_3_compact_3_5() {
     assert_eq!(disk_files.len(), 2);
     let old_compacted_data_files = disk_files.keys().cloned().collect::<Vec<_>>();
     let old_compacted_index_block_files = get_index_block_filepaths(&table).await;
-    let old_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    let old_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(old_compacted_index_block_file_ids.len(), 2);
 
     // Read and increment reference count.
@@ -1717,7 +1717,7 @@ async fn test_3_compact_3_5() {
     assert!(is_local_file(new_compacted_file, &temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
     let new_compacted_index_block_size = get_index_block_files_size(&table).await;
-    let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -1861,7 +1861,7 @@ async fn test_3_compact_1_5() {
 
     let mut old_compacted_index_block_files = get_index_block_filepaths(&table).await;
     old_compacted_index_block_files.sort();
-    let old_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    let old_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(old_compacted_index_block_file_ids.len(), 2);
 
     // Read and increment reference count.
@@ -1904,7 +1904,7 @@ async fn test_3_compact_1_5() {
     assert!(is_local_file(new_compacted_file, &temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
     let new_compacted_file_index_size = get_index_block_files_size(&table).await;
-    let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.
@@ -2011,7 +2011,7 @@ async fn test_1_compact_1_5() {
     let file_indices = get_index_block_filepaths(&table).await;
     assert_eq!(file_indices.len(), 1);
     let new_compacted_index_block_size = get_index_block_files_size(&table).await;
-    let new_compacted_index_block_file_ids = table.get_index_block_file_ids().await;
+    let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.

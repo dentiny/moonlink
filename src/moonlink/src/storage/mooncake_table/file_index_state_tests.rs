@@ -272,9 +272,6 @@ async fn test_3_index_merge() {
     let (_, index_merge_payload, _, files_to_delete) = table
         .create_mooncake_snapshot_for_test(&mut table_notify)
         .await;
-
-    println!("===iceberg finished====");
-
     assert!(files_to_delete.is_empty());
     let index_merge_payload = index_merge_payload.unwrap();
 
