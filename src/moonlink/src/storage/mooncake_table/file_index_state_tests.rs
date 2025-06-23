@@ -281,7 +281,7 @@ async fn test_3_index_merge() {
     // Get data files and old merged index block files.
     let disk_files = table.get_disk_files_for_snapshot().await;
     assert_eq!(disk_files.len(), 2);
-    let mut old_compacted_index_block_files = table.get_index_block_files().await;
+    let mut old_compacted_index_block_files = get_index_block_filepaths(&table).await;
     assert_eq!(old_compacted_index_block_files.len(), 2);
     old_compacted_index_block_files.sort();
 
@@ -292,7 +292,7 @@ async fn test_3_index_merge() {
     evicted_files_to_delete.sort();
     assert_eq!(old_compacted_index_block_files, evicted_files_to_delete);
 
-    let merged_file_indices = table.get_index_block_files().await;
+    let merged_file_indices = get_index_block_filepaths(&table).await;
     assert_eq!(merged_file_indices.len(), 1);
 
     // Check cache state.

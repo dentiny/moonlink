@@ -421,7 +421,7 @@ async fn test_2_compact() {
         );
     }
     assert_eq!(old_compacted_puffin_files.len(), 2);
-    let old_compacted_index_block_files = table.get_index_block_files().await;
+    let old_compacted_index_block_files = get_index_block_filepaths(&table).await;
     assert_eq!(old_compacted_index_block_files.len(), 2);
 
     // Check cache state.

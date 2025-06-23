@@ -240,3 +240,19 @@ pub(super) fn get_index_block_files(
     }
     (index_block_files, overall_file_size)
 }
+
+/// ===================================
+/// Utils for mooncake table
+/// ===================================
+///
+/// Test util function to get all index block filepaths from the given mooncake table.
+pub(super) async fn get_index_block_filepaths(table: &MooncakeTable) -> Vec<String> {
+    let guard = table.snapshot.read().await;
+    let mut index_block_files = vec![];
+    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
+        for cur_index_block in cur_file_index.index_blocks.iter() {
+            index_block_files.push(cur_index_block.index_file.file_path().clone());
+        }
+    }
+    index_block_files
+}
