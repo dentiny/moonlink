@@ -279,9 +279,12 @@ impl CacheTrait for ObjectStorageCache {
             cache_entry: cache_entry.clone(),
             reference_count: 1,
         };
+        let file_size = cache_entry.file_metadata.file_size;
+        let non_evictable_handle =
+            NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
 
         let mut guard = self.cache.write().await;
-        guard.cur_bytes += cache_entry.file_metadata.file_size;
+        guard.cur_bytes += file_size;
 
         let cache_files_to_delete = guard
             .insert_non_evictable(
@@ -291,9 +294,6 @@ impl CacheTrait for ObjectStorageCache {
                 /*tolerate_insufficiency=*/ false,
             )
             .1;
-        let non_evictable_handle =
-            NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
-
         (non_evictable_handle, cache_files_to_delete)
     }
 
@@ -309,26 +309,26 @@ impl CacheTrait for ObjectStorageCache {
             let mut guard = self.cache.write().await;
 
             // Check non-evictable cache.
-            let mut value = guard.non_evictable_cache.get_mut(&file_id);
-            if value.is_some() {
-                ma::assert_gt!(value.as_ref().unwrap().reference_count, 0);
-                value.as_mut().unwrap().reference_count += 1;
-                let cache_entry = value.as_ref().unwrap().cache_entry.clone();
+            let value = guard.non_evictable_cache.get_mut(&file_id);
+            if let Some(value) = value {
+                ma::assert_gt!(value.reference_count, 0);
+                value.reference_count += 1;
+                let cache_entry = value.cache_entry.clone();
                 let non_evictable_handle =
                     NonEvictableHandle::new(file_id, cache_entry, self.cache.clone());
                 return Ok((Some(non_evictable_handle), /*files_to_delete=*/ vec![]));
             }
 
             // Check evictable cache.
-            let mut value = guard.evictable_cache.pop(&file_id);
-            if value.is_some() {
-                assert_eq!(value.as_ref().unwrap().reference_count, 0);
-                value.as_mut().unwrap().reference_count += 1;
-                let cache_entry = value.as_ref().unwrap().cache_entry.clone();
+            let value = guard.evictable_cache.pop(&file_id);
+            if let Some(mut value) = value {
+                assert_eq!(value.reference_count, 0);
+                value.reference_count += 1;
+                let cache_entry = value.cache_entry.clone();
                 let files_to_delete = guard
                     .insert_non_evictable(
                         file_id,
-                        value.unwrap(),
+                        value,
                         self.config.max_bytes,
                         /*tolerate_insufficiency=*/ true,
                     )
