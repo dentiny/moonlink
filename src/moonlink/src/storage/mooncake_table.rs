@@ -1123,34 +1123,6 @@ impl MooncakeTable {
         Ok(())
     }
 
-    // Test util function to perform index merge, block wait its completion and reflect index merge result to mooncake table.
-    // Return evicted files for assertion.
-    #[cfg(test)]
-    pub(crate) async fn perform_index_merge_for_test(
-        &mut self,
-        receiver: &mut Receiver<TableNotify>,
-        index_merge_payload: FileIndiceMergePayload,
-    ) -> Vec<String> {
-        // Perform and block wait index merge.
-        self.perform_index_merge(index_merge_payload);
-        let index_merge_result = Self::sync_index_merge(receiver).await;
-
-        self.set_file_indices_merge_res(index_merge_result);
-        assert!(self.create_snapshot(SnapshotOption {
-            force_create: true,
-            skip_iceberg_snapshot: false,
-            skip_file_indices_merge: false,
-            skip_data_file_compaction: true,
-        }));
-        let (_, _, _, evicted_files_to_delete) = Self::sync_mooncake_snapshot(receiver).await;
-        // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        io_utils::delete_local_files(evicted_files_to_delete.clone())
-            .await
-            .unwrap();
-
-        evicted_files_to_delete
-    }
-
     // Test util function to perform data compaction, block wait its completion and reflect compaction result to mooncake table.
     // Return evicted files for assertion.
     #[cfg(test)]

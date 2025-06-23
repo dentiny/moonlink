@@ -10,7 +10,10 @@ use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
-use crate::storage::mooncake_table::{DiskFileEntry, TableConfig as MooncakeTableConfig};
+use crate::storage::io_utils;
+use crate::storage::mooncake_table::{
+    DiskFileEntry, FileIndiceMergePayload, SnapshotOption, TableConfig as MooncakeTableConfig,
+};
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
 };
@@ -332,4 +335,32 @@ pub(super) async fn sync_read_request_for_test(
     } else {
         panic!("Receive other notifications other than read request")
     }
+}
+
+/// -------- Index merge --------
+/// Perform an index merge for the given table, and reflect the result to snapshot.
+/// Return evicted files to delete.
+pub(crate) async fn perform_index_merge_for_test(
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+    index_merge_payload: FileIndiceMergePayload,
+) -> Vec<String> {
+    // Perform and block wait index merge.
+    table.perform_index_merge(index_merge_payload);
+    let index_merge_result = MooncakeTable::sync_index_merge(receiver).await;
+
+    table.set_file_indices_merge_res(index_merge_result);
+    assert!(table.create_snapshot(SnapshotOption {
+        force_create: true,
+        skip_iceberg_snapshot: false,
+        skip_file_indices_merge: false,
+        skip_data_file_compaction: true,
+    }));
+    let (_, _, _, evicted_files_to_delete) = MooncakeTable::sync_mooncake_snapshot(receiver).await;
+    // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
+    io_utils::delete_local_files(evicted_files_to_delete.clone())
+        .await
+        .unwrap();
+
+    evicted_files_to_delete
 }

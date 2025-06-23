@@ -283,9 +283,8 @@ async fn test_3_index_merge() {
     old_compacted_index_block_files.sort();
 
     // Perform index merge and sync.
-    let mut evicted_files_to_delete = table
-        .perform_index_merge_for_test(&mut table_notify, index_merge_payload)
-        .await;
+    let mut evicted_files_to_delete =
+        perform_index_merge_for_test(&mut table, &mut table_notify, index_merge_payload).await;
     evicted_files_to_delete.sort();
     assert_eq!(old_compacted_index_block_files, evicted_files_to_delete);
 
