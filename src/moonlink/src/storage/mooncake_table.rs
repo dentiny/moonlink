@@ -1123,34 +1123,6 @@ impl MooncakeTable {
         Ok(())
     }
 
-    // Test util function to perform data compaction, block wait its completion and reflect compaction result to mooncake table.
-    // Return evicted files for assertion.
-    #[cfg(test)]
-    pub(crate) async fn perform_data_compaction_for_test(
-        &mut self,
-        receiver: &mut Receiver<TableNotify>,
-        data_compaction_payload: DataCompactionPayload,
-    ) -> Vec<String> {
-        // Perform and block wait data compaction.
-        self.perform_data_compaction(data_compaction_payload);
-        let data_compaction_result = Self::sync_data_compaction(receiver).await;
-        let data_compaction_result = data_compaction_result.unwrap();
-
-        self.set_data_compaction_res(data_compaction_result);
-        assert!(self.create_snapshot(SnapshotOption {
-            force_create: true,
-            skip_iceberg_snapshot: false,
-            skip_file_indices_merge: true,
-            skip_data_file_compaction: false,
-        }));
-        let (_, _, _, evicted_data_files_to_delete) = Self::sync_mooncake_snapshot(receiver).await;
-        // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-        for cur_data_file in evicted_data_files_to_delete.iter() {
-            tokio::fs::remove_file(cur_data_file).await.unwrap();
-        }
-        evicted_data_files_to_delete
-    }
-
     // Test util function, which does the following things in serial fashion.
     // (1) updates mooncake table snapshot, (2) create iceberg snapshot, (3) trigger data compaction, (4) perform data compaction, (5) another mooncake and iceberg snapshot.
     //

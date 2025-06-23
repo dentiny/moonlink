@@ -12,7 +12,8 @@ use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::io_utils;
 use crate::storage::mooncake_table::{
-    DiskFileEntry, FileIndiceMergePayload, SnapshotOption, TableConfig as MooncakeTableConfig,
+    DataCompactionPayload, DiskFileEntry, FileIndiceMergePayload, SnapshotOption,
+    TableConfig as MooncakeTableConfig,
 };
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
@@ -355,6 +356,35 @@ pub(crate) async fn perform_index_merge_for_test(
         skip_iceberg_snapshot: false,
         skip_file_indices_merge: false,
         skip_data_file_compaction: true,
+    }));
+    let (_, _, _, evicted_files_to_delete) = MooncakeTable::sync_mooncake_snapshot(receiver).await;
+    // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
+    io_utils::delete_local_files(evicted_files_to_delete.clone())
+        .await
+        .unwrap();
+
+    evicted_files_to_delete
+}
+
+/// -------- Data compaction --------
+/// Perform data compaction for the given table, and reflect the result to snapshot.
+/// Return evicted files to delete.
+pub(crate) async fn perform_data_compaction_for_test(
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+    data_compaction_payload: DataCompactionPayload,
+) -> Vec<String> {
+    // Perform and block wait data compaction.
+    table.perform_data_compaction(data_compaction_payload);
+    let data_compaction_result = MooncakeTable::sync_data_compaction(receiver).await;
+    let data_compaction_result = data_compaction_result.unwrap();
+
+    table.set_data_compaction_res(data_compaction_result);
+    assert!(table.create_snapshot(SnapshotOption {
+        force_create: true,
+        skip_iceberg_snapshot: false,
+        skip_file_indices_merge: true,
+        skip_data_file_compaction: false,
     }));
     let (_, _, _, evicted_files_to_delete) = MooncakeTable::sync_mooncake_snapshot(receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.

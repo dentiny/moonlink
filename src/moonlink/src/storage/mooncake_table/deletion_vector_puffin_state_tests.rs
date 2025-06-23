@@ -466,9 +466,12 @@ async fn test_2_compact() {
     );
 
     // Use by compaction.
-    let evicted_files = table
-        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
-        .await;
+    let evicted_files = perform_data_compaction_for_test(
+        &mut table,
+        &mut table_notify,
+        data_compaction_payload.unwrap(),
+    )
+    .await;
     // Include both two data files and their puffin files, index blocks.
     assert_eq!(evicted_files.len(), 6);
     assert!(evicted_files.contains(&old_compacted_puffin_files[0]));

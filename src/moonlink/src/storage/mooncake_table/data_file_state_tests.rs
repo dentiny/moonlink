@@ -1703,9 +1703,12 @@ async fn test_3_compact_3_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    let mut evicted_files_to_delete = table
-        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
-        .await;
+    let mut evicted_files_to_delete = perform_data_compaction_for_test(
+        &mut table,
+        &mut table_notify,
+        data_compaction_payload.unwrap(),
+    )
+    .await;
     evicted_files_to_delete.sort();
     assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
@@ -1880,9 +1883,12 @@ async fn test_3_compact_1_5() {
     assert!(data_compaction_payload.is_some());
 
     // Perform data compaction: use pinned local cache file and unreference.
-    let mut evicted_files_to_delete = table
-        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
-        .await;
+    let mut evicted_files_to_delete = perform_data_compaction_for_test(
+        &mut table,
+        &mut table_notify,
+        data_compaction_payload.unwrap(),
+    )
+    .await;
     evicted_files_to_delete.sort();
     assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
@@ -1995,9 +2001,12 @@ async fn test_1_compact_1_5() {
     assert!(evicted_files_to_delete.is_empty());
 
     // Perform data compaction: use remote file to perform compaction.
-    let evicted_files_to_delete = table
-        .perform_data_compaction_for_test(&mut table_notify, data_compaction_payload.unwrap())
-        .await;
+    let evicted_files_to_delete = perform_data_compaction_for_test(
+        &mut table,
+        &mut table_notify,
+        data_compaction_payload.unwrap(),
+    )
+    .await;
     // It contains one fake file, and two downloaded local file and their file indices.
     assert_eq!(evicted_files_to_delete.len(), 5);
 
