@@ -1077,18 +1077,9 @@ impl MooncakeTable {
         &mut self,
         receiver: &mut Receiver<TableNotify>,
     ) -> Result<()> {
-        // Create mooncake snapshot.
-        let mooncake_snapshot_created = self.create_snapshot(SnapshotOption {
-            force_create: true,
-            skip_iceberg_snapshot: false,
-            skip_file_indices_merge: false,
-            skip_data_file_compaction: false,
-        });
-        if !mooncake_snapshot_created {
-            return Ok(());
-        }
+        // Create mooncake snapshot and block wait completion.
         let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
-            Self::sync_mooncake_snapshot(receiver).await;
+            self.create_mooncake_snapshot_for_test(receiver).await;
 
         // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
         io_utils::delete_local_files(evicted_data_files_to_delete)
