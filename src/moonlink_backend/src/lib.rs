@@ -53,7 +53,7 @@ pub struct MoonlinkBackend<T: Eq + Hash> {
     replication_manager: RwLock<ReplicationManager<T>>,
 }
 
-impl<T: Eq + Hash + Clone> Default for MoonlinkBackend<T> {
+impl<T: Eq + Hash + Clone + std::fmt::Display> Default for MoonlinkBackend<T> {
     fn default() -> Self {
         Self::new(DEFAULT_MOONLINK_TABLE_BASE_PATH.to_string())
     }
@@ -85,7 +85,7 @@ fn create_default_object_storage_cache(
     ObjectStorageCache::new(cache_config)
 }
 
-impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
+impl<T: Eq + Hash + Clone + std::fmt::Display> MoonlinkBackend<T> {
     pub fn new(base_path: String) -> Self {
         logging::init_logging();
 

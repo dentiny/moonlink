@@ -289,10 +289,15 @@ impl ReplicationConnection {
         )
     }
 
-    async fn add_table_to_replication(&mut self, schema: &TableSchema) -> Result<()> {
+    async fn add_table_to_replication<T: std::fmt::Display>(
+        &mut self,
+        schema: &TableSchema,
+        external_table_id: &T,
+    ) -> Result<()> {
         let table_id = schema.table_id;
         debug!(table_id, "adding table to replication");
         let resources = build_table_components(
+            external_table_id.to_string(),
             schema,
             Path::new(&self.table_base_path),
             self.table_temp_files_directory.clone(),
@@ -369,13 +374,18 @@ impl ReplicationConnection {
         Ok(())
     }
 
-    pub async fn add_table(&mut self, table_name: &str) -> Result<TableId> {
+    pub async fn add_table<T: std::fmt::Display>(
+        &mut self,
+        table_name: &str,
+        external_table_id: &T,
+    ) -> Result<TableId> {
         info!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
         self.alter_table_replica_identity(table_name).await?;
         let table_schema = self.source.fetch_table_schema(table_name, None).await?;
 
-        self.add_table_to_replication(&table_schema).await?;
+        self.add_table_to_replication(&table_schema, external_table_id)
+            .await?;
 
         self.add_table_to_publication(table_name).await?;
 

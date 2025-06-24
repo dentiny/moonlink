@@ -39,13 +39,14 @@ fn create_iceberg_event_syncer() -> (IcebergEventSyncSender, IcebergEventSyncRec
 
 /// Build all components needed to replicate `table_schema`.
 pub async fn build_table_components(
+    table_id: String,
     table_schema: &TableSchema,
     base_path: &Path,
     table_temp_files_directory: String,
     replication_state: &ReplicationState,
     object_storage_cache: ObjectStorageCache,
 ) -> Result<TableResources> {
-    let table_path = PathBuf::from(base_path).join(table_schema.table_name.to_string());
+    let table_path = PathBuf::from(base_path).join(table_id);
     tokio::fs::create_dir_all(&table_path).await.unwrap();
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
     let iceberg_table_config = IcebergTableConfig {

@@ -28,7 +28,7 @@ pub struct ReplicationManager<T: Eq + Hash> {
     shutdown_handles: Vec<JoinHandle<Result<()>>>,
 }
 
-impl<T: Eq + Hash> ReplicationManager<T> {
+impl<T: Eq + Hash + Clone + std::fmt::Display> ReplicationManager<T> {
     pub fn new(
         table_base_path: String,
         table_temp_files_directory: String,
@@ -81,7 +81,9 @@ impl<T: Eq + Hash> ReplicationManager<T> {
             replication_connection.start_replication().await?;
         }
 
-        let table_id = replication_connection.add_table(table_name).await?;
+        let table_id = replication_connection
+            .add_table(table_name, &external_table_id)
+            .await?;
         self.table_info
             .insert(external_table_id, (uri.to_string(), table_id));
 
