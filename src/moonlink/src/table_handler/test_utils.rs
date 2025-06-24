@@ -175,7 +175,7 @@ impl TestEnvironment {
     // --- Util functions for iceberg drop table ---
 
     /// Request to drop iceberg table and block wait its completion.
-    pub async fn drop_iceberg_table(&mut self) -> Result<()> {
+    pub async fn drop_table(&mut self) -> Result<()> {
         self.iceberg_table_event_manager.drop_table().await
     }
 

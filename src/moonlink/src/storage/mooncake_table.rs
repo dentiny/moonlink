@@ -939,6 +939,12 @@ impl MooncakeTable {
         );
     }
 
+    /// Drop a mooncake table.
+    pub(crate) async fn drop_mooncake_table(&mut self) -> Result<()> {
+        tokio::fs::remove_dir_all(&self.metadata.path).await?;
+        Ok(())
+    }
+
     /// Drop an iceberg table.
     pub(crate) async fn drop_iceberg_table(&mut self) -> Result<()> {
         assert!(self.iceberg_table_manager.is_some());

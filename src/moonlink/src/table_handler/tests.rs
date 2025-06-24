@@ -427,16 +427,21 @@ async fn test_streaming_transaction_periodic_flush_then_abort() {
 
 // This test only checks whether drop table event send and receive works through table handler.
 #[tokio::test]
-async fn test_iceberg_drop_empty_table() {
+async fn test_drop_empty_table() {
     let temp_dir = tempdir().unwrap();
+    let mooncake_table_directory = temp_dir.path().to_str().unwrap().to_string();
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await; // No temp files created.
-    env.drop_iceberg_table().await.unwrap()
+    env.drop_table().await.unwrap();
+
+    // As of now, the whole mooncake table directory should be deleted.
+    assert!(!tokio::fs::try_exists(&mooncake_table_directory).await.unwrap());
 }
 
 // This test checks whether drop tables go through when there's real data.
 #[tokio::test]
-async fn test_iceberg_drop_table_with_data() {
+async fn test_drop_table_with_data() {
     let temp_dir = tempdir().unwrap();
+    let mooncake_table_directory = temp_dir.path().to_str().unwrap().to_string();
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
 
     // Write a few records to trigger mooncake and iceberg snapshot.
@@ -453,7 +458,10 @@ async fn test_iceberg_drop_table_with_data() {
         .await;
 
     // Drop table and block wait its completion, check whether error status is correctly propagated.
-    env.drop_iceberg_table().await.unwrap();
+    env.drop_table().await.unwrap();
+
+    // As of now, the whole mooncake table directory should be deleted.
+    assert!(!tokio::fs::try_exists(&mooncake_table_directory).await.unwrap());
 }
 
 #[tokio::test]
@@ -1091,6 +1099,6 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     let mut env = TestEnvironment::new_with_mooncake_table(temp_dir, mooncake_table).await;
 
     // Drop table and block wait its completion, check whether error status is correctly propagated.
-    let res = env.drop_iceberg_table().await;
+    let res = env.drop_table().await;
     assert!(res.is_err());
 }

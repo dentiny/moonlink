@@ -162,6 +162,7 @@ impl TableHandler {
 
         // Used to clean up mooncake table status, and send completion notification.
         let drop_table = async |table: &mut MooncakeTable| {
+            // Step-1: shutdown the table, which unreferences and deletes all cache files.
             if let Err(e) = table.shutdown().await {
                 iceberg_event_sync_sender
                     .iceberg_drop_table_completion_tx
@@ -169,10 +170,29 @@ impl TableHandler {
                     .await
                     .unwrap();
             }
-            let res = table.drop_iceberg_table().await;
+
+            // Step-2: delete the iceberg table.
+            if let Err(e) = table.drop_iceberg_table().await {
+                iceberg_event_sync_sender
+                    .iceberg_drop_table_completion_tx
+                    .send(Err(e))
+                    .await
+                    .unwrap();
+            }
+
+            // Step-3: delete the mooncake table.
+            if let Err(e) = table.drop_mooncake_table().await {
+                iceberg_event_sync_sender
+                    .iceberg_drop_table_completion_tx
+                    .send(Err(e))
+                    .await
+                    .unwrap();
+            }
+
+            // Step-4: send back completion notification.
             iceberg_event_sync_sender
                 .iceberg_drop_table_completion_tx
-                .send(res)
+                .send(Ok(()))
                 .await
                 .unwrap();
         };
