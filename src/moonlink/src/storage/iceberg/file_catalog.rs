@@ -805,11 +805,13 @@ mod tests {
     /// TODO(hjiang): Add the same hierarchy test for S3 catalog.
     #[tokio::test]
     async fn test_local_iceberg_table_creation() {
+        const NAMESPACE: &str = "default";
+
         let temp_dir = TempDir::new().unwrap();
         let warehouse_path = temp_dir.path().to_str().unwrap();
         let catalog =
             FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {}).unwrap();
-        let namespace_ident = NamespaceIdent::from_strs(["default"]).unwrap();
+        let namespace_ident = NamespaceIdent::from_strs([NAMESPACE]).unwrap();
         let _ = catalog
             .create_namespace(&namespace_ident, /*properties=*/ HashMap::new())
             .await
@@ -817,7 +819,7 @@ mod tests {
 
         // Expected directory for iceberg namespace.
         let mut namespace_dir_pathbuf = temp_dir.path().to_path_buf();
-        namespace_dir_pathbuf.push("default");
+        namespace_dir_pathbuf.push(NAMESPACE);
         let namespace_filepath = namespace_dir_pathbuf.to_str().unwrap().to_string();
 
         // Expected indicator file which marks an iceberg namespace.
