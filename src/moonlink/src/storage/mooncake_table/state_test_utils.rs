@@ -266,6 +266,31 @@ pub(crate) async fn get_disk_files_for_snapshot(
     guard.current_snapshot.disk_files.clone()
 }
 
+/// Test util function to get sorted data file filepaths for the given mooncake table, and assert on expected disk file number.
+pub(crate) async fn get_disk_files_for_snapshot_and_assert(
+    table: &MooncakeTable,
+    expected_file_num: usize,
+) -> Vec<String> {
+    let guard = table.snapshot.read().await;
+    assert_eq!(guard.current_snapshot.disk_files.len(), expected_file_num);
+    let mut data_files = guard
+        .current_snapshot
+        .disk_files
+        .keys()
+        .map(|f| f.file_path().to_string())
+        .collect::<Vec<_>>();
+    data_files.sort();
+    data_files
+}
+
+/// Test util to get the only data file filepath for the given mooncake table.
+pub(crate) async fn get_only_data_filepath(table: &MooncakeTable) -> String {
+    let guard = table.snapshot.read().await;
+    let disk_files = guard.current_snapshot.disk_files.clone();
+    assert_eq!(disk_files.len(), 1);
+    disk_files.iter().next().unwrap().0.file_path().to_string()
+}
+
 /// Test util function to get committed and uncommitted deletion logs states.
 pub(crate) async fn get_deletion_logs_for_snapshot(
     table: &MooncakeTable,
