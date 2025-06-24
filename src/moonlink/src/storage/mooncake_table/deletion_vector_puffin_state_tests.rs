@@ -176,15 +176,11 @@ async fn test_1_recover_2() {
         /*expected_count=*/ 0,
     )
     .await;
-    assert_eq!(
-        object_storage_cache_for_recovery
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0,
-    );
+    assert_evictable_cache_size(
+        &mut object_storage_cache_for_recovery,
+        /*expected_count=*/ 0,
+    )
+    .await;
     assert_eq!(
         object_storage_cache_for_recovery
             .cache
@@ -232,15 +228,7 @@ async fn test_2_read() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0,
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -266,15 +254,7 @@ async fn test_2_read() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1, // data file
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // data file
     assert_eq!(
         object_storage_cache
             .cache
@@ -395,15 +375,7 @@ async fn test_2_compact() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        2, // Data files.
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // data files
     assert_eq!(
         object_storage_cache
             .cache
@@ -446,15 +418,7 @@ async fn test_2_compact() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0,
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache

@@ -73,15 +73,6 @@ pub(crate) async fn check_directory_file_count(tmp_dir: &TempDir, expected_count
     assert_eq!(actual_count, expected_count);
 }
 
-/// Test util function to check evictable cache size.
-pub(crate) async fn assert_evictable_cache_size(
-    cache: &mut ObjectStorageCache,
-    expected_count: usize,
-) {
-    let guard = cache.cache.read().await;
-    assert_eq!(guard.evictable_cache.len(), expected_count);
-}
-
 /// Test util function to check the byte size for cache.
 pub(crate) async fn assert_cache_bytes_size(cache: &mut ObjectStorageCache, expected_bytes: u64) {
     let guard = cache.cache.read().await;
@@ -95,6 +86,15 @@ pub(crate) async fn assert_pending_eviction_entries_size(
 ) {
     let guard = cache.cache.read().await;
     assert_eq!(guard.evicted_entries.len(), expected_count);
+}
+
+/// Test util function to check evictable cache size.
+pub(crate) async fn assert_evictable_cache_size(
+    cache: &mut ObjectStorageCache,
+    expected_count: usize,
+) {
+    let guard = cache.cache.read().await;
+    assert_eq!(guard.evictable_cache.len(), expected_count);
 }
 
 /// Test util function to check non-evictable cache size.

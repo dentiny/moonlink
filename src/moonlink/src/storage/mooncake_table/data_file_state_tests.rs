@@ -144,15 +144,7 @@ async fn test_shutdown_table() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0,
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -209,15 +201,7 @@ async fn test_5_read_4_by_batch_write() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -249,15 +233,7 @@ async fn test_5_read_4_by_batch_write() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -323,15 +299,7 @@ async fn test_5_read_4_by_stream_write() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -363,15 +331,7 @@ async fn test_5_read_4_by_stream_write() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -426,15 +386,7 @@ async fn test_5_1() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -491,15 +443,7 @@ async fn test_4_3() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -531,15 +475,7 @@ async fn test_4_3() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -598,15 +534,7 @@ async fn test_4_read_4() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -637,15 +565,7 @@ async fn test_4_read_4() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -703,15 +623,7 @@ async fn test_4_read_and_read_over_4() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -778,15 +690,7 @@ async fn test_3_read_3() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -818,15 +722,7 @@ async fn test_3_read_3() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -894,15 +790,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -934,15 +822,7 @@ async fn test_3_read_and_read_over_and_pinned_3() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1006,15 +886,7 @@ async fn test_3_read_and_read_over_and_unpinned_1() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1071,15 +943,7 @@ async fn test_1_read_and_pinned_3() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1111,15 +975,7 @@ async fn test_1_read_and_pinned_3() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1245,15 +1101,7 @@ async fn test_2_read_and_pinned_3() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1285,15 +1133,7 @@ async fn test_2_read_and_pinned_3() {
     .await;
     assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1, // data file
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // data file
     assert_eq!(
         object_storage_cache
             .cache
@@ -1527,15 +1367,7 @@ async fn test_3_compact_3_5() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // data files
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     // Two old compacted data files, one new compacted data file, and one new compacted index block
     assert_eq!(
         object_storage_cache
@@ -1586,15 +1418,7 @@ async fn test_3_compact_3_5() {
         (new_compacted_data_file_size as u64) + new_compacted_index_block_size,
     );
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1701,15 +1525,7 @@ async fn test_3_compact_1_5() {
         (new_compacted_data_file_size as u64) + new_compacted_file_index_size,
     );
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -1799,15 +1615,7 @@ async fn test_1_compact_1_5() {
         (new_compacted_data_file_size as u64) + new_compacted_index_block_size,
     );
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        0
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
