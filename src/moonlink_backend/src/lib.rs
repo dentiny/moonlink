@@ -12,13 +12,13 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 // Default local filesystem directory where all tables data will be stored under.
-const DEFAULT_MOONLINK_TABLE_BASE_PATH: &str = "./mooncake/";
-// Default local filesystem directory under the above base directory (which defaults to `PGDATA/mooncake`) where all temporary files (used for union read) will be stored under.
+const DEFAULT_MOONLINK_TABLE_BASE_PATH: &str = "./pg_mooncake/";
+// Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./moonlink_temp_file/";
-// Default object storage cache directory under the above mooncake directory (which defaults to `PGDATA/mooncake`).
+pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./temp/";
+// Default object storage read-through cache directory under the above mooncake directory (which defaults to `PGDATA/pg_mooncake`).
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./moonlink_cache_file/";
+pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./read_through_cache/";
 // Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
 
