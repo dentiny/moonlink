@@ -434,7 +434,9 @@ async fn test_drop_empty_table() {
     env.drop_table().await.unwrap();
 
     // As of now, the whole mooncake table directory should be deleted.
-    assert!(!tokio::fs::try_exists(&mooncake_table_directory).await.unwrap());
+    assert!(!tokio::fs::try_exists(&mooncake_table_directory)
+        .await
+        .unwrap());
 }
 
 // This test checks whether drop tables go through when there's real data.
@@ -461,7 +463,9 @@ async fn test_drop_table_with_data() {
     env.drop_table().await.unwrap();
 
     // As of now, the whole mooncake table directory should be deleted.
-    assert!(!tokio::fs::try_exists(&mooncake_table_directory).await.unwrap());
+    assert!(!tokio::fs::try_exists(&mooncake_table_directory)
+        .await
+        .unwrap());
 }
 
 #[tokio::test]
