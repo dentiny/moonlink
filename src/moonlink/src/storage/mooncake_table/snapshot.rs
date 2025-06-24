@@ -265,6 +265,8 @@ impl SnapshotTableState {
         // Update disk file from local write through cache to iceberg persisted remote path.
         let persisted_data_files = &task.iceberg_persisted_records.import_result.new_data_files;
         for cur_data_file in persisted_data_files.iter() {
+            // Removing entry with [`cur_data_file`] and insert with the same key might be confusing, but here we're only using file id as key, but not filepath.
+            // So the real operation is: remove the entry with <old filepath> and insert with <new filepath>.
             let mut disk_file_entry = self
                 .current_snapshot
                 .disk_files
@@ -274,7 +276,7 @@ impl SnapshotTableState {
                 .cache_handle
                 .as_mut()
                 .unwrap()
-                .unreference()
+                .unreference_and_replace_with_remote(&cur_data_file.file_path())
                 .await;
             evicted_files_to_delete.extend(cur_evicted_files);
             disk_file_entry.cache_handle = None;

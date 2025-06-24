@@ -1,4 +1,3 @@
-use rstest::rstest;
 use tempfile::TempDir;
 use tokio::sync::mpsc::Receiver;
 
@@ -83,15 +82,12 @@ async fn prepare_test_deletion_vector_for_read(
 ///
 /// Test scenario: no deletion vector + persist => referenced, not requested to delete
 #[tokio::test]
-#[rstest]
-#[case(true)]
-#[case(false)]
-async fn test_1_persist_2(#[case] optimize_local_filesystem: bool) {
+async fn test_1_persist_2_without_local_filesystem_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
-        optimize_local_filesystem,
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -120,17 +116,55 @@ async fn test_1_persist_2(#[case] optimize_local_filesystem: bool) {
     );
 }
 
-/// Test scenario: no deletion vector + recover => referenced, not requested to delete
+/// State transfer is the same as [`test_1_persist_2_without_local_filesystem_optimization`].
+/// Test scenario: no deletion vector + persist => referenced, not requested to delete
 #[tokio::test]
-#[rstest]
-#[case(true)]
-#[case(false)]
-async fn test_1_recover_2(#[case] optimize_local_filesystem: bool) {
+async fn test_1_persist_2_with_local_filesystem_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
-        optimize_local_filesystem,
+        /*optimize_local_filesystem=*/ true,
+    );
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+
+    let (mut table, mut table_notify) =
+        prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
+    assert_eq!(disk_files.len(), 1);
+    let local_data_file = disk_files.iter().next().unwrap().0.file_path().to_string();
+
+    let (_, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    assert_eq!(files_to_delete, vec![local_data_file]);
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = get_disk_files_for_snapshot(&table).await;
+    assert_eq!(disk_files.len(), 1);
+    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
+
+    // Check cache state.
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // Data file.
+    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // Puffin file and index block.
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
+            .await,
+        1
+    );
+}
+
+/// Test scenario: no deletion vector + recover => referenced, not requested to delete
+#[tokio::test]
+async fn test_1_recover_2_without_local_filesystem_optimization() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
@@ -185,18 +219,82 @@ async fn test_1_recover_2(#[case] optimize_local_filesystem: bool) {
     );
 }
 
-/// Test scenario: referenced, no delete + use => referenced, no delete
-/// Test scenario: referenced, no delete + use over => referenced, no delete
+/// State transfer is the same as [`test_1_recover_2_without_local_filesystem_optimization`].
+/// Test scenario: no deletion vector + recover => referenced, not requested to delete
 #[tokio::test]
-#[rstest]
-#[case(true)]
-#[case(false)]
-async fn test_2_read(#[case] optimize_local_filesystem: bool) {
+async fn test_1_recover_2_with_local_filesystem_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
         temp_dir.path().to_str().unwrap().to_string(),
-        optimize_local_filesystem,
+        /*optimize_local_filesystem=*/ true,
+    );
+
+    let (mut table, mut table_notify) =
+        prepare_test_deletion_vector_for_read(&temp_dir, ObjectStorageCache::new(cache_config))
+            .await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
+    assert_eq!(disk_files.len(), 1);
+    let local_data_file = disk_files.iter().next().unwrap().0.file_path().to_string();
+
+    let (_, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    assert_eq!(files_to_delete, vec![local_data_file]);
+
+    // Now the disk file and deletion vector has been persist into iceberg.
+    let mut object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
+        table.metadata.clone(),
+        object_storage_cache_for_recovery.clone(),
+        get_iceberg_table_config(&temp_dir),
+    )
+    .unwrap();
+    let (next_file_id, mooncake_snapshot) = iceberg_table_manager_to_recover
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = mooncake_snapshot.disk_files.clone();
+    assert_eq!(disk_files.len(), 1);
+    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
+
+    // Check cache state.
+    assert_pending_eviction_entries_size(
+        &mut object_storage_cache_for_recovery,
+        /*expected_count=*/ 0,
+    )
+    .await;
+    assert_evictable_cache_size(
+        &mut object_storage_cache_for_recovery,
+        /*expected_count=*/ 0,
+    )
+    .await;
+    assert_non_evictable_cache_size(
+        &mut object_storage_cache_for_recovery,
+        /*expected_count=*/ 2,
+    )
+    .await; // Puffin file and index block.
+    assert_eq!(
+        object_storage_cache_for_recovery
+            .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
+            .await,
+        1,
+    );
+}
+
+/// Test scenario: referenced, no delete + use => referenced, no delete
+/// Test scenario: referenced, no delete + use over => referenced, no delete
+#[tokio::test]
+async fn test_2_read_without_local_filesystem_optimization() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ false,
     );
     let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
@@ -206,6 +304,70 @@ async fn test_2_read(#[case] optimize_local_filesystem: bool) {
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
+
+    // Use by read.
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
+    let read_state = snapshot_read_output.take_as_read_state().await;
+
+    // Check data file has been pinned in mooncake table.
+    let disk_files = get_disk_files_for_snapshot(&table).await;
+    assert_eq!(disk_files.len(), 1);
+    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
+
+    // Check cache state.
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 3).await; // Puffin file, data file, and index block.
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
+            .await,
+        2,
+    );
+
+    // Drop all read states and check reference count.
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    assert!(files_to_delete.is_empty());
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // data file
+    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // puffin file and index block.
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
+            .await,
+        1
+    );
+}
+
+/// State transfer is the same as [`test_2_read_without_local_filesystem_optimization`].
+/// Test scenario: referenced, no delete + use => referenced, no delete
+/// Test scenario: referenced, no delete + use over => referenced, no delete
+#[tokio::test]
+async fn test_2_read_with_local_filesystem_optimization() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+        /*optimize_local_filesystem=*/ true,
+    );
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+
+    let (mut table, mut table_notify) =
+        prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
+    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    let disk_files = get_disk_files_for_snapshot(&table).await;
+    assert_eq!(disk_files.len(), 1);
+    let local_data_file = disk_files.iter().next().unwrap().0.file_path().to_string();
+
+    let (_, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    assert_eq!(files_to_delete, vec![local_data_file]);
 
     // Use by read.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
@@ -409,9 +571,18 @@ async fn test_2_compact_with_local_filesystem_optimization() {
         )
         .await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
-    let (_, _, data_compaction_payload, files_to_delete) =
+    let disk_files = get_disk_files_for_snapshot(&table).await;
+    assert_eq!(disk_files.len(), 2);
+    let mut local_data_files = disk_files
+        .iter()
+        .map(|(f, _)| f.file_path().to_string())
+        .collect::<Vec<_>>();
+    local_data_files.sort();
+
+    let (_, _, data_compaction_payload, mut files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
+    files_to_delete.sort();
+    assert_eq!(files_to_delete, local_data_files);
 
     // Get old snapshot disk files.
     let disk_files = get_disk_files_for_snapshot(&table).await;
@@ -465,8 +636,10 @@ async fn test_2_compact_with_local_filesystem_optimization() {
         data_compaction_payload.unwrap(),
     )
     .await;
-    // Include both two data files and index blocks.
-    assert_eq!(evicted_files.len(), 4);
+    // Include both two index block files.
+    assert_eq!(evicted_files.len(), 2);
+    assert!(!evicted_files.contains(&local_data_files[0]));
+    assert!(!evicted_files.contains(&local_data_files[1]));
     assert!(!evicted_files.contains(&old_compacted_puffin_files[0]));
     assert!(!evicted_files.contains(&old_compacted_puffin_files[1]));
     assert!(evicted_files.contains(&old_compacted_index_block_files[0]));
