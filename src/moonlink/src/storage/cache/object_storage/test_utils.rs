@@ -60,8 +60,8 @@ pub(crate) fn get_test_object_storage_cache(tmp_dir: &TempDir) -> ObjectStorageC
     ObjectStorageCache::new(config)
 }
 
-/// Test util function to get cache file number.
-pub(crate) async fn check_cache_file_count(tmp_dir: &TempDir, expected_count: usize) {
+/// Test util function to get file number under the given directory.
+pub(crate) async fn check_directory_file_count(tmp_dir: &TempDir, expected_count: usize) {
     let mut actual_count = 0;
     let mut entries = tokio::fs::read_dir(tmp_dir.path()).await.unwrap();
     while let Some(entry) = entries.next_entry().await.unwrap() {
