@@ -69,13 +69,17 @@ fn get_cache_filesystem_size(path: &str) -> u64 {
 }
 
 /// Create default object storage cache.
-fn create_default_object_storage_cache() -> ObjectStorageCache {
-    let filesystem_size = get_cache_filesystem_size(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH);
+/// Precondition: cache directory has been created beforehand.
+fn create_default_object_storage_cache(
+    cache_directory_pathbuf: std::path::PathBuf,
+) -> ObjectStorageCache {
+    let cache_directory = cache_directory_pathbuf.to_str().unwrap().to_string();
+    let filesystem_size = get_cache_filesystem_size(&cache_directory);
     ma::assert_ge!(filesystem_size, MIN_DISK_SPACE_FOR_CACHE);
 
     let cache_config = ObjectStorageCacheConfig {
         max_bytes: filesystem_size - MIN_DISK_SPACE_FOR_CACHE,
-        cache_directory: DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH.to_string(),
+        cache_directory,
         optimize_local_filesystem: true,
     };
     ObjectStorageCache::new(cache_config)
@@ -95,7 +99,7 @@ impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
             replication_manager: RwLock::new(ReplicationManager::new(
                 base_path.clone(),
                 temp_files_dir.to_str().unwrap().to_string(),
-                create_default_object_storage_cache(),
+                create_default_object_storage_cache(cache_files_dir),
             )),
         }
     }
