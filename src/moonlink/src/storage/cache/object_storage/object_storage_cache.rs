@@ -152,7 +152,7 @@ impl ObjectStorageCacheInternal {
         cache_entry_wrapper.reference_count -= 1;
 
         // Aggregate cache entries to delete.
-        let mut entries_to_delete = vec![];
+        let mut evicted_files_to_delete = vec![];
 
         // Down-level to evictable if reference count goes away.
         if cache_entry_wrapper.reference_count == 0 {
@@ -167,7 +167,7 @@ impl ObjectStorageCacheInternal {
                 self.cur_bytes -= cache_entry_wrapper.cache_entry.file_metadata.file_size;
 
                 if cache_entry_wrapper.deletable {
-                    entries_to_delete.push(cache_entry_wrapper.cache_entry.cache_filepath);
+                    evicted_files_to_delete.push(cache_entry_wrapper.cache_entry.cache_filepath);
                 }
             }
             // The cache entry is not requested to delete.
@@ -176,7 +176,7 @@ impl ObjectStorageCacheInternal {
             }
         }
 
-        entries_to_delete
+        evicted_files_to_delete
     }
 
     /// Attempt to replace an evictable cache entry with remote path, if the filepath lives on local filesystem.
