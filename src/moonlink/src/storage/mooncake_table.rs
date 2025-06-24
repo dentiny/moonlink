@@ -515,12 +515,18 @@ impl MooncakeTable {
         if contains_new_writes(&iceberg_snapshot_res) {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn
+                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
+                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}",
+                self.last_iceberg_snapshot_lsn,
+                flush_lsn,
             );
         } else {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() <= flush_lsn
+                    || self.last_iceberg_snapshot_lsn.unwrap() <= flush_lsn,
+                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}",
+                self.last_iceberg_snapshot_lsn,
+                flush_lsn,
             );
         }
         self.last_iceberg_snapshot_lsn = Some(flush_lsn);
