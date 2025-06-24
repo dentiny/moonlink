@@ -17,15 +17,14 @@
 /// (1) + create mooncake snapshot => (2)
 /// (1) + requested to read + sufficient space => (3)
 /// (2) + requested to read + sufficient space => (3)
-/// (2) + requested to read + insufficient space => (2)
-/// (3) + requested to read => (3)
 /// (2) + new entry + sufficient space => (2)
 /// (2) + new entry + insufficient space => (1)
+/// (2) + requested to delete => (4)
+/// (3) + requested to read => (3)
 /// (3) + query finishes + still reference count => (3)
 /// (3) + query finishes + no reference count => (2)
 /// (3) + persist + still reference count => (3)
 /// (3) + persist + no reference count => (2)
-/// (2) + requested to delete => (4)
 /// (3) + requested to delete => (5)
 /// (5) + usage finishes + still reference count => (5)
 /// (5) + usage finishes + no reference count => (4)
@@ -141,59 +140,6 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
         .await
         .unwrap();
     assert!(cache_handle.is_none());
-    assert!(files_to_evict.is_empty());
-
-    // Check cache status.
-    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
-}
-
-// (2) + requested to read + insufficient space => (2)
-#[tokio::test]
-async fn test_cache_2_requested_to_read_with_insufficient_space() {
-    let remote_file_directory = tempdir().unwrap();
-    let cache_file_directory = tempdir().unwrap();
-    let test_file = create_test_file(remote_file_directory.path(), TEST_CACHE_FILENAME_1).await;
-    let mut cache = get_test_object_storage_cache(&cache_file_directory);
-
-    // Import into cache first.
-    let cache_entry = CacheEntry {
-        cache_filepath: test_file.to_str().unwrap().to_string(),
-        file_metadata: FileMetadata {
-            file_size: CONTENT.len() as u64,
-        },
-    };
-    let (mut cache_handle, files_to_evict) = cache
-        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
-        .await;
-    assert_non_evictable_cache_handle_ref_count(
-        &mut cache,
-        /*file_id=*/ get_table_unique_file_id(0),
-        /*expected_ref_count=*/ 1,
-    )
-    .await;
-    assert!(files_to_evict.is_empty());
-
-    // Unreference to make cache entry evictable.
-    let evicted_files_to_delete = cache_handle.unreference().await;
-    assert!(evicted_files_to_delete.is_empty());
-
-    // Request to read, thus pinning the cache entry.
-    let (_, files_to_evict) = cache
-        .get_cache_entry(
-            /*file_id=*/ get_table_unique_file_id(0),
-            test_file.as_path().to_str().unwrap(),
-        )
-        .await
-        .unwrap();
-    assert_non_evictable_cache_handle_ref_count(
-        &mut cache,
-        /*file_id=*/ get_table_unique_file_id(0),
-        /*expected_ref_count=*/ 1,
-    )
-    .await;
     assert!(files_to_evict.is_empty());
 
     // Check cache status.

@@ -23,6 +23,7 @@ use crate::{ObjectStorageCache, ObjectStorageCacheConfig};
 /// (5) + usage finishes + no reference count => (4)
 /// (2) + new entry + sufficient space => (2)
 /// (2) + new entry + insufficient space => (1)
+/// (2) + requested to read + sufficient space => (3)
 ///
 /// For more details, please refer to
 /// - remote object storage state tests: https://github.com/Mooncake-Labs/moonlink/blob/main/src/moonlink/src/storage/cache/object_storage/state_tests.rs
@@ -451,6 +452,59 @@ async fn test_cache_state_2_new_entry_with_insufficient_space_1() {
     );
 
     // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+}
+
+// (2) + requested to read + sufficient space => (3)
+#[tokio::test]
+async fn test_cache_state_2_request_to_read_sufficient_space_4() {
+    let cache_file_directory = tempdir().unwrap();
+    let test_cache_file =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+    let test_remote_file =
+        create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
+    let cache_entry = CacheEntry {
+        cache_filepath: test_cache_file.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let mut cache = create_object_storage_cache_with_local_optimization(&cache_file_directory);
+    let file_id = get_table_unique_file_id(0);
+
+    // Import local cache entry.
+    let (mut cache_handle, evicted_files_to_delete) =
+        cache.import_cache_entry(file_id, cache_entry.clone()).await;
+    assert_eq!(
+        cache_handle.cache_entry.cache_filepath,
+        test_cache_file.to_str().unwrap().to_string()
+    );
+    assert!(evicted_files_to_delete.is_empty());
+
+    // Unreference and try import.
+    let evicted_files_to_delete = cache_handle
+        .unreference_and_replace_with_remote(test_remote_file.to_str().unwrap())
+        .await;
+    assert_eq!(
+        evicted_files_to_delete,
+        vec![test_cache_file.to_str().unwrap().to_string()]
+    );
+    // Till now, the state is (2).
+
+    // Get the cache handle.
+    let (cache_handle, evicted_files_to_delete) = cache
+        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .await
+        .unwrap();
+    assert!(evicted_files_to_delete.is_empty());
+    assert_eq!(
+        cache_handle.as_ref().unwrap().cache_entry.cache_filepath,
+        test_remote_file.to_str().unwrap().to_string()
+    );
+
     assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
