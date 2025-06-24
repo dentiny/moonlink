@@ -21,6 +21,8 @@ use crate::{ObjectStorageCache, ObjectStorageCacheConfig};
 /// (2) + requested to delete => (4)
 /// (3) + requested to delete => (5)
 /// (5) + usage finishes + no reference count => (4)
+/// (2) + new entry + sufficient space => (2)
+/// (2) + new entry + insufficient space => (1)
 ///
 /// For more details, please refer to
 /// - remote object storage state tests: https://github.com/Mooncake-Labs/moonlink/blob/main/src/moonlink/src/storage/cache/object_storage/state_tests.rs
@@ -333,5 +335,124 @@ async fn test_cache_state_5_unreference_4() {
     assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ 0).await;
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+}
+
+// (2) + new entry + sufficient space => (2)
+#[tokio::test]
+async fn test_cache_state_2_new_entry_with_sufficient_space_4() {
+    let cache_file_directory = tempdir().unwrap();
+    let test_cache_file_1 =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+    let test_remote_file_1 =
+        create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
+    let test_cache_file_2 =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_2).await;
+
+    let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
+        max_bytes: CONTENT.len() as u64 * 2,
+        cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: true,
+    });
+    let file_id_1 = get_table_unique_file_id(0);
+    let file_id_2 = get_table_unique_file_id(1);
+
+    // Import local cache entry, and replace with remote one.
+    let cache_entry_1 = CacheEntry {
+        cache_filepath: test_cache_file_1.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let (mut cache_handle, _) = cache
+        .import_cache_entry(file_id_1, cache_entry_1.clone())
+        .await;
+    let _ = cache_handle
+        .unreference_and_replace_with_remote(test_remote_file_1.to_str().unwrap())
+        .await;
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
+    // Till now, the state is (2).
+
+    // Import a new cache entry.
+    let cache_entry_2 = CacheEntry {
+        cache_filepath: test_cache_file_2.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let (cache_handle, evicted_files_to_delete) = cache
+        .import_cache_entry(file_id_2, cache_entry_2.clone())
+        .await;
+    assert!(evicted_files_to_delete.is_empty());
+    assert_eq!(
+        cache_handle.cache_entry.cache_filepath,
+        test_cache_file_2.to_str().unwrap().to_string()
+    );
+
+    // Check cache status.
+    assert_cache_bytes_size(
+        &mut cache,
+        /*expected_bytes=*/ CONTENT.len() as u64 * 2,
+    )
+    .await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+}
+
+// (2) + new entry + insufficient space => (2)
+#[tokio::test]
+async fn test_cache_state_2_new_entry_with_insufficient_space_1() {
+    let cache_file_directory = tempdir().unwrap();
+    let test_cache_file_1 =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+    let test_remote_file_1 =
+        create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
+    let test_cache_file_2 =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_2).await;
+
+    let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
+        max_bytes: CONTENT.len() as u64,
+        cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem: true,
+    });
+    let file_id_1 = get_table_unique_file_id(0);
+    let file_id_2 = get_table_unique_file_id(1);
+
+    // Import local cache entry, and replace with remote one.
+    let cache_entry_1 = CacheEntry {
+        cache_filepath: test_cache_file_1.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let (mut cache_handle, _) = cache
+        .import_cache_entry(file_id_1, cache_entry_1.clone())
+        .await;
+    let _ = cache_handle
+        .unreference_and_replace_with_remote(test_remote_file_1.to_str().unwrap())
+        .await;
+    // Till now, the state is (2).
+
+    // Import a new cache entry.
+    let cache_entry_2 = CacheEntry {
+        cache_filepath: test_cache_file_2.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let (cache_handle, evicted_files_to_delete) = cache
+        .import_cache_entry(file_id_2, cache_entry_2.clone())
+        .await;
+    assert!(evicted_files_to_delete.is_empty());
+    assert_eq!(
+        cache_handle.cache_entry.cache_filepath,
+        test_cache_file_2.to_str().unwrap().to_string()
+    );
+
+    // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
