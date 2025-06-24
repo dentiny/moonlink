@@ -62,3 +62,45 @@ async fn test_cache_state_3_persist_and_unreferenced_2() {
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
 }
+
+#[tokio::test]
+async fn test_cache_state_3_persist_and_referenced_3() {
+    let cache_file_directory = tempdir().unwrap();
+    let test_cache_file =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+    let test_remote_file =
+        create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
+    let cache_entry = CacheEntry {
+        cache_filepath: test_cache_file.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let mut cache = create_object_storage_cache_with_local_optimization(&cache_file_directory);
+    let file_id = get_table_unique_file_id(0);
+    let (mut cache_handle_1, evicted_files_to_delete) =
+        cache.import_cache_entry(file_id, cache_entry.clone()).await;
+    assert!(evicted_files_to_delete.is_empty());
+
+    // Get the second reference.
+    let (cache_handle_2, evicted_files_to_delete) = cache
+        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .await
+        .unwrap();
+    assert!(evicted_files_to_delete.is_empty());
+
+    // Unreference and try import with remote doesn't work, since there're other references.
+    let evicted_files_to_delete = cache_handle_1
+        .unreference_and_replace_with_remote(test_remote_file.to_str().unwrap())
+        .await;
+    assert!(evicted_files_to_delete.is_empty());
+
+    // Unreference the second cache handle places it back to evictale entries.
+    let evicted_files_to_delete = cache_handle_2.unwrap().unreference().await;
+    assert!(evicted_files_to_delete.is_empty());
+
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+}
