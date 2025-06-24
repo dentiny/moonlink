@@ -2,6 +2,7 @@ use tempfile::TempDir;
 use tokio::sync::mpsc::Receiver;
 
 use crate::row::{MoonlinkRow, RowValue};
+use crate::storage::cache::object_storage::test_utils::*;
 /// Possible states:
 /// (1) No deletion vector
 /// (2) Deletion vector referenced, not requested to delete
@@ -88,7 +89,7 @@ async fn test_1_persist_2() {
         temp_dir.path().to_str().unwrap().to_string(),
         /*optimize_local_filesystem=*/ false,
     );
-    let object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
@@ -104,15 +105,7 @@ async fn test_1_persist_2() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evicted_entries
-            .len(),
-        0,
-    );
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -158,7 +151,7 @@ async fn test_1_recover_2() {
     assert!(files_to_delete.is_empty());
 
     // Now the disk file and deletion vector has been persist into iceberg.
-    let object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let mut object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         object_storage_cache_for_recovery.clone(),
@@ -178,15 +171,11 @@ async fn test_1_recover_2() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_eq!(
-        object_storage_cache_for_recovery
-            .cache
-            .read()
-            .await
-            .evicted_entries
-            .len(),
-        0,
-    );
+    assert_pending_eviction_entries_size(
+        &mut object_storage_cache_for_recovery,
+        /*expected_count=*/ 0,
+    )
+    .await;
     assert_eq!(
         object_storage_cache_for_recovery
             .cache
@@ -223,7 +212,7 @@ async fn test_2_read() {
         temp_dir.path().to_str().unwrap().to_string(),
         /*optimize_local_filesystem=*/ false,
     );
-    let object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
@@ -276,15 +265,7 @@ async fn test_2_read() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evicted_entries
-            .len(),
-        0,
-    );
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -371,7 +352,7 @@ async fn test_2_compact() {
         temp_dir.path().to_str().unwrap().to_string(),
         /*optimize_local_filesystem=*/ false,
     );
-    let object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
         prepare_test_disk_files_with_deletion_vector_for_compaction(
@@ -413,15 +394,7 @@ async fn test_2_compact() {
     assert_eq!(old_compacted_index_block_files.len(), 2);
 
     // Check cache state.
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evicted_entries
-            .len(),
-        0,
-    );
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache
@@ -472,15 +445,7 @@ async fn test_2_compact() {
     assert!(disk_files.is_empty());
 
     // Check cache state.
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evicted_entries
-            .len(),
-        0,
-    );
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_eq!(
         object_storage_cache
             .cache

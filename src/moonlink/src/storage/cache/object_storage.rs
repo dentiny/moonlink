@@ -10,4 +10,4 @@ mod state_tests;
 mod local_file_optimization_state_tests;
 
 #[cfg(test)]
-mod test_utils;
+pub(crate) mod test_utils;
