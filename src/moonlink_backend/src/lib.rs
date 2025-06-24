@@ -85,7 +85,7 @@ impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
     pub fn new(base_path: String) -> Self {
         logging::init_logging();
 
-        // Re-create directory for temporary files directoryand cache files directory under base directory.
+        // Re-create directory for temporary files directory and cache files directory under base directory.
         let temp_files_dir = get_temp_file_directory_under_base();
         let cache_files_dir = get_cache_directory_under_base();
         recreate_directory(temp_files_dir.to_str().unwrap()).unwrap();
