@@ -148,7 +148,6 @@ impl ObjectStorageCacheInternal {
     /// Unreference the given cache entry.
     pub(super) fn unreference(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
         let cache_entry_wrapper = self.non_evictable_cache.get_mut(&file_id);
-        assert!(cache_entry_wrapper.is_some());
         let cache_entry_wrapper = cache_entry_wrapper.unwrap();
         cache_entry_wrapper.reference_count -= 1;
 
@@ -166,7 +165,10 @@ impl ObjectStorageCacheInternal {
                     cache_entry_wrapper.cache_entry.file_metadata.file_size
                 );
                 self.cur_bytes -= cache_entry_wrapper.cache_entry.file_metadata.file_size;
-                entries_to_delete.push(cache_entry_wrapper.cache_entry.cache_filepath);
+
+                if cache_entry_wrapper.deletable {
+                    entries_to_delete.push(cache_entry_wrapper.cache_entry.cache_filepath);
+                }
             }
             // The cache entry is not requested to delete.
             else {
@@ -197,7 +199,7 @@ impl ObjectStorageCacheInternal {
         if let Some(cache_entry_wrapper) = self.evictable_cache.get_mut(&file_id) {
             let old_cache_filepath = cache_entry_wrapper.cache_entry.cache_filepath.clone();
             cache_entry_wrapper.cache_entry.cache_filepath = remote_path.to_string();
-            cache_entry_wrapper.deletable = true;
+            cache_entry_wrapper.deletable = false;
 
             return vec![old_cache_filepath];
         }
