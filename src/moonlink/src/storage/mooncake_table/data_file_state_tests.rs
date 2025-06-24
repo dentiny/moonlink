@@ -493,6 +493,7 @@ async fn test_4_read_4() {
     )
     .await;
     assert!(files_to_delete.is_empty());
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // data file and index block file
     assert_eq!(

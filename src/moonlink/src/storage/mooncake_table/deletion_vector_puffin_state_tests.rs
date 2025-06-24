@@ -106,15 +106,7 @@ async fn test_1_persist_2() {
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_eq!(
-        object_storage_cache
-            .cache
-            .read()
-            .await
-            .evictable_cache
-            .len(),
-        1, // Data file.
-    );
+    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // Data file.
     assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // Puffin file and index block.
     assert_eq!(
         object_storage_cache
@@ -216,6 +208,7 @@ async fn test_2_read() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
+    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 3).await; // Puffin file, data file, and index block.
     assert_eq!(
