@@ -61,16 +61,6 @@ static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(3);
 static RETRY_DELAY_FACTOR: f32 = 1.5;
 static MAX_RETRY_COUNT: usize = 5;
 
-// opendal requires local filesystem directory to end with "/".
-fn normalize_directory(mut path: PathBuf) -> String {
-    let mut os_string = path.as_mut_os_str().to_os_string();
-    if os_string.to_str().unwrap().ends_with("/") {
-        return os_string.to_str().unwrap().to_string();
-    }
-    os_string.push("/");
-    os_string.to_str().unwrap().to_string()
-}
-
 #[derive(Debug)]
 #[warn(dead_code)]
 pub enum CatalogConfig {
@@ -128,6 +118,7 @@ pub struct FileCatalog {
 }
 
 impl FileCatalog {
+    /// Create a file catalog, which gets initialized lazily.
     pub fn new(warehouse_location: String, config: CatalogConfig) -> IcebergResult<Self> {
         let file_io = create_file_io(&config)?;
         Ok(Self {
@@ -160,10 +151,6 @@ impl FileCatalog {
                             .expect("failed to create fs operator")
                             .layer(retry_layer)
                             .finish();
-                        op.create_dir(&normalize_directory(PathBuf::from(
-                            &self.warehouse_location,
-                        )))
-                        .await?;
                         Ok(op)
                     }
                     #[cfg(feature = "storage-s3")]
@@ -792,6 +779,62 @@ mod tests {
     };
     use iceberg::NamespaceIdent;
     use iceberg::Result as IcebergResult;
+
+    /// Test util function to get subdirectories and folders under the given folder.
+    /// NOTICE: directories names and file names returned are absolute path, not relative path.
+    async fn get_entities_under_directory(
+        directory: &str,
+    ) -> (Vec<String> /*directories*/, Vec<String> /*files*/) {
+        let mut dirs = vec![];
+        let mut files = vec![];
+
+        let mut stream = tokio::fs::read_dir(directory).await.unwrap();
+        while let Some(entry) = stream.next_entry().await.unwrap() {
+            let metadata = entry.metadata().await.unwrap();
+            if metadata.is_dir() {
+                dirs.push(entry.path().to_str().unwrap().to_string());
+            } else if metadata.is_file() {
+                files.push(entry.path().to_str().unwrap().to_string());
+            }
+        }
+        (dirs, files)
+    }
+
+    /// Test cases for iceberg table structure on local filesystem.
+    ///
+    /// TODO(hjiang): Add the same hierarchy test for S3 catalog.
+    #[tokio::test]
+    async fn test_local_iceberg_table_creation() {
+        let temp_dir = TempDir::new().unwrap();
+        let warehouse_path = temp_dir.path().to_str().unwrap();
+        let catalog =
+            FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {}).unwrap();
+        let namespace_ident = NamespaceIdent::from_strs(["default"]).unwrap();
+        let _ = catalog
+            .create_namespace(&namespace_ident, /*properties=*/ HashMap::new())
+            .await
+            .unwrap();
+
+        // Expected directory for iceberg namespace.
+        let mut namespace_dir_pathbuf = temp_dir.path().to_path_buf();
+        namespace_dir_pathbuf.push("default");
+        let namespace_filepath = namespace_dir_pathbuf.to_str().unwrap().to_string();
+
+        // Expected indicator file which marks an iceberg namespace.
+        let mut indicator_pathbuf = namespace_dir_pathbuf.clone();
+        indicator_pathbuf.push(NAMESPACE_INDICATOR_OBJECT_NAME);
+        let indicator_filepath = indicator_pathbuf.to_str().unwrap().to_string();
+
+        // The iceberg table should be placed under the temporary directory.
+        let (dirs, files) = get_entities_under_directory(warehouse_path).await;
+        assert_eq!(dirs, vec![namespace_filepath.clone()]);
+        assert!(files.is_empty());
+
+        // Check namespaces folder structure.
+        let (dirs, files) = get_entities_under_directory(&namespace_filepath).await;
+        assert!(dirs.is_empty());
+        assert_eq!(files, vec![indicator_filepath.clone()]);
+    }
 
     // Create S3 catalog with local minio deployment and a random bucket.
     #[cfg(feature = "storage-s3")]
