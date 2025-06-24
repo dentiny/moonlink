@@ -196,7 +196,7 @@ impl ObjectStorageCacheInternal {
         }
 
         // Only replace with remote filepath when requested file lives at evictable cache.
-        if let Some(cache_entry_wrapper) = self.evictable_cache.get_mut(&file_id) {
+        if let Some(cache_entry_wrapper) = self.evictable_cache.get_mut(file_id) {
             let old_cache_filepath = cache_entry_wrapper.cache_entry.cache_filepath.clone();
             cache_entry_wrapper.cache_entry.cache_filepath = remote_path.to_string();
             cache_entry_wrapper.deletable = false;
