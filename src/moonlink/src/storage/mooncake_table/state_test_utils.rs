@@ -327,7 +327,7 @@ pub(crate) async fn get_only_data_filepath(table: &MooncakeTable) -> String {
 }
 
 /// Test util to get the only puffin blob ref for the given mooncake snapshot.
-pub(crate) async fn get_only_puffin_blob_ref(snapshot: &Snapshot) -> PuffinBlobRef {
+pub(crate) fn get_only_puffin_blob_ref_from_snapshot(snapshot: &Snapshot) -> PuffinBlobRef {
     let disk_files = snapshot.disk_files.clone();
     assert_eq!(disk_files.len(), 1);
     disk_files
@@ -341,7 +341,23 @@ pub(crate) async fn get_only_puffin_blob_ref(snapshot: &Snapshot) -> PuffinBlobR
         .clone()
 }
 
-/// Test util to get data file and index block filepath for the given mooncake table.
+/// Test util to get the only puffin blob ref for the given mooncake table.
+pub(crate) async fn get_only_puffin_blob_ref_from_table(table: &MooncakeTable) -> PuffinBlobRef {
+    let guard = table.snapshot.read().await;
+    let disk_files = guard.current_snapshot.disk_files.clone();
+    assert_eq!(disk_files.len(), 1);
+    disk_files
+        .iter()
+        .next()
+        .unwrap()
+        .1
+        .puffin_deletion_blob
+        .as_ref()
+        .unwrap()
+        .clone()
+}
+
+/// Test util to get data files and index block filepaths for the given mooncake table, filepaths returned in alphabetical order.
 pub(crate) async fn get_data_files_and_index_block_files(table: &MooncakeTable) -> Vec<String> {
     let mut files = vec![];
 
@@ -360,6 +376,7 @@ pub(crate) async fn get_data_files_and_index_block_files(table: &MooncakeTable) 
         }
     }
 
+    files.sort();
     files
 }
 
