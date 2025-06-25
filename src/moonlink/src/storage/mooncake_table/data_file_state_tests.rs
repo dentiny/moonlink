@@ -169,7 +169,8 @@ async fn test_5_read_4_by_batch_write(#[case] optimize_local_filesystem: bool) {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_local_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -234,7 +235,8 @@ async fn test_5_read_4_by_stream_write(#[case] optimize_local_filesystem: bool) 
 
     // Check data file has been recorded in mooncake table.
     let file_id = get_only_local_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -295,7 +297,8 @@ async fn test_5_1_without_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -330,7 +333,8 @@ async fn test_5_1_with_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -370,7 +374,8 @@ async fn test_4_3_with_local_filesystem_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -438,7 +443,8 @@ async fn test_4_3_without_local_filesystem_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -506,7 +512,8 @@ async fn test_4_read_4(#[case] optimize_local_filesystem: bool) {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_local_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -585,7 +592,8 @@ async fn test_4_read_and_read_over_4(#[case] optimize_local_filesystem: bool) {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_local_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -659,7 +667,8 @@ async fn test_3_read_3_without_filesystem_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -731,7 +740,8 @@ async fn test_3_read_3_with_filesystem_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -806,7 +816,8 @@ async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimiz
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -885,7 +896,8 @@ async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimizati
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -955,7 +967,8 @@ async fn test_3_read_and_read_over_and_unpinned_1_without_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -1004,7 +1017,8 @@ async fn test_3_read_and_read_over_and_unpinned_1_with_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -1043,7 +1057,8 @@ async fn test_1_read_and_pinned_3_without_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -1109,7 +1124,8 @@ async fn test_1_read_and_pinned_3_with_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -1176,7 +1192,7 @@ async fn test_1_read_and_unpinned_3_without_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let _ = get_only_index_block_file_id(&table).await;
+    let _ = get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     check_file_not_pinned(&cache, data_file_id).await;
@@ -1221,7 +1237,7 @@ async fn test_1_read_and_unpinned_3_with_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let _ = get_only_index_block_file_id(&table).await;
+    let _ = get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     check_file_not_pinned(&cache, data_file_id).await;
@@ -1278,7 +1294,8 @@ async fn test_2_read_and_pinned_3_without_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -1365,7 +1382,8 @@ async fn test_2_read_and_pinned_3_with_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id = get_only_index_block_file_id(&table).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
@@ -1437,7 +1455,7 @@ async fn test_2_read_and_unpinned_2_without_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let _ = get_only_index_block_file_id(&table).await;
+    let _ = get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
 
     // Check cache state.
     check_file_not_pinned(&cache, data_file_id).await;
@@ -1493,7 +1511,7 @@ async fn test_2_read_and_unpinned_2_with_local_optimization() {
 
     // Check data file has been recorded in mooncake table.
     let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let _ = get_only_index_block_file_id(&table).await;
+    let _ = get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
 
     // Check cache state.
     check_file_not_pinned(&cache, data_file_id).await;

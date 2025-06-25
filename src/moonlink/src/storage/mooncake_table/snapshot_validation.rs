@@ -6,6 +6,8 @@ impl SnapshotTableState {
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
     pub(super) fn assert_current_snapshot_consistent(&self) {
+        // Check data files and file indices match each other.
+        self.assert_data_files_and_file_indices_match();
         // Check one data file is only pointed by one file index.
         self.assert_file_indices_no_duplicate();
         // Check file ids don't have duplicate.
@@ -14,6 +16,22 @@ impl SnapshotTableState {
         self.assert_index_blocks_cached();
         // Check persistence buffer.
         self.unpersisted_records.validate_invariants();
+    }
+
+    /// Test util function to validate data files and file indices match each other.
+    #[cfg(test)]
+    fn assert_data_files_and_file_indices_match(&self) {
+        let mut all_data_files_1 = HashSet::new();
+        let mut all_data_files_2 = HashSet::new();
+        for (cur_data_file, _) in self.current_snapshot.disk_files.iter() {
+            all_data_files_1.insert(cur_data_file.file_id());
+        }
+        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
+            for cur_data_file in cur_file_index.files.iter() {
+                all_data_files_2.insert(cur_data_file.file_id());
+            }
+        }
+        assert_eq!(all_data_files_1, all_data_files_2);
     }
 
     /// Test util function to validate all index block files are cached, and cache handle filepath matches index file path.

@@ -320,9 +320,11 @@ pub(crate) async fn get_disk_files_for_snapshot_and_assert(
 }
 
 /// Test util to get all index block file ids for the table, and assert there's only one file.
-///
-/// TODO(hjiang): Add assertion whether it's remote or local.
-pub(super) async fn get_only_index_block_file_id(table: &MooncakeTable) -> FileId {
+pub(super) async fn get_only_index_block_file_id(
+    table: &MooncakeTable,
+    temp_dir: &TempDir,
+    is_local: bool,
+) -> FileId {
     let mut file_ids = vec![];
 
     let guard = table.snapshot.read().await;
@@ -330,6 +332,11 @@ pub(super) async fn get_only_index_block_file_id(table: &MooncakeTable) -> FileI
         for cur_index_block in cur_file_index.index_blocks.iter() {
             assert!(cur_index_block.cache_handle.is_some());
             file_ids.push(cur_index_block.index_file.file_id());
+            if is_local {
+                assert!(is_local_file(&cur_index_block.index_file, temp_dir));
+            } else {
+                assert!(is_remote_file(&cur_index_block.index_file, temp_dir));
+            }
         }
     }
 
