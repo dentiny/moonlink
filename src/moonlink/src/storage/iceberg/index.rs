@@ -56,8 +56,8 @@ impl FileIndex {
     /// * local_data_file_to_remote: hash map from local data filepath to remote filepath, which is to be managed by iceberg.
     pub(crate) fn new(
         mooncake_index: &MooncakeFileIndex,
-        local_index_file_to_remote: &mut HashMap<String, String>,
-        local_data_file_to_remote: &mut HashMap<String, String>,
+        local_index_file_to_remote: &HashMap<String, String>,
+        local_data_file_to_remote: &HashMap<String, String>,
     ) -> Self {
         Self {
             data_files: mooncake_index
@@ -66,9 +66,13 @@ impl FileIndex {
                 .map(|cur_data_file| {
                     // It's possible to have multiple newly imported file indices pointing to remote filepath.
                     // One example is file index merge.
-                    local_data_file_to_remote
-                        .remove(cur_data_file.file_path())
-                        .unwrap_or(cur_data_file.file_path().clone())
+                    if let Some(remote_data_file) =
+                        local_data_file_to_remote.get(cur_data_file.file_path())
+                    {
+                        remote_data_file.to_string()
+                    } else {
+                        cur_data_file.file_path().clone()
+                    }
                 })
                 .collect(),
             index_block_files: mooncake_index
@@ -79,8 +83,9 @@ impl FileIndex {
                     bucket_end_idx: cur_index_block.bucket_end_idx,
                     bucket_start_offset: cur_index_block.bucket_start_offset,
                     filepath: local_index_file_to_remote
-                        .remove(cur_index_block.index_file.file_path())
-                        .unwrap(),
+                        .get(cur_index_block.index_file.file_path())
+                        .unwrap()
+                        .to_string(),
                 })
                 .collect(),
             num_rows: mooncake_index.num_rows,
@@ -174,8 +179,8 @@ pub(crate) struct FileIndexBlob {
 impl FileIndexBlob {
     pub fn new(
         file_indices: Vec<&MooncakeFileIndex>,
-        mut local_index_file_to_remote: HashMap<String, String>,
-        mut local_data_file_to_remote: HashMap<String, String>,
+        local_index_file_to_remote: &HashMap<String, String>,
+        local_data_file_to_remote: &HashMap<String, String>,
     ) -> Self {
         Self {
             file_indices: file_indices
@@ -183,8 +188,8 @@ impl FileIndexBlob {
                 .map(|file_index| {
                     FileIndex::new(
                         file_index,
-                        &mut local_index_file_to_remote,
-                        &mut local_data_file_to_remote,
+                        &local_index_file_to_remote,
+                        &local_data_file_to_remote,
                     )
                 })
                 .collect(),
@@ -320,8 +325,8 @@ mod tests {
         )]);
         let file_index_blob = FileIndexBlob::new(
             vec![&original_mooncake_file_index],
-            local_index_file_to_remote,
-            local_data_file_to_remote,
+            &local_index_file_to_remote,
+            &local_data_file_to_remote,
         );
         let blob = file_index_blob.as_blob().unwrap();
 

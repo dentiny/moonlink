@@ -565,28 +565,48 @@ impl IcebergTableManager {
     /// # Arguments:
     ///
     /// * local_data_file_to_remote: contains mappings from newly imported data files to remote paths.
-    fn get_updated_file_indices_at_import(
+    /// * local_index_file_to_remote: contains mappings from newly imported data files to remote paths.
+    fn get_updated_file_index_at_import(
         old_file_index: &MooncakeFileIndex,
         local_data_file_to_remote: &HashMap<String, String>,
+        local_index_file_to_remote: &HashMap<String, String>,
     ) -> MooncakeFileIndex {
         let mut new_file_index = old_file_index.clone();
+
+        // Update data file from local path to remote one.
         for cur_data_file in new_file_index.files.iter_mut() {
             let remote_data_file = local_data_file_to_remote
                 .get(cur_data_file.file_path())
+                // [`local_data_file_to_remote`] only contains new data files introduced in the previous persistence,
+                // but it's possible that the data file was already persisted in the previous iterations.
                 .unwrap_or(cur_data_file.file_path())
                 .clone();
             *cur_data_file = create_data_file(cur_data_file.file_id().0, remote_data_file);
         }
+
+        // Update index block from local path to remote one.
+        for cur_index_block in new_file_index.index_blocks.iter_mut() {
+            let remote_index_block_filepath = local_index_file_to_remote
+                .get(cur_index_block.index_file.file_path())
+                .unwrap()
+                .clone();
+            cur_index_block.index_file = create_data_file(
+                cur_index_block.index_file.file_id().0,
+                remote_index_block_filepath,
+            );
+        }
+
         new_file_index
     }
 
     /// Process file indices to import.
     /// [`local_data_file_to_remote`] should contain all local data filepath to remote data filepath mapping.
+    /// Return the mapping from local index files to remote index files.
     async fn import_file_indices(
         &mut self,
         file_indices_to_import: &[MooncakeFileIndex],
-        local_data_file_to_remote: HashMap<String, String>,
-    ) -> IcebergResult<()> {
+        local_data_file_to_remote: &HashMap<String, String>,
+    ) -> IcebergResult<HashMap<String, String>> {
         let puffin_filepath = self.get_unique_hash_index_v1_filepath();
         let mut puffin_writer = puffin_utils::create_puffin_writer(
             self.iceberg_table.as_ref().unwrap().file_io(),
@@ -622,8 +642,8 @@ impl IcebergTableManager {
 
         let file_index_blob = FileIndexBlob::new(
             new_file_indices,
-            local_index_file_to_remote,
-            local_data_file_to_remote,
+            &local_index_file_to_remote,
+            &local_data_file_to_remote,
         );
         let puffin_blob = file_index_blob.as_blob()?;
         puffin_writer
@@ -633,7 +653,7 @@ impl IcebergTableManager {
             .record_puffin_metadata_and_close(puffin_filepath, puffin_writer)
             .await?;
 
-        Ok(())
+        Ok(local_index_file_to_remote)
     }
 
     /// Dump file indices into the iceberg table, only new file indices will be persisted into the table.
@@ -655,17 +675,24 @@ impl IcebergTableManager {
             return Ok(vec![]);
         }
 
-        // Update local file indices pointing from local data file path to remote one.
+        // Import new file indices.
+        let local_index_block_to_remote = self
+            .import_file_indices(file_indices_to_import, &local_data_file_to_remote)
+            .await?;
+
+        // Update local file indices:
+        // - Redirect local data file to remote one
+        // - Redirect local index block file to remote one
         let remote_file_indices = file_indices_to_import
             .iter()
             .map(|old_file_index| {
-                Self::get_updated_file_indices_at_import(old_file_index, &local_data_file_to_remote)
+                Self::get_updated_file_index_at_import(
+                    old_file_index,
+                    &local_data_file_to_remote,
+                    &local_index_block_to_remote,
+                )
             })
             .collect::<Vec<_>>();
-
-        // Import new file indices.
-        self.import_file_indices(file_indices_to_import, local_data_file_to_remote)
-            .await?;
 
         // Process file indices to remove.
         self.catalog.set_puffin_files_to_remove(
