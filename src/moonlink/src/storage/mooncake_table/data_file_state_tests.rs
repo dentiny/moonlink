@@ -83,6 +83,7 @@ use crate::{MooncakeTable, ObjectStorageCache};
 async fn prepare_test_disk_file_for_read(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
+    use_batch_write: bool,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
@@ -92,47 +93,36 @@ async fn prepare_test_disk_file_for_read(
         RowValue::ByteArray("John".as_bytes().to_vec()),
         RowValue::Int32(30),
     ]);
-    table.append(row.clone()).unwrap();
-    table.commit(/*lsn=*/ 1);
-    table.flush(/*lsn=*/ 1).await.unwrap();
 
-    (table, table_notify)
-}
-
-/// Prepare persisted data files in mooncake table.
-/// Rows are committed and flushed with LSN 1.
-async fn prepare_test_disk_file_by_stream_write(
-    temp_dir: &TempDir,
-    cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
-    let (mut table, table_notify) =
-        create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
-
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
-    table
-        .append_in_stream_batch(row.clone(), /*xact_id=*/ 0)
-        .unwrap();
-    table
-        .commit_transaction_stream(/*xact_id-*/ 0, /*lsn=*/ 1)
-        .await
-        .unwrap();
+    if use_batch_write {
+        table.append(row.clone()).unwrap();
+        table.commit(/*lsn=*/ 1);
+        table.flush(/*lsn=*/ 1).await.unwrap();
+    } else {
+        table
+            .append_in_stream_batch(row.clone(), /*xact_id=*/ 0)
+            .unwrap();
+        table
+            .commit_transaction_stream(/*xact_id-*/ 0, /*lsn=*/ 1)
+            .await
+            .unwrap();
+    }
 
     (table, table_notify)
 }
 
 /// Test scenario: when shutdown table, all cache entries should be unpinned.
 #[tokio::test]
-async fn test_shutdown_table() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_shutdown_table(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -153,14 +143,19 @@ async fn test_shutdown_table() {
 /// Test scenario: no remote, local, not used + use => no remote, local, in use
 #[tokio::test]
 #[rstest]
-#[case(true)]
-#[case(false)]
-async fn test_5_read_4_by_batch_write(#[case] optimize_local_filesystem: bool) {
+#[case(true, true)]
+#[case(false, true)]
+#[case(true, false)]
+#[case(false, false)]
+async fn test_5_read_4_by_batch_write(
+    #[case] optimize_local_filesystem: bool,
+    #[case] use_batch_write: bool,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_infinite_object_storage_cache(&temp_dir, optimize_local_filesystem);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -214,81 +209,18 @@ async fn test_5_read_4_by_batch_write(#[case] optimize_local_filesystem: bool) {
     );
 }
 
-/// Same state machine with [`test_5_read_4_by_batch_write`], but with stream write.
-/// Test scenario: no remote, local, not used + use => no remote, local, in use
+/// Test scenario: no remote, local, not used + persist => remote, no local, not used
 #[tokio::test]
 #[rstest]
 #[case(true)]
 #[case(false)]
-async fn test_5_read_4_by_stream_write(#[case] optimize_local_filesystem: bool) {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut cache =
-        create_object_storage_cache_with_one_file_size(&temp_dir, optimize_local_filesystem);
-
-    let (mut table, mut table_notify) =
-        prepare_test_disk_file_by_stream_write(&temp_dir, cache.clone()).await;
-    let (_, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
-    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
-    let read_state = snapshot_read_output.take_as_read_state().await;
-
-    // Check data file has been recorded in mooncake table.
-    let file_id = get_only_local_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
-
-    // Check cache state.
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file_id))
-            .await,
-        2
-    );
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
-
-    // Drop all read states and check reference count.
-    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
-        vec![read_state],
-        &mut table,
-        &mut table_notify,
-    )
-    .await;
-    assert!(files_to_delete.is_empty());
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file_id))
-            .await,
-        1
-    );
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
-}
-
-/// Test scenario: no remote, local, not used + persist => remote, no local, not used
-#[tokio::test]
-async fn test_5_1_without_local_optimization() {
+async fn test_5_1_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     // Till now, iceberg snapshot has been persisted, need an extra mooncake snapshot to reflect persistence result.
     let (_, _, _, files_to_delete) =
@@ -315,13 +247,16 @@ async fn test_5_1_without_local_optimization() {
 /// State transfer is the same as [`test_5_1_without_local_optimization`].
 /// Test scenario: no remote, local, not used + persist => remote, no local, not used
 #[tokio::test]
-async fn test_5_1_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_5_1_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
@@ -350,14 +285,17 @@ async fn test_5_1_with_local_optimization() {
 
 /// Test scenario: no remote, local, in use + persist => remote, local, in use
 #[tokio::test]
-async fn test_4_3_with_local_filesystem_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_4_3_with_local_filesystem_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -416,14 +354,17 @@ async fn test_4_3_with_local_filesystem_optimization() {
 /// State transfer is the same as [`test_4_3_without_local_filesystem_optimization`].
 /// Test scenario: no remote, local, in use + persist => remote, local, in use
 #[tokio::test]
-async fn test_4_3_without_local_filesystem_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_4_3_without_local_filesystem_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -485,15 +426,17 @@ async fn test_4_3_without_local_filesystem_optimization() {
 /// Test scenario: no remote, local, in use + use => no remote, local, in use
 #[tokio::test]
 #[rstest]
-#[case(true)]
-#[case(false)]
-async fn test_4_read_4(#[case] optimize_local_filesystem: bool) {
+#[case(true, true)]
+#[case(false, true)]
+#[case(true, false)]
+#[case(false, false)]
+async fn test_4_read_4(#[case] optimize_local_filesystem: bool, #[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_object_storage_cache_with_one_file_size(&temp_dir, optimize_local_filesystem);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -560,15 +503,20 @@ async fn test_4_read_4(#[case] optimize_local_filesystem: bool) {
 /// Test scenario: no remote, local, in use + use over => no remote, local, in use
 #[tokio::test]
 #[rstest]
-#[case(true)]
-#[case(false)]
-async fn test_4_read_and_read_over_4(#[case] optimize_local_filesystem: bool) {
+#[case(true, true)]
+#[case(false, true)]
+#[case(true, false)]
+#[case(false, false)]
+async fn test_4_read_and_read_over_4(
+    #[case] optimize_local_filesystem: bool,
+    #[case] use_batch_write: bool,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_object_storage_cache_with_one_file_size(&temp_dir, optimize_local_filesystem);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -639,14 +587,17 @@ async fn test_4_read_and_read_over_4(#[case] optimize_local_filesystem: bool) {
 
 /// Test scenario: remote, local, in use + use => remote, local, in use
 #[tokio::test]
-async fn test_3_read_3_without_filesystem_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_3_read_3_without_filesystem_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -709,14 +660,17 @@ async fn test_3_read_3_without_filesystem_optimization() {
 /// State transfer is the same as [`test_3_read_3_with_filesystem_optimization`].
 /// Test scenario: remote, local, in use + use => remote, local, in use
 #[tokio::test]
-async fn test_3_read_3_with_filesystem_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_3_read_3_with_filesystem_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -781,14 +735,19 @@ async fn test_3_read_3_with_filesystem_optimization() {
 
 /// Test scenario: remote, local, in use + use over & pinned => remote, local, in use
 #[tokio::test]
-async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimization(
+    #[case] use_batch_write: bool,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -858,14 +817,19 @@ async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimiz
 /// State transfer is the same as [`test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimization`].
 /// Test scenario: remote, local, in use + use over & pinned => remote, local, in use
 #[tokio::test]
-async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimization(
+    #[case] use_batch_write: bool,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -937,13 +901,18 @@ async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimizati
 
 /// Test scenario: remote, local, in use + use over & unpinned => remote, no local, not used
 #[tokio::test]
-async fn test_3_read_and_read_over_and_unpinned_1_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_3_read_and_read_over_and_unpinned_1_without_local_optimization(
+    #[case] use_batch_write: bool,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -985,13 +954,18 @@ async fn test_3_read_and_read_over_and_unpinned_1_without_local_optimization() {
 /// State transfer is the same as [`test_3_read_and_read_over_and_unpinned_1_without_local_optimization`].
 /// Test scenario: remote, local, in use + use over & unpinned => remote, no local, not used
 #[tokio::test]
-async fn test_3_read_and_read_over_and_unpinned_1_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_3_read_and_read_over_and_unpinned_1_with_local_optimization(
+    #[case] use_batch_write: bool,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1034,13 +1008,16 @@ async fn test_3_read_and_read_over_and_unpinned_1_with_local_optimization() {
 
 /// Test scenario: remote, no local, not used + use & pinned => remote, local, in use
 #[tokio::test]
-async fn test_1_read_and_pinned_3_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_read_and_pinned_3_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1099,13 +1076,16 @@ async fn test_1_read_and_pinned_3_without_local_optimization() {
 /// State transfer is the same as [`test_1_read_and_pinned_3_without_local_optimization`].
 /// Test scenario: remote, no local, not used + use & pinned => remote, local, in use
 #[tokio::test]
-async fn test_1_read_and_pinned_3_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_read_and_pinned_3_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1165,14 +1145,17 @@ async fn test_1_read_and_pinned_3_with_local_optimization() {
 
 /// Test scenario: remote, no local, not used + use & unpinned => remote, no local, not used
 #[tokio::test]
-async fn test_1_read_and_unpinned_3_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_read_and_unpinned_3_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1207,14 +1190,17 @@ async fn test_1_read_and_unpinned_3_without_local_optimization() {
 /// State transfer is the same as [`test_1_read_and_unpinned_3_without_local_optimization`].
 /// Test scenario: remote, no local, not used + use & unpinned => remote, no local, not used
 #[tokio::test]
-async fn test_1_read_and_unpinned_3_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_read_and_unpinned_3_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1251,14 +1237,17 @@ async fn test_1_read_and_unpinned_3_with_local_optimization() {
 
 /// Test scenario: remote, no local, in use + use & pinned => remote, local, in use
 #[tokio::test]
-async fn test_2_read_and_pinned_3_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_and_pinned_3_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1336,14 +1325,17 @@ async fn test_2_read_and_pinned_3_without_local_optimization() {
 /// State transfer is the same as [`test_2_read_and_pinned_3_without_local_optimization`].
 /// Test scenario: remote, no local, in use + use & pinned => remote, local, in use
 #[tokio::test]
-async fn test_2_read_and_pinned_3_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1423,14 +1415,17 @@ async fn test_2_read_and_pinned_3_with_local_optimization() {
 
 /// Test scenario: remote, no local, in use + use & unpinned => remote, no local, in use
 #[tokio::test]
-async fn test_2_read_and_unpinned_2_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_and_unpinned_2_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1476,14 +1471,17 @@ async fn test_2_read_and_unpinned_2_without_local_optimization() {
 /// State transfer is the same as [`test_2_read_and_unpinned_2_with_local_optimization`].
 /// Test scenario: remote, no local, in use + use & unpinned => remote, no local, in use
 #[tokio::test]
-async fn test_2_read_and_unpinned_2_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_and_unpinned_2_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1531,14 +1529,17 @@ async fn test_2_read_and_unpinned_2_with_local_optimization() {
 
 /// Test scenario: remote, no local, in use + use over => remote, no local, not used
 #[tokio::test]
-async fn test_2_read_over_1_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_over_1_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1570,14 +1571,17 @@ async fn test_2_read_over_1_without_local_optimization() {
 /// State transfer is the same as [`test_2_read_over_1_without_local_optimization`].
 /// Test scenario: remote, no local, in use + use over => remote, no local, not used
 #[tokio::test]
-async fn test_2_read_over_1_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_over_1_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache = create_object_storage_cache_with_one_file_size(
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());

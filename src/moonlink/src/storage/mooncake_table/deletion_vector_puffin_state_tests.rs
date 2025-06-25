@@ -1,3 +1,4 @@
+use rstest::rstest;
 use tempfile::TempDir;
 use tokio::sync::mpsc::Receiver;
 
@@ -54,6 +55,7 @@ use crate::{
 async fn prepare_test_deletion_vector_for_read(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
+    use_batch_write: bool,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
@@ -64,14 +66,34 @@ async fn prepare_test_deletion_vector_for_read(
         RowValue::ByteArray("John".as_bytes().to_vec()),
         RowValue::Int32(30),
     ]);
-    table.append(row.clone()).unwrap();
-    table.commit(/*lsn=*/ 1);
-    table.flush(/*lsn=*/ 1).await.unwrap();
 
-    // Delete the row.
-    table.delete(/*row=*/ row.clone(), /*lsn=*/ 2).await;
-    table.commit(/*lsn=*/ 3);
-    table.flush(/*lsn=*/ 3).await.unwrap();
+    if use_batch_write {
+        table.append(row.clone()).unwrap();
+        table.commit(/*lsn=*/ 1);
+        table.flush(/*lsn=*/ 1).await.unwrap();
+
+        // Delete the row.
+        table.delete(/*row=*/ row.clone(), /*lsn=*/ 2).await;
+        table.commit(/*lsn=*/ 3);
+        table.flush(/*lsn=*/ 3).await.unwrap();
+    } else {
+        table
+            .append_in_stream_batch(row.clone(), /*xact_id=*/ 0)
+            .unwrap();
+        table
+            .commit_transaction_stream(/*xact_id=*/ 0, /*lsn=*/ 1)
+            .await
+            .unwrap();
+
+        // Delete the row.
+        table
+            .delete_in_stream_batch(row.clone(), /*xact_id=*/ 1)
+            .await;
+        table
+            .commit_transaction_stream(/*xact_id=*/ 1, /*lsn=*/ 3)
+            .await
+            .unwrap();
+    }
 
     (table, table_notify)
 }
@@ -82,13 +104,16 @@ async fn prepare_test_deletion_vector_for_read(
 ///
 /// Test scenario: no deletion vector + persist => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_persist_2_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_persist_2_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -112,13 +137,16 @@ async fn test_1_persist_2_without_local_optimization() {
 /// State transfer is the same as [`test_1_persist_2_without_local_optimization`].
 /// Test scenario: no deletion vector + persist => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_persist_2_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_persist_2_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
@@ -144,7 +172,10 @@ async fn test_1_persist_2_with_local_optimization() {
 
 /// Test scenario: no deletion vector + recover => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_recover_2_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_recover_2_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
@@ -152,9 +183,12 @@ async fn test_1_recover_2_without_local_optimization() {
         /*optimize_local_filesystem=*/ false,
     );
 
-    let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, ObjectStorageCache::new(cache_config))
-            .await;
+    let (mut table, mut table_notify) = prepare_test_deletion_vector_for_read(
+        &temp_dir,
+        ObjectStorageCache::new(cache_config),
+        use_batch_write,
+    )
+    .await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -192,7 +226,10 @@ async fn test_1_recover_2_without_local_optimization() {
 /// State transfer is the same as [`test_1_recover_2_without_local_optimization`].
 /// Test scenario: no deletion vector + recover => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_recover_2_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_1_recover_2_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
@@ -200,9 +237,12 @@ async fn test_1_recover_2_with_local_optimization() {
         /*optimize_local_filesystem=*/ true,
     );
 
-    let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, ObjectStorageCache::new(cache_config))
-            .await;
+    let (mut table, mut table_notify) = prepare_test_deletion_vector_for_read(
+        &temp_dir,
+        ObjectStorageCache::new(cache_config),
+        use_batch_write,
+    )
+    .await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
@@ -243,13 +283,16 @@ async fn test_1_recover_2_with_local_optimization() {
 /// Test scenario: referenced, no delete + use => referenced, no delete
 /// Test scenario: referenced, no delete + use over => referenced, no delete
 #[tokio::test]
-async fn test_2_read_without_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_without_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -296,13 +339,16 @@ async fn test_2_read_without_local_optimization() {
 /// Test scenario: referenced, no delete + use => referenced, no delete
 /// Test scenario: referenced, no delete + use over => referenced, no delete
 #[tokio::test]
-async fn test_2_read_with_local_optimization() {
+#[rstest]
+#[case(true)]
+#[case(false)]
+async fn test_2_read_with_local_optimization(#[case] use_batch_write: bool) {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
