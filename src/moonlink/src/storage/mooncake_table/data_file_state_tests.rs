@@ -548,10 +548,16 @@ async fn test_4_read_and_read_over_4(#[case] optimize_local_filesystem: bool) {
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
 
-    // Read, increment reference count and drop to declare finish.
-    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
-    let read_state = snapshot_read_output.take_as_read_state().await;
-    drop(read_state);
+    // Read, increment reference count.
+    let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
+    let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
+
+    // Read, increment reference count for the second time.
+    let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
+    let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+
+    // Drop read state and still referenced.
+    drop(read_state_1);
     sync_read_request_for_test(&mut table, &mut table_notify).await;
 
     // Create a mooncake snapshot to reflect read request completion result.
@@ -570,6 +576,30 @@ async fn test_4_read_and_read_over_4(#[case] optimize_local_filesystem: bool) {
     assert_eq!(index_block_file_ids.len(), 1);
 
     // Check cache state.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
+    assert_eq!(
+        cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(file.file_id()))
+            .await,
+        2
+    );
+    assert_eq!(
+        cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_ids[0]))
+            .await,
+        1,
+    );
+
+    // Drop all read states and check reference count.
+    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
+        vec![read_state_2],
+        &mut table,
+        &mut table_notify,
+    )
+    .await;
+    assert!(files_to_delete.is_empty());
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
