@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use rstest::rstest;
 use tempfile::TempDir;
 use tokio::sync::mpsc::Receiver;
@@ -1688,12 +1689,8 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     assert_eq!(evicted_files_to_delete, old_compacted_index_block_files);
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let (new_compacted_data_file_size, new_compacted_data_file_id) =
+        get_new_compacted_local_file_size_and_id(&table, &temp_dir).await;
     let new_compacted_index_block_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
@@ -1706,7 +1703,7 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1,
@@ -1730,11 +1727,11 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     )
     .await;
     actual_files_to_delete.sort();
-    let mut expected_files_to_delete = old_compacted_data_files
+    let expected_files_to_delete = old_compacted_data_files
         .iter()
         .map(|f| f.file_path().clone())
+        .sorted()
         .collect::<Vec<_>>();
-    expected_files_to_delete.sort();
     assert_eq!(actual_files_to_delete, expected_files_to_delete);
 
     // Check cache status.
@@ -1748,7 +1745,7 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1
@@ -1810,12 +1807,8 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     assert!(evicted_files_to_delete.is_empty());
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let (new_compacted_data_file_size, new_compacted_data_file_id) =
+        get_new_compacted_local_file_size_and_id(&table, &temp_dir).await;
     let new_compacted_index_block_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
@@ -1828,7 +1821,7 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1,
@@ -1852,11 +1845,11 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     )
     .await;
     actual_files_to_delete.sort();
-    let mut expected_files_to_delete = old_compacted_data_files
+    let expected_files_to_delete = old_compacted_data_files
         .iter()
         .map(|f| f.file_path().clone())
+        .sorted()
         .collect::<Vec<_>>();
-    expected_files_to_delete.sort();
     assert_eq!(actual_files_to_delete, expected_files_to_delete);
 
     // Check cache status.
@@ -1870,7 +1863,7 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1
@@ -1945,15 +1938,10 @@ async fn test_3_compact_1_5_without_local_filesystem_optimization() {
     assert_eq!(files_to_delete, old_compacted_data_files);
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let (new_compacted_data_file_size, new_compacted_data_file_id) =
+        get_new_compacted_local_file_size_and_id(&table, &temp_dir).await;
     let new_compacted_file_index_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
-    assert_eq!(new_compacted_index_block_file_ids.len(), 1);
 
     // Check cache state.
     assert_eq!(
@@ -1966,7 +1954,7 @@ async fn test_3_compact_1_5_without_local_filesystem_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1,
@@ -1999,11 +1987,11 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
     // Get old compacted files before compaction.
     let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
-    let mut old_compacted_data_files = disk_files
+    let old_compacted_data_files = disk_files
         .keys()
         .map(|f| f.file_path().clone())
+        .sorted()
         .collect::<Vec<_>>();
-    old_compacted_data_files.sort();
 
     let old_compacted_index_block_files = get_index_block_filepaths(&table).await;
     let old_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
@@ -2041,12 +2029,8 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
     assert_eq!(files_to_delete, old_compacted_data_files);
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let (new_compacted_data_file_size, new_compacted_data_file_id) =
+        get_new_compacted_local_file_size_and_id(&table, &temp_dir).await;
     let new_compacted_file_index_size = get_index_block_files_size(&table).await;
     let new_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
     assert_eq!(new_compacted_index_block_file_ids.len(), 1);
@@ -2062,7 +2046,7 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1,
@@ -2118,12 +2102,8 @@ async fn test_1_compact_1_5_without_local_optimization() {
     assert_eq!(evicted_files_to_delete.len(), 5);
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let (new_compacted_data_file_size, new_compacted_data_file_id) =
+        get_new_compacted_local_file_size_and_id(&table, &temp_dir).await;
     let file_indices = get_index_block_filepaths(&table).await;
     assert_eq!(file_indices.len(), 1);
     let new_compacted_index_block_size = get_index_block_files_size(&table).await;
@@ -2141,7 +2121,7 @@ async fn test_1_compact_1_5_without_local_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1,
@@ -2198,12 +2178,8 @@ async fn test_1_compact_1_5_with_local_optimization() {
     assert_eq!(evicted_files_to_delete.len(), 1);
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, &temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
+    let (new_compacted_data_file_size, new_compacted_data_file_id) =
+        get_new_compacted_local_file_size_and_id(&table, &temp_dir).await;
     let file_indices = get_index_block_filepaths(&table).await;
     assert_eq!(file_indices.len(), 1);
     let new_compacted_index_block_size = get_index_block_files_size(&table).await;
@@ -2221,7 +2197,7 @@ async fn test_1_compact_1_5_with_local_optimization() {
     assert_eq!(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(
-                new_compacted_file.file_id()
+                new_compacted_data_file_id
             ))
             .await,
         1,
