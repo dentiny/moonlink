@@ -276,7 +276,7 @@ impl SnapshotTableState {
                 .cache_handle
                 .as_mut()
                 .unwrap()
-                .unreference_and_replace_with_remote(&cur_data_file.file_path())
+                .unreference_and_replace_with_remote(cur_data_file.file_path())
                 .await;
             evicted_files_to_delete.extend(cur_evicted_files);
             disk_file_entry.cache_handle = None;

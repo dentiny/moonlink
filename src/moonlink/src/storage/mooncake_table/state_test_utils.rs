@@ -23,8 +23,8 @@ use crate::storage::storage_utils::{
 };
 use crate::table_notify::TableNotify;
 use crate::{
-    IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState,
-    SnapshotReadOutput,
+    IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
+    ObjectStorageCacheConfig, ReadState, SnapshotReadOutput,
 };
 
 /// This module contains util functions for state-based tests.
@@ -73,29 +73,6 @@ pub(super) fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> 
 /// Test util function to decide whether a given file is local file.
 pub(super) fn is_local_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
     !is_remote_file(file, temp_dir)
-}
-
-/// Test util function to drop read states, and apply the synchronized response to mooncake table.
-pub(super) async fn drop_read_states(
-    read_states: Vec<Arc<ReadState>>,
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
-) {
-    for cur_read_state in read_states.into_iter() {
-        drop(cur_read_state);
-        sync_read_request_for_test(table, receiver).await;
-    }
-}
-/// Test util function to drop read states and create a mooncake snapshot to reflect.
-/// Return evicted files to delete.
-pub(super) async fn drop_read_states_and_create_mooncake_snapshot(
-    read_states: Vec<Arc<ReadState>>,
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
-) -> Vec<String> {
-    drop_read_states(read_states, table, receiver).await;
-    let (_, _, _, files_to_delete) = create_mooncake_snapshot_for_test(table, receiver).await;
-    files_to_delete
 }
 
 /// Test util function to get fake file path.
@@ -151,44 +128,6 @@ pub(super) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
         namespace: vec!["namespace".to_string()],
         table_name: "test_table".to_string(),
     }
-}
-
-/// Test util function to create mooncake table and table notify for read test.
-pub(super) async fn create_mooncake_table_and_notify_for_read(
-    temp_dir: &TempDir,
-    object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
-    let path = temp_dir.path().to_path_buf();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
-
-    let iceberg_table_config = get_iceberg_table_config(temp_dir);
-    let schema = create_test_arrow_schema();
-
-    // Create iceberg snapshot whenever `create_snapshot` is called.
-    let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
-        ..Default::default()
-    };
-
-    let mut table = MooncakeTable::new(
-        schema.as_ref().clone(),
-        "test_table".to_string(),
-        /*version=*/ TEST_TABLE_ID.0,
-        path,
-        identity_property,
-        iceberg_table_config.clone(),
-        mooncake_table_config,
-        object_storage_cache,
-    )
-    .await
-    .unwrap();
-
-    let (notify_tx, notify_rx) = mpsc::channel(100);
-    table.register_table_notify(notify_tx).await;
-
-    (table, notify_rx)
 }
 
 /// Test util function to create mooncake table and table notify for compaction test.
@@ -252,6 +191,102 @@ pub(super) fn get_index_block_files(
         }
     }
     (index_block_files, overall_file_size)
+}
+
+/// ===================================
+/// Cache utils
+///  ===================================
+///
+/// Test util function to create an infinitely large object storage cache.
+pub(super) fn create_infinite_object_storage_cache(
+    temp_dir: &TempDir,
+    optimize_local_filesystem: bool,
+) -> ObjectStorageCache {
+    let cache_config = ObjectStorageCacheConfig::new(
+        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem,
+    );
+    ObjectStorageCache::new(cache_config)
+}
+
+/// Test util function to create an object storage cache, with size of only one file.
+pub(super) fn create_object_storage_cache_with_one_file_size(
+    temp_dir: &TempDir,
+    optimize_local_filesystem: bool,
+) -> ObjectStorageCache {
+    let cache_config = ObjectStorageCacheConfig::new(
+        ONE_FILE_CACHE_SIZE,
+        temp_dir.path().to_str().unwrap().to_string(),
+        optimize_local_filesystem,
+    );
+    ObjectStorageCache::new(cache_config)
+}
+
+/// ===================================
+/// Request read
+/// ===================================
+///
+/// Test util function to drop read states, and apply the synchronized response to mooncake table.
+pub(super) async fn drop_read_states(
+    read_states: Vec<Arc<ReadState>>,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+) {
+    for cur_read_state in read_states.into_iter() {
+        drop(cur_read_state);
+        sync_read_request_for_test(table, receiver).await;
+    }
+}
+
+/// Test util function to drop read states and create a mooncake snapshot to reflect.
+/// Return evicted files to delete.
+pub(super) async fn drop_read_states_and_create_mooncake_snapshot(
+    read_states: Vec<Arc<ReadState>>,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableNotify>,
+) -> Vec<String> {
+    drop_read_states(read_states, table, receiver).await;
+    let (_, _, _, files_to_delete) = create_mooncake_snapshot_for_test(table, receiver).await;
+    files_to_delete
+}
+
+/// Test util function to create mooncake table and table notify for read test.
+pub(super) async fn create_mooncake_table_and_notify_for_read(
+    temp_dir: &TempDir,
+    object_storage_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableNotify>) {
+    let path = temp_dir.path().to_path_buf();
+    let mooncake_table_metadata =
+        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = get_iceberg_table_config(temp_dir);
+    let schema = create_test_arrow_schema();
+
+    // Create iceberg snapshot whenever `create_snapshot` is called.
+    let mooncake_table_config = MooncakeTableConfig {
+        iceberg_snapshot_new_data_file_count: 0,
+        ..Default::default()
+    };
+
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*version=*/ TEST_TABLE_ID.0,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        mooncake_table_config,
+        object_storage_cache,
+    )
+    .await
+    .unwrap();
+
+    let (notify_tx, notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    (table, notify_rx)
 }
 
 /// ===================================

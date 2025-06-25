@@ -53,10 +53,10 @@ use crate::{
 /// Rows are committed and flushed with LSN 1, and deleted with LSN 3.
 async fn prepare_test_deletion_vector_for_read(
     temp_dir: &TempDir,
-    object_storage_cache: ObjectStorageCache,
+    cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
-        create_mooncake_table_and_notify_for_read(temp_dir, object_storage_cache).await;
+        create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
 
     // Append a new row.
     let row = MoonlinkRow::new(vec![
@@ -82,17 +82,13 @@ async fn prepare_test_deletion_vector_for_read(
 ///
 /// Test scenario: no deletion vector + persist => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_persist_2_without_local_filesystem_optimization() {
+async fn test_1_persist_2_without_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
-        temp_dir.path().to_str().unwrap().to_string(),
-        /*optimize_local_filesystem=*/ false,
-    );
-    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut cache =
+        create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -105,31 +101,27 @@ async fn test_1_persist_2_without_local_filesystem_optimization() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // Data file.
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // Puffin file and index block.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // Data file.
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // Puffin file and index block.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1
     );
 }
 
-/// State transfer is the same as [`test_1_persist_2_without_local_filesystem_optimization`].
+/// State transfer is the same as [`test_1_persist_2_without_local_optimization`].
 /// Test scenario: no deletion vector + persist => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_persist_2_with_local_filesystem_optimization() {
+async fn test_1_persist_2_with_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
-        temp_dir.path().to_str().unwrap().to_string(),
-        /*optimize_local_filesystem=*/ true,
-    );
-    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut cache =
+        create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
@@ -146,11 +138,11 @@ async fn test_1_persist_2_with_local_filesystem_optimization() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // Data file.
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // Puffin file and index block.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // Data file.
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // Puffin file and index block.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1
@@ -159,7 +151,7 @@ async fn test_1_persist_2_with_local_filesystem_optimization() {
 
 /// Test scenario: no deletion vector + recover => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_recover_2_without_local_filesystem_optimization() {
+async fn test_1_recover_2_without_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
@@ -176,10 +168,10 @@ async fn test_1_recover_2_without_local_filesystem_optimization() {
     assert!(files_to_delete.is_empty());
 
     // Now the disk file and deletion vector has been persist into iceberg.
-    let mut object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let mut cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
-        object_storage_cache_for_recovery.clone(),
+        cache_for_recovery.clone(),
         get_iceberg_table_config(&temp_dir),
     )
     .unwrap();
@@ -196,33 +188,21 @@ async fn test_1_recover_2_without_local_filesystem_optimization() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_pending_eviction_entries_size(
-        &mut object_storage_cache_for_recovery,
-        /*expected_count=*/ 0,
-    )
-    .await;
-    assert_evictable_cache_size(
-        &mut object_storage_cache_for_recovery,
-        /*expected_count=*/ 0,
-    )
-    .await;
-    assert_non_evictable_cache_size(
-        &mut object_storage_cache_for_recovery,
-        /*expected_count=*/ 2,
-    )
-    .await; // Puffin file and index block.
+    assert_pending_eviction_entries_size(&mut cache_for_recovery, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache_for_recovery, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache_for_recovery, /*expected_count=*/ 2).await; // Puffin file and index block.
     assert_eq!(
-        object_storage_cache_for_recovery
+        cache_for_recovery
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1,
     );
 }
 
-/// State transfer is the same as [`test_1_recover_2_without_local_filesystem_optimization`].
+/// State transfer is the same as [`test_1_recover_2_without_local_optimization`].
 /// Test scenario: no deletion vector + recover => referenced, not requested to delete
 #[tokio::test]
-async fn test_1_recover_2_with_local_filesystem_optimization() {
+async fn test_1_recover_2_with_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
     let cache_config = ObjectStorageCacheConfig::new(
         INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
@@ -243,10 +223,10 @@ async fn test_1_recover_2_with_local_filesystem_optimization() {
     assert_eq!(files_to_delete, vec![local_data_file]);
 
     // Now the disk file and deletion vector has been persist into iceberg.
-    let mut object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let mut cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
-        object_storage_cache_for_recovery.clone(),
+        cache_for_recovery.clone(),
         get_iceberg_table_config(&temp_dir),
     )
     .unwrap();
@@ -263,23 +243,11 @@ async fn test_1_recover_2_with_local_filesystem_optimization() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_pending_eviction_entries_size(
-        &mut object_storage_cache_for_recovery,
-        /*expected_count=*/ 0,
-    )
-    .await;
-    assert_evictable_cache_size(
-        &mut object_storage_cache_for_recovery,
-        /*expected_count=*/ 0,
-    )
-    .await;
-    assert_non_evictable_cache_size(
-        &mut object_storage_cache_for_recovery,
-        /*expected_count=*/ 2,
-    )
-    .await; // Puffin file and index block.
+    assert_pending_eviction_entries_size(&mut cache_for_recovery, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache_for_recovery, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache_for_recovery, /*expected_count=*/ 2).await; // Puffin file and index block.
     assert_eq!(
-        object_storage_cache_for_recovery
+        cache_for_recovery
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1,
@@ -289,17 +257,13 @@ async fn test_1_recover_2_with_local_filesystem_optimization() {
 /// Test scenario: referenced, no delete + use => referenced, no delete
 /// Test scenario: referenced, no delete + use over => referenced, no delete
 #[tokio::test]
-async fn test_2_read_without_local_filesystem_optimization() {
+async fn test_2_read_without_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
-        temp_dir.path().to_str().unwrap().to_string(),
-        /*optimize_local_filesystem=*/ false,
-    );
-    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut cache =
+        create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -316,11 +280,11 @@ async fn test_2_read_without_local_filesystem_optimization() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 3).await; // Puffin file, data file, and index block.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 3).await; // Puffin file, data file, and index block.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         2,
@@ -334,32 +298,28 @@ async fn test_2_read_without_local_filesystem_optimization() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // data file
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // puffin file and index block.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // data file
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // puffin file and index block.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1
     );
 }
 
-/// State transfer is the same as [`test_2_read_without_local_filesystem_optimization`].
+/// State transfer is the same as [`test_2_read_without_local_optimization`].
 /// Test scenario: referenced, no delete + use => referenced, no delete
 /// Test scenario: referenced, no delete + use over => referenced, no delete
 #[tokio::test]
-async fn test_2_read_with_local_filesystem_optimization() {
+async fn test_2_read_with_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
-        temp_dir.path().to_str().unwrap().to_string(),
-        /*optimize_local_filesystem=*/ true,
-    );
-    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut cache =
+        create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_deletion_vector_for_read(&temp_dir, object_storage_cache.clone()).await;
+        prepare_test_deletion_vector_for_read(&temp_dir, cache.clone()).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 1);
@@ -380,11 +340,11 @@ async fn test_2_read_with_local_filesystem_optimization() {
     let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 3).await; // Puffin file, data file, and index block.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 3).await; // Puffin file, data file, and index block.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         2,
@@ -398,11 +358,11 @@ async fn test_2_read_with_local_filesystem_optimization() {
     )
     .await;
     assert!(files_to_delete.is_empty());
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 1).await; // data file
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // puffin file and index block.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // data file
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // puffin file and index block.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&puffin_blob_ref.puffin_file_cache_handle.file_id)
             .await,
         1
@@ -417,10 +377,10 @@ async fn test_2_read_with_local_filesystem_optimization() {
 /// Rows are committed and flushed with LSN 1 and 2 respectively.
 async fn prepare_test_disk_files_with_deletion_vector_for_compaction(
     temp_dir: &TempDir,
-    object_storage_cache: ObjectStorageCache,
+    cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableNotify>) {
     let (mut table, table_notify) =
-        create_mooncake_table_and_notify_for_compaction(temp_dir, object_storage_cache).await;
+        create_mooncake_table_and_notify_for_compaction(temp_dir, cache).await;
 
     // Append, commit and flush the first row.
     let row = MoonlinkRow::new(vec![
@@ -462,21 +422,13 @@ async fn prepare_test_disk_files_with_deletion_vector_for_compaction(
 /// Test scenario: referenced, no delete + delete & referenced => referenced, requested to delete
 /// Test scenario: referenced, no delete + delete & unreferenced => no entry
 #[tokio::test]
-async fn test_2_compact_without_local_filesystem_optimization() {
+async fn test_2_compact_without_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
-        temp_dir.path().to_str().unwrap().to_string(),
-        /*optimize_local_filesystem=*/ false,
-    );
-    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut cache =
+        create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_files_with_deletion_vector_for_compaction(
-            &temp_dir,
-            object_storage_cache.clone(),
-        )
-        .await;
+        prepare_test_disk_files_with_deletion_vector_for_compaction(&temp_dir, cache.clone()).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -511,17 +463,17 @@ async fn test_2_compact_without_local_filesystem_optimization() {
     assert_eq!(old_compacted_index_block_files.len(), 2);
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // data files
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 4).await; // Puffin files and index blocks.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data files
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 4).await; // Puffin files and index blocks.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[0])
             .await,
         1,
     );
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[1])
             .await,
         1,
@@ -546,36 +498,28 @@ async fn test_2_compact_without_local_filesystem_optimization() {
     assert!(disk_files.is_empty());
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
 
-/// State transfer is the same as [`test_2_compact_without_local_filesystem_optimization`].
+/// State transfer is the same as [`test_2_compact_without_local_optimization`].
 /// Test scenario: referenced, no delete + delete & referenced => referenced, requested to delete
 /// Test scenario: referenced, no delete + delete & unreferenced => no entry
 #[tokio::test]
-async fn test_2_compact_with_local_filesystem_optimization() {
+async fn test_2_compact_with_local_optimization() {
     let temp_dir = tempfile::tempdir().unwrap();
-    let cache_config = ObjectStorageCacheConfig::new(
-        INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE,
-        temp_dir.path().to_str().unwrap().to_string(),
-        /*optimize_local_filesystem=*/ true,
-    );
-    let mut object_storage_cache = ObjectStorageCache::new(cache_config);
+    let mut cache =
+        create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_files_with_deletion_vector_for_compaction(
-            &temp_dir,
-            object_storage_cache.clone(),
-        )
-        .await;
+        prepare_test_disk_files_with_deletion_vector_for_compaction(&temp_dir, cache.clone()).await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
     let disk_files = get_disk_files_for_snapshot(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut local_data_files = disk_files
-        .iter()
-        .map(|(f, _)| f.file_path().to_string())
+        .keys()
+        .map(|f| f.file_path().to_string())
         .collect::<Vec<_>>();
     local_data_files.sort();
 
@@ -613,17 +557,17 @@ async fn test_2_compact_with_local_filesystem_optimization() {
     assert_eq!(old_compacted_index_block_files.len(), 2);
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 2).await; // data files
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 4).await; // Puffin files and index blocks.
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data files
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 4).await; // Puffin files and index blocks.
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[0])
             .await,
         1,
     );
     assert_eq!(
-        object_storage_cache
+        cache
             .get_non_evictable_entry_ref_count(&old_compacted_puffin_file_ids[1])
             .await,
         1,
@@ -650,7 +594,7 @@ async fn test_2_compact_with_local_filesystem_optimization() {
     assert!(disk_files.is_empty());
 
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut object_storage_cache, /*expected_count=*/ 0).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
 }
