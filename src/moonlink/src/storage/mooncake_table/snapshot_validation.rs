@@ -10,8 +10,28 @@ impl SnapshotTableState {
         self.assert_file_indices_no_duplicate();
         // Check file ids don't have duplicate.
         self.assert_file_ids_no_duplicate();
+        // Check index blocks are all cached.
+        self.assert_index_blocks_cached();
         // Check persistence buffer.
         self.unpersisted_records.validate_invariants();
+    }
+
+    /// Test util function to validate all index block files are cached, and cache handle filepath matches index file path.
+    #[cfg(test)]
+    fn assert_index_blocks_cached(&self) {
+        for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
+            for cur_index_block in cur_file_index.index_blocks.iter() {
+                assert!(cur_index_block.cache_handle.is_some());
+                assert_eq!(
+                    cur_index_block
+                        .cache_handle
+                        .as_ref()
+                        .unwrap()
+                        .get_cache_filepath(),
+                    cur_index_block.index_file.file_path()
+                );
+            }
+        }
     }
 
     /// Test util function to validate one data file is referenced by exactly one file index.

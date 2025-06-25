@@ -977,6 +977,15 @@ impl SnapshotTableState {
             .await;
         evicted_data_files_to_delete.extend(puffin_evicted_data_files);
 
+        // Import all new file indices, including newly imported ones, merged ones, and compacted ones into cache.
+        // So it should happen before reflecting index merge and data compaction result into mooncake snapshot, and before integrating stream transactions and disk slices.
+        //
+        // TODO(hjiang): double check why we cannot apply disk slice/stream transaction before append unpersisted records.
+        // Import file indices into cache.
+        let file_indices_evicted_files_to_delete =
+            self.import_file_indices_into_cache(&mut task).await;
+        evicted_data_files_to_delete.extend(file_indices_evicted_files_to_delete);
+
         // Update disk files' disk entries and file indices from merged indices.
         let index_merge_evicted_files = self
             .update_file_indices_merge_to_mooncake_snapshot(&task)
@@ -993,12 +1002,6 @@ impl SnapshotTableState {
         // Prune unpersisted records.
         self.prune_committed_deletion_logs(&task);
         self.unpersisted_records.prune_persisted_records(&task);
-
-        // TODO(hjiang): double check why we cannot apply disk slice/stream transaction before append unpersisted records.
-        // Import file indices into cache.
-        let file_indices_evicted_files_to_delete =
-            self.import_file_indices_into_cache(&mut task).await;
-        evicted_data_files_to_delete.extend(file_indices_evicted_files_to_delete);
 
         // Sync buffer snapshot states into unpersisted iceberg content.
         self.unpersisted_records.buffer_unpersisted_records(&task);
