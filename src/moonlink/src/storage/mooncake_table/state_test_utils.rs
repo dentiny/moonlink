@@ -326,6 +326,22 @@ pub(crate) async fn get_only_data_filepath(table: &MooncakeTable) -> String {
     disk_files.iter().next().unwrap().0.file_path().to_string()
 }
 
+/// Test util to get all index block file ids for the table, and assert there's only one file.
+pub(crate) async fn get_only_index_block(table: &MooncakeTable) -> FileId {
+    let mut file_ids = vec![];
+
+    let guard = table.snapshot.read().await;
+    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
+        for cur_index_block in cur_file_index.index_blocks.iter() {
+            assert!(cur_index_block.cache_handle.is_some());
+            file_ids.push(cur_index_block.index_file.file_id());
+        }
+    }
+
+    assert_eq!(file_ids.len(), 1);
+    file_ids[0]
+}
+
 /// Test util to get the only puffin blob ref for the given mooncake snapshot.
 pub(crate) fn get_only_puffin_blob_ref_from_snapshot(snapshot: &Snapshot) -> PuffinBlobRef {
     let disk_files = snapshot.disk_files.clone();
@@ -378,6 +394,41 @@ pub(crate) async fn get_data_files_and_index_block_files(table: &MooncakeTable) 
 
     files.sort();
     files
+}
+
+///Test util function to assert there's only one data file in table snapshot, and it indicates remote file.
+pub(crate) async fn get_only_remote_data_file_id(table: &MooncakeTable, temp_dir: &TempDir) -> FileId {
+    let guard = table.snapshot.read().await;
+    let disk_files = &guard.current_snapshot.disk_files;
+    assert_eq!(disk_files.len(), 1);
+    let data_file = disk_files.iter().next().unwrap().0;
+    assert!(is_remote_file(data_file, temp_dir));
+    data_file.file_id()
+}
+
+/// Test util function to assert there's only one data file in table snapshot, and it indicates local file.
+pub(crate) async fn get_only_local_data_file_id(
+    table: &MooncakeTable,
+    temp_dir: &TempDir,
+) -> FileId {
+    let guard = table.snapshot.read().await;
+    let disk_files = &guard.current_snapshot.disk_files;
+    assert_eq!(disk_files.len(), 1);
+    let (data_file, disk_file_entry) = disk_files.iter().next().unwrap();
+    assert!(disk_file_entry.cache_handle.is_some());
+
+    assert_eq!(
+        data_file.file_path(),
+        &disk_file_entry
+            .cache_handle
+            .as_ref()
+            .unwrap()
+            .cache_entry
+            .cache_filepath
+    );
+    assert!(is_local_file(data_file, &temp_dir));
+
+    data_file.file_id()
 }
 
 /// Test util function to get committed and uncommitted deletion logs states.
