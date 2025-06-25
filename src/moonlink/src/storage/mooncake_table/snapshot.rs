@@ -252,7 +252,10 @@ impl SnapshotTableState {
     async fn update_data_files_to_persisted(
         &mut self,
         task: &SnapshotTask,
-    ) -> (HashSet<FileId>, Vec<String>) {
+    ) -> (
+        HashSet<FileId>, /*updated data file id*/
+        Vec<String>,     /*evicted files to delete*/
+    ) {
         // Updated data file ids.
         let mut updated_file_ids = HashSet::new();
         // Aggregate evicted files to delete.
@@ -292,17 +295,19 @@ impl SnapshotTableState {
     }
 
     /// Update file indices in the current snapshot from local data files to remote ones.
+    /// Return evicted files to delete.
     ///
     /// # Arguments
     ///
     /// * updated_file_ids: file ids which are updated by data files update, used to identify which file indices to remove.
-    fn update_file_indices_to_persisted(
+    /// * new_file_indices: newly persisted file indices, need to reflect the update to mooncake snapshot.
+    async fn update_file_indices_to_persisted(
         &mut self,
-        new_file_indices: Vec<FileIndex>,
+        mut new_file_indices: Vec<FileIndex>,
         updated_file_ids: HashSet<FileId>,
-    ) {
+    ) -> Vec<String> {
         if new_file_indices.is_empty() && updated_file_ids.is_empty() {
-            return;
+            return vec![];
         }
 
         // Update file indice from local write through cache to iceberg persisted remote path.
@@ -331,8 +336,30 @@ impl SnapshotTableState {
                 updated_file_indices.push(cur_file_index);
             }
         }
-        updated_file_indices.extend(new_file_indices.clone());
+
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
+        // For newly persisted index block files, attempt local filesystem optimization to replace local cache filepath to remote if applicable.
+        // At this point, all index block files are at an inconsistent state, which have their
+        // - file path pointing to remote path
+        // - cache handle pinned and refers to local cache file path
+        for cur_file_index in new_file_indices.iter_mut() {
+            for cur_index_block in cur_file_index.index_blocks.iter_mut() {
+                // All index block files have their cache handle pinned in cache.
+                let cur_evicted_files = cur_index_block
+                    .cache_handle
+                    .as_mut()
+                    .unwrap()
+                    .replace_with_remote(&cur_index_block.index_file.file_path())
+                    .await;
+                evicted_files_to_delete.extend(cur_evicted_files);
+            }
+        }
+        updated_file_indices.extend(new_file_indices);
         self.current_snapshot.indices.file_indices = updated_file_indices;
+
+        evicted_files_to_delete
     }
 
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
@@ -344,16 +371,23 @@ impl SnapshotTableState {
         &mut self,
         task: &SnapshotTask,
     ) -> Vec<String> {
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
         // Handle imported new data files and file indices.
-        let (updated_file_ids, evicted_files_to_delete) =
-            self.update_data_files_to_persisted(task).await;
-        self.update_file_indices_to_persisted(
-            task.iceberg_persisted_records
-                .import_result
-                .imported_file_indices
-                .clone(),
-            updated_file_ids,
-        );
+        let (updated_file_ids, cur_evicted_files) = self.update_data_files_to_persisted(task).await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+
+        let cur_evicted_files = self
+            .update_file_indices_to_persisted(
+                task.iceberg_persisted_records
+                    .import_result
+                    .imported_file_indices
+                    .clone(),
+                updated_file_ids,
+            )
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
 
         evicted_files_to_delete
     }

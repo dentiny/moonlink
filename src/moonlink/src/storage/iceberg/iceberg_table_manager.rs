@@ -594,6 +594,10 @@ impl IcebergTableManager {
                 cur_index_block.index_file.file_id().0,
                 remote_index_block_filepath,
             );
+            // At this point, all index block files are at an inconsistent state, which have their
+            // - file path pointing to remote path
+            // - cache handle pinned and refers to local cache file path
+            // The inconsistency will be fixed when they're imported into mooncake snapshot.
         }
 
         new_file_index
