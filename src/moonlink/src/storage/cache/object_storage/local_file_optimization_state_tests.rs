@@ -40,6 +40,10 @@ fn create_object_storage_cache_with_local_optimization(tmp_dir: &TempDir) -> Obj
     ObjectStorageCache::new(config)
 }
 
+// ========================================
+// unreference and replace with remote
+// ========================================
+//
 // (3) + persist + no reference count => (2)
 #[tokio::test]
 async fn test_cache_state_3_persist_and_unreferenced_2() {
@@ -512,4 +516,129 @@ async fn test_cache_state_2_request_to_read_sufficient_space_4() {
     assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
     assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+}
+
+/// ========================================
+/// replace with remote
+/// ========================================
+///
+/// Replacement with remote filepath doesn't change states.
+///
+/// Test state transfer (which displays different behavior as normal one):
+/// (2) + replace with remote => (2)
+/// (5) + replace with remote => (5)
+///
+/// (2) + replace with remote => (2)
+#[tokio::test]
+async fn test_cache_state_2_replace_with_remote_2() {
+    let cache_file_directory = tempdir().unwrap();
+    let test_cache_file =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+    let test_remote_file =
+        create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
+    let cache_entry = CacheEntry {
+        cache_filepath: test_cache_file.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let mut cache = create_object_storage_cache_with_local_optimization(&cache_file_directory);
+
+    // Check cache handle status.
+    let (mut cache_handle, files_to_evict) = cache
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
+        .await;
+    assert_non_evictable_cache_handle_ref_count(
+        &mut cache,
+        /*file_id=*/ get_table_unique_file_id(0),
+        /*expected_ref_count=*/ 1,
+    )
+    .await;
+    assert!(files_to_evict.is_empty());
+
+    // Replace with remote filepath.
+    let evicted_files_to_delete = cache_handle
+        .replace_with_remote(test_remote_file.to_str().unwrap())
+        .await;
+    assert_eq!(
+        evicted_files_to_delete,
+        vec![test_cache_file.to_str().unwrap().to_string()]
+    );
+
+    // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_handle_ref_count(
+        &mut cache,
+        /*file_id=*/ get_table_unique_file_id(0),
+        /*expected_ref_count=*/ 1,
+    )
+    .await;
+
+    // Check cache handle.
+    assert_eq!(
+        cache_handle.cache_entry.cache_filepath,
+        test_remote_file.to_str().unwrap().to_string()
+    );
+}
+
+/// (5) + replace with remote => (5)
+#[tokio::test]
+async fn test_cache_state_5_replace_with_remote_5() {
+    let cache_file_directory = tempdir().unwrap();
+    let test_cache_file =
+        create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+    let test_remote_file =
+        create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
+    let cache_entry = CacheEntry {
+        cache_filepath: test_cache_file.to_str().unwrap().to_string(),
+        file_metadata: FileMetadata {
+            file_size: CONTENT.len() as u64,
+        },
+    };
+    let mut cache = create_object_storage_cache_with_local_optimization(&cache_file_directory);
+
+    // Check cache handle status.
+    let (mut cache_handle, files_to_evict) = cache
+        .import_cache_entry(/*file_id=*/ get_table_unique_file_id(0), cache_entry)
+        .await;
+    assert_non_evictable_cache_handle_ref_count(
+        &mut cache,
+        /*file_id=*/ get_table_unique_file_id(0),
+        /*expected_ref_count=*/ 1,
+    )
+    .await;
+    assert!(files_to_evict.is_empty());
+
+    // Try delete the cache entry.
+    let evicted_files_to_delete = cache
+        .try_delete_cache_entry(/*file_id=*/ get_table_unique_file_id(0))
+        .await;
+    assert!(evicted_files_to_delete.is_empty());
+
+    // Replace with remote filepath, but doesn't have any effect.
+    let evicted_files_to_delete = cache_handle
+        .replace_with_remote(test_remote_file.to_str().unwrap())
+        .await;
+    assert!(evicted_files_to_delete.is_empty());
+
+    // Check cache status.
+    assert_cache_bytes_size(&mut cache, /*expected_bytes=*/ CONTENT.len() as u64).await;
+    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 1).await;
+    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
+    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
+    assert_non_evictable_cache_handle_ref_count(
+        &mut cache,
+        /*file_id=*/ get_table_unique_file_id(0),
+        /*expected_ref_count=*/ 1,
+    )
+    .await;
+
+    // Check cache handle.
+    assert_eq!(
+        cache_handle.cache_entry.cache_filepath,
+        test_cache_file.to_str().unwrap().to_string()
+    );
 }

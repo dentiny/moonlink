@@ -209,7 +209,7 @@ impl ObjectStorageCacheInternal {
     }
 
     /// Attempt to replace the cache entry with remote path, if it's the last reference count on local filesystem, and not requested to delete.
-    /// Return evicted files to delete.
+    /// Return evicted files to delete; it's non empty if replacement succeeds.
     pub(super) fn try_replace_only_reference_count_with_remote(
         &mut self,
         file_id: &TableUniqueFileId,

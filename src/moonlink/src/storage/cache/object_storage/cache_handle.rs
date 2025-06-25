@@ -69,7 +69,7 @@ impl NonEvictableHandle {
     /// The idea way, from users's perspective, is to switch from local filepath to remote if possible, but that leads to state machine being over-complicated.
     /// For example, we need to keep another pending state in cache, to record file paths requested to replace with remote, when they're (1) in use, or (2) in use and requested to delete.
     /// To make implementation easy, the implementation here only attempt once at unreference; if it fails, the replacement will never happen.
-    /// 
+    ///
     /// But local cache files are still subject to eviction and deletion, for example, when
     /// - Object storage cache goes out of space;
     /// - Maintainance job like compaction kicks in and requests to delete old compacted files;
@@ -86,20 +86,17 @@ impl NonEvictableHandle {
         assert!(cur_evicted_files.is_empty());
 
         // Then try to replace cache filepath with remote file, if applicable.
-        let evicted_files_to_delete =
-            guard.try_replace_evictable_with_remote(&self.file_id, remote_filepath);
-
-        evicted_files_to_delete
+        guard.try_replace_evictable_with_remote(&self.file_id, remote_filepath)
     }
 
     /// Replace current cache filepath with remote, used for local filesystem optimization if enabled.
-    /// 
+    ///
     /// This is an optimization for cases where both cache files and persisted files live on local filesystem, so we don't need to store the same files twice.
     /// The idea way, from users's perspective, is to switch from local filepath to remote if possible, but that leads to state machine being over-complicated.
     /// For example, we need to keep another pending state in cache, to record file paths requested to replace with remote, when they're (1) in use, or (2) in use and requested to delete.
-    /// To make implementation easy, the implementation here only attempt once at invocation, it succeeds if the current cache entry is the only non-evictable reference count, and not requested to delete; 
+    /// To make implementation easy, the implementation here only attempt once at invocation, it succeeds if the current cache entry is the only non-evictable reference count, and not requested to delete;
     /// if it fails, the replacement will never happen.
-    /// 
+    ///
     /// But local cache files are still subject to eviction and deletion, for example, when
     /// - Object storage cache goes out of space;
     /// - Maintainance job like compaction kicks in and requests to delete old compacted files;
@@ -110,6 +107,13 @@ impl NonEvictableHandle {
         let mut guard = self.cache.write().await;
 
         // Try to replace cache filepath with remote file, if applicable.
-        guard.try_replace_only_reference_count_with_remote(&self.file_id, remote_filepath)
+        let evicted_files_to_delete =
+            guard.try_replace_only_reference_count_with_remote(&self.file_id, remote_filepath);
+        // If replacement succeeds, local cache filepath will be returned and to evict.
+        if !evicted_files_to_delete.is_empty() {
+            self.cache_entry.cache_filepath = remote_filepath.to_string();
+        }
+
+        evicted_files_to_delete
     }
 }
