@@ -13,23 +13,22 @@ use tokio::sync::RwLock;
 
 // Default local filesystem directory where all tables data will be stored under.
 const DEFAULT_MOONLINK_TABLE_BASE_PATH: &str = "./mooncake/";
-// Default local filesystem directory under the above base directory (which defaults to `PGDATA/mooncake`) where all temporary files (used for union read) will be stored under.
+// Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./moonlink_temp_file/";
-// Default object storage cache directory under the above mooncake directory (which defaults to `PGDATA/mooncake`).
+pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./temp/";
+// Default object storage read-through cache directory under the above mooncake directory (which defaults to `PGDATA/pg_mooncake`).
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./moonlink_cache_file/";
+pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./read_through_cache/";
 // Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
 
 /// Get temporary directory under base path.
-fn get_temp_file_directory_under_base() -> std::path::PathBuf {
-    std::path::PathBuf::from(DEFAULT_MOONLINK_TABLE_BASE_PATH).join(DEFAULT_MOONLINK_TEMP_FILE_PATH)
+fn get_temp_file_directory_under_base(base_path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(base_path).join(DEFAULT_MOONLINK_TEMP_FILE_PATH)
 }
 /// Get cache directory under base path.
-fn get_cache_directory_under_base() -> std::path::PathBuf {
-    std::path::PathBuf::from(DEFAULT_MOONLINK_TABLE_BASE_PATH)
-        .join(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH)
+fn get_cache_directory_under_base(base_path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(base_path).join(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH)
 }
 
 /// Util function to delete and re-create the given directory.
@@ -53,7 +52,7 @@ pub struct MoonlinkBackend<T: Eq + Hash> {
     replication_manager: RwLock<ReplicationManager<T>>,
 }
 
-impl<T: Eq + Hash + Clone> Default for MoonlinkBackend<T> {
+impl<T: Eq + Hash + Clone + std::fmt::Display> Default for MoonlinkBackend<T> {
     fn default() -> Self {
         Self::new(DEFAULT_MOONLINK_TABLE_BASE_PATH.to_string())
     }
@@ -85,19 +84,19 @@ fn create_default_object_storage_cache(
     ObjectStorageCache::new(cache_config)
 }
 
-impl<T: Eq + Hash + Clone> MoonlinkBackend<T> {
+impl<T: Eq + Hash + Clone + std::fmt::Display> MoonlinkBackend<T> {
     pub fn new(base_path: String) -> Self {
         logging::init_logging();
 
         // Re-create directory for temporary files directory and cache files directory under base directory.
-        let temp_files_dir = get_temp_file_directory_under_base();
-        let cache_files_dir = get_cache_directory_under_base();
+        let temp_files_dir = get_temp_file_directory_under_base(&base_path);
+        let cache_files_dir = get_cache_directory_under_base(&base_path);
         recreate_directory(temp_files_dir.to_str().unwrap()).unwrap();
         recreate_directory(cache_files_dir.to_str().unwrap()).unwrap();
 
         Self {
             replication_manager: RwLock::new(ReplicationManager::new(
-                base_path.clone(),
+                base_path,
                 temp_files_dir.to_str().unwrap().to_string(),
                 create_default_object_storage_cache(cache_files_dir),
             )),
