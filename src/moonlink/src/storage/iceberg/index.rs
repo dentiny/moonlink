@@ -188,8 +188,8 @@ impl FileIndexBlob {
                 .map(|file_index| {
                     FileIndex::new(
                         file_index,
-                        &local_index_file_to_remote,
-                        &local_data_file_to_remote,
+                        local_index_file_to_remote,
+                        local_data_file_to_remote,
                     )
                 })
                 .collect(),

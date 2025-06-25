@@ -351,7 +351,7 @@ impl SnapshotTableState {
                     .cache_handle
                     .as_mut()
                     .unwrap()
-                    .replace_with_remote(&cur_index_block.index_file.file_path())
+                    .replace_with_remote(cur_index_block.index_file.file_path())
                     .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
 

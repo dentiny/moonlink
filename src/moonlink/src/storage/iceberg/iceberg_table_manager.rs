@@ -647,7 +647,7 @@ impl IcebergTableManager {
         let file_index_blob = FileIndexBlob::new(
             new_file_indices,
             &local_index_file_to_remote,
-            &local_data_file_to_remote,
+            local_data_file_to_remote,
         );
         let puffin_blob = file_index_blob.as_blob()?;
         puffin_writer
