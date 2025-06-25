@@ -23,13 +23,12 @@ pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./read_through_cac
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
 
 /// Get temporary directory under base path.
-fn get_temp_file_directory_under_base() -> std::path::PathBuf {
-    std::path::PathBuf::from(DEFAULT_MOONLINK_TABLE_BASE_PATH).join(DEFAULT_MOONLINK_TEMP_FILE_PATH)
+fn get_temp_file_directory_under_base(base_path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(base_path).join(DEFAULT_MOONLINK_TEMP_FILE_PATH)
 }
 /// Get cache directory under base path.
-fn get_cache_directory_under_base() -> std::path::PathBuf {
-    std::path::PathBuf::from(DEFAULT_MOONLINK_TABLE_BASE_PATH)
-        .join(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH)
+fn get_cache_directory_under_base(base_path: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(base_path).join(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH)
 }
 
 /// Util function to delete and re-create the given directory.
@@ -90,8 +89,8 @@ impl<T: Eq + Hash + Clone + std::fmt::Display> MoonlinkBackend<T> {
         logging::init_logging();
 
         // Re-create directory for temporary files directory and cache files directory under base directory.
-        let temp_files_dir = get_temp_file_directory_under_base();
-        let cache_files_dir = get_cache_directory_under_base();
+        let temp_files_dir = get_temp_file_directory_under_base(&base_path);
+        let cache_files_dir = get_cache_directory_under_base(&base_path);
         recreate_directory(temp_files_dir.to_str().unwrap()).unwrap();
         recreate_directory(cache_files_dir.to_str().unwrap()).unwrap();
 
