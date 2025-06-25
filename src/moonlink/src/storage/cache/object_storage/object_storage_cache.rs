@@ -181,7 +181,6 @@ impl ObjectStorageCacheInternal {
 
     /// Attempt to replace an evictable cache entry with remote path, if the filepath lives on local filesystem.
     /// Return evicted files to delete.
-    #[allow(dead_code)]
     pub(super) fn try_replace_evictable_with_remote(
         &mut self,
         file_id: &TableUniqueFileId,
@@ -197,6 +196,45 @@ impl ObjectStorageCacheInternal {
 
         // Only replace with remote filepath when requested file lives at evictable cache.
         if let Some(cache_entry_wrapper) = self.evictable_cache.get_mut(file_id) {
+            let old_cache_filepath =
+                std::mem::take(&mut cache_entry_wrapper.cache_entry.cache_filepath);
+            cache_entry_wrapper.cache_entry.cache_filepath = remote_path.to_string();
+            cache_entry_wrapper.deletable = false;
+
+            return vec![old_cache_filepath];
+        }
+
+        // Otherwise, do nothing.
+        vec![]
+    }
+
+    /// Attempt to replace the cache entry with remote path, if it's the last reference count on local filesystem, and not requested to delete.
+    /// Return evicted files to delete.
+    pub(super) fn try_replace_only_reference_count_with_remote(
+        &mut self,
+        file_id: &TableUniqueFileId,
+        remote_path: &str,
+    ) -> Vec<String> {
+        // Local filesystem optimization doesn't apply here.
+        if !self.config.optimize_local_filesystem {
+            return vec![];
+        }
+        if !path_utils::is_local_filepath(remote_path) {
+            return vec![];
+        }
+
+        // If the cache entry has been requested to delete, skip.
+        if self.evicted_entries.contains(file_id) {
+            return vec![];
+        }
+
+        // Only replace with remote filepath when requested file is the only reference count at the non-evictable cache.
+        if let Some(cache_entry_wrapper) = self.non_evictable_cache.get_mut(file_id) {
+            ma::assert_ge!(cache_entry_wrapper.reference_count, 1);
+            if cache_entry_wrapper.reference_count > 1 {
+                return vec![];
+            }
+
             let old_cache_filepath =
                 std::mem::take(&mut cache_entry_wrapper.cache_entry.cache_filepath);
             cache_entry_wrapper.cache_entry.cache_filepath = remote_path.to_string();
