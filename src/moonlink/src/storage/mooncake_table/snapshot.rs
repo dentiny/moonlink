@@ -33,7 +33,7 @@ use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
 use crate::table_notify::TableNotify;
-use crate::NonEvictableHandle;
+use crate::{create_data_file, NonEvictableHandle};
 use more_asserts as ma;
 use parquet::arrow::AsyncArrowWriter;
 use parquet::basic::{Compression, Encoding};
@@ -354,6 +354,18 @@ impl SnapshotTableState {
                     .replace_with_remote(&cur_index_block.index_file.file_path())
                     .await;
                 evicted_files_to_delete.extend(cur_evicted_files);
+
+                // Reset the index block to be local cache file, to keep it consistent.
+                cur_index_block.index_file = create_data_file(
+                    cur_index_block.index_file.file_id().0,
+                    cur_index_block
+                        .cache_handle
+                        .as_ref()
+                        .unwrap()
+                        .cache_entry
+                        .cache_filepath
+                        .to_string(),
+                );
             }
         }
         updated_file_indices.extend(new_file_indices);

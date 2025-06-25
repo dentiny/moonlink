@@ -214,13 +214,11 @@ async fn test_1_recover_2_with_local_optimization() {
         prepare_test_deletion_vector_for_read(&temp_dir, ObjectStorageCache::new(cache_config))
             .await;
     create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
-    let disk_files = get_disk_files_for_snapshot(&table).await;
-    assert_eq!(disk_files.len(), 1);
-    let local_data_file = disk_files.iter().next().unwrap().0.file_path().to_string();
+    let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert_eq!(files_to_delete, vec![local_data_file]);
+    assert_eq!(files_to_delete, local_data_files_and_index_blocks);
 
     // Now the disk file and deletion vector has been persist into iceberg.
     let mut cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
@@ -237,10 +235,7 @@ async fn test_1_recover_2_with_local_optimization() {
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = mooncake_snapshot.disk_files.clone();
-    assert_eq!(disk_files.len(), 1);
-    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
-    let puffin_blob_ref = disk_file_entry.puffin_deletion_blob.as_ref().unwrap();
+    let puffin_blob_ref = get_only_puffin_blob_ref(&mooncake_snapshot).await;
 
     // Check cache state.
     assert_pending_eviction_entries_size(&mut cache_for_recovery, /*expected_count=*/ 0).await;

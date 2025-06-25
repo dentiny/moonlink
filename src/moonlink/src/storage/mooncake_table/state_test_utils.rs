@@ -12,15 +12,15 @@ use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
-use crate::storage::io_utils;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, DataCompactionResult, DiskFileEntry, FileIndiceMergePayload,
-    FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult, SnapshotOption,
+    FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult, Snapshot, SnapshotOption,
     TableConfig as MooncakeTableConfig,
 };
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
 };
+use crate::storage::{io_utils, PuffinBlobRef};
 use crate::table_notify::TableNotify;
 use crate::{
     IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
@@ -324,6 +324,43 @@ pub(crate) async fn get_only_data_filepath(table: &MooncakeTable) -> String {
     let disk_files = guard.current_snapshot.disk_files.clone();
     assert_eq!(disk_files.len(), 1);
     disk_files.iter().next().unwrap().0.file_path().to_string()
+}
+
+/// Test util to get the only puffin blob ref for the given mooncake snapshot.
+pub(crate) async fn get_only_puffin_blob_ref(snapshot: &Snapshot) -> PuffinBlobRef {
+    let disk_files = snapshot.disk_files.clone();
+    assert_eq!(disk_files.len(), 1);
+    disk_files
+        .iter()
+        .next()
+        .unwrap()
+        .1
+        .puffin_deletion_blob
+        .as_ref()
+        .unwrap()
+        .clone()
+}
+
+/// Test util to get data file and index block filepath for the given mooncake table.
+pub(crate) async fn get_data_files_and_index_block_files(table: &MooncakeTable) -> Vec<String> {
+    let mut files = vec![];
+
+    let guard = table.snapshot.read().await;
+
+    // Check and get data files.
+    let disk_files = guard.current_snapshot.disk_files.clone();
+    for (cur_file, _) in disk_files.iter() {
+        files.push(cur_file.file_path().to_string());
+    }
+
+    // Check and get index block files.
+    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
+        for cur_index_block in cur_file_index.index_blocks.iter() {
+            files.push(cur_index_block.index_file.file_path().to_string());
+        }
+    }
+
+    files
 }
 
 /// Test util function to get committed and uncommitted deletion logs states.
