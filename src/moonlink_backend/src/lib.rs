@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 // Default local filesystem directory where all tables data will be stored under.
-const DEFAULT_MOONLINK_TABLE_BASE_PATH: &str = "./pg_mooncake/";
+const DEFAULT_MOONLINK_TABLE_BASE_PATH: &str = "./mooncake/";
 // Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
 // The whole directory is cleaned up at moonlink backend start, to prevent file leak.
 pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./temp/";
