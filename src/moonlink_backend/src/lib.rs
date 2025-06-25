@@ -96,7 +96,7 @@ impl<T: Eq + Hash + Clone + std::fmt::Display> MoonlinkBackend<T> {
 
         Self {
             replication_manager: RwLock::new(ReplicationManager::new(
-                base_path.clone(),
+                base_path,
                 temp_files_dir.to_str().unwrap().to_string(),
                 create_default_object_storage_cache(cache_files_dir),
             )),
