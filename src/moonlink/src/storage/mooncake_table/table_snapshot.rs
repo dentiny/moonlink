@@ -70,7 +70,7 @@ pub struct IcebergSnapshotImportResult {
     /// Persisted puffin blob reference.
     pub(crate) puffin_blob_ref: HashMap<FileId, PuffinBlobRef>,
     /// Imported file indices.
-    pub(crate) imported_file_indices: Vec<MooncakeFileIndex>,
+    pub(crate) new_file_indices: Vec<MooncakeFileIndex>,
 }
 
 impl IcebergSnapshotImportResult {
@@ -78,7 +78,7 @@ impl IcebergSnapshotImportResult {
     pub fn is_empty(&self) -> bool {
         self.new_data_files.is_empty()
             && self.puffin_blob_ref.is_empty()
-            && self.imported_file_indices.is_empty()
+            && self.new_file_indices.is_empty()
     }
 }
 

@@ -394,7 +394,7 @@ impl SnapshotTableState {
             .update_file_indices_to_persisted(
                 task.iceberg_persisted_records
                     .import_result
-                    .imported_file_indices
+                    .new_file_indices
                     .clone(),
                 updated_file_ids,
             )

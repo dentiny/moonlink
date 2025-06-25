@@ -500,7 +500,7 @@ impl MooncakeTable {
         // Whether the iceberg snapshot result contains new write operations from mooncake table (append/delete).
         let contains_new_writes = |res: &IcebergSnapshotResult| {
             if !res.import_result.new_data_files.is_empty() {
-                assert!(!res.import_result.imported_file_indices.is_empty());
+                assert!(!res.import_result.new_file_indices.is_empty());
                 return true;
             }
             if !res.import_result.puffin_blob_ref.is_empty() {
@@ -829,7 +829,7 @@ impl MooncakeTable {
             .new_data_files_to_import
             .len();
 
-        let new_imported_file_indices_count = snapshot_payload.import_payload.file_indices.len();
+        let new_new_file_indices_count = snapshot_payload.import_payload.file_indices.len();
         let new_merged_file_indices_count = snapshot_payload
             .index_merge_payload
             .new_file_indices_to_import
@@ -881,7 +881,7 @@ impl MooncakeTable {
             iceberg_persistence_res.remote_data_files.len()
         );
 
-        let new_file_indices_cutoff_index_1 = new_imported_file_indices_count;
+        let new_file_indices_cutoff_index_1 = new_new_file_indices_count;
         let new_file_indices_cutoff_index_2 =
             new_file_indices_cutoff_index_1 + new_merged_file_indices_count;
         let new_file_indices_cutoff_index_3 =
@@ -899,7 +899,7 @@ impl MooncakeTable {
                     [0..new_data_files_cutoff_index_1]
                     .to_vec(),
                 puffin_blob_ref: iceberg_persistence_res.puffin_blob_ref,
-                imported_file_indices: iceberg_persistence_res.remote_file_indices
+                new_file_indices: iceberg_persistence_res.remote_file_indices
                     [0..new_file_indices_cutoff_index_1]
                     .to_vec(),
             },

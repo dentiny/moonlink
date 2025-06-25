@@ -165,7 +165,7 @@ impl UnpersistedRecords {
         let persisted_new_file_indices = &task
             .iceberg_persisted_records
             .import_result
-            .imported_file_indices;
+            .new_file_indices;
         ma::assert_ge!(
             self.new_file_indices.len(),
             persisted_new_file_indices.len()
