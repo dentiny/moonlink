@@ -32,3 +32,6 @@ pub(super) mod test_utils;
 
 #[cfg(test)]
 mod catalog_test_utils;
+
+#[cfg(test)]
+mod file_catalog_test_utils;

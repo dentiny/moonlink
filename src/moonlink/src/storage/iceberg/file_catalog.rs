@@ -42,11 +42,11 @@ use iceberg::io::{FileIO, FileIOBuilder};
 use iceberg::puffin::PuffinWriter;
 use iceberg::spec::{TableMetadata, TableMetadataBuilder};
 use iceberg::table::Table;
-use iceberg::Error as IcebergError;
 use iceberg::Result as IcebergResult;
 use iceberg::{
     Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent, TableUpdate,
 };
+use iceberg::{Error as IcebergError, TableRequirement};
 use opendal::layers::RetryLayer;
 use opendal::services;
 use opendal::Operator;
@@ -305,6 +305,47 @@ impl FileCatalog {
             .map_err(|e| IcebergError::new(iceberg::ErrorKind::DataInvalid, e.to_string()))?;
 
         Ok((metadata_filepath, metadata))
+    }
+
+    /// Validate table commit requirements.
+    fn validate_table_requirements(
+        table_requirements: Vec<TableRequirement>,
+        table_metadata: &TableMetadata,
+    ) -> IcebergResult<()> {
+        for cur_requirment in table_requirements.into_iter() {
+            cur_requirment.check(Some(table_metadata))?;
+        }
+        Ok(())
+    }
+
+    /// Reflect table updates to table metadata builder.
+    fn reflect_table_updates(
+        mut builder: TableMetadataBuilder,
+        table_updates: Vec<TableUpdate>,
+    ) -> IcebergResult<TableMetadataBuilder> {
+        for update in &table_updates {
+            match update {
+                TableUpdate::AddSnapshot { snapshot } => {
+                    builder = builder.add_snapshot(snapshot.clone())?;
+                }
+                TableUpdate::SetSnapshotRef {
+                    ref_name,
+                    reference,
+                } => {
+                    builder = builder.set_ref(ref_name, reference.clone())?;
+                }
+                TableUpdate::SetProperties { updates } => {
+                    builder = builder.set_properties(updates.clone())?;
+                }
+                TableUpdate::RemoveProperties { removals } => {
+                    builder = builder.remove_properties(removals)?;
+                }
+                _ => {
+                    unreachable!("Only snapshot updates are expected in this implementation");
+                }
+            }
+        }
+        Ok(builder)
     }
 }
 
@@ -622,41 +663,20 @@ impl Catalog for FileCatalog {
     }
 
     /// Update a table to the catalog, which writes metadata file and version hint file.
-    ///
-    /// TODO(hjiang): Implement table requirements, which indicates user-defined compare-and-swap logic.
     async fn update_table(&self, mut commit: TableCommit) -> IcebergResult<Table> {
         let (metadata_filepath, metadata) = self.load_metadata(commit.identifier()).await?;
         let version = metadata.next_sequence_number();
-        let mut builder = TableMetadataBuilder::new_from_metadata(
+        let builder = TableMetadataBuilder::new_from_metadata(
             metadata.clone(),
             /*current_file_location=*/ Some(metadata_filepath.clone()),
         );
 
-        let updates = commit.take_updates();
-        for update in &updates {
-            match update {
-                TableUpdate::AddSnapshot { snapshot } => {
-                    builder = builder.add_snapshot(snapshot.clone())?;
-                }
-                TableUpdate::SetSnapshotRef {
-                    ref_name,
-                    reference,
-                } => {
-                    builder = builder.set_ref(ref_name, reference.clone())?;
-                }
-                TableUpdate::SetProperties { updates } => {
-                    builder = builder.set_properties(updates.clone())?;
-                }
-                TableUpdate::RemoveProperties { removals } => {
-                    builder = builder.remove_properties(removals)?;
-                }
-                _ => {
-                    unreachable!("Only snapshot updates are expected in this implementation");
-                }
-            }
-        }
+        // Validate existing table metadata with requirements.
+        Self::validate_table_requirements(commit.take_requirements(), &metadata)?;
 
         // Construct new metadata with updates.
+        let updates = commit.take_updates();
+        let builder = Self::reflect_table_updates(builder, updates)?;
         let metadata = builder.build()?.metadata;
 
         // Write metadata file.
@@ -692,12 +712,7 @@ impl Catalog for FileCatalog {
         let version_hint_path = format!("{}/version-hint.text", metadata_directory);
         self.write_object(&version_hint_path, &format!("{version}"))
             .await
-            .map_err(|e| {
-                IcebergError::new(
-                    iceberg::ErrorKind::Unexpected,
-                    format!("Failed to write version hint file at table update: {}", e),
-                )
-            })?;
+            .map_err(to_iceberg_error)?;
 
         Table::builder()
             .identifier(commit.identifier().clone())
@@ -712,6 +727,7 @@ impl Catalog for FileCatalog {
 mod tests {
     use super::*;
     use crate::storage::iceberg::catalog_test_utils;
+    use crate::storage::iceberg::file_catalog_test_utils::*;
     #[cfg(feature = "storage-s3")]
     use crate::storage::iceberg::s3_test_utils;
 
@@ -726,6 +742,7 @@ mod tests {
     };
     use iceberg::NamespaceIdent;
     use iceberg::Result as IcebergResult;
+    use uuid::Uuid;
 
     /// Test util function to get subdirectories and folders under the given folder.
     /// NOTICE: directories names and file names returned are absolute path, not relative path.
@@ -1042,6 +1059,36 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn test_update_table_with_requirement_check_failed() {
+        let temp_dir = TempDir::new().unwrap();
+        let catalog = create_test_file_catalog(&temp_dir);
+        create_test_table(&catalog).await.unwrap();
+        let namespace = NamespaceIdent::from_strs(["default"]).unwrap();
+        let table_name = "test_table".to_string();
+        let table_ident = TableIdent::new(namespace.clone(), table_name.clone());
+        catalog.load_metadata(&table_ident).await.unwrap();
+
+        #[repr(C)]
+        struct TableCommitProxy {
+            ident: TableIdent,
+            requirements: Vec<iceberg::TableRequirement>,
+            updates: Vec<TableUpdate>,
+        }
+        let table_commit_proxy = TableCommitProxy {
+            ident: table_ident.clone(),
+            requirements: vec![TableRequirement::UuidMatch {
+                uuid: Uuid::new_v4(),
+            }],
+            updates: vec![],
+        };
+        let table_commit =
+            unsafe { std::mem::transmute::<TableCommitProxy, TableCommit>(table_commit_proxy) };
+
+        let res = catalog.update_table(table_commit).await;
+        assert!(res.is_err());
+    }
+
     async fn test_update_table_impl(mut catalog: FileCatalog) -> IcebergResult<()> {
         create_test_table(&catalog).await?;
 
@@ -1130,11 +1177,12 @@ mod tests {
     /// -------------------------
     /// Namespace operations test.
     #[tokio::test]
-    async fn test_catalog_namespace_operations_filesystem() -> IcebergResult<()> {
-        let temp_dir = TempDir::new().expect("tempdir failed");
-        let warehouse_path = temp_dir.path().to_str().unwrap();
-        let catalog = FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {})?;
-        test_catalog_namespace_operations_impl(catalog).await
+    async fn test_catalog_namespace_operations_filesystem() {
+        let temp_dir = TempDir::new().unwrap();
+        let catalog = create_test_file_catalog(&temp_dir);
+        test_catalog_namespace_operations_impl(catalog)
+            .await
+            .unwrap();
     }
     #[tokio::test]
     #[cfg(feature = "storage-s3")]
@@ -1145,11 +1193,10 @@ mod tests {
 
     /// Table operations test.
     #[tokio::test]
-    async fn test_catalog_table_operations_filesystem() -> IcebergResult<()> {
-        let temp_dir = TempDir::new().expect("tempdir failed");
-        let warehouse_path = temp_dir.path().to_str().unwrap();
-        let catalog = FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {})?;
-        test_catalog_table_operations_impl(catalog).await
+    async fn test_catalog_table_operations_filesystem() {
+        let temp_dir = TempDir::new().unwrap();
+        let catalog = create_test_file_catalog(&temp_dir);
+        test_catalog_table_operations_impl(catalog).await.unwrap();
     }
     #[tokio::test]
     #[cfg(feature = "storage-s3")]
@@ -1160,11 +1207,10 @@ mod tests {
 
     /// List operation test.
     #[tokio::test]
-    async fn test_list_operation_filesystem() -> IcebergResult<()> {
-        let temp_dir = TempDir::new().expect("tempdir failed");
-        let warehouse_path = temp_dir.path().to_str().unwrap();
-        let catalog = FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {})?;
-        test_list_operation_impl(catalog).await
+    async fn test_list_operation_filesystem() {
+        let temp_dir = TempDir::new().unwrap();
+        let catalog = create_test_file_catalog(&temp_dir);
+        test_list_operation_impl(catalog).await.unwrap();
     }
     #[tokio::test]
     #[cfg(feature = "storage-s3")]
@@ -1175,11 +1221,10 @@ mod tests {
 
     /// Update table test.
     #[tokio::test]
-    async fn test_update_table_filesystem() -> IcebergResult<()> {
-        let temp_dir = TempDir::new().expect("tempdir failed");
-        let warehouse_path = temp_dir.path().to_str().unwrap();
-        let catalog = FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {})?;
-        test_update_table_impl(catalog).await
+    async fn test_update_table_filesystem() {
+        let temp_dir = TempDir::new().unwrap();
+        let catalog = create_test_file_catalog(&temp_dir);
+        test_update_table_impl(catalog).await.unwrap();
     }
     #[tokio::test]
     #[cfg(feature = "storage-s3")]
