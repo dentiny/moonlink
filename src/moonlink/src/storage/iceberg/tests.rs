@@ -715,7 +715,7 @@ async fn test_index_merge_and_create_snapshot() {
     mooncake_table.delete(row_2.clone(), /*lsn=*/ 4).await;
     mooncake_table.commit(/*lsn=*/ 5);
     mooncake_table.flush(/*lsn=*/ 5).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut mooncake_table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut mooncake_table, &mut notify_rx).await;
 }
 
 /// Testing scenario: attempt an iceberg snapshot when no data file, deletion vector or index files generated.
@@ -809,7 +809,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
     table.flush(/*lsn=*/ 10).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Second time snapshot check, committed deletion logs haven't reached flush LSN.
     table.delete(row.clone(), /*lsn=*/ 20).await;
@@ -913,13 +913,13 @@ async fn test_small_batch_size_and_large_parquet_size() {
     // Commit, flush and create snapshots.
     table.commit(/*lsn=*/ 1);
     table.flush(/*lsn=*/ 1).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Delete the second record.
     table.delete(/*row=*/ row_2.clone(), /*lsn=*/ 2).await;
     table.commit(/*lsn=*/ 3);
     table.flush(/*lsn=*/ 3).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
@@ -1203,7 +1203,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.delete(row1.clone(), /*flush_lsn=*/ 100).await;
     table.commit(/*flush_lsn=*/ 200);
     table.flush(/*flush_lsn=*/ 200).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1274,7 +1274,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.delete(row2.clone(), /*flush_lsn=*/ 300).await;
     table.commit(/*flush_lsn=*/ 300);
     table.flush(/*flush_lsn=*/ 300).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1339,7 +1339,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.delete(row3.clone(), /*flush_lsn=*/ 400).await;
     table.flush(/*flush_lsn=*/ 400).await.unwrap();
     table.commit(/*flush_lsn=*/ 400);
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1408,7 +1408,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.append(row4.clone()).unwrap();
     table.commit(/*flush_lsn=*/ 500);
     table.flush(/*flush_lsn=*/ 500).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(

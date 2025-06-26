@@ -246,10 +246,10 @@ async fn test_state_1_1() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
+    // Request to persist.
     assert!(!table.create_snapshot(SnapshotOption::default()));
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -278,10 +278,10 @@ async fn test_state_1_2() -> IcebergResult<()> {
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 1).await;
 
-    // Request to create snapshot.
+    // Request to persist.
     assert!(!table.create_snapshot(SnapshotOption::default()));
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -313,10 +313,10 @@ async fn test_state_1_3() -> IcebergResult<()> {
     ]);
     table.append(row.clone()).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -350,10 +350,10 @@ async fn test_state_1_4() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 400).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -386,10 +386,10 @@ async fn test_state_1_5() -> IcebergResult<()> {
     ]);
     table.append(row.clone()).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one puffin blob
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -424,10 +424,10 @@ async fn test_state_1_6() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 400).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one puffin blob
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -455,10 +455,10 @@ async fn test_state_2_1() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -488,10 +488,10 @@ async fn test_state_2_2() -> IcebergResult<()> {
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 200).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -524,10 +524,10 @@ async fn test_state_2_3() -> IcebergResult<()> {
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -562,10 +562,10 @@ async fn test_state_2_4() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 500).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -599,10 +599,10 @@ async fn test_state_2_5() -> IcebergResult<()> {
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -638,10 +638,10 @@ async fn test_state_2_6() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 500).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -670,10 +670,10 @@ async fn test_state_3_1() -> IcebergResult<()> {
     table.commit(/*lsn=*/ 100);
     table.flush(/*lsn=*/ 200).await.unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -704,10 +704,10 @@ async fn test_state_3_2() -> IcebergResult<()> {
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 300).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -741,10 +741,10 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
     table.commit(/*lsn=*/ 400);
     table.flush(/*lsn=*/ 500).await.unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -783,10 +783,10 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
     table.delete(old_row.clone(), /*lsn=*/ 400).await;
     table.commit(/*lsn=*/ 500);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
@@ -827,10 +827,10 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 600).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -871,10 +871,10 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 600).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
@@ -914,10 +914,10 @@ async fn test_state_3_5() -> IcebergResult<()> {
     table.commit(/*lsn=*/ 400);
     table.flush(/*lsn=*/ 400).await.unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -959,10 +959,10 @@ async fn test_state_3_6() -> IcebergResult<()> {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 500).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1002,10 +1002,10 @@ async fn test_state_4_1() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -1042,10 +1042,10 @@ async fn test_state_4_2() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -1085,10 +1085,10 @@ async fn test_state_4_3() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -1130,10 +1130,10 @@ async fn test_state_4_4() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -1174,10 +1174,10 @@ async fn test_state_4_5() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -1220,10 +1220,10 @@ async fn test_state_4_6() -> IcebergResult<()> {
     // Prepare uncommitted deletion record.
     table.delete(row.clone(), /*lsn=*/ 500).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -1260,10 +1260,10 @@ async fn test_state_5_1() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 300);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -1302,10 +1302,10 @@ async fn test_state_5_2() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 400);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -1347,10 +1347,10 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 600);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1397,10 +1397,10 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 600);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
@@ -1449,10 +1449,10 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 700);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1501,10 +1501,10 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 700);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
@@ -1552,10 +1552,10 @@ async fn test_state_5_5() -> IcebergResult<()> {
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 500);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1605,10 +1605,10 @@ async fn test_state_5_6() -> IcebergResult<()> {
     // Prepare uncommitted deletion record.
     table.delete(row.clone(), /*lsn=*/ 600).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1657,10 +1657,10 @@ async fn test_state_6_1() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -1706,10 +1706,10 @@ async fn test_state_6_2() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_new_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -1758,10 +1758,10 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1815,10 +1815,10 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
@@ -1873,10 +1873,10 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -1932,10 +1932,10 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 4); // two data files, two index block files
     check_prev_and_new_data_files(
@@ -1990,10 +1990,10 @@ async fn test_state_6_5() -> IcebergResult<()> {
     ]);
     table.append(row).unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -2050,10 +2050,10 @@ async fn test_state_6_6() -> IcebergResult<()> {
     // Prepare uncommitted deletion record.
     table.delete(/*row=*/ row.clone(), /*lsn=*/ 600).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 5); // two data files, two index block files, one deletion vector puffin
     check_prev_and_new_data_files(
@@ -2077,10 +2077,10 @@ async fn test_state_7_1() -> IcebergResult<()> {
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 0);
     assert!(snapshot.disk_files.is_empty());
@@ -2104,10 +2104,10 @@ async fn test_state_7_2() -> IcebergResult<()> {
     // Prepare uncommitted deletion record.
     table.delete(/*row=*/ old_row.clone(), /*lsn=*/ 200).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -2132,10 +2132,10 @@ async fn test_state_7_3() -> IcebergResult<()> {
     table.delete(/*row=*/ old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -2163,10 +2163,10 @@ async fn test_state_7_4() -> IcebergResult<()> {
     // Prepare uncommitted deletion record.
     table.delete(old_row_2, /*lsn=*/ 400).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 2); // one data file, one index block file
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
@@ -2192,10 +2192,10 @@ async fn test_state_7_5() -> IcebergResult<()> {
     table.commit(/*lsn=*/ 300);
     table.flush(/*lsn=*/ 300).await.unwrap();
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;
@@ -2223,10 +2223,10 @@ async fn test_state_7_6() -> IcebergResult<()> {
     // Prepare uncommitted deletion record.
     table.delete(old_row_2.clone(), /*lsn=*/ 400).await;
 
-    // Request to create snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut notify_rx).await;
+    // Request to persist.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check iceberg snapshot status.
+    // Check persistence status.
     let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
     check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ true).await;

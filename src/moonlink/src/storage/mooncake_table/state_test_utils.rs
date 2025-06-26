@@ -707,7 +707,7 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
 }
 
 // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
-pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_test(
+pub(crate) async fn create_mooncake_and_persist_for_test(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableNotify>,
 ) {
@@ -762,7 +762,7 @@ async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
 // * injected_committed_deletion_rows: rows to delete and commit in between data compaction initiation and snapshot creation
 // * injected_uncommitted_deletion_rows: rows to delete but not commit in between data compaction initiation and snapshot creation
 #[cfg(test)]
-pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_data_compaction_for_test(
+pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableNotify>,
     injected_committed_deletion_rows: Vec<(MoonlinkRow, u64 /*lsn*/)>,

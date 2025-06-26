@@ -221,7 +221,7 @@ async fn test_5_1_without_local_optimization(#[case] use_batch_write: bool) {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     // Till now, iceberg snapshot has been persisted, need an extra mooncake snapshot to reflect persistence result.
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
@@ -257,7 +257,7 @@ async fn test_5_1_with_local_optimization(#[case] use_batch_write: bool) {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     // Till now, iceberg snapshot has been persisted, need an extra mooncake snapshot to reflect persistence result.
@@ -305,7 +305,7 @@ async fn test_4_3_with_local_filesystem_optimization(#[case] use_batch_write: bo
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -377,7 +377,7 @@ async fn test_4_3_without_local_filesystem_optimization(#[case] use_batch_write:
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert_eq!(files_to_delete, vec![local_index_block]);
@@ -607,7 +607,7 @@ async fn test_3_read_3_without_filesystem_optimization(#[case] use_batch_write: 
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -683,7 +683,7 @@ async fn test_3_read_3_with_filesystem_optimization(#[case] use_batch_write: boo
     let local_index_block = get_only_index_block_filepath(&table).await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert_eq!(files_to_delete, vec![local_index_block]);
@@ -757,7 +757,7 @@ async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimiz
     let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -842,7 +842,7 @@ async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimizati
     let local_index_block = get_only_index_block_filepath(&table).await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert_eq!(files_to_delete, vec![local_index_block]);
@@ -918,7 +918,7 @@ async fn test_3_read_and_read_over_and_unpinned_1_without_local_optimization(
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -971,7 +971,7 @@ async fn test_3_read_and_read_over_and_unpinned_1_with_local_optimization(
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, files_to_delete) =
@@ -1023,7 +1023,7 @@ async fn test_1_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1091,7 +1091,7 @@ async fn test_1_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, files_to_delete) =
@@ -1161,7 +1161,7 @@ async fn test_1_read_and_unpinned_3_without_local_optimization(#[case] use_batch
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1206,7 +1206,7 @@ async fn test_1_read_and_unpinned_3_with_local_optimization(#[case] use_batch_wr
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, mut files_to_delete) =
@@ -1253,7 +1253,7 @@ async fn test_2_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1341,7 +1341,7 @@ async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, mut files_to_delete) =
@@ -1431,7 +1431,7 @@ async fn test_2_read_and_unpinned_2_without_local_optimization(#[case] use_batch
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1487,7 +1487,7 @@ async fn test_2_read_and_unpinned_2_with_local_optimization(#[case] use_batch_wr
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, mut files_to_delete) =
@@ -1545,7 +1545,7 @@ async fn test_2_read_over_1_without_local_optimization(#[case] use_batch_write: 
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1587,7 +1587,7 @@ async fn test_2_read_over_1_with_local_optimization(#[case] use_batch_write: boo
     assert!(files_to_delete.is_empty());
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, files_to_delete) =
@@ -1694,7 +1694,7 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -1812,7 +1812,7 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, mut files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
@@ -1933,7 +1933,7 @@ async fn test_3_compact_1_5_without_local_filesystem_optimization() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -2024,7 +2024,7 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
     let read_state = snapshot_read_output.take_as_read_state().await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, mut files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
@@ -2101,7 +2101,7 @@ async fn test_1_compact_1_5_without_local_optimization() {
     let _ = get_disk_files_for_snapshot_and_assert(&table, /*expected_file_num=*/ 2).await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, mut files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
@@ -2177,7 +2177,7 @@ async fn test_1_compact_1_5_with_local_optimization() {
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     // Create iceberg snapshot and reflect persistence result to mooncake snapshot.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, mut files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();

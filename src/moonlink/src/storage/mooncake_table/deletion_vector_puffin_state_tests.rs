@@ -114,7 +114,7 @@ async fn test_1_persist_2_without_local_optimization(#[case] use_batch_write: bo
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -147,7 +147,7 @@ async fn test_1_persist_2_with_local_optimization(#[case] use_batch_write: bool)
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, mut files_to_delete) =
@@ -189,7 +189,7 @@ async fn test_1_recover_2_without_local_optimization(#[case] use_batch_write: bo
         use_batch_write,
     )
     .await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -243,7 +243,7 @@ async fn test_1_recover_2_with_local_optimization(#[case] use_batch_write: bool)
         use_batch_write,
     )
     .await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, mut files_to_delete) =
@@ -293,7 +293,7 @@ async fn test_2_read_without_local_optimization(#[case] use_batch_write: bool) {
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -349,7 +349,7 @@ async fn test_2_read_with_local_optimization(#[case] use_batch_write: bool) {
 
     let (mut table, mut table_notify) =
         prepare_test_deletion_vector_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, _, mut files_to_delete) =
@@ -454,7 +454,7 @@ async fn test_2_compact_without_local_optimization() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_files_with_deletion_vector_for_compaction(&temp_dir, cache.clone()).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, data_compaction_payload, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -539,7 +539,7 @@ async fn test_2_compact_with_local_optimization() {
 
     let (mut table, mut table_notify) =
         prepare_test_disk_files_with_deletion_vector_for_compaction(&temp_dir, cache.clone()).await;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut table_notify).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
     let (_, _, data_compaction_payload, mut files_to_delete) =

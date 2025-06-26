@@ -174,7 +174,7 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
     table.append(row3.clone())?;
     table.commit(/*lsn=*/ 100);
     table.flush(/*lsn=*/ 100).await?;
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut event_completion_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
     {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
@@ -202,7 +202,7 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
     table.flush(/*lsn=*/ 300).await?;
 
     // Check update result.
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut event_completion_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
     {
         let mut table_snapshot = table.snapshot.write().await;
         let SnapshotReadOutput {
@@ -372,7 +372,7 @@ async fn test_duplicate_deletion() -> Result<()> {
     table.append(old_row.clone()).unwrap();
     table.commit(/*lsn=*/ 100);
     table.flush(/*lsn=*/ 100).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut event_completion_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
 
     // Update operation.
     let new_row = old_row.clone();
@@ -380,7 +380,7 @@ async fn test_duplicate_deletion() -> Result<()> {
     table.append(new_row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     table.flush(/*lsn=*/ 200).await.unwrap();
-    create_mooncake_and_iceberg_snapshot_for_test(&mut table, &mut event_completion_rx).await;
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
 
     {
         let mut table_snapshot = table.snapshot.write().await;
