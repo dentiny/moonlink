@@ -598,7 +598,7 @@ impl Catalog for FileCatalog {
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
         self.remove_directory(&directory)
             .await
-            .map_err(|err| to_iceberg_error(err))?;
+            .map_err(to_iceberg_error)?;
         Ok(())
     }
 
@@ -612,7 +612,7 @@ impl Catalog for FileCatalog {
         let exists = self
             .object_exists(version_hint_filepath.to_str().unwrap())
             .await
-            .map_err(|e| to_iceberg_error(e))?;
+            .map_err(to_iceberg_error)?;
         Ok(exists)
     }
 
