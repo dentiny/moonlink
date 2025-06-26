@@ -1,0 +1,10 @@
+[package]
+name = "moonlink_metadata_store"
+version = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+
+[dependencies]
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+tokio-postgres = { workspace = true }

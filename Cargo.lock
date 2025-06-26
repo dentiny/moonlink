@@ -2475,6 +2475,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "moonlink_metadata_store"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "thiserror 2.0.12",
+ "tokio-postgres",
+]
+
+[[package]]
 name = "more-asserts"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
