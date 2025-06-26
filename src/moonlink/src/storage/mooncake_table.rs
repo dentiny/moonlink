@@ -1,3 +1,4 @@
+pub mod config;
 mod data_batches;
 pub(crate) mod delete_vector;
 mod disk_slice;
@@ -56,9 +57,36 @@ use tracing::info_span;
 use tracing::Instrument;
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
+#[derive(Clone, Debug, Default)]
+pub struct IcebergPersistenceConfig {
+    /// Number of new data files to trigger an iceberg snapshot.
+    pub new_data_file_count: usize,
+    /// Number of unpersisted committed delete logs to trigger an iceberg snapshot.
+    pub new_committed_deletion_log: usize,
+}
+
 // TODO(hjiang): Add another threshold for merged file indices to trigger iceberg snapshot.
+impl IcebergPersistenceConfig {
+    #[cfg(debug_assertions)]
+    pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
+    #[cfg(debug_assertions)]
+    pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
+
+    #[cfg(not(debug_assertions))]
+    pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
+    #[cfg(not(debug_assertions))]
+    pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
+
+    pub fn default() -> Self {
+        Self {
+            new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
+            new_committed_deletion_log: Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
-pub struct TableConfig {
+pub struct MooncakeTableConfig {
     /// Number of batch records which decides when to flush records from MemSlice to disk.
     pub mem_slice_size: usize,
     /// Number of new deletion records which decides whether to create a new mooncake table snapshot.
@@ -67,10 +95,8 @@ pub struct TableConfig {
     pub batch_size: usize,
     /// Disk slice parquet file flush threshold.
     pub disk_slice_parquet_file_size: usize,
-    /// Number of new data files to trigger an iceberg snapshot.
-    pub iceberg_snapshot_new_data_file_count: usize,
-    /// Number of unpersisted committed delete logs to trigger an iceberg snapshot.
-    pub iceberg_snapshot_new_committed_deletion_log: usize,
+    /// Config for iceberg persistence config.
+    pub persistence_config: IcebergPersistenceConfig,
     /// Config for data compaction.
     pub data_compaction_config: DataCompactionConfig,
     /// Config for index merge.
@@ -79,36 +105,28 @@ pub struct TableConfig {
     pub temp_files_directory: String,
 }
 
-impl Default for TableConfig {
+impl Default for MooncakeTableConfig {
     fn default() -> Self {
         Self::new(Self::DEFAULT_TEMP_FILE_DIRECTORY.to_string())
     }
 }
 
-impl TableConfig {
+impl MooncakeTableConfig {
     #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_MEM_SLICE_SIZE: usize = TableConfig::DEFAULT_BATCH_SIZE * 8;
+    pub(crate) const DEFAULT_MEM_SLICE_SIZE: usize = MooncakeTableConfig::DEFAULT_BATCH_SIZE * 8;
     #[cfg(debug_assertions)]
     pub(super) const DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT: usize = 1000;
     #[cfg(debug_assertions)]
     pub(crate) const DEFAULT_BATCH_SIZE: usize = 128;
     #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
-    #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
-    #[cfg(debug_assertions)]
     pub(crate) const DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE: usize = 1024 * 1024 * 2; // 2MiB
 
     #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_MEM_SLICE_SIZE: usize = TableConfig::DEFAULT_BATCH_SIZE * 32;
+    pub(crate) const DEFAULT_MEM_SLICE_SIZE: usize = MooncakeTableConfig::DEFAULT_BATCH_SIZE * 32;
     #[cfg(not(debug_assertions))]
     pub(super) const DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT: usize = 1000;
     #[cfg(not(debug_assertions))]
     pub(crate) const DEFAULT_BATCH_SIZE: usize = 4096;
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
     #[cfg(not(debug_assertions))]
     pub(crate) const DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE: usize = 1024 * 1024 * 128; // 128MiB
 
@@ -121,9 +139,7 @@ impl TableConfig {
             snapshot_deletion_record_count: Self::DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT,
             batch_size: Self::DEFAULT_BATCH_SIZE,
             disk_slice_parquet_file_size: Self::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
-            iceberg_snapshot_new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
-            iceberg_snapshot_new_committed_deletion_log:
-                Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
+            persistence_config: IcebergPersistenceConfig::default(),
             data_compaction_config: DataCompactionConfig::default(),
             file_index_config: FileIndexMergeConfig::default(),
             temp_files_directory,
@@ -133,13 +149,13 @@ impl TableConfig {
         self.batch_size
     }
     pub fn iceberg_snapshot_new_data_file_count(&self) -> usize {
-        self.iceberg_snapshot_new_data_file_count
+        self.persistence_config.new_data_file_count
     }
     pub fn snapshot_deletion_record_count(&self) -> usize {
         self.snapshot_deletion_record_count
     }
     pub fn iceberg_snapshot_new_committed_deletion_log(&self) -> usize {
-        self.iceberg_snapshot_new_committed_deletion_log
+        self.persistence_config.new_committed_deletion_log
     }
 }
 
@@ -152,7 +168,7 @@ pub struct TableMetadata {
     /// table schema
     pub(crate) schema: Arc<Schema>,
     /// table config
-    pub(crate) config: TableConfig,
+    pub(crate) config: MooncakeTableConfig,
     /// storage path
     pub(crate) path: PathBuf,
     /// function to get lookup key from row
@@ -238,7 +254,7 @@ pub struct SnapshotTask {
     /// ---- States not recorded by mooncake snapshot ----
     ///
     /// Mooncake table config.
-    mooncake_table_config: TableConfig,
+    mooncake_table_config: MooncakeTableConfig,
     /// Current task
     ///
     new_disk_slices: Vec<DiskSliceWriter>,
@@ -274,7 +290,7 @@ pub struct SnapshotTask {
 }
 
 impl SnapshotTask {
-    pub fn new(mooncake_table_config: TableConfig) -> Self {
+    pub fn new(mooncake_table_config: MooncakeTableConfig) -> Self {
         Self {
             mooncake_table_config,
             new_disk_slices: Vec::new(),
@@ -430,7 +446,7 @@ impl MooncakeTable {
         base_path: PathBuf,
         identity: IdentityProp,
         iceberg_table_config: IcebergTableConfig,
-        table_config: TableConfig,
+        table_config: MooncakeTableConfig,
         object_storage_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {

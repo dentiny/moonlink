@@ -262,7 +262,7 @@ mod tests {
     use crate::row::{IdentityProp, MoonlinkRow, RowValue};
     use crate::storage::index::persisted_bucket_hash_map::test_get_hashes_for_index;
     use crate::storage::mooncake_table::mem_slice::MemSlice;
-    use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
+    use crate::storage::mooncake_table::MooncakeTableConfig;
     use crate::storage::storage_utils::RawDeletionRecord;
     use arrow::datatypes::{DataType, Field};
     use arrow_array::{Int32Array, StringArray};

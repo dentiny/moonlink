@@ -47,8 +47,8 @@ use tokio::sync::mpsc::Receiver;
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
-use crate::storage::mooncake_table::state_test_utils::*;
-use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
+use crate::storage::mooncake_table::MooncakeTableConfig;
+use crate::storage::mooncake_table::{state_test_utils::*, IcebergPersistenceConfig};
 use crate::table_notify::TableNotify;
 use crate::{
     IcebergTableConfig, IcebergTableManager, MooncakeTable, ObjectStorageCache,
@@ -185,7 +185,10 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
 
     // Create iceberg snapshot whenever [`create_snapshot`] is called.
     let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 0,
+            ..Default::default()
+        },
         // Trigger index merge as long as there're two index block files.
         file_index_config: FileIndexMergeConfig {
             index_block_final_size: u64::MAX,

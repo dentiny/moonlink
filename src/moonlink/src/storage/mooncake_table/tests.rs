@@ -233,7 +233,7 @@ async fn test_snapshot_initialization() -> Result<()> {
         name: "test_table".to_string(),
         id: 1,
         schema: Arc::new(schema),
-        config: TableConfig::default(), // No temp files generated.
+        config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::new(),
         identity,
     });
@@ -411,7 +411,7 @@ async fn test_snapshot_store_failure() {
         name: "test_table".to_string(),
         id: 1,
         schema: Arc::new(test_schema()),
-        config: TableConfig::default(), // No temp files generated.
+        config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),
         identity: IdentityProp::Keys(vec![0]),
     });

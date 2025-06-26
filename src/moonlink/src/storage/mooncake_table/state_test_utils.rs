@@ -15,8 +15,8 @@ use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, DataCompactionResult, DiskFileEntry, FileIndiceMergePayload,
-    FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult, Snapshot, SnapshotOption,
-    TableConfig as MooncakeTableConfig,
+    FileIndiceMergeResult, IcebergPersistenceConfig, IcebergSnapshotPayload, IcebergSnapshotResult,
+    MooncakeTableConfig, Snapshot, SnapshotOption,
 };
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
@@ -151,7 +151,10 @@ pub(super) async fn create_mooncake_table_and_notify_for_compaction(
 
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 0,
+            ..Default::default()
+        },
         // Trigger compaction as long as there're two data files.
         data_compaction_config: DataCompactionConfig {
             data_file_final_size: u64::MAX,
@@ -267,7 +270,10 @@ pub(super) async fn create_mooncake_table_and_notify_for_read(
 
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
 

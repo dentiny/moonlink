@@ -7,12 +7,13 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::DataCompactionPayload;
 use crate::storage::mooncake_table::FileIndiceMergePayload;
+use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
-    DiskFileEntry, TableConfig as MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
+    DiskFileEntry, MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableNotify;
@@ -197,8 +198,11 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
 
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
         data_compaction_config,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
 

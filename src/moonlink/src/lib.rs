@@ -11,7 +11,7 @@ pub(crate) use storage::NonEvictableHandle;
 pub use storage::SnapshotReadOutput;
 pub use storage::{
     IcebergEventSyncReceiver, IcebergTableConfig, IcebergTableEventManager, IcebergTableManager,
-    MooncakeTable, TableConfig, TableManager,
+    MooncakeTable, MooncakeTableConfig, TableManager,
 };
 pub use storage::{ObjectStorageCache, ObjectStorageCacheConfig};
 pub use table_handler::{IcebergEventSyncSender, TableEvent, TableHandler};

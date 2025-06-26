@@ -14,6 +14,7 @@ use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
@@ -21,9 +22,7 @@ use crate::storage::mooncake_table::{
     IcebergSnapshotDataCompactionPayload, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload,
 };
-use crate::storage::mooncake_table::{
-    TableConfig as MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
-};
+use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::storage_utils::create_data_file;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
@@ -636,11 +635,13 @@ async fn test_index_merge_and_create_snapshot() {
         // Flush on every commit.
         mem_slice_size: 1,
         snapshot_deletion_record_count: 1000,
-        iceberg_snapshot_new_data_file_count: 1000,
-        iceberg_snapshot_new_committed_deletion_log: 1000,
         temp_files_directory: tmp_dir.path().to_str().unwrap().to_string(),
         data_compaction_config: DataCompactionConfig::default(),
         file_index_config,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 1000,
+            new_committed_deletion_log: 1000,
+        },
     };
 
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
@@ -884,7 +885,10 @@ async fn test_small_batch_size_and_large_parquet_size() {
         batch_size: 1,
         disk_slice_parquet_file_size: 1000,
         // Trigger iceberg snapshot as long as there're any commit deletion log.
-        iceberg_snapshot_new_committed_deletion_log: 1,
+        persistence_config: IcebergPersistenceConfig {
+            new_committed_deletion_log: 1,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let mut table = MooncakeTable::new(
@@ -1158,7 +1162,10 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let schema = create_test_arrow_schema();
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let (notify_tx, mut notify_rx) = mpsc::channel(100);
@@ -1509,7 +1516,10 @@ async fn test_drop_table_at_creation() {
 
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
-        iceberg_snapshot_new_data_file_count: 0,
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 0,
+            ..Default::default()
+        },
         ..Default::default()
     };
     let mut table = MooncakeTable::new(

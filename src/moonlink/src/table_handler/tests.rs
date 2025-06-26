@@ -5,13 +5,13 @@ use tempfile::tempdir;
 use super::test_utils::*;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
-use crate::storage::mooncake_table::TableConfig as MooncakeTableConfig;
+use crate::storage::mooncake_table::IcebergPersistenceConfig;
+use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::MockTableManager;
 use crate::storage::MooncakeTable;
 use crate::storage::TableManager;
 use crate::ObjectStorageCache;
-use crate::TableConfig;
 
 use std::sync::Arc;
 
@@ -58,11 +58,13 @@ async fn test_append_with_small_disk_slice() {
         disk_slice_parquet_file_size: 1, // One parquet file only contains one arrow record.
         mem_slice_size: 1000,
         snapshot_deletion_record_count: 1000,
-        iceberg_snapshot_new_data_file_count: 1000,
-        iceberg_snapshot_new_committed_deletion_log: 1000,
         temp_files_directory: temp_dir.path().to_str().unwrap().to_string(),
         data_compaction_config: DataCompactionConfig::default(),
         file_index_config: FileIndexMergeConfig::default(),
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 1000,
+            new_committed_deletion_log: 1000,
+        },
     };
     let env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
 
@@ -477,11 +479,13 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
         disk_slice_parquet_file_size: MooncakeTableConfig::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
         mem_slice_size: 1000,
         snapshot_deletion_record_count: 1000,
-        iceberg_snapshot_new_data_file_count: 1000,
-        iceberg_snapshot_new_committed_deletion_log: 1000,
         temp_files_directory: temp_dir.path().to_str().unwrap().to_string(),
         data_compaction_config: DataCompactionConfig::default(),
         file_index_config: FileIndexMergeConfig::default(),
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 1000,
+            new_committed_deletion_log: 1000,
+        },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
 
@@ -677,11 +681,13 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
         disk_slice_parquet_file_size: MooncakeTableConfig::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
         mem_slice_size: 1000,
         snapshot_deletion_record_count: 1000,
-        iceberg_snapshot_new_data_file_count: 1000,
-        iceberg_snapshot_new_committed_deletion_log: 1000,
         temp_files_directory: temp_dir.path().to_str().unwrap().to_string(),
         data_compaction_config: DataCompactionConfig::default(),
         file_index_config: FileIndexMergeConfig::default(),
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 1000,
+            new_committed_deletion_log: 1000,
+        },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
 
@@ -909,11 +915,13 @@ async fn test_multiple_snapshot_requests() {
         disk_slice_parquet_file_size: MooncakeTableConfig::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
         mem_slice_size: 1000,
         snapshot_deletion_record_count: 1000,
-        iceberg_snapshot_new_data_file_count: 1000,
-        iceberg_snapshot_new_committed_deletion_log: 1000,
         temp_files_directory: temp_dir.path().to_str().unwrap().to_string(),
         data_compaction_config: DataCompactionConfig::default(),
         file_index_config: FileIndexMergeConfig::default(),
+        persistence_config: IcebergPersistenceConfig {
+            new_data_file_count: 1000,
+            new_committed_deletion_log: 1000,
+        },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
 
@@ -1019,7 +1027,8 @@ async fn test_multiple_snapshot_requests() {
 #[tokio::test]
 async fn test_iceberg_snapshot_failure_mock_test() {
     let temp_dir = tempdir().unwrap();
-    let mooncake_table_config = TableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+    let mooncake_table_config =
+        MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
         id: 0,
@@ -1070,7 +1079,8 @@ async fn test_iceberg_snapshot_failure_mock_test() {
 #[tokio::test]
 async fn test_iceberg_drop_table_failure_mock_test() {
     let temp_dir = tempdir().unwrap();
-    let mooncake_table_config = TableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+    let mooncake_table_config =
+        MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
         id: 0,

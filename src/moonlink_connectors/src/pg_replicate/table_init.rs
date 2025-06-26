@@ -4,7 +4,8 @@ use crate::pg_replicate::util::postgres_schema_to_moonlink_schema;
 use crate::{Error, Result};
 use moonlink::{
     IcebergEventSyncReceiver, IcebergEventSyncSender, IcebergTableConfig, IcebergTableEventManager,
-    MooncakeTable, ObjectStorageCache, ReadStateManager, TableConfig, TableEvent, TableHandler,
+    MooncakeTable, MooncakeTableConfig, ObjectStorageCache, ReadStateManager, TableEvent,
+    TableHandler,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,7 +55,7 @@ pub async fn build_table_components(
         namespace: vec![table_schema.table_name.schema.clone()],
         table_name: table_id,
     };
-    let mooncake_table_config = TableConfig::new(table_temp_files_directory);
+    let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(
         arrow_schema,
         table_schema.table_name.to_string(),
