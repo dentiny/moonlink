@@ -3,9 +3,9 @@ use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
 };
+use crate::storage::iceberg::utils::to_iceberg_error;
 
 use futures::future::join_all;
-use futures::StreamExt;
 use std::collections::{HashMap, HashSet};
 /// This module contains the file-based catalog implementation, which relies on version hint file to decide current version snapshot.
 /// Dispite a few limitation (i.e. atomic rename for local filesystem), it's not a problem for moonlink, which guarantees at most one writer at the same time (for nows).
@@ -197,28 +197,6 @@ impl FileCatalog {
         }
     }
 
-    /// List all objects under the given directory.
-    #[tracing::instrument(name = "list_objects", skip_all)]
-    async fn list_objects_under_directory(
-        &self,
-        folder: &str,
-    ) -> Result<Vec<String>, Box<dyn Error>> {
-        let prefix = format!("{}/", folder);
-        let mut objects = Vec::new();
-        let mut lister = self
-            .get_operator()
-            .await?
-            .lister_with(&prefix)
-            .recursive(true)
-            .await?;
-        while let Some(entry) = lister.next().await {
-            let entry = entry?;
-            let path = entry.path();
-            objects.push(path.to_string());
-        }
-        Ok(objects)
-    }
-
     /// List all direct sub-directory under the given directory.
     ///
     /// For example, we have directory "a", "a/b", "a/b/c", listing direct subdirectories for "a" will return "a/b".
@@ -277,22 +255,11 @@ impl FileCatalog {
         Ok(())
     }
 
-    /// Delete all given objects.
-    /// TODO(hjiang): Add test and documentation on partial failure.
-    async fn delete_all_objects(
-        &self,
-        objects_to_delete: Vec<String>,
-    ) -> Result<(), Box<dyn Error>> {
-        let futures = objects_to_delete.into_iter().map(|object| async move {
-            let op = self.get_operator().await.unwrap().clone();
-            op.delete(&object).await
-        });
-
-        let results = join_all(futures).await;
-        for result in results {
-            result?;
-        }
-
+    /// Remove the whole directory.
+    #[tracing::instrument(name = "remove_directory", skip_all)]
+    async fn remove_directory(&self, directory: &str) -> Result<(), Box<dyn Error>> {
+        let op = self.get_operator().await.unwrap().clone();
+        op.remove_all(directory).await?;
         Ok(())
     }
 
@@ -629,21 +596,9 @@ impl Catalog for FileCatalog {
     /// Drop a table from the catalog.
     async fn drop_table(&self, table: &TableIdent) -> IcebergResult<()> {
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
-        let objects = self
-            .list_objects_under_directory(&directory)
+        self.remove_directory(&directory)
             .await
-            .map_err(|e| {
-                IcebergError::new(
-                    iceberg::ErrorKind::Unexpected,
-                    format!("Failed to get objects under {}: {}", directory, e),
-                )
-            })?;
-        self.delete_all_objects(objects).await.map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to delete objects: {}", e),
-            )
-        })?;
+            .map_err(|err| to_iceberg_error(err))?;
         Ok(())
     }
 
@@ -657,15 +612,7 @@ impl Catalog for FileCatalog {
         let exists = self
             .object_exists(version_hint_filepath.to_str().unwrap())
             .await
-            .map_err(|e| {
-                IcebergError::new(
-                    iceberg::ErrorKind::Unexpected,
-                    format!(
-                        "Failed to check object existence when get table existence: {}",
-                        e
-                    ),
-                )
-            })?;
+            .map_err(|e| to_iceberg_error(e))?;
         Ok(exists)
     }
 
