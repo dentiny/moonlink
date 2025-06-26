@@ -16,6 +16,7 @@ pub use iceberg::iceberg_table_event_manager::{
 };
 pub use iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 pub use iceberg::table_manager::TableManager;
+pub use mooncake_table::table_config::TableConfig as MoonlinkTableConfig;
 pub use mooncake_table::SnapshotReadOutput;
 pub use mooncake_table::{MooncakeTable, MooncakeTableConfig};
 pub(crate) use mooncake_table::{PuffinDeletionBlobAtRead, SnapshotTableState};

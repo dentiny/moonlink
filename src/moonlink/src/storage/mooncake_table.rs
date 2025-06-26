@@ -1,4 +1,3 @@
-pub mod config;
 mod data_batches;
 pub(crate) mod delete_vector;
 mod disk_slice;
@@ -8,6 +7,7 @@ mod shared_array;
 mod snapshot;
 pub mod snapshot_read_output;
 mod snapshot_validation;
+pub mod table_config;
 mod table_snapshot;
 mod transaction_stream;
 

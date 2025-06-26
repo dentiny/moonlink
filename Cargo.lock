@@ -2479,7 +2479,11 @@ name = "moonlink_metadata_store"
 version = "0.0.1"
 dependencies = [
  "async-trait",
+ "moonlink",
+ "serde",
+ "serde_json",
  "thiserror 2.0.12",
+ "tokio",
  "tokio-postgres",
 ]
 
