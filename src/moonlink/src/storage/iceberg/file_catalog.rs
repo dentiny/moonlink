@@ -732,14 +732,10 @@ mod tests {
     use crate::storage::iceberg::s3_test_utils;
 
     use std::collections::HashMap;
-    use std::sync::Arc;
     use std::time::{SystemTime, UNIX_EPOCH};
     use tempfile::TempDir;
 
-    use iceberg::spec::{
-        NestedField, PrimitiveType, Schema, SnapshotReference, SnapshotRetention,
-        Type as IcebergType, MAIN_BRANCH,
-    };
+    use iceberg::spec::{SnapshotReference, SnapshotRetention, MAIN_BRANCH};
     use iceberg::NamespaceIdent;
     use iceberg::Result as IcebergResult;
     use uuid::Uuid;
@@ -812,21 +808,6 @@ mod tests {
         s3_test_utils::create_minio_s3_catalog(&bucket_name, &warehouse_uri)
     }
 
-    // Test util function to get iceberg schema,
-    async fn get_test_schema() -> IcebergResult<Schema> {
-        let field = NestedField::required(
-            /*id=*/ 1,
-            "field_name".to_string(),
-            IcebergType::Primitive(PrimitiveType::Int),
-        );
-        let schema = Schema::builder()
-            .with_schema_id(0)
-            .with_fields(vec![Arc::new(field)])
-            .build()?;
-
-        Ok(schema)
-    }
-
     // Test util function to create a new table.
     async fn create_test_table(catalog: &FileCatalog) -> IcebergResult<()> {
         // Define namespace and table.
@@ -857,8 +838,7 @@ mod tests {
         let namespace = NamespaceIdent::from_strs(vec!["default", "ns"])?;
 
         // Ensure namespace does not exist.
-        let exists = catalog.namespace_exists(&namespace).await?;
-        assert!(!exists, "Namespace should not exist before creation");
+        assert!(!catalog.namespace_exists(&namespace).await?);
 
         // Create parent namespace.
         catalog
@@ -872,18 +852,15 @@ mod tests {
         catalog
             .create_namespace(&namespace, /*properties=*/ HashMap::new())
             .await?;
-
-        let exists = catalog.namespace_exists(&namespace).await?;
-        assert!(exists, "Namespace should exist after creation");
+        assert!(catalog.namespace_exists(&namespace).await?);
 
         // Get the namespace and check.
         let ns = catalog.get_namespace(&namespace).await?;
-        assert_eq!(ns.name(), &namespace, "Namespace should match created one");
+        assert_eq!(ns.name(), &namespace);
 
         // Drop the namespace and check.
         catalog.drop_namespace(&namespace).await?;
-        let exists = catalog.namespace_exists(&namespace).await?;
-        assert!(!exists, "Namespace should not exist after drop");
+        assert!(!catalog.namespace_exists(&namespace).await?);
 
         Ok(())
     }
@@ -896,16 +873,11 @@ mod tests {
 
         // Ensure table does not exist.
         let table_already_exists = catalog.table_exists(&table_ident).await?;
-        assert!(
-            !table_already_exists,
-            "Table should not exist before creation"
-        );
+        assert!(!table_already_exists,);
 
         // TODO(hjiang): Add testcase to check list table here.
-
         create_test_table(&catalog).await?;
-        let table_already_exists = catalog.table_exists(&table_ident).await?;
-        assert!(table_already_exists, "Table should exist after creation");
+        assert!(catalog.table_exists(&table_ident).await?);
 
         let tables = catalog.list_tables(&namespace).await?;
         assert_eq!(tables.len(), 1);
@@ -914,16 +886,8 @@ mod tests {
         // Load table and check.
         let table = catalog.load_table(&table_ident).await?;
         let expected_schema = get_test_schema().await?;
-        assert_eq!(
-            table.identifier(),
-            &table_ident,
-            "Loaded table identifier should match"
-        );
-        assert_eq!(
-            *table.metadata().current_schema().as_ref(),
-            expected_schema,
-            "Loaded table schema should match"
-        );
+        assert_eq!(table.identifier(), &table_ident,);
+        assert_eq!(*table.metadata().current_schema().as_ref(), expected_schema,);
 
         // Drop the table and check.
         catalog.drop_table(&table_ident).await?;
@@ -940,33 +904,17 @@ mod tests {
                 &NamespaceIdent::from_strs(["non-existent-ns"]).unwrap(),
             ))
             .await;
-        assert!(
-            res.is_err(),
-            "List namespace under a non-existent namespace should fail"
-        );
+        assert!(res.is_err(),);
         let err = res.err().unwrap();
-        assert_eq!(
-            err.kind(),
-            iceberg::ErrorKind::NamespaceNotFound,
-            "List namespace under a non-existent namespace gets error {:?}",
-            err
-        );
+        assert_eq!(err.kind(), iceberg::ErrorKind::NamespaceNotFound,);
 
         // List tables with non-existent parent namespace.
         let res = catalog
             .list_tables(&NamespaceIdent::from_strs(["non-existent-ns"]).unwrap())
             .await;
-        assert!(
-            res.is_err(),
-            "List tables under a non-existent namespace should fail"
-        );
+        assert!(res.is_err(),);
         let err = res.err().unwrap();
-        assert_eq!(
-            err.kind(),
-            iceberg::ErrorKind::NamespaceNotFound,
-            "List namespace under a non-existent namespace gets error {:?}",
-            err
-        );
+        assert_eq!(err.kind(), iceberg::ErrorKind::NamespaceNotFound,);
 
         // Create default namespace.
         let default_namespace = NamespaceIdent::from_strs(["default"])?;
@@ -999,24 +947,14 @@ mod tests {
 
         // List default namespace and check.
         let res = catalog.list_namespaces(/*parent=*/ None).await?;
-        assert_eq!(
-            res.len(),
-            1,
-            "Only default namespace expected under root, but actually there're {:?}",
-            res
-        );
+        assert_eq!(res.len(), 1,);
         assert_eq!(res[0].to_url_string(), "default");
 
         // List namespaces under default namespace and check.
         let res = catalog
             .list_namespaces(Some(&NamespaceIdent::from_strs(["default"]).unwrap()))
             .await?;
-        assert_eq!(
-            res.len(),
-            2,
-            "Expect two children namespaces, actually there're {:?}",
-            res
-        );
+        assert_eq!(res.len(), 2,);
         assert!(
             res.contains(&child_namespace_1),
             "Expects children namespace {:?}, but actually {:?}",
@@ -1064,17 +1002,12 @@ mod tests {
         let temp_dir = TempDir::new().unwrap();
         let catalog = create_test_file_catalog(&temp_dir);
         create_test_table(&catalog).await.unwrap();
+
         let namespace = NamespaceIdent::from_strs(["default"]).unwrap();
         let table_name = "test_table".to_string();
         let table_ident = TableIdent::new(namespace.clone(), table_name.clone());
         catalog.load_metadata(&table_ident).await.unwrap();
 
-        #[repr(C)]
-        struct TableCommitProxy {
-            ident: TableIdent,
-            requirements: Vec<iceberg::TableRequirement>,
-            updates: Vec<TableUpdate>,
-        }
         let table_commit_proxy = TableCommitProxy {
             ident: table_ident.clone(),
             requirements: vec![TableRequirement::UuidMatch {
@@ -1135,13 +1068,6 @@ mod tests {
             }
         ]);
 
-        // TODO(hjiang): This is a hack to create `TableCommit`, because its builder is only exposed to crate instead of public.
-        #[repr(C)]
-        struct TableCommitProxy {
-            ident: TableIdent,
-            requirements: Vec<iceberg::TableRequirement>,
-            updates: Vec<TableUpdate>,
-        }
         let table_commit_proxy = TableCommitProxy {
             ident: table_ident.clone(),
             requirements: vec![],
@@ -1158,18 +1084,9 @@ mod tests {
         assert_eq!(
             **table_metadata.current_schema(),
             get_test_schema().await.unwrap(),
-            "Schema should match"
         );
-        assert_eq!(
-            table.identifier(),
-            &table_ident,
-            "Updated table identifier should match"
-        );
-        assert_eq!(
-            table_metadata.current_snapshot_id(),
-            Some(1),
-            "Current snapshot ID should be 1"
-        );
+        assert_eq!(table.identifier(), &table_ident,);
+        assert_eq!(table_metadata.current_snapshot_id(), Some(1),);
 
         Ok(())
     }
