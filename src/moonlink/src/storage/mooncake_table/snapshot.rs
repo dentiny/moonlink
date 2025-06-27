@@ -13,7 +13,6 @@ use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation, SingleFileToCompact,
 };
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
-use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
@@ -112,8 +111,7 @@ impl SnapshotTableState {
     pub(super) async fn new(
         metadata: Arc<MooncakeTableMetadata>,
         object_storage_cache: ObjectStorageCache,
-        // TODO(hjiang): Used when recovery enabled.
-        _iceberg_table_manager: &mut dyn TableManager,
+        current_snapshot: Snapshot,
     ) -> Result<Self> {
         let mut batches = BTreeMap::new();
         batches.insert(0, InMemoryBatch::new(metadata.config.batch_size));
@@ -121,7 +119,7 @@ impl SnapshotTableState {
         let table_config = metadata.config.clone();
         Ok(Self {
             mooncake_table_metadata: metadata.clone(),
-            current_snapshot: Snapshot::new(metadata.clone()),
+            current_snapshot,
             batches,
             rows: None,
             last_commit: RecordLocation::MemoryBatch(0, 0),

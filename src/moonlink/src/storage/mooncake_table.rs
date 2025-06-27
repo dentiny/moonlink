@@ -471,6 +471,8 @@ impl MooncakeTable {
         object_storage_cache: ObjectStorageCache,
     ) -> Result<Self> {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(0);
+        let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
+
         Ok(Self {
             mem_slice: MemSlice::new(
                 table_metadata.schema.clone(),
@@ -482,7 +484,7 @@ impl MooncakeTable {
                 SnapshotTableState::new(
                     table_metadata.clone(),
                     object_storage_cache,
-                    &mut *table_manager,
+                    current_snapshot,
                 )
                 .await?,
             )),
@@ -490,7 +492,7 @@ impl MooncakeTable {
             transaction_stream_states: HashMap::new(),
             table_snapshot_watch_sender,
             table_snapshot_watch_receiver,
-            next_file_id: 0,
+            next_file_id,
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn: None,
             table_notify: None,

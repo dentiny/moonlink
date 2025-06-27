@@ -7,6 +7,7 @@ use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::MooncakeTableConfig;
+use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::MockTableManager;
 use crate::storage::MooncakeTable;
@@ -1149,7 +1150,20 @@ async fn test_iceberg_snapshot_failure_mock_test() {
         identity: crate::row::IdentityProp::Keys(vec![0]),
     });
 
+    let mooncake_table_metadata_copy = mooncake_table_metadata.clone();
     let mut mock_table_manager = MockTableManager::new();
+    mock_table_manager
+        .expect_load_snapshot_from_table()
+        .times(1)
+        .returning(move || {
+            let table_metadata_copy = mooncake_table_metadata_copy.clone();
+            Box::pin(async move {
+                Ok((
+                    /*next_file_id=*/ 0,
+                    MooncakeSnapshot::new(table_metadata_copy),
+                ))
+            })
+        });
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
@@ -1201,7 +1215,20 @@ async fn test_iceberg_drop_table_failure_mock_test() {
         identity: crate::row::IdentityProp::Keys(vec![0]),
     });
 
+    let mooncake_table_metadata_copy = mooncake_table_metadata.clone();
     let mut mock_table_manager = MockTableManager::new();
+    mock_table_manager
+        .expect_load_snapshot_from_table()
+        .times(1)
+        .returning(move || {
+            let table_metadata_copy = mooncake_table_metadata_copy.clone();
+            Box::pin(async move {
+                Ok((
+                    /*next_file_id=*/ 0,
+                    MooncakeSnapshot::new(table_metadata_copy),
+                ))
+            })
+        });
     mock_table_manager
         .expect_drop_table()
         .times(1)
