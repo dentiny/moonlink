@@ -58,3 +58,22 @@ pub(crate) fn deserialze_moonlink_table_config(
 
     Ok(moonlink_table_config)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use moonlink::{MooncakeTableConfig, MoonlinkTableConfig};
+
+    #[test]
+    fn test_moonlink_table_config_serde() {
+        let old_moonlink_table_config = MoonlinkTableConfig {
+            iceberg_table_config: IcebergTableConfig::default(),
+            mooncake_table_config: MooncakeTableConfig::default(),
+        };
+        let serialized =
+            serialize_moonlink_table_config(old_moonlink_table_config.clone()).unwrap();
+        let new_moonlink_table_config = deserialze_moonlink_table_config(serialized).unwrap();
+        assert_eq!(old_moonlink_table_config, new_moonlink_table_config);
+    }
+}
