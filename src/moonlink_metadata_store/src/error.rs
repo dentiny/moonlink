@@ -15,6 +15,9 @@ pub enum Error {
 
     #[error("required field {0} not exist in serialized config json")]
     ConfigFieldNotExist(String),
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

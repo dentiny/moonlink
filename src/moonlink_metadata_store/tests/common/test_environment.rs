@@ -15,7 +15,11 @@ impl TestEnvironment {
             }
         });
         postgres_client
-            .simple_query("DROP TABLE IF EXISTS moonlink_tables")
+            .simple_query("DROP TABLE IF EXISTS mooncake.tables")
+            .await
+            .unwrap();
+        postgres_client
+            .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake;")
             .await
             .unwrap();
         Self { _connection_handle }

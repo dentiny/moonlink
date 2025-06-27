@@ -10,6 +10,9 @@ use tokio_postgres::{connect, Client, NoTls};
 
 use std::sync::Arc;
 
+/// SQL statements for moonlink metadata table schema.
+const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
+
 #[allow(dead_code)]
 pub struct PgMetadataStore {
     /// Postgres client.
@@ -25,9 +28,9 @@ impl MetadataStoreTrait for PgMetadataStore {
             let guard = self.postgres_client.lock().await;
 
             guard
-                .query("SELECT * FROM moonlink_tables WHERE oid = $1", &[&table_id])
+                .query("SELECT * FROM mooncake.tables WHERE oid = $1", &[&table_id])
                 .await
-                .expect("Failed to query moonlink_tables")
+                .expect("Failed to query tables")
         };
 
         if rows.is_empty() {
@@ -54,7 +57,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         // TODO(hjiang): Fill in other fields as well.
         guard
             .execute(
-                "INSERT INTO moonlink_tables (oid, table_name, config)
+                "INSERT INTO mooncake.tables (oid, table_name, config)
                 VALUES ($1, $2, $3)",
                 &[&table_id, &table_name, &PgJson(&serialized_config)],
             )
@@ -65,9 +68,11 @@ impl MetadataStoreTrait for PgMetadataStore {
 }
 
 impl PgMetadataStore {
+    /// Precondition: [`mooncake`] schema has been created in the current database.
     pub async fn new(uri: &str) -> Result<Self> {
-        let (postgres_client, connection) = connect(uri, NoTls).await.unwrap();
-        // Spawn connection driver in background to keep it alive.
+        let (postgres_client, connection) = connect(uri, NoTls).await?;
+
+        // Spawn connection driver in background to keep eventloop alive.
         let _pg_connection = tokio::spawn(async move {
             if let Err(e) = connection.await {
                 eprintln!("Postgres connection error: {}", e);
@@ -75,15 +80,7 @@ impl PgMetadataStore {
         });
 
         postgres_client
-            .simple_query(
-                "CREATE TABLE IF NOT EXISTS moonlink_tables (
-                oid oid PRIMARY KEY,          -- column store table OID
-                table_name text NOT NULL,     -- source table name
-                uri text,                     -- source URI
-                config json,                  -- mooncake and persistence configurations
-                cardinality bigint            -- estimated row count or similar
-            );",
-            )
+            .simple_query(CREATE_TABLE_SCHEMA_SQL)
             .await?;
 
         Ok(Self {
