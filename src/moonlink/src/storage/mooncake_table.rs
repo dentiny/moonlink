@@ -508,9 +508,11 @@ impl MooncakeTable {
             .register_table_notify(table_notify);
     }
 
-    /// Set iceberg snapshot flush LSN, called after a snapshot operation.
-    pub(crate) fn set_iceberg_snapshot_res(&mut self, iceberg_snapshot_res: IcebergSnapshotResult) {
-        // ---- Update mooncake table fields ----
+    /// Assert flush LSN doesn't regress.
+    fn assert_flush_lsn_on_iceberg_snapshot_res(
+        &self,
+        iceberg_snapshot_res: &IcebergSnapshotResult,
+    ) {
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
 
         // Whether the iceberg snapshot result contains new write operations from mooncake table (append/delete).
@@ -528,7 +530,7 @@ impl MooncakeTable {
 
         // There're two types of operations could trigger iceberg snapshot: (1) index merge / data compaction; (2) table writes, including append and delete.
         // The first type is safe to import to iceberg at any time, with no flush LSN advancement.
-        if contains_new_writes(&iceberg_snapshot_res) {
+        if contains_new_writes(iceberg_snapshot_res) {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
                     || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
@@ -549,6 +551,13 @@ impl MooncakeTable {
                 iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
             );
         }
+    }
+
+    /// Set iceberg snapshot flush LSN, called after a snapshot operation.
+    pub(crate) fn set_iceberg_snapshot_res(&mut self, iceberg_snapshot_res: IcebergSnapshotResult) {
+        // ---- Update mooncake table fields ----
+        let flush_lsn = iceberg_snapshot_res.flush_lsn;
+        self.assert_flush_lsn_on_iceberg_snapshot_res(&iceberg_snapshot_res);
         self.last_iceberg_snapshot_lsn = Some(flush_lsn);
 
         assert!(self.iceberg_table_manager.is_none());
