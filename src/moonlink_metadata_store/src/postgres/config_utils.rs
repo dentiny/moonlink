@@ -23,6 +23,24 @@ struct MoonlinkTableConfigForPersistence {
     iceberg_table_config: IcebergTableConfigForPersistence,
 }
 
+/// Serialize moonlink table config into string.
+/// TODO(hjiang): Handle namespace better.
+pub(crate) fn serialize_moonlink_table_string(
+    moonlink_table_config: MoonlinkTableConfig,
+) -> Result<serde_json::Value> {
+    let iceberg_config = moonlink_table_config.iceberg_table_config;
+    let persisted = MoonlinkTableConfigForPersistence {
+        iceberg_table_config: IcebergTableConfigForPersistence {
+            warehouse_uri: iceberg_config.warehouse_uri,
+            namespace: iceberg_config.namespace[0].to_string(),
+            table_name: iceberg_config.table_name,
+        },
+    };
+
+    let config_json = serde_json::to_value(&persisted)?;
+    Ok(config_json)
+}
+
 /// Deserialize json value to moonlink table config.
 pub(crate) fn deserialze_moonlink_table_config(
     config: serde_json::Value,

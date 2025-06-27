@@ -49,7 +49,7 @@ const MOONCAKE_TABLE_FLUSH_LSN: &str = "mooncake-table-flush-lsn";
 /// TODO(hjiang): Consider using `Option<>` to represent uninitialized, which is more rust-idiometic.
 const UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW: usize = 0;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IcebergTableConfig {
     /// Table warehouse location.
     pub warehouse_uri: String,

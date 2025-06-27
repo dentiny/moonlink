@@ -2480,8 +2480,10 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "moonlink",
+ "postgres-types",
  "serde",
  "serde_json",
+ "serial_test",
  "thiserror 2.0.12",
  "tokio",
  "tokio-postgres",
@@ -3032,6 +3034,8 @@ dependencies = [
  "bytes",
  "fallible-iterator",
  "postgres-protocol",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

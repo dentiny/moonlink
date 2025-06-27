@@ -57,7 +57,7 @@ use tracing::info_span;
 use tracing::Instrument;
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct IcebergPersistenceConfig {
     /// Number of new data files to trigger an iceberg snapshot.
     pub new_data_file_count: usize,
@@ -85,7 +85,7 @@ impl IcebergPersistenceConfig {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MooncakeTableConfig {
     /// Number of batch records which decides when to flush records from MemSlice to disk.
     pub mem_slice_size: usize,

@@ -3,7 +3,7 @@ use typed_builder::TypedBuilder;
 /// Configurations for data compaction.
 ///
 /// TODO(hjiang): To reduce code change before preview release, disable data compaction by default until we do further testing to make sure moonlink fine.
-#[derive(Clone, Default, Debug, TypedBuilder)]
+#[derive(Clone, Debug, PartialEq, TypedBuilder)]
 pub struct DataCompactionConfig {
     /// Number of existing data files with deletion vector and under final size to trigger a compaction operation.
     pub data_file_to_compact: u32,
@@ -21,8 +21,10 @@ impl DataCompactionConfig {
     pub const DEFAULT_DATA_FILE_TO_COMPACT: u32 = u32::MAX;
     #[cfg(not(debug_assertions))]
     pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = u64::MAX;
+}
 
-    pub fn default() -> Self {
+impl Default for DataCompactionConfig {
+    fn default() -> Self {
         Self {
             data_file_to_compact: Self::DEFAULT_DATA_FILE_TO_COMPACT,
             data_file_final_size: Self::DEFAULT_DATA_FILE_FINAL_SIZE,

@@ -7,8 +7,12 @@ license = { workspace = true }
 [dependencies]
 async-trait = { workspace = true }
 moonlink = { path = "../moonlink" }
+postgres-types = { version = "0.2", features = ["with-serde_json-1"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
+
+[dev-dependencies]
+serial_test = { workspace = true }
