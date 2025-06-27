@@ -1,7 +1,7 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
-use moonlink::{IcebergTableConfig, MooncakeTable, ObjectStorageCache, TableConfig};
+use moonlink::{IcebergTableConfig, MooncakeTable, MooncakeTableConfig, ObjectStorageCache};
 use pprof::criterion::{Output, PProfProfiler};
 use std::collections::HashMap;
 use tempfile::tempdir;
@@ -53,7 +53,8 @@ fn bench_write(c: &mut Criterion) {
                 let iceberg_table_config = IcebergTableConfig::builder()
                     .warehouse_uri(temp_warehouse_uri)
                     .build();
-                let table_config = TableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+                let table_config =
+                    MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
                 let mut table = MooncakeTable::new(
                     schema.clone(),
                     "test_table".to_string(),
@@ -86,7 +87,8 @@ fn bench_write(c: &mut Criterion) {
                 let iceberg_table_config = IcebergTableConfig::builder()
                     .warehouse_uri(temp_warehouse_uri)
                     .build();
-                let table_config = TableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+                let table_config =
+                    MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
                 let mut table = MooncakeTable::new(
                     schema.clone(),
                     "test_table".to_string(),
@@ -122,7 +124,8 @@ fn bench_write(c: &mut Criterion) {
                 let iceberg_table_config = IcebergTableConfig::builder()
                     .warehouse_uri(temp_warehouse_uri)
                     .build();
-                let table_config = TableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+                let table_config =
+                    MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
                 let mut table = rt
                     .block_on(MooncakeTable::new(
                         schema.clone(),

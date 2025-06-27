@@ -10,6 +10,7 @@ use tokio_postgres::{connect, Client, NoTls};
 
 use std::sync::Arc;
 
+#[allow(dead_code)]
 pub struct PgMetadataStore {
     /// Postgres client.
     postgres_client: Arc<Mutex<Client>>,
@@ -22,11 +23,11 @@ impl MetadataStoreTrait for PgMetadataStore {
     async fn load_table_config(&self, table_id: u32) -> Result<MoonlinkTableConfig> {
         let rows = {
             let guard = self.postgres_client.lock().await;
-            let rows = guard
+
+            guard
                 .query("SELECT * FROM moonlink_tables WHERE oid = $1", &[&table_id])
                 .await
-                .expect("Failed to query moonlink_tables");
-            rows
+                .expect("Failed to query moonlink_tables")
         };
 
         if rows.is_empty() {

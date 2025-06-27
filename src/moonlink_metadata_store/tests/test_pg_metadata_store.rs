@@ -1,10 +1,10 @@
-#[path = "test_environment.rs"]
-mod test_environment;
-#[path = "test_utils.rs"]
-mod test_utils;
+mod common;
 
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::PgMetadataStore;
+
+use common::test_environment::*;
+use common::test_utils::*;
 
 /// Test connection string.
 const URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
@@ -17,14 +17,12 @@ mod tests {
 
     use serial_test::serial;
 
-    use crate::test_environment::TestEnvironment;
-
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn test_table_metadata_store_and_load() {
         let _test_environment = TestEnvironment::new(URI).await;
         let metadata_store = PgMetadataStore::new(URI).await.unwrap();
-        let moonlink_table_config = test_utils::get_moonlink_table_config();
+        let moonlink_table_config = get_moonlink_table_config();
 
         // Store moonlink table config to metadata storage.
         metadata_store
@@ -59,7 +57,7 @@ mod tests {
     async fn test_table_metadata_store_for_duplicate_tables() {
         let _test_environment = TestEnvironment::new(URI).await;
         let metadata_store = PgMetadataStore::new(URI).await.unwrap();
-        let moonlink_table_config = test_utils::get_moonlink_table_config();
+        let moonlink_table_config = get_moonlink_table_config();
 
         // Store moonlink table config to metadata storage.
         metadata_store

@@ -41,6 +41,7 @@ use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
 use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
+use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
 /// Key for iceberg table property, to record flush lsn.
@@ -49,13 +50,16 @@ const MOONCAKE_TABLE_FLUSH_LSN: &str = "mooncake-table-flush-lsn";
 /// TODO(hjiang): Consider using `Option<>` to represent uninitialized, which is more rust-idiometic.
 const UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW: usize = 0;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, TypedBuilder)]
 pub struct IcebergTableConfig {
     /// Table warehouse location.
+    #[builder(default = "/tmp/moonlink_iceberg".to_string())]
     pub warehouse_uri: String,
     /// Namespace for the iceberg table.
+    #[builder(default = vec!["default".to_string()])]
     pub namespace: Vec<String>,
     /// Iceberg table name.
+    #[builder(default = "table".to_string())]
     pub table_name: String,
 }
 

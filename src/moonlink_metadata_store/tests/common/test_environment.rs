@@ -1,7 +1,5 @@
-use std::thread::JoinHandle;
-
 /// Test environment to setup and cleanup a test case.
-use tokio_postgres::{connect, Client, NoTls};
+use tokio_postgres::{connect, NoTls};
 
 pub(crate) struct TestEnvironment {
     _connection_handle: tokio::task::JoinHandle<()>,

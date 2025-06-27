@@ -2,7 +2,7 @@ use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
 use moonlink::{IcebergTableConfig, ObjectStorageCache};
-use moonlink::{MooncakeTable, TableConfig};
+use moonlink::{MooncakeTable, MooncakeTableConfig};
 use std::collections::HashMap;
 use std::time::Duration;
 use tempfile::tempdir;
@@ -53,7 +53,7 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
         table_name: table_name.to_string(),
     };
     let rt = Runtime::new().unwrap();
-    let table_config = TableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+    let table_config = MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mut table = rt
         .block_on(MooncakeTable::new(
             schema,
