@@ -532,17 +532,21 @@ impl MooncakeTable {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
                     || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
-                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}",
+                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
                 self.last_iceberg_snapshot_lsn,
                 flush_lsn,
+                iceberg_snapshot_res.import_result.new_data_files.len(),
+                iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
             );
         } else {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
                     || self.last_iceberg_snapshot_lsn.unwrap() <= flush_lsn,
-                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}",
+                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
                 self.last_iceberg_snapshot_lsn,
                 flush_lsn,
+                iceberg_snapshot_res.import_result.new_data_files.len(),
+                iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
             );
         }
         self.last_iceberg_snapshot_lsn = Some(flush_lsn);
