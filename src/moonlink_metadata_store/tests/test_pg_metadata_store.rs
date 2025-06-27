@@ -17,10 +17,13 @@ mod tests {
 
     use serial_test::serial;
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test]
     #[serial]
     async fn test_table_metadata_store_and_load() {
         let _test_environment = TestEnvironment::new(URI).await;
+        // Unused metadata storage, used to check it could be initialized for multiple times idempotently.
+        let _metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        // Initialize for the second time.
         let metadata_store = PgMetadataStore::new(URI).await.unwrap();
         let moonlink_table_config = get_moonlink_table_config();
 
@@ -40,7 +43,7 @@ mod tests {
     }
 
     /// Test scenario: load from non-existent row.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test]
     #[serial]
     async fn test_table_metadata_load_from_non_existent_table() {
         let _test_environment = TestEnvironment::new(URI).await;
@@ -52,7 +55,7 @@ mod tests {
     }
 
     /// Test scenario: store for duplicate table ids.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test]
     #[serial]
     async fn test_table_metadata_store_for_duplicate_tables() {
         let _test_environment = TestEnvironment::new(URI).await;
