@@ -48,7 +48,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let serialized_config =
-            config_utils::serialize_moonlink_table_string(moonlink_table_config)?;
+            config_utils::serialize_moonlink_table_config(moonlink_table_config)?;
 
         let guard = self.postgres_client.lock().await;
         // TODO(hjiang): Fill in other fields as well.
@@ -67,7 +67,7 @@ impl MetadataStoreTrait for PgMetadataStore {
 impl PgMetadataStore {
     pub async fn new(uri: &str) -> Result<Self> {
         let (postgres_client, connection) = connect(uri, NoTls).await.unwrap();
-        // Spawn connection driver in background to keep it alive
+        // Spawn connection driver in background to keep it alive.
         let _pg_connection = tokio::spawn(async move {
             if let Err(e) = connection.await {
                 eprintln!("Postgres connection error: {}", e);

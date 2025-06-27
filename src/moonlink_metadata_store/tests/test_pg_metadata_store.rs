@@ -10,6 +10,8 @@ use common::test_utils::*;
 const URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
 /// Test table id.
 const TABLE_ID: u32 = 0;
+/// Test table name.
+const TABLE_NAME: &str = "table";
 
 #[cfg(test)]
 mod tests {
@@ -29,11 +31,7 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_config(
-                TABLE_ID,
-                /*table_name=*/ "table",
-                moonlink_table_config.clone(),
-            )
+            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
             .await
             .unwrap();
 
@@ -64,21 +62,13 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_config(
-                TABLE_ID,
-                /*table_name=*/ "table",
-                moonlink_table_config.clone(),
-            )
+            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
             .await
             .unwrap();
 
         // Store moonlink table config to metadata storage.
         let res = metadata_store
-            .store_table_config(
-                TABLE_ID,
-                /*table_name=*/ "table",
-                moonlink_table_config.clone(),
-            )
+            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
             .await;
         assert!(res.is_err());
     }
