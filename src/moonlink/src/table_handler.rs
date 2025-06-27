@@ -389,7 +389,7 @@ impl TableHandler {
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
                                     let iceberg_flush_lsn = snapshot_res.flush_lsn;
-                                    let _ = iceberg_event_sync_sender.flush_lsn_tx.send(iceberg_flush_lsn);
+                                    iceberg_event_sync_sender.flush_lsn_tx.send(iceberg_flush_lsn).unwrap();
                                     table.set_iceberg_snapshot_res(snapshot_res);
                                     iceberg_snapshot_result_consumed = false;
 
