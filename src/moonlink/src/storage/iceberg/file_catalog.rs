@@ -57,12 +57,11 @@ static NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
 
 // Retry related constants.
 static MIN_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
-static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(3);
+static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(10);
 static RETRY_DELAY_FACTOR: f32 = 1.5;
 static MAX_RETRY_COUNT: usize = 5;
 
 #[derive(Debug)]
-#[warn(dead_code)]
 pub enum CatalogConfig {
     #[cfg(feature = "storage-fs")]
     FileSystem,
