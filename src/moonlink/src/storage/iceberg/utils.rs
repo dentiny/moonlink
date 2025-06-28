@@ -103,20 +103,6 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     todo!("Need to take secrets from client side and create object storage catalog.")
 }
 
-// Create iceberg table properties from table config.
-fn create_iceberg_table_properties() -> HashMap<String, String> {
-    let mut props = HashMap::with_capacity(3);
-    props.insert(
-        table_property::PARQUET_COMPRESSION.to_string(),
-        table_property::PARQUET_COMPRESSION_DEFAULT.to_string(),
-    );
-    props.insert(
-        table_property::METADATA_COMPRESSION.to_string(),
-        table_property::METADATA_COMPRESSION_DEFAULT.to_string(),
-    );
-    props
-}
-
 /// Create an iceberg table in the given catalog from the given namespace and table name.
 /// Precondition: table doesn't exist in the given catalog.
 async fn create_iceberg_table<C: MoonlinkCatalog + ?Sized>(
@@ -143,7 +129,7 @@ async fn create_iceberg_table<C: MoonlinkCatalog + ?Sized>(
             table_name
         ))
         .schema(iceberg_schema)
-        .properties(create_iceberg_table_properties())
+        .properties(table_property::create_iceberg_table_properties())
         .build();
     let table = catalog.create_table(&namespace_ident, tbl_creation).await?;
     Ok(table)
