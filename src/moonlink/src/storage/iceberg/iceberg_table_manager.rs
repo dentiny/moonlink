@@ -41,7 +41,6 @@ use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
 use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
-use more_asserts as ma;
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
@@ -381,10 +380,9 @@ impl IcebergTableManager {
         let unique_table_auto_incre_id_offset = puffin_index / storage_utils::NUM_FILES_PER_FLUSH;
         let cur_table_auto_incr_id =
             file_params.table_auto_incr_ids.start as u64 + unique_table_auto_incre_id_offset;
-        ma::assert_lt!(
-            cur_table_auto_incr_id,
-            file_params.table_auto_incr_ids.end as u64
-        );
+        assert!(file_params
+            .table_auto_incr_ids
+            .contains(&(cur_table_auto_incr_id as u32)));
         let cur_file_idx =
             puffin_index - storage_utils::NUM_FILES_PER_FLUSH * unique_table_auto_incre_id_offset;
         TableUniqueFileId {

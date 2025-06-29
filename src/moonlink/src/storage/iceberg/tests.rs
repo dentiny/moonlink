@@ -1557,7 +1557,7 @@ async fn test_drop_table_at_creation() {
     assert!(snapshot.data_file_flush_lsn.is_none());
 }
 
-/// Testint scenario: a large number of deletion records are requested to persist to iceberg, thus multiple table auto increment ids are needed.
+/// Testing scenario: a large number of deletion records are requested to persist to iceberg, thus multiple table auto increment ids are needed.
 /// For more details, please refer to https://github.com/Mooncake-Labs/moonlink/issues/640
 #[tokio::test]
 async fn test_multiple_table_ids_for_deletion_vector() {
