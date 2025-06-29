@@ -60,12 +60,21 @@ pub fn get_iceberg_manager_config(table_name: String, warehouse_uri: String) -> 
 pub struct TestEnvironment {
     pub handler: TableHandler,
     event_sender: mpsc::Sender<TableEvent>,
-    read_state_manager: Arc<ReadStateManager>,
+    read_state_manager: Option<Arc<ReadStateManager>>,
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
     pub(crate) iceberg_table_event_manager: IcebergTableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
+}
+
+impl Drop for TestEnvironment {
+    fn drop(&mut self) {
+        // Dropping read state manager involves asynchronous operation, which depends on table handler.
+        // explicitly destruct read state manager first, and sleep for a while, to "make sure" async destruction finishes.
+        self.read_state_manager = None;
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
 }
 
 impl TestEnvironment {
@@ -84,11 +93,11 @@ impl TestEnvironment {
     ) -> Self {
         let (replication_tx, replication_rx) = watch::channel(0u64);
         let (last_commit_tx, last_commit_rx) = watch::channel(0u64);
-        let read_state_manager = Arc::new(ReadStateManager::new(
+        let read_state_manager = Some(Arc::new(ReadStateManager::new(
             &mooncake_table,
             replication_rx,
             last_commit_rx,
-        ));
+        )));
 
         let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) =
             oneshot::channel();
@@ -178,7 +187,7 @@ impl TestEnvironment {
     // --- Util functions for iceberg drop table ---
 
     /// Request to drop iceberg table and block wait its completion.
-    pub async fn drop_table(self) -> Result<()> {
+    pub async fn drop_table(&mut self) -> Result<()> {
         self.iceberg_table_event_manager.drop_table().await
     }
 
@@ -254,7 +263,12 @@ impl TestEnvironment {
     }
 
     pub async fn verify_snapshot(&self, target_lsn: u64, expected_ids: &[i32]) {
-        check_read_snapshot(&self.read_state_manager, target_lsn, expected_ids).await;
+        check_read_snapshot(
+            self.read_state_manager.as_ref().unwrap(),
+            target_lsn,
+            expected_ids,
+        )
+        .await;
     }
 
     // --- Lifecycle Helper ---
