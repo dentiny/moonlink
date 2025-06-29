@@ -1076,17 +1076,10 @@ impl SnapshotTableState {
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
         // To reduce iceberg persistence overhead, we only snapshot when (1) there're persisted data files, or (2) accumulated unflushed deletion vector exceeds threshold.
         let mut iceberg_snapshot_payload: Option<IcebergSnapshotPayload> = None;
-        let flush_by_data_files = self
+        let flush_by_deletion = self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
+        let flush_by_new_files_or_maintainence = self
             .unpersisted_records
-            .if_persist_by_data_files(opt.force_create);
-        let flush_by_deletion_logs =
-            self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
-        let flush_by_merge_file_indices = self
-            .unpersisted_records
-            .if_persist_by_index_merge(opt.force_create);
-        let flush_by_data_compaction = self
-            .unpersisted_records
-            .if_persist_by_data_compaction(opt.force_create);
+            .if_persist_by_new_files_or_maintainence(opt.force_create);
 
         // Decide whether to perform a data compaction.
         let mut data_compaction_payload: Option<DataCompactionPayload> = None;
@@ -1106,10 +1099,7 @@ impl SnapshotTableState {
         // TODO(hjiang): Add whether to flush based on merged file indices.
         if !opt.skip_iceberg_snapshot
             && self.current_snapshot.data_file_flush_lsn.is_some()
-            && (flush_by_data_files
-                || flush_by_deletion_logs
-                || flush_by_merge_file_indices
-                || flush_by_data_compaction)
+            && (flush_by_new_files_or_maintainence || flush_by_deletion)
         {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
@@ -1118,10 +1108,7 @@ impl SnapshotTableState {
                 self.aggregate_committed_deletion_logs(flush_lsn);
 
             // Only create iceberg snapshot when there's something to import.
-            if !aggregated_committed_deletion_logs.is_empty()
-                || flush_by_data_files
-                || flush_by_merge_file_indices
-                || flush_by_data_compaction
+            if !aggregated_committed_deletion_logs.is_empty() || flush_by_new_files_or_maintainence
             {
                 iceberg_snapshot_payload =
                     Some(self.get_iceberg_snapshot_payload(

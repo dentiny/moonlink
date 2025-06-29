@@ -242,7 +242,7 @@ impl UnpersistedRecords {
     /// ==================================
     ///
     /// Util function to decide whether to create iceberg snapshot by data compaction results.
-    pub(crate) fn if_persist_by_data_compaction(&self, force_create: bool) -> bool {
+    fn if_persist_by_data_compaction(&self, force_create: bool) -> bool {
         force_create
             && (!self.compacted_data_files_to_add.is_empty()
                 || !self.compacted_data_files_to_remove.is_empty())
@@ -250,12 +250,12 @@ impl UnpersistedRecords {
 
     /// TODO(hjiang): Decide when to create iceberg snapshot by index merge and data compaction.
     /// Util function to decide whether to create iceberg snapshot by index merge results.
-    pub(crate) fn if_persist_by_index_merge(&self, force_create: bool) -> bool {
+    fn if_persist_by_index_merge(&self, force_create: bool) -> bool {
         force_create && !self.merged_file_indices_to_add.is_empty()
     }
 
     /// Util function to decide whether to create iceberg snapshot by new data files.
-    pub(crate) fn if_persist_by_data_files(&self, force_create: bool) -> bool {
+    fn if_persist_by_data_files(&self, force_create: bool) -> bool {
         let data_file_snapshot_threshold = if !force_create {
             self.mooncake_table_config
                 .iceberg_snapshot_new_data_file_count()
@@ -263,6 +263,20 @@ impl UnpersistedRecords {
             1
         };
         self.new_data_files.len() >= data_file_snapshot_threshold
+    }
+
+    /// Util function to decide whether to flush by new data files or maintainance task.
+    pub(crate) fn if_persist_by_new_files_or_maintainence(&self, force_create: bool) -> bool {
+        if self.if_persist_by_data_files(force_create) {
+            return true;
+        }
+        if self.if_persist_by_data_compaction(force_create) {
+            return true;
+        }
+        if self.if_persist_by_index_merge(force_create) {
+            return true;
+        }
+        false
     }
 
     /// ==================================
