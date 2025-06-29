@@ -3,11 +3,9 @@ use crate::storage::mooncake_table::{DiskFileEntry, TableMetadata as MooncakeTab
 use crate::storage::IcebergTableConfig;
 use crate::storage::{load_blob_from_puffin_file, DeletionVector};
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
-use crate::table_handler::{IcebergEventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
+use crate::table_handler::{EventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
 use crate::union_read::{decode_read_state_for_testing, ReadStateManager};
-use crate::{
-    IcebergEventSyncReceiver, IcebergTableEventManager, IcebergTableManager, MooncakeTableConfig,
-};
+use crate::{EventSyncReceiver, IcebergTableManager, MooncakeTableConfig, TableEventManager};
 use crate::{ObjectStorageCache, Result};
 
 use arrow::datatypes::{DataType, Field, Schema};
@@ -63,7 +61,7 @@ pub struct TestEnvironment {
     read_state_manager: Arc<ReadStateManager>,
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
-    pub(crate) iceberg_table_event_manager: IcebergTableEventManager,
+    pub(crate) iceberg_table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
 }
@@ -90,20 +88,19 @@ impl TestEnvironment {
             last_commit_rx,
         ));
 
-        let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) =
-            oneshot::channel();
+        let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
         let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
-        let iceberg_event_sync_sender = IcebergEventSyncSender {
-            iceberg_drop_table_completion_tx,
+        let event_sync_sender = EventSyncSender {
+            drop_table_completion_tx,
             flush_lsn_tx,
         };
-        let iceberg_event_sync_receiver = IcebergEventSyncReceiver {
-            iceberg_drop_table_completion_rx,
+        let iceberg_event_sync_receiver = EventSyncReceiver {
+            drop_table_completion_rx,
             flush_lsn_rx,
         };
-        let handler = TableHandler::new(mooncake_table, iceberg_event_sync_sender).await;
+        let handler = TableHandler::new(mooncake_table, event_sync_sender).await;
         let iceberg_table_event_manager =
-            IcebergTableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
+            TableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
         let event_sender = handler.get_event_sender();
 
         let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);

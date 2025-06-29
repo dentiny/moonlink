@@ -5,15 +5,15 @@ use crate::Result;
 use crate::TableEvent;
 
 /// Contains a few receivers, which get notified after certain iceberg events completion.
-pub struct IcebergEventSyncReceiver {
+pub struct EventSyncReceiver {
     /// Get notified when iceberg drop table completes.
-    pub iceberg_drop_table_completion_rx: oneshot::Receiver<Result<()>>,
+    pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
 }
 
 /// At most one outstanding snapshot request is allowed.
-pub struct IcebergTableEventManager {
+pub struct TableEventManager {
     /// Used to initiate a mooncake and iceberg snapshot operation.
     table_event_tx: mpsc::Sender<TableEvent>,
     /// Used to synchronize on the completion of an iceberg drop table.
@@ -22,14 +22,14 @@ pub struct IcebergTableEventManager {
     flush_lsn_rx: watch::Receiver<u64>,
 }
 
-impl IcebergTableEventManager {
+impl TableEventManager {
     pub fn new(
         table_event_tx: mpsc::Sender<TableEvent>,
-        iceberg_event_sync_rx: IcebergEventSyncReceiver,
+        iceberg_event_sync_rx: EventSyncReceiver,
     ) -> Self {
         Self {
             table_event_tx,
-            drop_table_completion_rx: iceberg_event_sync_rx.iceberg_drop_table_completion_rx,
+            drop_table_completion_rx: iceberg_event_sync_rx.drop_table_completion_rx,
             flush_lsn_rx: iceberg_event_sync_rx.flush_lsn_rx,
         }
     }

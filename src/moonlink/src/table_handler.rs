@@ -1,11 +1,7 @@
-use crate::row::MoonlinkRow;
-use crate::storage::mooncake_table::{
-    DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload, FileIndiceMergeResult,
-    IcebergSnapshotPayload, IcebergSnapshotResult, SnapshotOption,
-};
+use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::{io_utils, MooncakeTable};
 use crate::table_notify::TableEvent;
-use crate::{Error, NonEvictableHandle, Result};
+use crate::{Error, Result};
 use more_asserts as ma;
 use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -25,19 +21,16 @@ pub struct TableHandler {
 }
 
 /// Contains a few senders, which notifies after certain iceberg events completion.
-pub struct IcebergEventSyncSender {
-    /// Notifies when iceberg drop table completes.
-    pub iceberg_drop_table_completion_tx: oneshot::Sender<Result<()>>,
+pub struct EventSyncSender {
+    /// Notifies when drop table completes.
+    pub drop_table_completion_tx: oneshot::Sender<Result<()>>,
     /// Notifies when iceberg flush LSN advances.
     pub flush_lsn_tx: watch::Sender<u64>,
 }
 
 impl TableHandler {
     /// Create a new TableHandler for the given schema and table name
-    pub async fn new(
-        mut table: MooncakeTable,
-        iceberg_event_sync_sender: IcebergEventSyncSender,
-    ) -> Self {
+    pub async fn new(mut table: MooncakeTable, event_sync_sender: EventSyncSender) -> Self {
         // Create channel for events
         let (event_sender, event_receiver) = mpsc::channel(100);
 
@@ -47,7 +40,7 @@ impl TableHandler {
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(
             async move {
-                Self::event_loop(iceberg_event_sync_sender, event_receiver, table).await;
+                Self::event_loop(event_sync_sender, event_receiver, table).await;
             }
             .instrument(info_span!("table_event_loop")),
         ));
@@ -67,7 +60,7 @@ impl TableHandler {
     /// Main event processing loop
     #[tracing::instrument(name = "table_event_loop", skip_all)]
     async fn event_loop(
-        iceberg_event_sync_sender: IcebergEventSyncSender,
+        event_sync_sender: EventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
         mut table: MooncakeTable,
     ) {
@@ -127,41 +120,40 @@ impl TableHandler {
             |iceberg_consumed: bool, iceberg_ongoing: bool| iceberg_consumed && !iceberg_ongoing;
 
         // Used to clean up mooncake table status, and send completion notification.
-        let drop_table =
-            async |table: &mut MooncakeTable, iceberg_event_sync_sender: IcebergEventSyncSender| {
-                // Step-1: shutdown the table, which unreferences and deletes all cache files.
-                if let Err(e) = table.shutdown().await {
-                    iceberg_event_sync_sender
-                        .iceberg_drop_table_completion_tx
-                        .send(Err(e))
-                        .unwrap();
-                    return;
-                }
-
-                // Step-2: delete the iceberg table.
-                if let Err(e) = table.drop_iceberg_table().await {
-                    iceberg_event_sync_sender
-                        .iceberg_drop_table_completion_tx
-                        .send(Err(e))
-                        .unwrap();
-                    return;
-                }
-
-                // Step-3: delete the mooncake table.
-                if let Err(e) = table.drop_mooncake_table().await {
-                    iceberg_event_sync_sender
-                        .iceberg_drop_table_completion_tx
-                        .send(Err(e))
-                        .unwrap();
-                    return;
-                }
-
-                // Step-4: send back completion notification.
-                iceberg_event_sync_sender
-                    .iceberg_drop_table_completion_tx
-                    .send(Ok(()))
+        let drop_table = async |table: &mut MooncakeTable, event_sync_sender: EventSyncSender| {
+            // Step-1: shutdown the table, which unreferences and deletes all cache files.
+            if let Err(e) = table.shutdown().await {
+                event_sync_sender
+                    .drop_table_completion_tx
+                    .send(Err(e))
                     .unwrap();
-            };
+                return;
+            }
+
+            // Step-2: delete the iceberg table.
+            if let Err(e) = table.drop_iceberg_table().await {
+                event_sync_sender
+                    .drop_table_completion_tx
+                    .send(Err(e))
+                    .unwrap();
+                return;
+            }
+
+            // Step-3: delete the mooncake table.
+            if let Err(e) = table.drop_mooncake_table().await {
+                event_sync_sender
+                    .drop_table_completion_tx
+                    .send(Err(e))
+                    .unwrap();
+                return;
+            }
+
+            // Step-4: send back completion notification.
+            event_sync_sender
+                .drop_table_completion_tx
+                .send(Ok(()))
+                .unwrap();
+        };
 
         // Util function to spawn a detached task to delete evicted data files.
         let start_task_to_delete_evicted = |evicted_file_to_delete: Vec<String>| {
@@ -302,7 +294,7 @@ impl TableHandler {
                         TableEvent::DropTable => {
                             // Fast-path: no other concurrent events, directly clean up states and ack back.
                             if !mooncake_snapshot_ongoing && !iceberg_snapshot_ongoing {
-                                drop_table(&mut table, iceberg_event_sync_sender).await;
+                                drop_table(&mut table, event_sync_sender).await;
                                 return;
                             }
 
@@ -319,7 +311,7 @@ impl TableHandler {
 
                             // Drop table if requested, and table at a clean state.
                             if drop_table_requested && !iceberg_snapshot_ongoing {
-                                drop_table(&mut table, iceberg_event_sync_sender).await;
+                                drop_table(&mut table, event_sync_sender).await;
                                 return;
                             }
 
@@ -361,7 +353,7 @@ impl TableHandler {
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
                                     let iceberg_flush_lsn = snapshot_res.flush_lsn;
-                                    iceberg_event_sync_sender.flush_lsn_tx.send(iceberg_flush_lsn).unwrap();
+                                    event_sync_sender.flush_lsn_tx.send(iceberg_flush_lsn).unwrap();
                                     table.set_iceberg_snapshot_res(snapshot_res);
                                     iceberg_snapshot_result_consumed = false;
 
@@ -388,7 +380,7 @@ impl TableHandler {
 
                             // Drop table if requested, and table at a clean state.
                             if drop_table_requested && !mooncake_snapshot_ongoing {
-                                drop_table(&mut table, iceberg_event_sync_sender).await;
+                                drop_table(&mut table, event_sync_sender).await;
                                 return;
                             }
                         }

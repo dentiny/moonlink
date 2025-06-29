@@ -6,7 +6,7 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
-use moonlink::{IcebergTableEventManager, ObjectStorageCache, ReadStateManager};
+use moonlink::{ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use tokio::pin;
@@ -48,7 +48,7 @@ pub struct ReplicationConnection {
     postgres_client: Client,
     handle: Option<JoinHandle<Result<()>>>,
     table_readers: HashMap<TableId, ReadStateManager>,
-    iceberg_table_event_managers: HashMap<TableId, IcebergTableEventManager>,
+    iceberg_table_event_managers: HashMap<TableId, TableEventManager>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: Option<mpsc::Receiver<Command>>,
     replication_state: Arc<ReplicationState>,
@@ -252,10 +252,7 @@ impl ReplicationConnection {
         self.table_readers.len()
     }
 
-    pub fn get_iceberg_table_event_manager(
-        &mut self,
-        table_id: TableId,
-    ) -> &mut IcebergTableEventManager {
+    pub fn get_iceberg_table_event_manager(&mut self, table_id: TableId) -> &mut TableEventManager {
         self.iceberg_table_event_managers
             .get_mut(&table_id)
             .unwrap()

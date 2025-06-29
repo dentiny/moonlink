@@ -1,6 +1,5 @@
 pub(super) mod deletion_vector;
 pub(super) mod file_catalog;
-pub(super) mod iceberg_table_event_manager;
 pub(super) mod iceberg_table_manager;
 pub(super) mod index;
 pub(super) mod moonlink_catalog;
@@ -9,6 +8,7 @@ pub(super) mod parquet_stats_utils;
 pub(super) mod parquet_utils;
 pub(super) mod puffin_utils;
 pub(super) mod puffin_writer_proxy;
+pub(super) mod table_event_manager;
 pub(super) mod table_manager;
 pub(super) mod table_property;
 pub(super) mod tokio_retry_utils;
