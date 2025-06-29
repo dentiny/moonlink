@@ -9,7 +9,7 @@ use moonlink::{
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{mpsc, mpsc::Sender, watch};
+use tokio::sync::{mpsc, mpsc::Sender, oneshot, watch};
 
 /// Components required to replicate a single table.
 /// Components that the [`Sink`] needs for processing CDC events.
@@ -28,7 +28,7 @@ pub struct TableResources {
 
 /// Create iceberg table event manager sender and receiver.
 fn create_iceberg_event_syncer() -> (IcebergEventSyncSender, IcebergEventSyncReceiver) {
-    let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) = mpsc::channel(1);
+    let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) = oneshot::channel();
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
     let iceberg_event_sync_sender = IcebergEventSyncSender {
         iceberg_drop_table_completion_tx,

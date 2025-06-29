@@ -1,5 +1,5 @@
-/// This module interacts with iceberg snapshot status.
-use tokio::sync::{mpsc, watch};
+/// This module interacts with iceberg snapshot status, which corresponds to one mooncake table.
+use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::Result;
 use crate::TableEvent;
@@ -7,7 +7,7 @@ use crate::TableEvent;
 /// Contains a few receivers, which get notified after certain iceberg events completion.
 pub struct IcebergEventSyncReceiver {
     /// Get notified when iceberg drop table completes.
-    pub iceberg_drop_table_completion_rx: mpsc::Receiver<Result<()>>,
+    pub iceberg_drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
 }
@@ -17,7 +17,7 @@ pub struct IcebergTableEventManager {
     /// Used to initiate a mooncake and iceberg snapshot operation.
     table_event_tx: mpsc::Sender<TableEvent>,
     /// Used to synchronize on the completion of an iceberg drop table.
-    drop_table_completion_rx: mpsc::Receiver<Result<()>>,
+    drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Channel to observe latest flush LSN reported by iceberg.
     flush_lsn_rx: watch::Receiver<u64>,
 }
@@ -50,11 +50,11 @@ impl IcebergTableEventManager {
     }
 
     /// Drop an iceberg table.
-    pub async fn drop_table(&mut self) -> Result<()> {
+    pub async fn drop_table(self) -> Result<()> {
         self.table_event_tx
             .send(TableEvent::DropTable)
             .await
             .unwrap();
-        self.drop_table_completion_rx.recv().await.unwrap()
+        self.drop_table_completion_rx.await.unwrap()
     }
 }

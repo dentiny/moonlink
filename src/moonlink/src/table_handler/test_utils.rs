@@ -18,7 +18,7 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 /// Creates a default schema for testing.
 pub fn default_schema() -> Schema {
@@ -90,7 +90,8 @@ impl TestEnvironment {
             last_commit_rx,
         ));
 
-        let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) = mpsc::channel(1);
+        let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) =
+            oneshot::channel();
         let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
         let iceberg_event_sync_sender = IcebergEventSyncSender {
             iceberg_drop_table_completion_tx,
@@ -177,7 +178,7 @@ impl TestEnvironment {
     // --- Util functions for iceberg drop table ---
 
     /// Request to drop iceberg table and block wait its completion.
-    pub async fn drop_table(&mut self) -> Result<()> {
+    pub async fn drop_table(self) -> Result<()> {
         self.iceberg_table_event_manager.drop_table().await
     }
 

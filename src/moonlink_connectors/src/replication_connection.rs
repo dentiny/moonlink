@@ -323,9 +323,6 @@ impl ReplicationConnection {
         self.table_readers.remove_entry(&table_id).unwrap();
         // Notify the table handler to clean up cache, mooncake and iceberg table state.
         self.drop_iceberg_table(table_id).await?;
-        self.iceberg_table_event_managers
-            .remove_entry(&table_id)
-            .unwrap();
         if let Err(e) = self.cmd_tx.send(Command::DropTable { table_id }).await {
             error!(error = ?e, "failed to enqueue DropTable command");
         }
@@ -338,10 +335,7 @@ impl ReplicationConnection {
     /// Clean up iceberg table in a blocking manner.
     async fn drop_iceberg_table(&mut self, table_id: u32) -> Result<()> {
         info!(table_id, "dropping iceberg table");
-        let iceberg_state_manager = self
-            .iceberg_table_event_managers
-            .get_mut(&table_id)
-            .unwrap();
+        let iceberg_state_manager = self.iceberg_table_event_managers.remove(&table_id).unwrap();
         iceberg_state_manager.drop_table().await?;
         Ok(())
     }
