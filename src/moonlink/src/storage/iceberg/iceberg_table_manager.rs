@@ -14,7 +14,6 @@ use crate::storage::iceberg::table_manager::{
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
-use crate::storage::io_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
@@ -27,6 +26,7 @@ use crate::storage::storage_utils::{
     create_data_file, get_unique_file_id_for_flush, FileId, MooncakeDataFileRef, TableId,
     TableUniqueFileId,
 };
+use crate::storage::{io_utils, storage_utils};
 use crate::ObjectStorageCache;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -41,6 +41,7 @@ use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
 use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
+use more_asserts as ma;
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
@@ -369,6 +370,32 @@ impl IcebergTableManager {
 
     /// ---------- store snapshot ----------
     ///
+    /// Util function to get unique table file id for the deletion vector puffin file.
+    /// 
+    /// Notice: only deletion vector puffin generates new file ids.
+    fn get_unique_table_id_for_deletion_vector_puffin(
+        &self,
+        file_params: &PersistenceFileParams,
+        puffin_index: u64,
+    ) -> TableUniqueFileId {
+        let unique_table_auto_incre_id_offset = puffin_index / storage_utils::NUM_FILES_PER_FLUSH;
+        let cur_table_auto_incr_id =
+            file_params.table_auto_incr_ids.start as u64 + unique_table_auto_incre_id_offset;
+        ma::assert_lt!(
+            cur_table_auto_incr_id,
+            file_params.table_auto_incr_ids.end as u64
+        );
+        let cur_file_idx =
+            puffin_index - storage_utils::NUM_FILES_PER_FLUSH * unique_table_auto_incre_id_offset;
+        TableUniqueFileId {
+            table_id: TableId(self.mooncake_table_metadata.id),
+            file_id: FileId(get_unique_file_id_for_flush(
+                cur_table_auto_incr_id,
+                cur_file_idx,
+            )),
+        }
+    }
+
     /// Write deletion vector to puffin file.
     /// Precondition: batch deletion vector is not empty.
     ///
@@ -414,13 +441,8 @@ impl IcebergTableManager {
             .await?;
 
         // Import the puffin file in object storage cache.
-        let unique_file_id = TableUniqueFileId {
-            table_id: TableId(self.mooncake_table_metadata.id),
-            file_id: FileId(get_unique_file_id_for_flush(
-                file_params.table_auto_incr_id as u64,
-                puffin_index,
-            )),
-        };
+        let unique_file_id =
+            self.get_unique_table_id_for_deletion_vector_puffin(file_params, puffin_index);
         let (cache_handle, evicted_files_to_delete) = self
             .object_storage_cache
             .get_cache_entry(unique_file_id, &puffin_filepath)

@@ -221,7 +221,7 @@ async fn test_store_and_load_snapshot_impl(
     };
 
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 1,
+        table_auto_incr_ids: 1..2,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -271,7 +271,7 @@ async fn test_store_and_load_snapshot_impl(
     };
 
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 3,
+        table_auto_incr_ids: 3..4,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -344,7 +344,7 @@ async fn test_store_and_load_snapshot_impl(
         },
     };
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 4,
+        table_auto_incr_ids: 4..5,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -416,7 +416,7 @@ async fn test_store_and_load_snapshot_impl(
         },
     };
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 6,
+        table_auto_incr_ids: 6..7,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -477,7 +477,7 @@ async fn test_store_and_load_snapshot_impl(
         },
     };
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 7,
+        table_auto_incr_ids: 7..8,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -753,7 +753,7 @@ async fn test_empty_content_snapshot_creation() {
     };
 
     let persistence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 0,
+        table_auto_incr_ids: 0..1,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)

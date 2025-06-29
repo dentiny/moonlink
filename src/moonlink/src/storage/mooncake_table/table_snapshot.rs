@@ -58,6 +58,14 @@ pub struct IcebergSnapshotPayload {
     pub(crate) data_compaction_payload: IcebergSnapshotDataCompactionPayload,
 }
 
+impl IcebergSnapshotPayload {
+    /// Get the number of new files created in iceberg table.
+    pub fn get_new_file_ids_num(&self) -> u32 {
+        // Only deletion vector puffin blobs create files with new file ids.
+        self.import_payload.new_deletion_vector.len() as u32
+    }
+}
+
 ////////////////////////////
 /// Iceberg snapshot result
 ////////////////////////////

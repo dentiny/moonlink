@@ -850,7 +850,7 @@ impl MooncakeTable {
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
         table_notify: Sender<TableEvent>,
-        table_auto_incr_id: u32,
+        table_auto_incr_ids: std::ops::Range<u32>,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
 
@@ -883,7 +883,9 @@ impl MooncakeTable {
             .old_file_indices_to_remove
             .clone();
 
-        let persistence_file_params = PersistenceFileParams { table_auto_incr_id };
+        let persistence_file_params = PersistenceFileParams {
+            table_auto_incr_ids,
+        };
         let iceberg_persistence_res = iceberg_table_manager
             .sync_snapshot(snapshot_payload, persistence_file_params)
             .await;
@@ -963,14 +965,15 @@ impl MooncakeTable {
     pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
         // Create a detached task, whose completion will be notified separately.
-        let table_auto_incre_id = self.next_file_id;
-        self.next_file_id += 1;
+        let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
+        let table_auto_incre_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
+        self.next_file_id += new_file_ids_to_create;
         tokio::task::spawn(
             Self::persist_iceberg_snapshot_impl(
                 iceberg_table_manager,
                 snapshot_payload,
                 self.table_notify.as_ref().unwrap().clone(),
-                table_auto_incre_id,
+                table_auto_incre_ids,
             )
             .instrument(info_span!("persist_iceberg_snapshot")),
         );

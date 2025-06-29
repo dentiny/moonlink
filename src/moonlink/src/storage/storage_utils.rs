@@ -36,7 +36,7 @@ impl Hash for MooncakeDataFile {
 pub type MooncakeDataFileRef = Arc<MooncakeDataFile>;
 
 const LOCAL_FILE_ID_BASE: u64 = 10000000000000000;
-const NUM_FILES_PER_FLUSH: u64 = 100;
+pub const NUM_FILES_PER_FLUSH: u64 = 100;
 
 pub fn get_unique_file_id_for_flush(table_auto_incr_id: u64, file_idx: u64) -> u64 {
     ma::assert_lt!(file_idx, NUM_FILES_PER_FLUSH);
