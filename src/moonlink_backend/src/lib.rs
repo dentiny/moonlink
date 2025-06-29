@@ -1,6 +1,8 @@
+pub mod columnstore_table_id;
 mod error;
 mod logging;
 
+use columnstore_table_id::ColumnstoreTableId;
 pub use error::{Error, Result};
 pub use moonlink::ReadState;
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
@@ -45,12 +47,12 @@ pub fn recreate_directory(dir: &str) -> Result<()> {
     Ok(())
 }
 
-pub struct MoonlinkBackend<D, T: Eq + Hash> {
-    // TODO
-    _marker: std::marker::PhantomData<D>,
-
+pub struct MoonlinkBackend<
+    D: Eq + Hash + Clone + std::fmt::Display,
+    T: Eq + Hash + Clone + std::fmt::Display,
+> {
     // Could be either relative or absolute path.
-    replication_manager: RwLock<ReplicationManager<T>>,
+    replication_manager: RwLock<ReplicationManager<ColumnstoreTableId<D, T>>>,
 }
 
 /// Util function to get filesystem size for cache directory
@@ -82,7 +84,8 @@ fn create_default_object_storage_cache(
 impl<D, T> MoonlinkBackend<D, T>
 where
     D: Eq + Hash + Clone + std::fmt::Display,
-    T: Eq + Hash + Clone + std::fmt::Display {
+    T: Eq + Hash + Clone + std::fmt::Display,
+{
     pub fn new(base_path: String) -> Self {
         logging::init_logging();
 
@@ -93,7 +96,6 @@ where
         recreate_directory(cache_files_dir.to_str().unwrap()).unwrap();
 
         Self {
-            _marker: std::marker::PhantomData,
             replication_manager: RwLock::new(ReplicationManager::new(
                 base_path,
                 temp_files_dir.to_str().unwrap().to_string(),
@@ -103,31 +105,65 @@ where
     }
 
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
-    pub async fn create_snapshot(&self, _database_id: D, table_id: T, lsn: u64) -> Result<()> {
+    pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
-            let writer = manager.get_iceberg_table_event_manager(&table_id);
+            let columnstore_table_id = ColumnstoreTableId {
+                database_id,
+                table_id,
+            };
+            let writer = manager.get_iceberg_table_event_manager(&columnstore_table_id);
             writer.initiate_snapshot(lsn).await
         };
         rx.recv().await.unwrap()?;
         Ok(())
     }
 
-    pub async fn create_table(&self, _database_id: D, table_id: T, _dst_uri: String, src: String, src_uri: String) -> Result<()> {
+    /// # Arguments
+    ///
+    /// * src_uri: connection string for source database.
+    /// * dst_uri: connection string for
+    pub async fn create_table(
+        &self,
+        database_id: D,
+        table_id: T,
+        _dst_uri: String,
+        src_table_name: String,
+        src_uri: String,
+    ) -> Result<()> {
         let mut manager = self.replication_manager.write().await;
-        manager.add_table(&src_uri, table_id, &src).await?;
+        let columnstore_table_id = ColumnstoreTableId {
+            database_id,
+            table_id,
+        };
+        manager
+            .add_table(&src_uri, columnstore_table_id, &src_table_name)
+            .await?;
         Ok(())
     }
 
-    pub async fn drop_table(&self, _database_id: D, table_id: T) {
+    pub async fn drop_table(&self, database_id: D, table_id: T) {
         let mut manager = self.replication_manager.write().await;
-        manager.drop_table(table_id).await.unwrap();
+        let columnstore_table_id = ColumnstoreTableId {
+            database_id,
+            table_id,
+        };
+        manager.drop_table(columnstore_table_id).await.unwrap();
     }
 
-    pub async fn scan_table(&self, _database_id: D, table_id: T, lsn: Option<u64>) -> Result<Arc<ReadState>> {
+    pub async fn scan_table(
+        &self,
+        database_id: D,
+        table_id: T,
+        lsn: Option<u64>,
+    ) -> Result<Arc<ReadState>> {
         let read_state = {
             let manager = self.replication_manager.read().await;
-            let table_reader = manager.get_table_reader(&table_id);
+            let columnstore_table_id = ColumnstoreTableId {
+                database_id,
+                table_id,
+            };
+            let table_reader = manager.get_table_reader(&columnstore_table_id);
             table_reader.try_read(lsn).await?
         };
 
