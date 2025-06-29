@@ -174,8 +174,14 @@ impl TableHandler {
                 Some(event) = event_receiver.recv() => {
                     table_consistent_view_lsn = match event {
                         TableEvent::Commit { lsn, .. } => Some(lsn),
-                        // `ForceSnapshot` event doesn't affect whether mooncake is at a committed state.
-                        TableEvent::ForceSnapshot { .. } => table_consistent_view_lsn,
+                        // All events apart from replication events don't affect whether mooncake is at a committed state.
+                        TableEvent::ForceSnapshot { .. }
+                        | TableEvent::MooncakeTableSnapshot { .. }
+                        | TableEvent::IcebergSnapshot { .. }
+                        | TableEvent::IndexMerge { .. }
+                        | TableEvent::DataCompaction { .. }
+                        | TableEvent::ReadRequest { .. }
+                        | TableEvent::EvictedDataFilesToDelete { .. } => table_consistent_view_lsn,
                         _ => None,
                     };
                     table_updated = match event {
