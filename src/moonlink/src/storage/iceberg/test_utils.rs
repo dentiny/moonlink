@@ -137,11 +137,20 @@ pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {
 pub(crate) fn create_test_table_metadata(
     local_table_directory: String,
 ) -> Arc<MooncakeTableMetadata> {
+    let config = MooncakeTableConfig::new(local_table_directory.clone());
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
+/// Test util function to create mooncake table metadata with mooncake table config.
+pub(crate) fn create_test_table_metadata_with_config(
+    local_table_directory: String,
+    mooncake_table_config: MooncakeTableConfig,
+) -> Arc<MooncakeTableMetadata> {
     Arc::new(MooncakeTableMetadata {
         name: "test_table".to_string(),
         id: 0,
         schema: create_test_arrow_schema(),
-        config: MooncakeTableConfig::new(local_table_directory.clone()),
+        config: mooncake_table_config,
         path: std::path::PathBuf::from(local_table_directory),
         identity: RowIdentity::FullRow,
     })

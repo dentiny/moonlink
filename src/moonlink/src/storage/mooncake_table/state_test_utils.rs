@@ -631,7 +631,7 @@ pub(crate) async fn perform_data_compaction_for_test(
 /// ===================================
 ///
 /// Test util function to block wait and get iceberg / file indices merge payload.
-async fn sync_mooncake_snapshot(
+pub(crate) async fn sync_mooncake_snapshot(
     receiver: &mut Receiver<TableEvent>,
 ) -> (
     Option<IcebergSnapshotPayload>,
@@ -692,6 +692,7 @@ async fn sync_data_compaction(receiver: &mut Receiver<TableEvent>) -> DataCompac
 /// ===================================
 /// Composite util functions
 /// ===================================
+///
 // Test util function, which creates mooncake snapshot for testing.
 pub(crate) async fn create_mooncake_snapshot_for_test(
     table: &mut MooncakeTable,

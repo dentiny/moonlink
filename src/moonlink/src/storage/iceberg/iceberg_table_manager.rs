@@ -371,7 +371,7 @@ impl IcebergTableManager {
     /// ---------- store snapshot ----------
     ///
     /// Util function to get unique table file id for the deletion vector puffin file.
-    /// 
+    ///
     /// Notice: only deletion vector puffin generates new file ids.
     fn get_unique_table_id_for_deletion_vector_puffin(
         &self,
