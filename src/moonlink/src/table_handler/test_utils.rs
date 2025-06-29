@@ -66,6 +66,15 @@ pub struct TestEnvironment {
     pub(crate) object_storage_cache: ObjectStorageCache,
 }
 
+impl Drop for TestEnvironment {
+    fn drop(&mut self) {
+        // Dropping read state manager involves asynchronous operation, which depends on table handler.
+        // explicitly destruct read state manager first, and sleep for a while, to "make sure" async destruction finishes.
+        self.read_state_manager = None;
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+}
+
 impl TestEnvironment {
     /// Creates a default test environment with default settings.
     pub async fn default() -> Self {
@@ -175,14 +184,8 @@ impl TestEnvironment {
     // --- Util functions for iceberg drop table ---
 
     /// Request to drop iceberg table and block wait its completion.
-    pub async fn drop_table(mut self) -> Result<()> {
-        // Reset read state manager, which release all read states.
-        self.read_state_manager = None;
-
-        // Drop trait for read states performs async operations, sleep for a while to make sure it completes.
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-
-        self.table_event_manager.drop_table().await
+    pub async fn drop_table(&mut self) -> Result<()> {
+        self.iceberg_table_event_manager.drop_table().await
     }
 
     // --- Operation Helpers ---

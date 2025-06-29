@@ -433,7 +433,7 @@ async fn test_streaming_transaction_periodic_flush_then_abort() {
 async fn test_drop_empty_table() {
     let temp_dir = tempdir().unwrap();
     let mooncake_table_directory = temp_dir.path().to_str().unwrap().to_string();
-    let env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await; // No temp files created.
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await; // No temp files created.
     env.drop_table().await.unwrap();
 
     // As of now, the whole mooncake table directory should be deleted.
@@ -447,7 +447,7 @@ async fn test_drop_empty_table() {
 async fn test_drop_table_with_data() {
     let temp_dir = tempdir().unwrap();
     let mooncake_table_directory = temp_dir.path().to_str().unwrap().to_string();
-    let env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
 
     // Write a few records to trigger mooncake and iceberg snapshot.
     env.append_row(
@@ -1202,7 +1202,7 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     )
     .await
     .unwrap();
-    let env = TestEnvironment::new_with_mooncake_table(temp_dir, mooncake_table).await;
+    let mut env = TestEnvironment::new_with_mooncake_table(temp_dir, mooncake_table).await;
 
     // Drop table and block wait its completion, check whether error status is correctly propagated.
     let res = env.drop_table().await;

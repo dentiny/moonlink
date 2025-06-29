@@ -330,7 +330,8 @@ impl ReplicationConnection {
     /// Clean up iceberg table in a blocking manner.
     async fn drop_iceberg_table(&mut self, table_id: u32) -> Result<()> {
         info!(table_id, "dropping iceberg table");
-        let iceberg_state_manager = self.table_event_managers.remove(&table_id).unwrap();
+        let mut iceberg_state_manager =
+            self.iceberg_table_event_managers.remove(&table_id).unwrap();
         iceberg_state_manager.drop_table().await?;
         Ok(())
     }
