@@ -48,7 +48,7 @@ pub struct ReplicationConnection {
     postgres_client: Client,
     handle: Option<JoinHandle<Result<()>>>,
     table_readers: HashMap<TableId, ReadStateManager>,
-    iceberg_table_event_managers: HashMap<TableId, TableEventManager>,
+    table_event_managers: HashMap<TableId, TableEventManager>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: Option<mpsc::Receiver<Command>>,
     replication_state: Arc<ReplicationState>,
@@ -118,7 +118,7 @@ impl ReplicationConnection {
             postgres_client,
             handle: None,
             table_readers: HashMap::new(),
-            iceberg_table_event_managers: HashMap::new(),
+            table_event_managers: HashMap::new(),
             cmd_tx,
             cmd_rx: Some(cmd_rx),
             replication_state: ReplicationState::new(),
@@ -252,10 +252,8 @@ impl ReplicationConnection {
         self.table_readers.len()
     }
 
-    pub fn get_iceberg_table_event_manager(&mut self, table_id: TableId) -> &mut TableEventManager {
-        self.iceberg_table_event_managers
-            .get_mut(&table_id)
-            .unwrap()
+    pub fn get_table_event_manager(&mut self, table_id: TableId) -> &mut TableEventManager {
+        self.table_event_managers.get_mut(&table_id).unwrap()
     }
 
     async fn spawn_replication_task(
@@ -294,8 +292,8 @@ impl ReplicationConnection {
 
         self.table_readers
             .insert(table_id, resources.read_state_manager);
-        self.iceberg_table_event_managers
-            .insert(table_id, resources.iceberg_table_event_manager);
+        self.table_event_managers
+            .insert(table_id, resources.table_event_manager);
         if let Err(e) = self
             .cmd_tx
             .send(Command::AddTable {
@@ -332,7 +330,7 @@ impl ReplicationConnection {
     /// Clean up iceberg table in a blocking manner.
     async fn drop_iceberg_table(&mut self, table_id: u32) -> Result<()> {
         info!(table_id, "dropping iceberg table");
-        let iceberg_state_manager = self.iceberg_table_event_managers.remove(&table_id).unwrap();
+        let iceberg_state_manager = self.table_event_managers.remove(&table_id).unwrap();
         iceberg_state_manager.drop_table().await?;
         Ok(())
     }

@@ -519,10 +519,7 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     env.commit(/*lsn=*/ 1).await;
 
     // Attempt an iceberg snapshot, with requested LSN already committed.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 1)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 1).await;
     rx.recv().await.unwrap().unwrap();
 
     // Load from iceberg table manager to check snapshot status.
@@ -550,10 +547,7 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     // ---- Create snapshot after new records appended and old records deleted ----
     //
     // Attempt an iceberg snapshot, which is a future flush LSN, and contains both new records and deletion records.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 5)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 5).await;
     env.append_row(
         /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 20, /*xact_id=*/ None,
     )
@@ -611,10 +605,7 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     }
 
     // ---- Create snapshot only with old records deleted ----
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 7)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 7).await;
     env.delete_row(
         /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 20, /*lsn=*/ 6,
         /*xact_id=*/ None,
@@ -666,10 +657,7 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     }
 
     // Requested LSN is no later than current iceberg snapshot LSN.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 1)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 1).await;
     rx.recv().await.unwrap().unwrap();
 }
 
@@ -724,10 +712,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
     env.stream_commit(/*lsn=*/ 1, /*xact_id=*/ 0).await;
 
     // Attempt an iceberg snapshot, with requested LSN already committed.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 1)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 1).await;
     rx.recv().await.unwrap().unwrap();
 
     // Load from iceberg table manager to check snapshot status.
@@ -755,10 +740,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
     // ---- Create snapshot after new records appended and old records deleted ----
     //
     // Attempt an iceberg snapshot, which is a future flush LSN, and contains both new records and deletion records.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 5)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 5).await;
     env.append_row(
         /*id=*/ 2,
         /*name=*/ "Bob",
@@ -822,10 +804,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
     }
 
     // ---- Create snapshot only with old records deleted ----
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 7)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 7).await;
     env.delete_row(
         /*id=*/ 2,
         /*name=*/ "Bob",
@@ -880,10 +859,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
     }
 
     // Requested LSN is no later than current iceberg snapshot LSN.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 1)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 1).await;
     rx.recv().await.unwrap().unwrap();
 }
 
@@ -895,10 +871,7 @@ async fn test_empty_table_snapshot_creation() {
 
     let mut rx_vec = Vec::with_capacity(10);
     for _ in 1..=10 {
-        let rx = env
-            .iceberg_table_event_manager
-            .initiate_snapshot(/*lsn=*/ 0)
-            .await;
+        let rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 0).await;
         rx_vec.push(rx);
     }
     for mut cur_rx in rx_vec {
@@ -952,29 +925,13 @@ async fn test_multiple_snapshot_requests() {
     // Create multiple iceberg snapshot requests in advance.
     let mut rx_vec = Vec::new();
     // First flush and commit LSN.
-    rx_vec.push(
-        env.iceberg_table_event_manager
-            .initiate_snapshot(/*lsn=*/ 1)
-            .await,
-    );
+    rx_vec.push(env.table_event_manager.initiate_snapshot(/*lsn=*/ 1).await);
     // Second flush and commit LSN.
-    rx_vec.push(
-        env.iceberg_table_event_manager
-            .initiate_snapshot(/*lsn=*/ 2)
-            .await,
-    );
+    rx_vec.push(env.table_event_manager.initiate_snapshot(/*lsn=*/ 2).await);
     // The same requested LSN as previous.
-    rx_vec.push(
-        env.iceberg_table_event_manager
-            .initiate_snapshot(/*lsn=*/ 2)
-            .await,
-    );
+    rx_vec.push(env.table_event_manager.initiate_snapshot(/*lsn=*/ 2).await);
     // A LSN already satisfied.
-    rx_vec.push(
-        env.iceberg_table_event_manager
-            .initiate_snapshot(/*lsn=*/ 0)
-            .await,
-    );
+    rx_vec.push(env.table_event_manager.initiate_snapshot(/*lsn=*/ 0).await);
 
     // Append a new row to the mooncake table.
     env.append_row(
@@ -1031,7 +988,7 @@ async fn test_flush_lsn_ordering() {
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
 
     // Subscribe to flush_lsn updates
-    let mut flush_lsn_rx = env.iceberg_table_event_manager.subscribe_flush_lsn();
+    let mut flush_lsn_rx = env.table_event_manager.subscribe_flush_lsn();
 
     // Initial flush_lsn should be 0
     assert_eq!(*flush_lsn_rx.borrow(), 0);
@@ -1041,7 +998,7 @@ async fn test_flush_lsn_ordering() {
     env.commit(10).await;
 
     // Request iceberg snapshot at LSN 10
-    let mut rx = env.iceberg_table_event_manager.initiate_snapshot(10).await;
+    let mut rx = env.table_event_manager.initiate_snapshot(10).await;
     rx.recv().await.unwrap().unwrap();
 
     // Verify that flush_lsn was updated to 10
@@ -1053,7 +1010,7 @@ async fn test_flush_lsn_ordering() {
     env.commit(20).await;
 
     // Request iceberg snapshot at LSN 20
-    let mut rx = env.iceberg_table_event_manager.initiate_snapshot(20).await;
+    let mut rx = env.table_event_manager.initiate_snapshot(20).await;
     rx.recv().await.unwrap().unwrap();
 
     // Flush LSN should now be 20
@@ -1070,7 +1027,7 @@ async fn test_flush_lsn_out_of_order_lsn_operations() {
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
 
     // Subscribe to flush_lsn updates
-    let mut flush_lsn_rx = env.iceberg_table_event_manager.subscribe_flush_lsn();
+    let mut flush_lsn_rx = env.table_event_manager.subscribe_flush_lsn();
 
     // Commit operations out of chronological order but in LSN order
     env.append_row(1, "User1", 25, None).await;
@@ -1083,7 +1040,7 @@ async fn test_flush_lsn_out_of_order_lsn_operations() {
     env.commit(40).await;
 
     // Request snapshot at LSN 40 (should include all committed data)
-    let mut rx = env.iceberg_table_event_manager.initiate_snapshot(40).await;
+    let mut rx = env.table_event_manager.initiate_snapshot(40).await;
     rx.recv().await.unwrap().unwrap();
 
     // Verify flush_lsn reflects the snapshot LSN
@@ -1103,7 +1060,7 @@ async fn test_flush_lsn_consistency_across_snapshots() {
     let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
 
     // Subscribe to flush_lsn updates
-    let mut flush_lsn_rx = env.iceberg_table_event_manager.subscribe_flush_lsn();
+    let mut flush_lsn_rx = env.table_event_manager.subscribe_flush_lsn();
 
     // Create multiple snapshots and verify flush_lsn consistency
     let test_lsns = vec![10, 20, 30, 40, 50];
@@ -1115,7 +1072,7 @@ async fn test_flush_lsn_consistency_across_snapshots() {
         env.commit(lsn).await;
 
         // Create snapshot
-        let mut rx = env.iceberg_table_event_manager.initiate_snapshot(lsn).await;
+        let mut rx = env.table_event_manager.initiate_snapshot(lsn).await;
         rx.recv().await.unwrap().unwrap();
 
         // Verify flush_lsn matches expected LSN
@@ -1193,10 +1150,7 @@ async fn test_iceberg_snapshot_failure_mock_test() {
     env.commit(/*lsn=*/ 10).await;
 
     // Initiate snapshot and block wait its completion, check whether error status is correctly propagated.
-    let mut rx = env
-        .iceberg_table_event_manager
-        .initiate_snapshot(/*lsn=*/ 10)
-        .await;
+    let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 10).await;
     let res = rx.recv().await.unwrap();
     assert!(res.is_err());
 }

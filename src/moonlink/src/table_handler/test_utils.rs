@@ -58,10 +58,10 @@ pub fn get_iceberg_manager_config(table_name: String, warehouse_uri: String) -> 
 pub struct TestEnvironment {
     pub handler: TableHandler,
     event_sender: mpsc::Sender<TableEvent>,
-    read_state_manager: Arc<ReadStateManager>,
+    read_state_manager: Option<Arc<ReadStateManager>>,
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
-    pub(crate) iceberg_table_event_manager: TableEventManager,
+    pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
 }
@@ -82,11 +82,11 @@ impl TestEnvironment {
     ) -> Self {
         let (replication_tx, replication_rx) = watch::channel(0u64);
         let (last_commit_tx, last_commit_rx) = watch::channel(0u64);
-        let read_state_manager = Arc::new(ReadStateManager::new(
+        let read_state_manager = Some(Arc::new(ReadStateManager::new(
             &mooncake_table,
             replication_rx,
             last_commit_rx,
-        ));
+        )));
 
         let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
         let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
@@ -99,7 +99,7 @@ impl TestEnvironment {
             flush_lsn_rx,
         };
         let handler = TableHandler::new(mooncake_table, event_sync_sender).await;
-        let iceberg_table_event_manager =
+        let table_event_manager =
             TableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
         let event_sender = handler.get_event_sender();
 
@@ -111,7 +111,7 @@ impl TestEnvironment {
             read_state_manager,
             replication_tx,
             last_commit_tx,
-            iceberg_table_event_manager,
+            table_event_manager,
             temp_dir,
             object_storage_cache,
         }
@@ -175,8 +175,14 @@ impl TestEnvironment {
     // --- Util functions for iceberg drop table ---
 
     /// Request to drop iceberg table and block wait its completion.
-    pub async fn drop_table(self) -> Result<()> {
-        self.iceberg_table_event_manager.drop_table().await
+    pub async fn drop_table(mut self) -> Result<()> {
+        // Reset read state manager, which release all read states.
+        self.read_state_manager = None;
+
+        // Drop trait for read states performs async operations, sleep for a while to make sure it completes.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
+        self.table_event_manager.drop_table().await
     }
 
     // --- Operation Helpers ---
@@ -251,7 +257,12 @@ impl TestEnvironment {
     }
 
     pub async fn verify_snapshot(&self, target_lsn: u64, expected_ids: &[i32]) {
-        check_read_snapshot(&self.read_state_manager, target_lsn, expected_ids).await;
+        check_read_snapshot(
+            self.read_state_manager.as_ref().unwrap(),
+            target_lsn,
+            expected_ids,
+        )
+        .await;
     }
 
     // --- Lifecycle Helper ---

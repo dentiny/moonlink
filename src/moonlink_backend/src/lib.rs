@@ -135,7 +135,7 @@ impl<T: Eq + Hash + Clone + std::fmt::Display> MoonlinkBackend<T> {
     pub async fn create_iceberg_snapshot(&self, table_id: &T, lsn: u64) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
-            let writer = manager.get_iceberg_table_event_manager(table_id);
+            let writer = manager.get_table_event_manager(table_id);
             writer.initiate_snapshot(lsn).await
         };
         rx.recv().await.unwrap()?;

@@ -20,7 +20,7 @@ pub struct TableComponents {
 pub struct TableResources {
     pub event_sender: Sender<TableEvent>,
     pub read_state_manager: ReadStateManager,
-    pub iceberg_table_event_manager: TableEventManager,
+    pub table_event_manager: TableEventManager,
     pub commit_lsn_tx: watch::Sender<u64>,
     pub flush_lsn_rx: watch::Receiver<u64>,
 }
@@ -76,14 +76,14 @@ pub async fn build_table_components(
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();
     let handler = TableHandler::new(table, event_sync_sender).await;
     let flush_lsn_rx = event_sync_receiver.flush_lsn_rx.clone();
-    let iceberg_table_event_manager =
+    let table_event_manager =
         TableEventManager::new(handler.get_event_sender(), event_sync_receiver);
     let event_sender = handler.get_event_sender();
 
     Ok(TableResources {
         event_sender,
         read_state_manager,
-        iceberg_table_event_manager,
+        table_event_manager,
         commit_lsn_tx,
         flush_lsn_rx,
     })
