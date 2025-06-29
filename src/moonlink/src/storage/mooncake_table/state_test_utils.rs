@@ -22,7 +22,7 @@ use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
 };
 use crate::storage::{io_utils, PuffinBlobRef};
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
     ObjectStorageCacheConfig, ReadState, SnapshotReadOutput,
@@ -135,7 +135,7 @@ pub(super) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
 pub(super) async fn create_mooncake_table_and_notify_for_compaction(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
@@ -235,7 +235,7 @@ pub(super) fn create_object_storage_cache_with_one_file_size(
 pub(super) async fn drop_read_states(
     read_states: Vec<Arc<ReadState>>,
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) {
     for cur_read_state in read_states.into_iter() {
         drop(cur_read_state);
@@ -248,7 +248,7 @@ pub(super) async fn drop_read_states(
 pub(super) async fn drop_read_states_and_create_mooncake_snapshot(
     read_states: Vec<Arc<ReadState>>,
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) -> Vec<String> {
     drop_read_states(read_states, table, receiver).await;
     let (_, _, _, files_to_delete) = create_mooncake_snapshot_for_test(table, receiver).await;
@@ -259,7 +259,7 @@ pub(super) async fn drop_read_states_and_create_mooncake_snapshot(
 pub(super) async fn create_mooncake_table_and_notify_for_read(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
     let mooncake_table_metadata =
         create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
@@ -533,11 +533,11 @@ pub(super) async fn get_new_compacted_local_file_size_and_id(
 /// Test util function to block wait delete request, and check whether matches expected data files.
 #[cfg(test)]
 pub(crate) async fn sync_delete_evicted_files(
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
     mut expected_files_to_delete: Vec<String>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableNotify::EvictedDataFilesToDelete {
+    if let TableEvent::EvictedDataFilesToDelete {
         mut evicted_data_files,
     } = notification
     {
@@ -560,10 +560,10 @@ pub(super) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> 
 /// Precondition: there's ongoing read request.
 pub(super) async fn sync_read_request_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableNotify::ReadRequest { cache_handles } = notification {
+    if let TableEvent::ReadRequest { cache_handles } = notification {
         table.set_read_request_res(cache_handles);
     } else {
         panic!("Receive other notifications other than read request")
@@ -575,7 +575,7 @@ pub(super) async fn sync_read_request_for_test(
 /// Return evicted files to delete.
 pub(crate) async fn perform_index_merge_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
     index_merge_payload: FileIndiceMergePayload,
 ) -> Vec<String> {
     // Perform and block wait index merge.
@@ -603,7 +603,7 @@ pub(crate) async fn perform_index_merge_for_test(
 /// Return evicted files to delete.
 pub(crate) async fn perform_data_compaction_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
     data_compaction_payload: DataCompactionPayload,
 ) -> Vec<String> {
     // Perform and block wait data compaction.
@@ -632,7 +632,7 @@ pub(crate) async fn perform_data_compaction_for_test(
 ///
 /// Test util function to block wait and get iceberg / file indices merge payload.
 async fn sync_mooncake_snapshot(
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) -> (
     Option<IcebergSnapshotPayload>,
     Option<FileIndiceMergePayload>,
@@ -640,7 +640,7 @@ async fn sync_mooncake_snapshot(
     Vec<String>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableNotify::MooncakeTableSnapshot {
+    if let TableEvent::MooncakeTableSnapshot {
         iceberg_snapshot_payload,
         file_indice_merge_payload,
         data_compaction_payload,
@@ -658,9 +658,9 @@ async fn sync_mooncake_snapshot(
         panic!("Expected mooncake snapshot completion notification, but get others.");
     }
 }
-async fn sync_iceberg_snapshot(receiver: &mut Receiver<TableNotify>) -> IcebergSnapshotResult {
+async fn sync_iceberg_snapshot(receiver: &mut Receiver<TableEvent>) -> IcebergSnapshotResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableNotify::IcebergSnapshot {
+    if let TableEvent::IcebergSnapshot {
         iceberg_snapshot_result,
     } = notification
     {
@@ -669,17 +669,17 @@ async fn sync_iceberg_snapshot(receiver: &mut Receiver<TableNotify>) -> IcebergS
         panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
     }
 }
-async fn sync_index_merge(receiver: &mut Receiver<TableNotify>) -> FileIndiceMergeResult {
+async fn sync_index_merge(receiver: &mut Receiver<TableEvent>) -> FileIndiceMergeResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableNotify::IndexMerge { index_merge_result } = notification {
+    if let TableEvent::IndexMerge { index_merge_result } = notification {
         index_merge_result
     } else {
         panic!("Expected index merge completion notification, but get another one.");
     }
 }
-async fn sync_data_compaction(receiver: &mut Receiver<TableNotify>) -> DataCompactionResult {
+async fn sync_data_compaction(receiver: &mut Receiver<TableEvent>) -> DataCompactionResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableNotify::DataCompaction {
+    if let TableEvent::DataCompaction {
         data_compaction_result,
     } = notification
     {
@@ -695,7 +695,7 @@ async fn sync_data_compaction(receiver: &mut Receiver<TableNotify>) -> DataCompa
 // Test util function, which creates mooncake snapshot for testing.
 pub(crate) async fn create_mooncake_snapshot_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) -> (
     Option<IcebergSnapshotPayload>,
     Option<FileIndiceMergePayload>,
@@ -715,7 +715,7 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
 // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
 pub(crate) async fn create_mooncake_and_persist_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) {
     // Create mooncake snapshot and block wait completion.
     let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
@@ -737,7 +737,7 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
 // Test util to block wait current mooncake snapshot completion, get the iceberg persistence payload, and perform a new mooncake snapshot and wait completion.
 async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) {
     let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
         sync_mooncake_snapshot(receiver).await;
@@ -770,7 +770,7 @@ async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
 #[cfg(test)]
 pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
     injected_committed_deletion_rows: Vec<(MoonlinkRow, u64 /*lsn*/)>,
     injected_uncommitted_deletion_rows: Vec<(MoonlinkRow, u64 /*lsn*/)>,
 ) {
@@ -837,7 +837,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
 // (1) updates mooncake table snapshot, (2) create iceberg snapshot, (3) trigger index merge, (4) perform index merge, (5) another mooncake and iceberg snapshot.
 pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableNotify>,
+    receiver: &mut Receiver<TableEvent>,
 ) {
     // Create mooncake snapshot.
     let force_snapshot_option = SnapshotOption {

@@ -31,7 +31,7 @@ use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::{create_data_file, NonEvictableHandle};
 use more_asserts as ma;
 use parquet::arrow::AsyncArrowWriter;
@@ -75,7 +75,7 @@ pub(crate) struct SnapshotTableState {
     pub(super) object_storage_cache: ObjectStorageCache,
 
     /// Table notifier.
-    table_notify: Option<Sender<TableNotify>>,
+    table_notify: Option<Sender<TableEvent>>,
 
     /// ---- Items not persisted to iceberg snapshot ----
     ///
@@ -141,7 +141,7 @@ impl SnapshotTableState {
 
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
-    pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+    pub(crate) fn register_table_notify(&mut self, table_notify: Sender<TableEvent>) {
         assert!(self.table_notify.is_none());
         self.table_notify = Some(table_notify);
     }

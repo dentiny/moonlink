@@ -1,8 +1,11 @@
 use crate::row::MoonlinkRow;
-use crate::storage::mooncake_table::SnapshotOption;
+use crate::storage::mooncake_table::{
+    DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload, FileIndiceMergeResult,
+    IcebergSnapshotPayload, IcebergSnapshotResult, SnapshotOption,
+};
 use crate::storage::{io_utils, MooncakeTable};
-use crate::table_notify::TableNotify;
-use crate::{Error, Result};
+use crate::table_notify::TableEvent;
+use crate::{Error, NonEvictableHandle, Result};
 use more_asserts as ma;
 use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
@@ -11,36 +14,6 @@ use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
 use tracing::Instrument;
 use tracing::{error, info, info_span};
-
-/// Event types that can be processed by the TableHandler
-#[derive(Debug)]
-pub enum TableEvent {
-    /// Append a row to the table
-    Append {
-        row: MoonlinkRow,
-        xact_id: Option<u32>,
-    },
-    /// Delete a row from the table
-    Delete {
-        row: MoonlinkRow,
-        lsn: u64,
-        xact_id: Option<u32>,
-    },
-    /// Commit all pending operations with a given LSN and xact_id
-    Commit { lsn: u64, xact_id: Option<u32> },
-    /// Abort current stream with given xact_id
-    StreamAbort { xact_id: u32 },
-    /// Flush the table to disk
-    Flush { lsn: u64 },
-    /// Flush the transaction stream with given xact_id
-    StreamFlush { xact_id: u32 },
-    /// Shutdown the handler
-    Shutdown,
-    /// Force a mooncake and iceberg snapshot.
-    ForceSnapshot { lsn: u64, tx: Sender<Result<()>> },
-    /// Drop table.
-    DropTable,
-}
 
 /// Handler for table operations
 pub struct TableHandler {
@@ -69,19 +42,12 @@ impl TableHandler {
         let (event_sender, event_receiver) = mpsc::channel(100);
 
         // Create channel for internal control events.
-        let (table_notify_tx, table_notify_rx) = mpsc::channel(100);
-        table.register_table_notify(table_notify_tx).await;
+        table.register_table_notify(event_sender.clone()).await;
 
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(
             async move {
-                Self::event_loop(
-                    iceberg_event_sync_sender,
-                    event_receiver,
-                    table_notify_rx,
-                    table,
-                )
-                .await;
+                Self::event_loop(iceberg_event_sync_sender, event_receiver, table).await;
             }
             .instrument(info_span!("table_event_loop")),
         ));
@@ -103,7 +69,6 @@ impl TableHandler {
     async fn event_loop(
         iceberg_event_sync_sender: IcebergEventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
-        mut table_notify_rx: Receiver<TableNotify>,
         mut table: MooncakeTable,
     ) {
         let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
@@ -227,6 +192,10 @@ impl TableHandler {
                     };
 
                     match event {
+                        // ==============================
+                        // Replication events
+                        // ==============================
+                        //
                         TableEvent::Append { row, xact_id } => {
                             let result = match xact_id {
                                 Some(xact_id) => {
@@ -307,6 +276,10 @@ impl TableHandler {
                             info!("shutting down table handler");
                             break;
                         }
+                        // ==============================
+                        // Interactive blocking events
+                        // ==============================
+                        //
                         TableEvent::ForceSnapshot { lsn, tx } => {
                             // A workaround to avoid create snapshot call gets stuck, when there's no write operations to the table.
                             if !table_updated {
@@ -336,12 +309,11 @@ impl TableHandler {
                             // Otherwise, leave a drop marker to clean up states later.
                             drop_table_requested = true;
                         }
-                    }
-                }
-                // Wait for the mooncake table event notification.
-                Some(event) = table_notify_rx.recv() => {
-                    match event {
-                        TableNotify::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
+                        // ==============================
+                        // Table internal events
+                        // ==============================
+                        //
+                        TableEvent::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
                             // Spawn a detached best-effort task to delete evicted object storage cache.
                             start_task_to_delete_evicted(evicted_data_files_to_delete);
 
@@ -384,7 +356,7 @@ impl TableHandler {
 
                             mooncake_snapshot_ongoing = false;
                         }
-                        TableNotify::IcebergSnapshot { iceberg_snapshot_result } => {
+                        TableEvent::IcebergSnapshot { iceberg_snapshot_result } => {
                             iceberg_snapshot_ongoing = false;
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
@@ -420,11 +392,11 @@ impl TableHandler {
                                 return;
                             }
                         }
-                        TableNotify::IndexMerge { index_merge_result } => {
+                        TableEvent::IndexMerge { index_merge_result } => {
                             table.set_file_indices_merge_res(index_merge_result);
                             maintainance_ongoing = false;
                         }
-                        TableNotify::DataCompaction { data_compaction_result } => {
+                        TableEvent::DataCompaction { data_compaction_result } => {
                             match data_compaction_result {
                                 Ok(data_compaction_res) => {
                                     table.set_data_compaction_res(data_compaction_res)
@@ -435,10 +407,10 @@ impl TableHandler {
                             }
                             maintainance_ongoing = false;
                         }
-                        TableNotify::ReadRequest { cache_handles } => {
+                        TableEvent::ReadRequest { cache_handles } => {
                             table.set_read_request_res(cache_handles);
                         }
-                        TableNotify::EvictedDataFilesToDelete { evicted_data_files } => {
+                        TableEvent::EvictedDataFilesToDelete { evicted_data_files } => {
                             start_task_to_delete_evicted(evicted_data_files);
                         }
                     }

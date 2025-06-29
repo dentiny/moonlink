@@ -71,7 +71,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::cache::object_storage::test_utils::*;
 use crate::storage::mooncake_table::state_test_utils::*;
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::{MooncakeTable, ObjectStorageCache};
 
 /// ========================
@@ -84,7 +84,7 @@ async fn prepare_test_disk_file_for_read(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
     use_batch_write: bool,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
 
@@ -1636,7 +1636,7 @@ async fn test_2_read_over_1_with_local_optimization(#[case] use_batch_write: boo
 async fn prepare_test_disk_files_for_compaction(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_compaction(temp_dir, cache).await;
 

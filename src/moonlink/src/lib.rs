@@ -14,7 +14,8 @@ pub use storage::{
     MooncakeTable, MooncakeTableConfig, TableManager,
 };
 pub use storage::{MoonlinkTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
-pub use table_handler::{IcebergEventSyncSender, TableEvent, TableHandler};
+pub use table_handler::{IcebergEventSyncSender, TableHandler};
+pub use table_notify::TableEvent;
 pub use union_read::{ReadState, ReadStateManager};
 
 #[cfg(any(test, feature = "test-utils"))]

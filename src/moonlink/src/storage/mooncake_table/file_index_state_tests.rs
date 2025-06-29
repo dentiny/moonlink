@@ -49,7 +49,7 @@ use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::{state_test_utils::*, IcebergPersistenceConfig};
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableConfig, IcebergTableManager, MooncakeTable, ObjectStorageCache,
     ObjectStorageCacheConfig, TableManager,
@@ -58,7 +58,7 @@ use crate::{
 async fn prepare_test_disk_file(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_read(temp_dir, object_storage_cache).await;
 
@@ -169,7 +169,7 @@ async fn test_1_recover_3() {
 pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
@@ -221,7 +221,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
 async fn prepare_test_disk_files_for_index_merge(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_index_merge(temp_dir, object_storage_cache).await;
 

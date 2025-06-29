@@ -37,7 +37,7 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::{FileId, TableId};
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
@@ -431,7 +431,7 @@ pub struct MooncakeTable {
     last_iceberg_snapshot_lsn: Option<u64>,
 
     /// Table notifier, which is used to sent multiple types of event completion information.
-    table_notify: Option<Sender<TableNotify>>,
+    table_notify: Option<Sender<TableEvent>>,
 }
 
 impl MooncakeTable {
@@ -501,7 +501,7 @@ impl MooncakeTable {
 
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
-    pub(crate) async fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+    pub(crate) async fn register_table_notify(&mut self, table_notify: Sender<TableEvent>) {
         assert!(self.table_notify.is_none());
         self.table_notify = Some(table_notify.clone());
         self.snapshot
@@ -803,7 +803,7 @@ impl MooncakeTable {
                 new_file_indices: vec![merged],
             };
             table_notify_tx_copy
-                .send(TableNotify::IndexMerge { index_merge_result })
+                .send(TableEvent::IndexMerge { index_merge_result })
                 .await
                 .unwrap();
         });
@@ -831,7 +831,7 @@ impl MooncakeTable {
                 let builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
                 let data_compaction_result = builder.build().await;
                 table_notify_tx_copy
-                    .send(TableNotify::DataCompaction {
+                    .send(TableEvent::DataCompaction {
                         data_compaction_result,
                     })
                     .await
@@ -849,7 +849,7 @@ impl MooncakeTable {
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
-        table_notify: Sender<TableNotify>,
+        table_notify: Sender<TableEvent>,
         table_auto_incr_id: u32,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
@@ -891,7 +891,7 @@ impl MooncakeTable {
         // Notify on event error.
         if iceberg_persistence_res.is_err() {
             table_notify
-                .send(TableNotify::IcebergSnapshot {
+                .send(TableEvent::IcebergSnapshot {
                     iceberg_snapshot_result: Err(iceberg_persistence_res.unwrap_err().into()),
                 })
                 .await
@@ -952,7 +952,7 @@ impl MooncakeTable {
             },
         };
         table_notify
-            .send(TableNotify::IcebergSnapshot {
+            .send(TableEvent::IcebergSnapshot {
                 iceberg_snapshot_result: Ok(snapshot_result),
             })
             .await
@@ -997,7 +997,7 @@ impl MooncakeTable {
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
         opt: SnapshotOption,
-        table_notify: Sender<TableNotify>,
+        table_notify: Sender<TableEvent>,
     ) {
         let snapshot_result = snapshot
             .write()
@@ -1005,7 +1005,7 @@ impl MooncakeTable {
             .update_snapshot(next_snapshot_task, opt)
             .await;
         table_notify
-            .send(TableNotify::MooncakeTableSnapshot {
+            .send(TableEvent::MooncakeTableSnapshot {
                 lsn: snapshot_result.commit_lsn,
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,

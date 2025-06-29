@@ -16,7 +16,7 @@ use crate::storage::mooncake_table::{
     DiskFileEntry, MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::MooncakeTable;
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::ObjectStorageCache;
 use crate::Result;
 
@@ -168,7 +168,7 @@ pub(crate) async fn load_arrow_batch(
 /// Iceberg snapshot will be created whenever `create_snapshot` is called.
 pub(crate) async fn create_table_and_iceberg_manager(
     temp_dir: &TempDir,
-) -> (MooncakeTable, IcebergTableManager, Receiver<TableNotify>) {
+) -> (MooncakeTable, IcebergTableManager, Receiver<TableEvent>) {
     let default_data_compaction_config = DataCompactionConfig::default();
     create_table_and_iceberg_manager_with_data_compaction_config(
         temp_dir,
@@ -181,7 +181,7 @@ pub(crate) async fn create_table_and_iceberg_manager(
 pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config(
     temp_dir: &TempDir,
     data_compaction_config: DataCompactionConfig,
-) -> (MooncakeTable, IcebergTableManager, Receiver<TableNotify>) {
+) -> (MooncakeTable, IcebergTableManager, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
     let object_storage_cache = ObjectStorageCache::default_for_test(temp_dir);
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
@@ -234,7 +234,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
 
 /// Test util function to block wait a mooncake snapshot and get its result.
 pub(crate) async fn get_mooncake_snapshot_result(
-    notify_rx: &mut Receiver<TableNotify>,
+    notify_rx: &mut Receiver<TableEvent>,
 ) -> (
     u64,
     Option<IcebergSnapshotPayload>,
@@ -244,7 +244,7 @@ pub(crate) async fn get_mooncake_snapshot_result(
 ) {
     let notification = notify_rx.recv().await.unwrap();
     match notification {
-        TableNotify::MooncakeTableSnapshot {
+        TableEvent::MooncakeTableSnapshot {
             lsn,
             iceberg_snapshot_payload,
             file_indice_merge_payload,
@@ -266,7 +266,7 @@ pub(crate) async fn get_mooncake_snapshot_result(
 /// Test util function to perform a mooncake snapshot, block wait its completion and get its result.
 pub(crate) async fn create_mooncake_snapshot(
     table: &mut MooncakeTable,
-    notify_rx: &mut Receiver<TableNotify>,
+    notify_rx: &mut Receiver<TableEvent>,
 ) -> (
     u64,
     Option<IcebergSnapshotPayload>,
@@ -282,12 +282,12 @@ pub(crate) async fn create_mooncake_snapshot(
 pub(crate) async fn create_iceberg_snapshot(
     table: &mut MooncakeTable,
     iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
-    notify_rx: &mut Receiver<TableNotify>,
+    notify_rx: &mut Receiver<TableEvent>,
 ) -> Result<IcebergSnapshotResult> {
     table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
     let notification = notify_rx.recv().await.unwrap();
     match notification {
-        TableNotify::IcebergSnapshot {
+        TableEvent::IcebergSnapshot {
             iceberg_snapshot_result,
         } => iceberg_snapshot_result,
         _ => {

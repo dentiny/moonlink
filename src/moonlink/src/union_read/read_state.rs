@@ -5,7 +5,7 @@
 
 use super::table_metadata::TableMetadata;
 use crate::storage::PuffinDeletionBlobAtRead;
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 
 use bincode::config;
@@ -24,7 +24,7 @@ pub struct ReadState {
     /// Cache handles for data files.
     cache_handles: Vec<NonEvictableHandle>,
     // Invariant: [`table_notify`] cannot be `None` if there're involved data files.
-    table_notify: Option<tokio::sync::mpsc::Sender<TableNotify>>,
+    table_notify: Option<tokio::sync::mpsc::Sender<TableEvent>>,
 }
 
 impl Drop for ReadState {
@@ -36,7 +36,7 @@ impl Drop for ReadState {
         if let Some(table_notify) = self.table_notify.clone() {
             tokio::spawn(async move {
                 table_notify
-                    .send(TableNotify::ReadRequest { cache_handles })
+                    .send(TableEvent::ReadRequest { cache_handles })
                     .await
                     .unwrap();
             });
@@ -73,7 +73,7 @@ impl ReadState {
         // Fields used for read state cleanup after query completion.
         associated_files: Vec<String>,
         mut cache_handles: Vec<NonEvictableHandle>, // Cache handles for data files.
-        table_notify: Option<tokio::sync::mpsc::Sender<TableNotify>>,
+        table_notify: Option<tokio::sync::mpsc::Sender<TableEvent>>,
     ) -> Self {
         // Check invariants.
         if table_notify.is_none() {

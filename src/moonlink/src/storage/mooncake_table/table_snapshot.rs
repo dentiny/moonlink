@@ -145,6 +145,18 @@ pub struct IcebergSnapshotResult {
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
 }
 
+impl std::fmt::Debug for IcebergSnapshotResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotResult")
+            .field("flush_lsn", &self.flush_lsn)
+            .field("import_result", &self.import_result)
+            .field("index_merge_result", &self.index_merge_result)
+            .field("data_compaction_result", &self.data_compaction_result)
+            .field("table_manager", &"<ignored>")
+            .finish()
+    }
+}
+
 ////////////////////////////
 /// Index merge
 ////////////////////////////
