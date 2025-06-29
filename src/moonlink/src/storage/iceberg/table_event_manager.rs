@@ -6,7 +6,7 @@ use crate::TableEvent;
 
 /// Contains a few receivers, which get notified after certain iceberg events completion.
 pub struct EventSyncReceiver {
-    /// Get notified when iceberg drop table completes.
+    /// Get notified when drop table completes.
     pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
@@ -16,7 +16,7 @@ pub struct EventSyncReceiver {
 pub struct TableEventManager {
     /// Used to initiate a mooncake and iceberg snapshot operation.
     table_event_tx: mpsc::Sender<TableEvent>,
-    /// Used to synchronize on the completion of an iceberg drop table.
+    /// Used to synchronize on the completion of a drop table operation.
     drop_table_completion_rx: Option<oneshot::Receiver<Result<()>>>,
     /// Channel to observe latest flush LSN reported by iceberg.
     flush_lsn_rx: watch::Receiver<u64>,
@@ -25,12 +25,12 @@ pub struct TableEventManager {
 impl TableEventManager {
     pub fn new(
         table_event_tx: mpsc::Sender<TableEvent>,
-        iceberg_event_sync_rx: EventSyncReceiver,
+        table_event_sync_rx: EventSyncReceiver,
     ) -> Self {
         Self {
             table_event_tx,
-            drop_table_completion_rx: Some(iceberg_event_sync_rx.drop_table_completion_rx),
-            flush_lsn_rx: iceberg_event_sync_rx.flush_lsn_rx,
+            drop_table_completion_rx: Some(table_event_sync_rx.drop_table_completion_rx),
+            flush_lsn_rx: table_event_sync_rx.flush_lsn_rx,
         }
     }
 
@@ -49,7 +49,7 @@ impl TableEventManager {
         rx
     }
 
-    /// Drop an iceberg table.
+    /// Drop a mooncake table.
     /// Each table event manager correspond to one mooncake table, so this function should be called at most once.
     pub async fn drop_table(&mut self) -> Result<()> {
         self.table_event_tx

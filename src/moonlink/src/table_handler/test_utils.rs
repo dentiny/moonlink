@@ -103,13 +103,13 @@ impl TestEnvironment {
             drop_table_completion_tx,
             flush_lsn_tx,
         };
-        let iceberg_event_sync_receiver = EventSyncReceiver {
+        let table_event_sync_receiver = EventSyncReceiver {
             drop_table_completion_rx,
             flush_lsn_rx,
         };
         let handler = TableHandler::new(mooncake_table, event_sync_sender).await;
         let table_event_manager =
-            TableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
+            TableEventManager::new(handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = handler.get_event_sender();
 
         let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);

@@ -933,8 +933,6 @@ async fn test_multiple_snapshot_requests() {
     // A LSN already satisfied.
     rx_vec.push(env.table_event_manager.initiate_snapshot(/*lsn=*/ 0).await);
 
-    println!("==== 1 =====");
-
     // Append a new row to the mooncake table.
     env.append_row(
         /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*xact_id=*/ None,
@@ -949,12 +947,8 @@ async fn test_multiple_snapshot_requests() {
     .await;
     env.commit(/*lsn=*/ 2).await;
 
-    println!("==== 2 =====");
-
     for mut rx in rx_vec.into_iter() {
         rx.recv().await.unwrap().unwrap();
-
-        println!("receive one sync!!");
     }
 
     // Check iceberg snapshot content.
