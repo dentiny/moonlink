@@ -45,6 +45,7 @@ parquet = { version = "55", default-features = false, features = [
   "arrow_canonical_extension_types",
 ] }
 postgres-replication = { git = "https://github.com/Mooncake-labs/rust-postgres.git", rev = "e6bd7d5cacc4eb7a03930b5ca3db1ef9caf0a3d5" }
+postgres-types = { git = "https://github.com/Mooncake-Labs/rust-postgres.git", rev = "e6bd7d5cacc4eb7a03930b5ca3db1ef9caf0a3d5", features = ["with-serde_json-1"] }
 rand = "0.9"
 roaring = "0.10"
 serde = { version = "1.0", default-features = false, features = ["derive"] }
