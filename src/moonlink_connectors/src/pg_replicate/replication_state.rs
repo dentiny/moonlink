@@ -6,7 +6,7 @@ use std::sync::{
 use tokio::sync::watch;
 use tokio_postgres::types::PgLsn;
 
-use super::table::RowStoreTableId;
+use super::table::RowstoreTableId;
 
 /// Tracks replication progress and notifies listeners when the replicated
 /// LSN advances.

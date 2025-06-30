@@ -16,7 +16,7 @@ use tokio_postgres::types::PgLsn;
 use tokio_postgres::{tls::NoTlsStream, Connection, Socket};
 
 use crate::pg_replicate::replication_state::ReplicationState;
-use crate::pg_replicate::table::{RowStoreTableId, TableSchema};
+use crate::pg_replicate::table::{RowstoreTableId, TableSchema};
 use futures::StreamExt;
 use moonlink::TableEvent;
 use std::collections::HashMap;
@@ -29,14 +29,14 @@ use tracing::{debug, error, info, info_span, warn};
 
 pub enum Command {
     AddTable {
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
         schema: TableSchema,
         event_sender: mpsc::Sender<TableEvent>,
         commit_lsn_tx: watch::Sender<u64>,
         flush_lsn_rx: watch::Receiver<u64>,
     },
     DropTable {
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
     },
     Shutdown,
 }
@@ -47,8 +47,8 @@ pub struct ReplicationConnection {
     table_temp_files_directory: String,
     postgres_client: Client,
     handle: Option<JoinHandle<Result<()>>>,
-    table_readers: HashMap<RowStoreTableId, ReadStateManager>,
-    table_event_managers: HashMap<RowStoreTableId, TableEventManager>,
+    table_readers: HashMap<RowstoreTableId, ReadStateManager>,
+    table_event_managers: HashMap<RowstoreTableId, TableEventManager>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: Option<mpsc::Receiver<Command>>,
     replication_state: Arc<ReplicationState>,
@@ -244,7 +244,7 @@ impl ReplicationConnection {
         Ok(())
     }
 
-    pub fn get_table_reader(&self, rowstore_table_id: RowStoreTableId) -> &ReadStateManager {
+    pub fn get_table_reader(&self, rowstore_table_id: RowstoreTableId) -> &ReadStateManager {
         self.table_readers.get(&rowstore_table_id).unwrap()
     }
 
@@ -254,7 +254,7 @@ impl ReplicationConnection {
 
     pub fn get_table_event_manager(
         &mut self,
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
     ) -> &mut TableEventManager {
         self.table_event_managers
             .get_mut(&rowstore_table_id)
@@ -320,7 +320,7 @@ impl ReplicationConnection {
 
     async fn remove_table_from_replication(
         &mut self,
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
     ) -> Result<()> {
         debug!(rowstore_table_id, "removing table from replication");
         self.table_readers.remove_entry(&rowstore_table_id).unwrap();
@@ -369,7 +369,7 @@ impl ReplicationConnection {
         &mut self,
         table_name: &str,
         external_table_id: &T,
-    ) -> Result<(RowStoreTableId, MoonlinkTableConfig)> {
+    ) -> Result<(RowstoreTableId, MoonlinkTableConfig)> {
         info!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
         self.alter_table_replica_identity(table_name).await?;
@@ -471,7 +471,7 @@ async fn run_event_loop(
     debug!("replication event loop started");
 
     let mut status_interval = tokio::time::interval(Duration::from_secs(10));
-    let mut flush_lsn_rxs: HashMap<RowStoreTableId, watch::Receiver<u64>> = HashMap::new();
+    let mut flush_lsn_rxs: HashMap<RowstoreTableId, watch::Receiver<u64>> = HashMap::new();
 
     loop {
         tokio::select! {

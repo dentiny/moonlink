@@ -1,4 +1,4 @@
-use crate::pg_replicate::table::RowStoreTableId;
+use crate::pg_replicate::table::RowstoreTableId;
 use crate::Result;
 use crate::{PostgresSourceError, ReplicationConnection};
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
@@ -17,7 +17,7 @@ pub struct ReplicationManager<T: Clone + Eq + Hash + std::fmt::Display> {
     /// Maps from uri to replication connection.
     connections: HashMap<String, ReplicationConnection>,
     /// Maps from table id (string format) to (uri, row store table id).
-    table_info: HashMap<T, (String, RowStoreTableId)>,
+    table_info: HashMap<T, (String, RowstoreTableId)>,
     /// Base directory for mooncake tables.
     table_base_path: String,
     /// Base directory for temporary files used in union read.

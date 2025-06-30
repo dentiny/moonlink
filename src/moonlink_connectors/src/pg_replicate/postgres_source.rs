@@ -18,7 +18,7 @@ use crate::pg_replicate::{
         cdc_event::{CdcEvent, CdcEventConversionError, CdcEventConverter},
         table_row::{TableRow, TableRowConversionError, TableRowConverter},
     },
-    table::{ColumnSchema, RowStoreTableId, TableName, TableSchema},
+    table::{ColumnSchema, RowstoreTableId, TableName, TableSchema},
 };
 
 pub enum TableNamesFrom {
@@ -49,7 +49,7 @@ pub enum PostgresSourceError {
 
 pub struct PostgresSource {
     replication_client: ReplicationClient,
-    table_schemas: HashMap<RowStoreTableId, TableSchema>,
+    table_schemas: HashMap<RowstoreTableId, TableSchema>,
     slot_name: Option<String>,
     publication: Option<String>,
     confirmed_flush_lsn: PgLsn,
@@ -62,7 +62,7 @@ pub struct CdcStreamConfig {
     pub publication: String,
     pub slot_name: String,
     pub confirmed_flush_lsn: PgLsn,
-    pub table_schemas: HashMap<RowStoreTableId, TableSchema>,
+    pub table_schemas: HashMap<RowstoreTableId, TableSchema>,
 }
 
 impl PostgresSource {
@@ -134,7 +134,7 @@ impl PostgresSource {
         })
     }
 
-    pub async fn get_table_schemas(&self) -> HashMap<RowStoreTableId, TableSchema> {
+    pub async fn get_table_schemas(&self) -> HashMap<RowstoreTableId, TableSchema> {
         self.table_schemas.clone()
     }
 
@@ -306,7 +306,7 @@ pin_project! {
     pub struct CdcStream {
         #[pin]
         stream: LogicalReplicationStream,
-        table_schemas: HashMap<RowStoreTableId, TableSchema>,
+        table_schemas: HashMap<RowstoreTableId, TableSchema>,
         postgres_epoch: SystemTime,
     }
 }
@@ -340,7 +340,7 @@ impl CdcStream {
         this.table_schemas.insert(schema.rowstore_table_id, schema);
     }
 
-    pub fn remove_table_schema(self: Pin<&mut Self>, rowstore_table_id: RowStoreTableId) {
+    pub fn remove_table_schema(self: Pin<&mut Self>, rowstore_table_id: RowstoreTableId) {
         let this = self.project();
         this.table_schemas.remove(&rowstore_table_id);
     }

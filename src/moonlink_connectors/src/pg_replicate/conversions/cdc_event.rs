@@ -8,7 +8,7 @@ use postgres_replication::protocol::{
 };
 use thiserror::Error;
 
-use crate::pg_replicate::table::{ColumnSchema, RowStoreTableId, TableSchema};
+use crate::pg_replicate::table::{ColumnSchema, RowstoreTableId, TableSchema};
 
 use super::{
     table_row::TableRow,
@@ -34,7 +34,7 @@ pub enum CdcEventConversionError {
     MissingTupleInDeleteBody,
 
     #[error("schema missing for table id {0}")]
-    MissingSchema(RowStoreTableId),
+    MissingSchema(RowstoreTableId),
 
     #[error("from bytes error: {0}")]
     FromBytes(#[from] FromTextError),
@@ -68,7 +68,7 @@ impl CdcEventConverter {
     }
 
     fn try_from_insert_body(
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
         column_schemas: &[ColumnSchema],
         insert_body: InsertBody,
     ) -> Result<CdcEvent, CdcEventConversionError> {
@@ -84,7 +84,7 @@ impl CdcEventConverter {
 
     // TODO: handle when identity columns are changed
     fn try_from_update_body(
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
         column_schemas: &[ColumnSchema],
         update_body: UpdateBody,
     ) -> Result<CdcEvent, CdcEventConversionError> {
@@ -104,7 +104,7 @@ impl CdcEventConverter {
     }
 
     fn try_from_delete_body(
-        rowstore_table_id: RowStoreTableId,
+        rowstore_table_id: RowstoreTableId,
         column_schemas: &[ColumnSchema],
         delete_body: DeleteBody,
     ) -> Result<CdcEvent, CdcEventConversionError> {
@@ -124,7 +124,7 @@ impl CdcEventConverter {
 
     pub fn try_from(
         value: ReplicationMessage<LogicalReplicationMessage>,
-        table_schemas: &HashMap<RowStoreTableId, TableSchema>,
+        table_schemas: &HashMap<RowstoreTableId, TableSchema>,
     ) -> Result<CdcEvent, CdcEventConversionError> {
         match value {
             ReplicationMessage::XLogData(xlog_data) => match xlog_data.into_data() {
@@ -202,9 +202,9 @@ impl CdcEventConverter {
 pub enum CdcEvent {
     Begin(BeginBody),
     Commit(CommitBody),
-    Insert((RowStoreTableId, TableRow, Option<u32>)),
-    Update((RowStoreTableId, Option<TableRow>, TableRow, Option<u32>)),
-    Delete((RowStoreTableId, TableRow, Option<u32>)),
+    Insert((RowstoreTableId, TableRow, Option<u32>)),
+    Update((RowstoreTableId, Option<TableRow>, TableRow, Option<u32>)),
+    Delete((RowstoreTableId, TableRow, Option<u32>)),
     Relation(RelationBody),
     Type(TypeBody),
     PrimaryKeepAlive(PrimaryKeepAliveBody),
