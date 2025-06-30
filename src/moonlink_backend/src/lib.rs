@@ -112,7 +112,7 @@ where
                 database_id,
                 table_id,
             };
-            let writer = manager.get_iceberg_table_event_manager(&columnstore_table_id);
+            let writer = manager.get_table_event_manager(&columnstore_table_id);
             writer.initiate_snapshot(lsn).await
         };
         rx.recv().await.unwrap()?;

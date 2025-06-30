@@ -119,10 +119,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         connection.get_table_reader(*table_id)
     }
 
-    pub fn get_table_event_manager(
-        &mut self,
-        table_id: &T,
-    ) -> &mut TableEventManager {
+    pub fn get_table_event_manager(&mut self, table_id: &T) -> &mut TableEventManager {
         let (uri, table_id) = self
             .table_info
             .get(table_id)
