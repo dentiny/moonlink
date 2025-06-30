@@ -19,11 +19,10 @@ use crate::storage::iceberg::puffin_utils;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::{
-    get_file_idx_from_flush_file_id, get_random_file_name_in_dir, get_unique_file_id_for_flush,
-    MooncakeDataFileRef,
+    get_random_file_name_in_dir, get_unique_file_id_for_flush, MooncakeDataFileRef,
 };
-use crate::storage::storage_utils::{FileId, RecordLocation};
 use crate::storage::{parquet_utils, storage_utils};
 use crate::{create_data_file, Result};
 
