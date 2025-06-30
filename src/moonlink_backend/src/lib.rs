@@ -1,9 +1,9 @@
-pub mod columnstore_table_id;
 mod error;
 mod logging;
+pub mod mooncake_table_id;
 
-use columnstore_table_id::DbColumnstoreTableId;
 pub use error::{Error, Result};
+use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink_connectors::ReplicationManager;
@@ -55,7 +55,7 @@ pub struct MoonlinkBackend<
     T: Eq + Hash + Clone + std::fmt::Display,
 > {
     // Could be either relative or absolute path.
-    replication_manager: RwLock<ReplicationManager<DbColumnstoreTableId<D, T>>>,
+    replication_manager: RwLock<ReplicationManager<MooncakeTableId<D, T>>>,
     // Maps from metadata store connection string to metadata store client.
     //
     // TODO(hjiang): Store trait instead of concrete metadata store client.
@@ -122,11 +122,11 @@ where
     pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
-            let db_columnstore_table_id = DbColumnstoreTableId {
+            let mooncake_table_id = MooncakeTableId {
                 database_id,
                 table_id,
             };
-            let writer = manager.get_table_event_manager(&db_columnstore_table_id);
+            let writer = manager.get_table_event_manager(&mooncake_table_id);
             writer.initiate_snapshot(lsn).await
         };
         rx.recv().await.unwrap()?;
@@ -149,13 +149,13 @@ where
         // Add column store table to replication, and create corresponding mooncake table.
         let moonlink_table_config = {
             let mut manager = self.replication_manager.write().await;
-            let db_columnstore_table_id = DbColumnstoreTableId {
+            let mooncake_table_id = MooncakeTableId {
                 database_id: database_id.clone(),
                 table_id: table_id.clone(),
             };
 
             manager
-                .add_table(&src_uri, db_columnstore_table_id, &src_table_name)
+                .add_table(&src_uri, mooncake_table_id, &src_table_name)
                 .await?
         };
 
@@ -183,11 +183,11 @@ where
         let columnstore_table_id = Self::get_columnstore_table_id(&table_id).unwrap();
         let table_exists = {
             let mut manager = self.replication_manager.write().await;
-            let db_columnstore_table_id = DbColumnstoreTableId {
+            let mooncake_table_id = MooncakeTableId {
                 database_id: database_id.clone(),
                 table_id,
             };
-            manager.drop_table(db_columnstore_table_id).await.unwrap()
+            manager.drop_table(mooncake_table_id).await.unwrap()
         };
         if !table_exists {
             return;
@@ -211,11 +211,11 @@ where
     ) -> Result<Arc<ReadState>> {
         let read_state = {
             let manager = self.replication_manager.read().await;
-            let db_columnstore_table_id = DbColumnstoreTableId {
+            let mooncake_table_id = MooncakeTableId {
                 database_id,
                 table_id,
             };
-            let table_reader = manager.get_table_reader(&db_columnstore_table_id);
+            let table_reader = manager.get_table_reader(&mooncake_table_id);
             table_reader.try_read(lsn).await?
         };
 

@@ -2,12 +2,12 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::hash::Hash;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DbColumnstoreTableId<D, T> {
+pub struct MooncakeTableId<D, T> {
     pub database_id: D,
     pub table_id: T,
 }
 
-impl<D, T> Display for DbColumnstoreTableId<D, T>
+impl<D, T> Display for MooncakeTableId<D, T>
 where
     D: Display,
     T: Display,
