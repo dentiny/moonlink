@@ -5,12 +5,11 @@ mod logging;
 use columnstore_table_id::DbColumnstoreTableId;
 pub use error::{Error, Result};
 pub use moonlink::ReadState;
-use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig, TableEvent};
+use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::PgMetadataStore;
 use more_asserts as ma;
-use nix::libc::ETH_DATA_LEN;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::io::ErrorKind;
@@ -156,10 +155,10 @@ where
                 database_id: database_id.clone(),
                 table_id: table_id.clone(),
             };
-            let moonlink_table_config = manager
+
+            manager
                 .add_table(&src_uri, db_columnstore_table_id, &src_table_name)
-                .await?;
-            moonlink_table_config
+                .await?
         };
 
         // Create metadata store entry.

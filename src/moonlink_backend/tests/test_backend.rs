@@ -132,7 +132,7 @@ mod tests {
             .await
             .unwrap();
         client
-            .simple_query(&format!("DROP TABLE IF EXISTS mooncake.tables"))
+            .simple_query("DROP TABLE IF EXISTS mooncake.tables")
             .await
             .unwrap();
         backend
