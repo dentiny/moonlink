@@ -49,12 +49,12 @@ pub enum LookupKey {
     FullRow,
 }
 
-pub type TableId = u32;
+pub type RowStoreTableId = u32;
 
 #[derive(Debug, Clone)]
 pub struct TableSchema {
     pub table_name: TableName,
-    pub table_id: TableId,
+    pub rowstore_table_id: RowStoreTableId,
     pub column_schemas: Vec<ColumnSchema>,
     pub lookup_key: LookupKey,
 }

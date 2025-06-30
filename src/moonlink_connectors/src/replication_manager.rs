@@ -1,7 +1,7 @@
-use crate::pg_replicate::table::TableId;
+use crate::pg_replicate::table::RowStoreTableId;
 use crate::Result;
 use crate::{PostgresSourceError, ReplicationConnection};
-use moonlink::{ObjectStorageCache, ReadStateManager, TableEventManager};
+use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
 use std::hash::Hash;
 use tokio::task::JoinHandle;
@@ -16,8 +16,8 @@ use tracing::{debug, info, warn};
 pub struct ReplicationManager<T: Clone + Eq + Hash + std::fmt::Display> {
     /// Maps from uri to replication connection.
     connections: HashMap<String, ReplicationConnection>,
-    /// Maps from table id (string format) to (uri, table id).
-    table_info: HashMap<T, (String, TableId)>,
+    /// Maps from table id (string format) to (uri, row store table id).
+    table_info: HashMap<T, (String, RowStoreTableId)>,
     /// Base directory for mooncake tables.
     table_base_path: String,
     /// Base directory for temporary files used in union read.
@@ -50,13 +50,13 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     /// source will be created.
     pub async fn add_table(
         &mut self,
-        uri: &str,
-        external_table_id: T,
+        src_uri: &str,
+        columnstore_table_id: T,
         table_name: &str,
-    ) -> Result<()> {
-        info!(%uri, table_name, "adding table through manager");
-        if !self.connections.contains_key(uri) {
-            debug!(%uri, "creating replication connection");
+    ) -> Result<MoonlinkTableConfig> {
+        info!(%src_uri, table_name, "adding table through manager");
+        if !self.connections.contains_key(src_uri) {
+            debug!(%src_uri, "creating replication connection");
             // Lazily create the directory that will hold all tables.
             // This will not overwrite any existing directory.
             tokio::fs::create_dir_all(&self.table_base_path)
@@ -66,30 +66,32 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 .await
                 .map_err(PostgresSourceError::Io)?;
             let replication_connection = ReplicationConnection::new(
-                uri.to_owned(),
+                src_uri.to_string(),
                 base_path.to_str().unwrap().to_string(),
                 self.table_temp_files_directory.clone(),
                 self.object_storage_cache.clone(),
             )
             .await?;
             self.connections
-                .insert(uri.to_string(), replication_connection);
+                .insert(src_uri.to_string(), replication_connection);
         }
-        let replication_connection = self.connections.get_mut(uri).unwrap();
+        let replication_connection = self.connections.get_mut(src_uri).unwrap();
 
         if !replication_connection.replication_started() {
             replication_connection.start_replication().await?;
         }
 
-        let rowstore_table_id = replication_connection
-            .add_table(table_name, &external_table_id)
+        let (rowstore_table_id, moonlink_table_config) = replication_connection
+            .add_table(table_name, &columnstore_table_id)
             .await?;
-        self.table_info
-            .insert(external_table_id, (uri.to_string(), rowstore_table_id));
+        self.table_info.insert(
+            columnstore_table_id,
+            (src_uri.to_string(), rowstore_table_id),
+        );
 
         info!(rowstore_table_id, "table added through manager");
 
-        Ok(())
+        Ok(moonlink_table_config)
     }
 
     /// Drop table specified by the given table id.

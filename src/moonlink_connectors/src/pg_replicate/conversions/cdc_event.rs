@@ -8,7 +8,7 @@ use postgres_replication::protocol::{
 };
 use thiserror::Error;
 
-use crate::pg_replicate::table::{ColumnSchema, TableId, TableSchema};
+use crate::pg_replicate::table::{ColumnSchema, RowStoreTableId, TableSchema};
 
 use super::{
     table_row::TableRow,
@@ -34,7 +34,7 @@ pub enum CdcEventConversionError {
     MissingTupleInDeleteBody,
 
     #[error("schema missing for table id {0}")]
-    MissingSchema(TableId),
+    MissingSchema(RowStoreTableId),
 
     #[error("from bytes error: {0}")]
     FromBytes(#[from] FromTextError),
@@ -68,19 +68,23 @@ impl CdcEventConverter {
     }
 
     fn try_from_insert_body(
-        table_id: TableId,
+        rowstore_table_id: RowStoreTableId,
         column_schemas: &[ColumnSchema],
         insert_body: InsertBody,
     ) -> Result<CdcEvent, CdcEventConversionError> {
         let row =
             Self::try_from_tuple_data_slice(column_schemas, insert_body.tuple().tuple_data())?;
 
-        Ok(CdcEvent::Insert((table_id, row, insert_body.xid())))
+        Ok(CdcEvent::Insert((
+            rowstore_table_id,
+            row,
+            insert_body.xid(),
+        )))
     }
 
-    //TODO: handle when identity columns are changed
+    // TODO: handle when identity columns are changed
     fn try_from_update_body(
-        table_id: TableId,
+        rowstore_table_id: RowStoreTableId,
         column_schemas: &[ColumnSchema],
         update_body: UpdateBody,
     ) -> Result<CdcEvent, CdcEventConversionError> {
@@ -92,7 +96,7 @@ impl CdcEventConverter {
             Self::try_from_tuple_data_slice(column_schemas, update_body.new_tuple().tuple_data())?;
 
         Ok(CdcEvent::Update((
-            table_id,
+            rowstore_table_id,
             old_row,
             new_row,
             update_body.xid(),
@@ -100,7 +104,7 @@ impl CdcEventConverter {
     }
 
     fn try_from_delete_body(
-        table_id: TableId,
+        rowstore_table_id: RowStoreTableId,
         column_schemas: &[ColumnSchema],
         delete_body: DeleteBody,
     ) -> Result<CdcEvent, CdcEventConversionError> {
@@ -111,12 +115,16 @@ impl CdcEventConverter {
 
         let row = Self::try_from_tuple_data_slice(column_schemas, tuple.tuple_data())?;
 
-        Ok(CdcEvent::Delete((table_id, row, delete_body.xid())))
+        Ok(CdcEvent::Delete((
+            rowstore_table_id,
+            row,
+            delete_body.xid(),
+        )))
     }
 
     pub fn try_from(
         value: ReplicationMessage<LogicalReplicationMessage>,
-        table_schemas: &HashMap<TableId, TableSchema>,
+        table_schemas: &HashMap<RowStoreTableId, TableSchema>,
     ) -> Result<CdcEvent, CdcEventConversionError> {
         match value {
             ReplicationMessage::XLogData(xlog_data) => match xlog_data.into_data() {
@@ -194,9 +202,9 @@ impl CdcEventConverter {
 pub enum CdcEvent {
     Begin(BeginBody),
     Commit(CommitBody),
-    Insert((TableId, TableRow, Option<u32>)),
-    Update((TableId, Option<TableRow>, TableRow, Option<u32>)),
-    Delete((TableId, TableRow, Option<u32>)),
+    Insert((RowStoreTableId, TableRow, Option<u32>)),
+    Update((RowStoreTableId, Option<TableRow>, TableRow, Option<u32>)),
+    Delete((RowStoreTableId, TableRow, Option<u32>)),
     Relation(RelationBody),
     Type(TypeBody),
     PrimaryKeepAlive(PrimaryKeepAliveBody),

@@ -121,8 +121,8 @@ where
 
     /// # Arguments
     ///
-    /// * src_uri: connection string for source database.
-    /// * dst_uri: connection string for
+    /// * src_uri: connection string for source database (row storage database).
+    /// * dst_uri: connection string for metadata storage.
     pub async fn create_table(
         &self,
         database_id: D,
@@ -136,9 +136,10 @@ where
             database_id,
             table_id,
         };
-        manager
+        let moonlink_table_config = manager
             .add_table(&src_uri, columnstore_table_id, &src_table_name)
             .await?;
+
         Ok(())
     }
 

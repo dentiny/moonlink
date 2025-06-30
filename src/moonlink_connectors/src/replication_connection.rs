@@ -6,7 +6,7 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
-use moonlink::{ObjectStorageCache, ReadStateManager, TableEventManager};
+use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 use tokio::pin;
@@ -16,7 +16,7 @@ use tokio_postgres::types::PgLsn;
 use tokio_postgres::{tls::NoTlsStream, Connection, Socket};
 
 use crate::pg_replicate::replication_state::ReplicationState;
-use crate::pg_replicate::table::{TableId, TableSchema};
+use crate::pg_replicate::table::{RowStoreTableId, TableSchema};
 use futures::StreamExt;
 use moonlink::TableEvent;
 use std::collections::HashMap;
@@ -29,14 +29,14 @@ use tracing::{debug, error, info, info_span, warn};
 
 pub enum Command {
     AddTable {
-        table_id: TableId,
+        rowstore_table_id: RowStoreTableId,
         schema: TableSchema,
         event_sender: mpsc::Sender<TableEvent>,
         commit_lsn_tx: watch::Sender<u64>,
         flush_lsn_rx: watch::Receiver<u64>,
     },
     DropTable {
-        table_id: TableId,
+        rowstore_table_id: RowStoreTableId,
     },
     Shutdown,
 }
@@ -47,8 +47,8 @@ pub struct ReplicationConnection {
     table_temp_files_directory: String,
     postgres_client: Client,
     handle: Option<JoinHandle<Result<()>>>,
-    table_readers: HashMap<TableId, ReadStateManager>,
-    table_event_managers: HashMap<TableId, TableEventManager>,
+    table_readers: HashMap<RowStoreTableId, ReadStateManager>,
+    table_event_managers: HashMap<RowStoreTableId, TableEventManager>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: Option<mpsc::Receiver<Command>>,
     replication_state: Arc<ReplicationState>,
@@ -244,16 +244,21 @@ impl ReplicationConnection {
         Ok(())
     }
 
-    pub fn get_table_reader(&self, table_id: TableId) -> &ReadStateManager {
-        self.table_readers.get(&table_id).unwrap()
+    pub fn get_table_reader(&self, rowstore_table_id: RowStoreTableId) -> &ReadStateManager {
+        self.table_readers.get(&rowstore_table_id).unwrap()
     }
 
     pub fn table_readers_count(&self) -> usize {
         self.table_readers.len()
     }
 
-    pub fn get_table_event_manager(&mut self, table_id: TableId) -> &mut TableEventManager {
-        self.table_event_managers.get_mut(&table_id).unwrap()
+    pub fn get_table_event_manager(
+        &mut self,
+        rowstore_table_id: RowStoreTableId,
+    ) -> &mut TableEventManager {
+        self.table_event_managers
+            .get_mut(&rowstore_table_id)
+            .unwrap()
     }
 
     async fn spawn_replication_task(
@@ -277,10 +282,10 @@ impl ReplicationConnection {
         &mut self,
         schema: &TableSchema,
         external_table_id: &T,
-    ) -> Result<()> {
-        let table_id = schema.table_id;
-        debug!(table_id, "adding table to replication");
-        let resources = build_table_components(
+    ) -> Result<MoonlinkTableConfig> {
+        let rowstore_table_id = schema.rowstore_table_id;
+        debug!(rowstore_table_id, "adding table to replication");
+        let (table_resources, moonlink_table_config) = build_table_components(
             external_table_id.to_string(),
             schema,
             Path::new(&self.table_base_path),
@@ -291,38 +296,45 @@ impl ReplicationConnection {
         .await?;
 
         self.table_readers
-            .insert(table_id, resources.read_state_manager);
+            .insert(rowstore_table_id, table_resources.read_state_manager);
         self.table_event_managers
-            .insert(table_id, resources.table_event_manager);
+            .insert(rowstore_table_id, table_resources.table_event_manager);
         if let Err(e) = self
             .cmd_tx
             .send(Command::AddTable {
-                table_id,
+                rowstore_table_id,
                 schema: schema.clone(),
-                event_sender: resources.event_sender,
-                commit_lsn_tx: resources.commit_lsn_tx,
-                flush_lsn_rx: resources.flush_lsn_rx,
+                event_sender: table_resources.event_sender,
+                commit_lsn_tx: table_resources.commit_lsn_tx,
+                flush_lsn_rx: table_resources.flush_lsn_rx,
             })
             .await
         {
             error!(error = ?e, "failed to enqueue AddTable command");
         }
 
-        debug!(table_id, "table added to replication");
+        debug!(rowstore_table_id, "table added to replication");
 
-        Ok(())
+        Ok(moonlink_table_config)
     }
 
-    async fn remove_table_from_replication(&mut self, table_id: u32) -> Result<()> {
-        debug!(table_id, "removing table from replication");
-        self.table_readers.remove_entry(&table_id).unwrap();
+    async fn remove_table_from_replication(
+        &mut self,
+        rowstore_table_id: RowStoreTableId,
+    ) -> Result<()> {
+        debug!(rowstore_table_id, "removing table from replication");
+        self.table_readers.remove_entry(&rowstore_table_id).unwrap();
         // Notify the table handler to clean up cache, mooncake and iceberg table state.
-        self.drop_iceberg_table(table_id).await?;
-        if let Err(e) = self.cmd_tx.send(Command::DropTable { table_id }).await {
+        self.drop_iceberg_table(rowstore_table_id).await?;
+        if let Err(e) = self
+            .cmd_tx
+            .send(Command::DropTable { rowstore_table_id })
+            .await
+        {
             error!(error = ?e, "failed to enqueue DropTable command");
         }
 
-        debug!(table_id, "table removed from replication");
+        debug!(rowstore_table_id, "table removed from replication");
 
         Ok(())
     }
@@ -357,33 +369,38 @@ impl ReplicationConnection {
         &mut self,
         table_name: &str,
         external_table_id: &T,
-    ) -> Result<TableId> {
+    ) -> Result<(RowStoreTableId, MoonlinkTableConfig)> {
         info!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
         self.alter_table_replica_identity(table_name).await?;
         let table_schema = self.source.fetch_table_schema(table_name, None).await?;
 
-        self.add_table_to_replication(&table_schema, external_table_id)
+        let moonlink_table_config = self
+            .add_table_to_replication(&table_schema, external_table_id)
             .await?;
 
         self.add_table_to_publication(table_name).await?;
 
-        info!(table_id = table_schema.table_id, "table added");
+        info!(
+            rowstore_table_id = table_schema.rowstore_table_id,
+            "table added"
+        );
 
-        Ok(table_schema.table_id)
+        Ok((table_schema.rowstore_table_id, moonlink_table_config))
     }
 
     /// Remove the given table from connection.
-    pub async fn drop_table(&mut self, table_id: u32) -> Result<()> {
-        info!(table_id, "dropping table");
-        let table_name = self.source.get_table_name_from_id(table_id);
+    pub async fn drop_table(&mut self, rowstore_table_id: u32) -> Result<()> {
+        info!(rowstore_table_id, "dropping table");
+        let table_name = self.source.get_table_name_from_id(rowstore_table_id);
 
         // Remove table from publication as the first step, to prevent further events.
         self.remove_table_from_publication(&table_name).await?;
-        self.source.remove_table_schema(table_id);
-        self.remove_table_from_replication(table_id).await?;
+        self.source.remove_table_schema(rowstore_table_id);
+        self.remove_table_from_replication(rowstore_table_id)
+            .await?;
 
-        info!(table_id, "table dropped");
+        info!(rowstore_table_id, "table dropped");
         Ok(())
     }
 
@@ -454,7 +471,7 @@ async fn run_event_loop(
     debug!("replication event loop started");
 
     let mut status_interval = tokio::time::interval(Duration::from_secs(10));
-    let mut flush_lsn_rxs: HashMap<TableId, watch::Receiver<u64>> = HashMap::new();
+    let mut flush_lsn_rxs: HashMap<RowStoreTableId, watch::Receiver<u64>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -477,15 +494,15 @@ async fn run_event_loop(
                             }
                         },
                         Some(cmd) = cmd_rx.recv() => match cmd {
-                            Command::AddTable { table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx } => {
-                                sink.add_table(table_id, event_sender, commit_lsn_tx);
-                                flush_lsn_rxs.insert(table_id, flush_lsn_rx);
+                            Command::AddTable { rowstore_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx } => {
+                                sink.add_table(rowstore_table_id, event_sender, commit_lsn_tx);
+                                flush_lsn_rxs.insert(rowstore_table_id, flush_lsn_rx);
                                 stream.as_mut().add_table_schema(schema);
                             }
-                            Command::DropTable { table_id } => {
-                                sink.drop_table(table_id);
-                                flush_lsn_rxs.remove(&table_id);
-                                stream.as_mut().remove_table_schema(table_id);
+                            Command::DropTable { rowstore_table_id } => {
+                                sink.drop_table(rowstore_table_id);
+                                flush_lsn_rxs.remove(&rowstore_table_id);
+                                stream.as_mut().remove_table_schema(rowstore_table_id);
                             }
                             Command::Shutdown => {
                                 info!("received shutdown command");
