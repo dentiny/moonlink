@@ -72,4 +72,30 @@ mod tests {
             .await;
         assert!(res.is_err());
     }
+
+    /// Test senario: delete table metadata store.
+    #[tokio::test]
+    #[serial]
+    async fn test_delete_table_metadata_store() {
+        let _test_environment = TestEnvironment::new(URI).await;
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let moonlink_table_config = get_moonlink_table_config();
+
+        // Store moonlink table config to metadata storage.
+        metadata_store
+            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
+            .await
+            .unwrap();
+        let actual_config = metadata_store.load_table_config(TABLE_ID).await.unwrap();
+        assert_eq!(moonlink_table_config, actual_config);
+
+        // Delete moonlink table config to metadata storage and check.
+        metadata_store.delete_table_config(TABLE_ID).await.unwrap();
+        let res = metadata_store.load_table_config(TABLE_ID).await;
+        assert!(res.is_err());
+
+        // Delete for the second time also fails.
+        let res = metadata_store.delete_table_config(TABLE_ID).await;
+        assert!(res.is_err());
+    }
 }

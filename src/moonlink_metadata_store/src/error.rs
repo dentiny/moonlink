@@ -7,6 +7,9 @@ pub enum Error {
     #[error("tokio postgres error: {0}")]
     TokioPostgresError(#[from] TokioPostgresError),
 
+    #[error("metadata operation row number doesn't match {0} vs {1}")]
+    PostgresRowCountError(u32, u32),
+
     #[error("serde json error: {0}")]
     SerdeJsonError(#[from] SerdeJsonError),
 
