@@ -811,8 +811,10 @@ impl MooncakeTable {
 
     /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
-        let data_compaction_new_file_ids = compaction_payload.get_new_compacted_data_file_ids_number();
-        let table_auto_incr_ids = self.next_file_id..(self.next_file_id + data_compaction_new_file_ids);
+        let data_compaction_new_file_ids =
+            compaction_payload.get_new_compacted_data_file_ids_number();
+        let table_auto_incr_ids =
+            self.next_file_id..(self.next_file_id + data_compaction_new_file_ids);
         self.next_file_id += data_compaction_new_file_ids;
         let file_params = CompactionFileParams {
             dir_path: self.metadata.path.clone(),

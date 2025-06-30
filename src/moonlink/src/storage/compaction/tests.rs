@@ -75,7 +75,7 @@ async fn test_data_file_compaction_1() {
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -160,7 +160,7 @@ async fn test_data_file_compaction_2() {
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -248,7 +248,7 @@ async fn test_data_file_compaction_3() {
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -327,7 +327,7 @@ async fn test_data_file_compaction_4() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -442,7 +442,7 @@ async fn test_data_file_compaction_5() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -564,7 +564,7 @@ async fn test_data_file_compaction_6() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -674,7 +674,7 @@ async fn test_multiple_compacted_data_files_1() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: MULTI_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -809,7 +809,7 @@ async fn test_multiple_compacted_data_files_2() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: MULTI_COMPACTED_DATA_FILE_SIZE,
     };
 
