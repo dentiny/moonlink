@@ -19,8 +19,8 @@ use crate::storage::iceberg::puffin_utils;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::parquet_utils;
-use crate::storage::storage_utils::RecordLocation;
+use crate::storage::{parquet_utils, storage_utils};
+use crate::storage::storage_utils::{FileId, RecordLocation};
 use crate::storage::storage_utils::{
     get_file_idx_from_flush_file_id, get_random_file_name_in_dir, get_unique_file_id_for_flush,
     MooncakeDataFileRef,
@@ -33,7 +33,7 @@ pub(crate) struct CompactionFileParams {
     /// Local directory to place compacted data files.
     pub(crate) dir_path: std::path::PathBuf,
     /// Used to generate unique file id.
-    pub(crate) table_auto_incr_id: u32,
+    pub(crate) table_auto_incr_ids: std::ops::Range<u32>,
     /// Final size for compacted data files.
     pub(crate) data_file_final_size: u64,
 }
@@ -55,7 +55,7 @@ pub(crate) struct CompactionBuilder {
     cur_new_data_file: Option<MooncakeDataFileRef>,
     /// Current row number for the new compaction file.
     cur_row_num: usize,
-    /// Current compacted data file count.
+    /// Current compacted file count, including new compacted data files and index block files.
     compacted_file_count: u64,
 }
 
@@ -78,16 +78,25 @@ impl CompactionBuilder {
         }
     }
 
+    /// Util function to get the next file id.
+    fn get_next_file_id(&self) -> u64 {
+        let unique_table_auto_incre_id_offset = self.compacted_file_count / storage_utils::NUM_FILES_PER_FLUSH;
+        let cur_table_auto_incr_id =
+            self.file_params.table_auto_incr_ids.start as u64 + unique_table_auto_incre_id_offset;
+        assert!(self.file_params.table_auto_incr_ids.contains(&(cur_table_auto_incr_id as u32)));
+        let cur_file_idx = self.compacted_file_count - storage_utils::NUM_FILES_PER_FLUSH * unique_table_auto_incre_id_offset;
+        get_unique_file_id_for_flush(
+            cur_table_auto_incr_id,
+            cur_file_idx,
+        )
+    }
+
     /// Util function to create a new data file.
     fn create_new_data_file(&self) -> MooncakeDataFileRef {
         assert!(self.cur_new_data_file.is_none());
-        let file_id = get_unique_file_id_for_flush(
-            self.file_params.table_auto_incr_id as u64,
-            self.compacted_file_count,
-        );
+        let next_file_id = self.get_next_file_id();
         let file_path = get_random_file_name_in_dir(self.file_params.dir_path.as_path());
-
-        create_data_file(file_id, file_path)
+        create_data_file(next_file_id, file_path)
     }
 
     /// Initialize arrow writer for once.

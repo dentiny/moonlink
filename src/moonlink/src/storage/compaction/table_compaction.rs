@@ -31,6 +31,14 @@ pub struct DataCompactionPayload {
     pub(crate) file_indices: Vec<FileIndex>,
 }
 
+impl DataCompactionPayload {
+    /// Get max possible number of new file ids number.
+    pub fn get_new_compacted_data_file_ids_number(&self) -> u32 {
+        // In worst case, we create two new files (one data file, one index block) per data file.
+        self.disk_files.len() as u32 * 2
+    }
+}
+
 /// Entry for compacted data files.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct CompactedDataEntry {

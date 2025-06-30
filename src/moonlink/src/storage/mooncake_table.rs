@@ -811,11 +811,12 @@ impl MooncakeTable {
 
     /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
-        let next_file_id = self.next_file_id;
-        self.next_file_id += 1;
+        let data_compaction_new_file_ids = compaction_payload.get_new_compacted_data_file_ids_number();
+        let table_auto_incr_ids = self.next_file_id..(self.next_file_id + data_compaction_new_file_ids);
+        self.next_file_id += data_compaction_new_file_ids;
         let file_params = CompactionFileParams {
             dir_path: self.metadata.path.clone(),
-            table_auto_incr_id: next_file_id,
+            table_auto_incr_ids,
             data_file_final_size: self
                 .metadata
                 .config
@@ -966,14 +967,14 @@ impl MooncakeTable {
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
         // Create a detached task, whose completion will be notified separately.
         let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
-        let table_auto_incre_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
+        let table_auto_incr_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
         self.next_file_id += new_file_ids_to_create;
         tokio::task::spawn(
             Self::persist_iceberg_snapshot_impl(
                 iceberg_table_manager,
                 snapshot_payload,
                 self.table_notify.as_ref().unwrap().clone(),
-                table_auto_incre_ids,
+                table_auto_incr_ids,
             )
             .instrument(info_span!("persist_iceberg_snapshot")),
         );
