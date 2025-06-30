@@ -16,6 +16,8 @@ mod tests {
 
     const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const DST_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
+    const CREATE_TABLE_SCHEMA_SQL: &str =
+        include_str!("../../moonlink_metadata_store/src/postgres/sql/create_tables.sql");
 
     type DatabaseId = u64;
     type TableId = u64;
@@ -129,6 +131,10 @@ mod tests {
             ))
             .await
             .unwrap();
+        client
+            .simple_query(&format!("DROP TABLE IF EXISTS mooncake.tables"))
+            .await
+            .unwrap();
         backend
             .create_table(
                 DATABASE_ID,
@@ -157,11 +163,16 @@ mod tests {
             )
             .await
             .unwrap();
+        client
+            .simple_query("DROP TABLE IF EXISTS mooncake.tables;")
+            .await
+            .unwrap();
+        client.simple_query(CREATE_TABLE_SCHEMA_SQL).await.unwrap();
 
         backend
             .create_table(
                 DATABASE_ID,
-                /*table_id*=*/ TABLE_ID,
+                TABLE_ID,
                 DST_URI.to_string(),
                 /*table_name=*/ "public.test".to_string(),
                 uri.to_string(),

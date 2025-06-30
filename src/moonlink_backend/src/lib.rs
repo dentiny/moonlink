@@ -2,12 +2,16 @@ pub mod columnstore_table_id;
 mod error;
 mod logging;
 
-use columnstore_table_id::ColumnstoreTableId;
+use columnstore_table_id::DbColumnstoreTableId;
 pub use error::{Error, Result};
 pub use moonlink::ReadState;
-use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
+use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig, TableEvent};
 use moonlink_connectors::ReplicationManager;
+use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
+use moonlink_metadata_store::PgMetadataStore;
 use more_asserts as ma;
+use nix::libc::ETH_DATA_LEN;
+use std::collections::HashMap;
 use std::hash::Hash;
 use std::io::ErrorKind;
 use std::sync::Arc;
@@ -52,7 +56,11 @@ pub struct MoonlinkBackend<
     T: Eq + Hash + Clone + std::fmt::Display,
 > {
     // Could be either relative or absolute path.
-    replication_manager: RwLock<ReplicationManager<ColumnstoreTableId<D, T>>>,
+    replication_manager: RwLock<ReplicationManager<DbColumnstoreTableId<D, T>>>,
+    // Maps from metadata store connection string to metadata store client.
+    //
+    // TODO(hjiang): Store trait instead of concrete metadata store client.
+    metadata_store_clients: RwLock<HashMap<D, PgMetadataStore>>,
 }
 
 /// Util function to get filesystem size for cache directory
@@ -101,18 +109,25 @@ where
                 temp_files_dir.to_str().unwrap().to_string(),
                 create_default_object_storage_cache(cache_files_dir),
             )),
+            metadata_store_clients: RwLock::new(HashMap::new()),
         }
+    }
+
+    /// Get column store table id from its generic type.
+    fn get_columnstore_table_id(table_id: &T) -> Result<u32> {
+        let columnstore_table_id = table_id.to_string().parse::<u32>()?;
+        Ok(columnstore_table_id)
     }
 
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
     pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
-            let columnstore_table_id = ColumnstoreTableId {
+            let db_columnstore_table_id = DbColumnstoreTableId {
                 database_id,
                 table_id,
             };
-            let writer = manager.get_table_event_manager(&columnstore_table_id);
+            let writer = manager.get_table_event_manager(&db_columnstore_table_id);
             writer.initiate_snapshot(lsn).await
         };
         rx.recv().await.unwrap()?;
@@ -122,34 +137,81 @@ where
     /// # Arguments
     ///
     /// * src_uri: connection string for source database (row storage database).
-    /// * dst_uri: connection string for metadata storage.
     pub async fn create_table(
         &self,
         database_id: D,
         table_id: T,
-        _dst_uri: String,
+        metadata_store_uri: String,
         src_table_name: String,
         src_uri: String,
     ) -> Result<()> {
-        let mut manager = self.replication_manager.write().await;
-        let columnstore_table_id = ColumnstoreTableId {
-            database_id,
-            table_id,
+        let columnstore_table_id = Self::get_columnstore_table_id(&table_id)?;
+
+        println!("create row of columnstore oid {}", columnstore_table_id);
+
+        // Add column store table to replication, and create corresponding mooncake table.
+        let moonlink_table_config = {
+            let mut manager = self.replication_manager.write().await;
+            let db_columnstore_table_id = DbColumnstoreTableId {
+                database_id: database_id.clone(),
+                table_id: table_id.clone(),
+            };
+            let moonlink_table_config = manager
+                .add_table(&src_uri, db_columnstore_table_id, &src_table_name)
+                .await?;
+            moonlink_table_config
         };
-        let moonlink_table_config = manager
-            .add_table(&src_uri, columnstore_table_id, &src_table_name)
-            .await?;
+
+        // Create metadata store entry.
+        {
+            let mut guard = self.metadata_store_clients.write().await;
+            let cur_metadata_store_client = if guard.contains_key(&database_id) {
+                guard.get(&database_id).unwrap()
+            } else {
+                let new_metadata_store = PgMetadataStore::new(&metadata_store_uri).await?;
+                assert!(guard
+                    .insert(database_id.clone(), new_metadata_store)
+                    .is_none());
+                guard.get(&database_id).unwrap()
+            };
+            cur_metadata_store_client
+                .store_table_config(columnstore_table_id, &src_table_name, moonlink_table_config)
+                .await?;
+
+            println!("add metadata for {}", columnstore_table_id);
+        }
 
         Ok(())
     }
 
     pub async fn drop_table(&self, database_id: D, table_id: T) {
-        let mut manager = self.replication_manager.write().await;
-        let columnstore_table_id = ColumnstoreTableId {
-            database_id,
-            table_id,
+        let columnstore_table_id = Self::get_columnstore_table_id(&table_id).unwrap();
+        let table_exists = {
+            let mut manager = self.replication_manager.write().await;
+            let db_columnstore_table_id = DbColumnstoreTableId {
+                database_id: database_id.clone(),
+                table_id,
+            };
+            manager.drop_table(db_columnstore_table_id).await.unwrap()
         };
-        manager.drop_table(columnstore_table_id).await.unwrap();
+
+        println!(
+            "table to drop exists ? {}, to drop {}",
+            table_exists, columnstore_table_id
+        );
+
+        if !table_exists {
+            return;
+        }
+
+        let metadata_store = {
+            let mut guard = self.metadata_store_clients.write().await;
+            guard.remove(&database_id).unwrap()
+        };
+        metadata_store
+            .delete_table_config(columnstore_table_id)
+            .await
+            .unwrap()
     }
 
     pub async fn scan_table(
@@ -160,11 +222,11 @@ where
     ) -> Result<Arc<ReadState>> {
         let read_state = {
             let manager = self.replication_manager.read().await;
-            let columnstore_table_id = ColumnstoreTableId {
+            let db_columnstore_table_id = DbColumnstoreTableId {
                 database_id,
                 table_id,
             };
-            let table_reader = manager.get_table_reader(&columnstore_table_id);
+            let table_reader = manager.get_table_reader(&db_columnstore_table_id);
             table_reader.try_read(lsn).await?
         };
 

@@ -2437,6 +2437,7 @@ dependencies = [
  "console-subscriber",
  "moonlink",
  "moonlink_connectors",
+ "moonlink_metadata_store",
  "more-asserts",
  "nix 0.27.1",
  "parquet",

@@ -65,6 +65,15 @@ impl MetadataStoreTrait for PgMetadataStore {
 
         Ok(())
     }
+
+    async fn delete_table_config(&self, table_id: u32) -> Result<()> {
+        let guard = self.postgres_client.lock().await;
+        guard
+            .execute("DELETE FROM mooncake.tables WHERE oid = $1", &[&table_id])
+            .await?;
+
+        Ok(())
+    }
 }
 
 impl PgMetadataStore {

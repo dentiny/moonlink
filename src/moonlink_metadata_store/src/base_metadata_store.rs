@@ -20,4 +20,9 @@ pub trait MetadataStoreTrait: Send {
         table_name: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()>;
+
+    /// Delete table config for the given table.
+    /// Precondition: the requested table id has been record in the metadata storage.
+    #[allow(async_fn_in_trait)]
+    async fn delete_table_config(&self, table_id: u32) -> Result<()>;
 }

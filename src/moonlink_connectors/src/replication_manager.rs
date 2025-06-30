@@ -96,12 +96,13 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
 
     /// Drop table specified by the given table id.
     /// If the table is not tracked, logs a message and returns successfully.
-    pub async fn drop_table(&mut self, external_table_id: T) -> Result<()> {
+    /// Return whether the table is tracked by moonlink.
+    pub async fn drop_table(&mut self, external_table_id: T) -> Result<bool> {
         let (table_uri, table_id) = match self.table_info.get(&external_table_id) {
             Some(info) => info.clone(),
             None => {
                 warn!("attempted to drop table that is not tracked by moonlink - table may already be dropped");
-                return Ok(());
+                return Ok(false);
             }
         };
         info!(table_id, %table_uri, "dropping table through manager");
@@ -112,7 +113,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         }
 
         info!(table_id, "table dropped through manager");
-        Ok(())
+        Ok(true)
     }
 
     pub fn get_table_reader(&self, table_id: &T) -> &ReadStateManager {

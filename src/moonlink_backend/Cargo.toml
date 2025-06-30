@@ -12,6 +12,7 @@ arrow-array.workspace = true
 console-subscriber = { workspace = true }
 moonlink = { path = "../moonlink", features = ["test-utils"] }
 moonlink_connectors = { path = "../moonlink_connectors" }
+moonlink_metadata_store = { path = "../moonlink_metadata_store"}
 more-asserts = { workspace = true }
 nix = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
