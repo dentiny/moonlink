@@ -36,6 +36,9 @@ impl MetadataStoreTrait for PgMetadataStore {
         if rows.is_empty() {
             return Err(Error::TableIdNotFound(table_id));
         }
+        if rows.len() != 1 {
+            return Err(Error::PostgresRowCountError(1, rows.len() as u32));
+        }
 
         let row = &rows[0];
         let config_json = row.get("config");
@@ -55,13 +58,17 @@ impl MetadataStoreTrait for PgMetadataStore {
 
         let guard = self.postgres_client.lock().await;
         // TODO(hjiang): Fill in other fields as well.
-        guard
+        let rows_affected = guard
             .execute(
                 "INSERT INTO mooncake.tables (oid, table_name, config)
                 VALUES ($1, $2, $3)",
                 &[&table_id, &table_name, &PgJson(&serialized_config)],
             )
             .await?;
+
+        if rows_affected != 1 {
+            return Err(Error::PostgresRowCountError(1, rows_affected as u32));
+        }
 
         Ok(())
     }

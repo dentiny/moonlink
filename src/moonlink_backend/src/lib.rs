@@ -146,8 +146,6 @@ where
     ) -> Result<()> {
         let columnstore_table_id = Self::get_columnstore_table_id(&table_id)?;
 
-        println!("create row of columnstore oid {}", columnstore_table_id);
-
         // Add column store table to replication, and create corresponding mooncake table.
         let moonlink_table_config = {
             let mut manager = self.replication_manager.write().await;
@@ -176,8 +174,6 @@ where
             cur_metadata_store_client
                 .store_table_config(columnstore_table_id, &src_table_name, moonlink_table_config)
                 .await?;
-
-            println!("add metadata for {}", columnstore_table_id);
         }
 
         Ok(())
@@ -193,12 +189,6 @@ where
             };
             manager.drop_table(db_columnstore_table_id).await.unwrap()
         };
-
-        println!(
-            "table to drop exists ? {}, to drop {}",
-            table_exists, columnstore_table_id
-        );
-
         if !table_exists {
             return;
         }
