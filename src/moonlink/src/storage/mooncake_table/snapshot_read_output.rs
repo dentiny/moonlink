@@ -2,7 +2,7 @@ use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::storage::PuffinDeletionBlobAtRead;
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::{NonEvictableHandle, ReadState};
 
 use std::sync::Arc;
@@ -46,7 +46,7 @@ pub struct ReadOutput {
     /// Contains committed but non-persisted record batches, which are persisted as temporary data files on local filesystem.
     pub associated_files: Vec<String>,
     /// Table notifier for query completion; could be none for empty read output.
-    pub table_notifier: Option<Sender<TableNotify>>,
+    pub table_notifier: Option<Sender<TableEvent>>,
     /// Object storage cache, to pin local file cache, could be none for empty read output.
     pub object_storage_cache: Option<ObjectStorageCache>,
 }
@@ -82,7 +82,7 @@ impl ReadOutput {
                         self.table_notifier
                             .as_mut()
                             .unwrap()
-                            .send(TableNotify::EvictedDataFilesToDelete {
+                            .send(TableEvent::EvictedDataFilesToDelete {
                                 evicted_data_files: files_to_delete,
                             })
                             .await

@@ -3,11 +3,9 @@ use crate::storage::mooncake_table::{DiskFileEntry, TableMetadata as MooncakeTab
 use crate::storage::IcebergTableConfig;
 use crate::storage::{load_blob_from_puffin_file, DeletionVector};
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
-use crate::table_handler::{IcebergEventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
+use crate::table_handler::{EventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
 use crate::union_read::{decode_read_state_for_testing, ReadStateManager};
-use crate::{
-    IcebergEventSyncReceiver, IcebergTableEventManager, IcebergTableManager, MooncakeTableConfig,
-};
+use crate::{EventSyncReceiver, IcebergTableManager, MooncakeTableConfig, TableEventManager};
 use crate::{ObjectStorageCache, Result};
 
 use arrow::datatypes::{DataType, Field, Schema};
@@ -18,7 +16,7 @@ use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 
 /// Creates a default schema for testing.
 pub fn default_schema() -> Schema {
@@ -60,12 +58,21 @@ pub fn get_iceberg_manager_config(table_name: String, warehouse_uri: String) -> 
 pub struct TestEnvironment {
     pub handler: TableHandler,
     event_sender: mpsc::Sender<TableEvent>,
-    read_state_manager: Arc<ReadStateManager>,
+    read_state_manager: Option<Arc<ReadStateManager>>,
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
-    pub(crate) iceberg_table_event_manager: IcebergTableEventManager,
+    pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
+}
+
+impl Drop for TestEnvironment {
+    fn drop(&mut self) {
+        // Dropping read state manager involves asynchronous operation, which depends on table handler.
+        // explicitly destruct read state manager first, and sleep for a while, to "make sure" async destruction finishes.
+        self.read_state_manager = None;
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
 }
 
 impl TestEnvironment {
@@ -84,25 +91,25 @@ impl TestEnvironment {
     ) -> Self {
         let (replication_tx, replication_rx) = watch::channel(0u64);
         let (last_commit_tx, last_commit_rx) = watch::channel(0u64);
-        let read_state_manager = Arc::new(ReadStateManager::new(
+        let read_state_manager = Some(Arc::new(ReadStateManager::new(
             &mooncake_table,
             replication_rx,
             last_commit_rx,
-        ));
+        )));
 
-        let (iceberg_drop_table_completion_tx, iceberg_drop_table_completion_rx) = mpsc::channel(1);
+        let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
         let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
-        let iceberg_event_sync_sender = IcebergEventSyncSender {
-            iceberg_drop_table_completion_tx,
+        let event_sync_sender = EventSyncSender {
+            drop_table_completion_tx,
             flush_lsn_tx,
         };
-        let iceberg_event_sync_receiver = IcebergEventSyncReceiver {
-            iceberg_drop_table_completion_rx,
+        let table_event_sync_receiver = EventSyncReceiver {
+            drop_table_completion_rx,
             flush_lsn_rx,
         };
-        let handler = TableHandler::new(mooncake_table, iceberg_event_sync_sender).await;
-        let iceberg_table_event_manager =
-            IcebergTableEventManager::new(handler.get_event_sender(), iceberg_event_sync_receiver);
+        let handler = TableHandler::new(mooncake_table, event_sync_sender).await;
+        let table_event_manager =
+            TableEventManager::new(handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = handler.get_event_sender();
 
         let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
@@ -113,7 +120,7 @@ impl TestEnvironment {
             read_state_manager,
             replication_tx,
             last_commit_tx,
-            iceberg_table_event_manager,
+            table_event_manager,
             temp_dir,
             object_storage_cache,
         }
@@ -178,7 +185,7 @@ impl TestEnvironment {
 
     /// Request to drop iceberg table and block wait its completion.
     pub async fn drop_table(&mut self) -> Result<()> {
-        self.iceberg_table_event_manager.drop_table().await
+        self.table_event_manager.drop_table().await
     }
 
     // --- Operation Helpers ---
@@ -253,7 +260,12 @@ impl TestEnvironment {
     }
 
     pub async fn verify_snapshot(&self, target_lsn: u64, expected_ids: &[i32]) {
-        check_read_snapshot(&self.read_state_manager, target_lsn, expected_ids).await;
+        check_read_snapshot(
+            self.read_state_manager.as_ref().unwrap(),
+            target_lsn,
+            expected_ids,
+        )
+        .await;
     }
 
     // --- Lifecycle Helper ---

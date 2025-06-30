@@ -1,7 +1,7 @@
 use crate::pg_replicate::table::TableId;
 use crate::Result;
 use crate::{PostgresSourceError, ReplicationConnection};
-use moonlink::{IcebergTableEventManager, ObjectStorageCache, ReadStateManager};
+use moonlink::{ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
 use std::hash::Hash;
 use tokio::task::JoinHandle;
@@ -119,16 +119,16 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         connection.get_table_reader(*table_id)
     }
 
-    pub fn get_iceberg_table_event_manager(
+    pub fn get_table_event_manager(
         &mut self,
         table_id: &T,
-    ) -> &mut IcebergTableEventManager {
+    ) -> &mut TableEventManager {
         let (uri, table_id) = self
             .table_info
             .get(table_id)
             .unwrap_or_else(|| panic!("table {} not found", table_id));
         let connection = self.connections.get_mut(uri).expect("connection not found");
-        connection.get_iceberg_table_event_manager(*table_id)
+        connection.get_table_event_manager(*table_id)
     }
 
     /// Gracefully shutdown a replication connection by its URI.

@@ -36,15 +36,11 @@ impl Hash for MooncakeDataFile {
 pub type MooncakeDataFileRef = Arc<MooncakeDataFile>;
 
 const LOCAL_FILE_ID_BASE: u64 = 10000000000000000;
-const NUM_FILES_PER_FLUSH: u64 = 100;
+pub const NUM_FILES_PER_FLUSH: u64 = 100;
 
 pub fn get_unique_file_id_for_flush(table_auto_incr_id: u64, file_idx: u64) -> u64 {
     ma::assert_lt!(file_idx, NUM_FILES_PER_FLUSH);
     LOCAL_FILE_ID_BASE + table_auto_incr_id * NUM_FILES_PER_FLUSH + file_idx
-}
-
-pub fn get_file_idx_from_flush_file_id(file_id: u64, table_auto_incr_id: u64) -> u64 {
-    file_id - LOCAL_FILE_ID_BASE - table_auto_incr_id * NUM_FILES_PER_FLUSH
 }
 
 pub fn get_random_file_name_in_dir(dir_path: &Path) -> String {

@@ -58,6 +58,14 @@ pub struct IcebergSnapshotPayload {
     pub(crate) data_compaction_payload: IcebergSnapshotDataCompactionPayload,
 }
 
+impl IcebergSnapshotPayload {
+    /// Get the number of new files created in iceberg table.
+    pub fn get_new_file_ids_num(&self) -> u32 {
+        // Only deletion vector puffin blobs create files with new file ids.
+        self.import_payload.new_deletion_vector.len() as u32
+    }
+}
+
 ////////////////////////////
 /// Iceberg snapshot result
 ////////////////////////////
@@ -143,6 +151,18 @@ pub struct IcebergSnapshotResult {
     pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
     /// Iceberg data file compaction result.
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
+}
+
+impl std::fmt::Debug for IcebergSnapshotResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotResult")
+            .field("flush_lsn", &self.flush_lsn)
+            .field("import_result", &self.import_result)
+            .field("index_merge_result", &self.index_merge_result)
+            .field("data_compaction_result", &self.data_compaction_result)
+            .field("table_manager", &"<ignored>")
+            .finish()
+    }
 }
 
 ////////////////////////////

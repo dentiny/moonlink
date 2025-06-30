@@ -10,11 +10,12 @@ pub use storage::storage_utils::create_data_file;
 pub(crate) use storage::NonEvictableHandle;
 pub use storage::SnapshotReadOutput;
 pub use storage::{
-    IcebergEventSyncReceiver, IcebergTableConfig, IcebergTableEventManager, IcebergTableManager,
-    MooncakeTable, MooncakeTableConfig, TableManager,
+    EventSyncReceiver, IcebergTableConfig, IcebergTableManager, MooncakeTable, MooncakeTableConfig,
+    TableEventManager, TableManager,
 };
 pub use storage::{MoonlinkTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
-pub use table_handler::{IcebergEventSyncSender, TableEvent, TableHandler};
+pub use table_handler::{EventSyncSender, TableHandler};
+pub use table_notify::TableEvent;
 pub use union_read::{ReadState, ReadStateManager};
 
 #[cfg(any(test, feature = "test-utils"))]

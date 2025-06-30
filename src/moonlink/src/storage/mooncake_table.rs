@@ -37,7 +37,7 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::{FileId, TableId};
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
@@ -431,7 +431,7 @@ pub struct MooncakeTable {
     last_iceberg_snapshot_lsn: Option<u64>,
 
     /// Table notifier, which is used to sent multiple types of event completion information.
-    table_notify: Option<Sender<TableNotify>>,
+    table_notify: Option<Sender<TableEvent>>,
 }
 
 impl MooncakeTable {
@@ -501,7 +501,7 @@ impl MooncakeTable {
 
     /// Register event completion notifier.
     /// Notice it should be registered only once, which could be used to notify multiple events.
-    pub(crate) async fn register_table_notify(&mut self, table_notify: Sender<TableNotify>) {
+    pub(crate) async fn register_table_notify(&mut self, table_notify: Sender<TableEvent>) {
         assert!(self.table_notify.is_none());
         self.table_notify = Some(table_notify.clone());
         self.snapshot
@@ -803,7 +803,7 @@ impl MooncakeTable {
                 new_file_indices: vec![merged],
             };
             table_notify_tx_copy
-                .send(TableNotify::IndexMerge { index_merge_result })
+                .send(TableEvent::IndexMerge { index_merge_result })
                 .await
                 .unwrap();
         });
@@ -811,11 +811,14 @@ impl MooncakeTable {
 
     /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
-        let next_file_id = self.next_file_id;
-        self.next_file_id += 1;
+        let data_compaction_new_file_ids =
+            compaction_payload.get_new_compacted_data_file_ids_number();
+        let table_auto_incr_ids =
+            self.next_file_id..(self.next_file_id + data_compaction_new_file_ids);
+        self.next_file_id += data_compaction_new_file_ids;
         let file_params = CompactionFileParams {
             dir_path: self.metadata.path.clone(),
-            table_auto_incr_id: next_file_id,
+            table_auto_incr_ids,
             data_file_final_size: self
                 .metadata
                 .config
@@ -831,7 +834,7 @@ impl MooncakeTable {
                 let builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
                 let data_compaction_result = builder.build().await;
                 table_notify_tx_copy
-                    .send(TableNotify::DataCompaction {
+                    .send(TableEvent::DataCompaction {
                         data_compaction_result,
                     })
                     .await
@@ -849,8 +852,8 @@ impl MooncakeTable {
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
         snapshot_payload: IcebergSnapshotPayload,
-        table_notify: Sender<TableNotify>,
-        table_auto_incr_id: u32,
+        table_notify: Sender<TableEvent>,
+        table_auto_incr_ids: std::ops::Range<u32>,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
 
@@ -883,7 +886,9 @@ impl MooncakeTable {
             .old_file_indices_to_remove
             .clone();
 
-        let persistence_file_params = PersistenceFileParams { table_auto_incr_id };
+        let persistence_file_params = PersistenceFileParams {
+            table_auto_incr_ids,
+        };
         let iceberg_persistence_res = iceberg_table_manager
             .sync_snapshot(snapshot_payload, persistence_file_params)
             .await;
@@ -891,7 +896,7 @@ impl MooncakeTable {
         // Notify on event error.
         if iceberg_persistence_res.is_err() {
             table_notify
-                .send(TableNotify::IcebergSnapshot {
+                .send(TableEvent::IcebergSnapshot {
                     iceberg_snapshot_result: Err(iceberg_persistence_res.unwrap_err().into()),
                 })
                 .await
@@ -952,7 +957,7 @@ impl MooncakeTable {
             },
         };
         table_notify
-            .send(TableNotify::IcebergSnapshot {
+            .send(TableEvent::IcebergSnapshot {
                 iceberg_snapshot_result: Ok(snapshot_result),
             })
             .await
@@ -963,14 +968,15 @@ impl MooncakeTable {
     pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
         // Create a detached task, whose completion will be notified separately.
-        let table_auto_incre_id = self.next_file_id;
-        self.next_file_id += 1;
+        let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
+        let table_auto_incr_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
+        self.next_file_id += new_file_ids_to_create;
         tokio::task::spawn(
             Self::persist_iceberg_snapshot_impl(
                 iceberg_table_manager,
                 snapshot_payload,
                 self.table_notify.as_ref().unwrap().clone(),
-                table_auto_incre_id,
+                table_auto_incr_ids,
             )
             .instrument(info_span!("persist_iceberg_snapshot")),
         );
@@ -997,7 +1003,7 @@ impl MooncakeTable {
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
         opt: SnapshotOption,
-        table_notify: Sender<TableNotify>,
+        table_notify: Sender<TableEvent>,
     ) {
         let snapshot_result = snapshot
             .write()
@@ -1005,7 +1011,7 @@ impl MooncakeTable {
             .update_snapshot(next_snapshot_task, opt)
             .await;
         table_notify
-            .send(TableNotify::MooncakeTableSnapshot {
+            .send(TableEvent::MooncakeTableSnapshot {
                 lsn: snapshot_result.commit_lsn,
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,

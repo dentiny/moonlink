@@ -145,7 +145,7 @@ pub fn batch_rows(start_id: i32, count: i32) -> Vec<MoonlinkRow> {
 /// Test util function to perform a mooncake snapshot, block waits its completion and gets result.
 pub async fn snapshot(
     table: &mut MooncakeTable,
-    notify_rx: &mut Receiver<TableNotify>,
+    notify_rx: &mut Receiver<TableEvent>,
 ) -> (
     u64,
     Option<IcebergSnapshotPayload>,
@@ -156,7 +156,7 @@ pub async fn snapshot(
     assert!(table.create_snapshot(SnapshotOption::default()));
     let table_notify = notify_rx.recv().await.unwrap();
     match table_notify {
-        TableNotify::MooncakeTableSnapshot {
+        TableEvent::MooncakeTableSnapshot {
             lsn,
             iceberg_snapshot_payload,
             data_compaction_payload,
@@ -179,12 +179,12 @@ pub async fn snapshot(
 pub async fn create_iceberg_snapshot(
     table: &mut MooncakeTable,
     iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
-    completion_rx: &mut Receiver<TableNotify>,
+    completion_rx: &mut Receiver<TableEvent>,
 ) -> Result<IcebergSnapshotResult> {
     table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
     let notification = completion_rx.recv().await.unwrap();
     match notification {
-        TableNotify::IcebergSnapshot {
+        TableEvent::IcebergSnapshot {
             iceberg_snapshot_result,
         } => iceberg_snapshot_result,
         _ => {
@@ -197,7 +197,7 @@ pub async fn create_iceberg_snapshot(
 
 pub async fn append_commit_flush_snapshot(
     table: &mut MooncakeTable,
-    completion_rx: &mut Receiver<TableNotify>,
+    completion_rx: &mut Receiver<TableEvent>,
     rows: Vec<MoonlinkRow>,
     lsn: u64,
 ) -> Result<()> {

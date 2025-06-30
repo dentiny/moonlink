@@ -5,7 +5,7 @@ use crate::storage::compaction::test_utils::get_record_location_mapping;
 use crate::storage::iceberg::test_utils as iceberg_test_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::{
-    get_unique_file_id_for_flush, MooncakeDataFileRef, TableId, TableUniqueFileId,
+    self, get_unique_file_id_for_flush, MooncakeDataFileRef, TableId, TableUniqueFileId,
 };
 use crate::storage::storage_utils::{FileId, RecordLocation};
 use crate::storage::PuffinBlobRef;
@@ -75,7 +75,7 @@ async fn test_data_file_compaction_1() {
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -160,7 +160,7 @@ async fn test_data_file_compaction_2() {
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -248,7 +248,7 @@ async fn test_data_file_compaction_3() {
     let table_auto_incr_id: u64 = 2;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -327,7 +327,7 @@ async fn test_data_file_compaction_4() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -442,7 +442,7 @@ async fn test_data_file_compaction_5() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -564,7 +564,7 @@ async fn test_data_file_compaction_6() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 1),
         data_file_final_size: SINGLE_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -674,7 +674,7 @@ async fn test_multiple_compacted_data_files_1() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 4),
         data_file_final_size: MULTI_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -809,7 +809,7 @@ async fn test_multiple_compacted_data_files_2() {
     let table_auto_incr_id: u64 = 4;
     let file_params = CompactionFileParams {
         dir_path: std::path::PathBuf::from(temp_dir.path()),
-        table_auto_incr_id: table_auto_incr_id as u32,
+        table_auto_incr_ids: (table_auto_incr_id as u32)..(table_auto_incr_id as u32 + 4),
         data_file_final_size: MULTI_COMPACTED_DATA_FILE_SIZE,
     };
 
@@ -822,4 +822,82 @@ async fn test_multiple_compacted_data_files_2() {
     let compaction_result = builder.build().await.unwrap();
     assert!(compaction_result.new_data_files.is_empty());
     assert!(compaction_result.remapped_data_files.is_empty());
+}
+
+/// Testing scenario: new compacted data files are larger than max flush count.
+/// For more details, please refer to https://github.com/Mooncake-Labs/moonlink/issues/641
+#[tokio::test]
+async fn test_large_number_of_data_files() {
+    // Create data file.
+    let temp_dir = tempfile::tempdir().unwrap();
+
+    let target_data_files_to_compact = storage_utils::NUM_FILES_PER_FLUSH + 1;
+    let record_batch = test_utils::create_test_batch_1();
+    let row_count_per_file = record_batch.num_rows();
+
+    let mut old_data_files_to_compact = vec![];
+    let mut old_file_indices_to_compact = vec![];
+    for idx in 0..target_data_files_to_compact {
+        let data_file_file_id = idx;
+        let index_block_file_id = target_data_files_to_compact + idx;
+
+        // Prepare data files to compact.
+        let data_file_path = temp_dir.path().join(format!("test-{}.parquet", idx));
+        let data_file = create_data_file(
+            data_file_file_id,
+            data_file_path.to_str().unwrap().to_string(),
+        );
+        test_utils::dump_arrow_record_batches(vec![record_batch.clone()], data_file.clone()).await;
+        old_data_files_to_compact.push(get_single_file_to_compact(
+            &data_file, /*deletion_vector=*/ None,
+        ));
+
+        // Prepare file indices to compact.
+        let file_index = test_utils::create_file_index_1(
+            temp_dir.path().to_path_buf(),
+            data_file.clone(),
+            index_block_file_id,
+        )
+        .await;
+        old_file_indices_to_compact.push(file_index);
+    }
+
+    // Prepare compaction payload.
+    let payload = DataCompactionPayload {
+        object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        disk_files: old_data_files_to_compact,
+        file_indices: old_file_indices_to_compact,
+    };
+    let start_table_auto_incr_id = target_data_files_to_compact as u32 * 3;
+    let end_table_auto_incr_id = target_data_files_to_compact as u32 * 4;
+    let file_params = CompactionFileParams {
+        dir_path: std::path::PathBuf::from(temp_dir.path()),
+        table_auto_incr_ids: start_table_auto_incr_id..end_table_auto_incr_id,
+        data_file_final_size: 1, // Dump each data file into its own file.
+    };
+
+    // Perform compaction.
+    let builder = CompactionBuilder::new(
+        payload,
+        iceberg_test_utils::create_test_arrow_schema(),
+        file_params,
+    );
+    let compaction_result = builder.build().await.unwrap();
+    assert_eq!(
+        compaction_result.remapped_data_files.len(),
+        target_data_files_to_compact as usize * row_count_per_file
+    );
+    assert_eq!(
+        compaction_result.old_data_files.len(),
+        target_data_files_to_compact as usize
+    );
+    assert_eq!(
+        compaction_result.new_data_files.len(),
+        target_data_files_to_compact as usize
+    );
+    assert_eq!(
+        compaction_result.old_file_indices.len(),
+        target_data_files_to_compact as usize
+    );
+    assert_eq!(compaction_result.new_file_indices.len(), 1);
 }

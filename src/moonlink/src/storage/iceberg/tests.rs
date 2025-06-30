@@ -23,6 +23,7 @@ use crate::storage::mooncake_table::{
     IcebergSnapshotIndexMergePayload,
 };
 use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
+use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
@@ -221,7 +222,7 @@ async fn test_store_and_load_snapshot_impl(
     };
 
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 1,
+        table_auto_incr_ids: 1..2,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -271,7 +272,7 @@ async fn test_store_and_load_snapshot_impl(
     };
 
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 3,
+        table_auto_incr_ids: 3..4,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -344,7 +345,7 @@ async fn test_store_and_load_snapshot_impl(
         },
     };
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 4,
+        table_auto_incr_ids: 4..5,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -416,7 +417,7 @@ async fn test_store_and_load_snapshot_impl(
         },
     };
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 6,
+        table_auto_incr_ids: 6..7,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -477,7 +478,7 @@ async fn test_store_and_load_snapshot_impl(
         },
     };
     let peristence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 7,
+        table_auto_incr_ids: 7..8,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
@@ -753,7 +754,7 @@ async fn test_empty_content_snapshot_creation() {
     };
 
     let persistence_file_params = PersistenceFileParams {
-        table_auto_incr_id: 0,
+        table_auto_incr_ids: 0..1,
     };
     iceberg_table_manager
         .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
@@ -1554,4 +1555,88 @@ async fn test_drop_table_at_creation() {
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
+}
+
+/// Testing scenario: a large number of deletion records are requested to persist to iceberg, thus multiple table auto increment ids are needed.
+/// For more details, please refer to https://github.com/Mooncake-Labs/moonlink/issues/640
+#[tokio::test]
+async fn test_multiple_table_ids_for_deletion_vector() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().to_path_buf();
+    let warehouse_uri = path.clone().to_str().unwrap().to_string();
+    let mooncake_table_config = MooncakeTableConfig {
+        // Flush as long as there's new rows appended at commit.
+        mem_slice_size: 1,
+        // At flush, place each row in a separate parquet file.
+        disk_slice_parquet_file_size: 1,
+        ..Default::default()
+    };
+    let mooncake_table_metadata = create_test_table_metadata_with_config(
+        temp_dir.path().to_str().unwrap().to_string(),
+        mooncake_table_config,
+    );
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    let schema = create_test_arrow_schema();
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*version=*/ 1,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(&temp_dir),
+    )
+    .await
+    .unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    // Create a large number of data files, which is larger than [`NUM_FILES_PER_FLUSH`].
+    let target_data_files_num = storage_utils::NUM_FILES_PER_FLUSH + 1;
+    let mut all_rows = Vec::with_capacity(target_data_files_num as usize);
+    for idx in 0..target_data_files_num {
+        let cur_row = MoonlinkRow::new(vec![
+            RowValue::Int32(idx as i32),
+            RowValue::ByteArray(idx.to_be_bytes().to_vec()),
+            RowValue::Int32(idx as i32),
+        ]);
+        all_rows.push(cur_row.clone());
+        table.append(cur_row).unwrap();
+        table.commit(/*lsn=*/ idx);
+        table.flush(/*lsn=*/ idx).await.unwrap();
+    }
+
+    // Create the first mooncake and iceberg snapshot, which include [`target_data_files_num`] number of files.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Delete all rows, which corresponds to large number of deletion vector puffin files.
+    for cur_row in all_rows.into_iter() {
+        table.delete(cur_row, /*lsn=*/ target_data_files_num).await;
+    }
+    table.commit(/*lsn=*/ target_data_files_num + 1);
+    table
+        .flush(/*lsn=*/ target_data_files_num + 1)
+        .await
+        .unwrap();
+
+    // Create the second mooncake and iceberg snapshot, which include [`target_data_files_num`] number of deletion vector puffin files.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Load snaphot from iceberg table to validate.
+    let (_, mut iceberg_table_manager_for_recovery, _) =
+        create_table_and_iceberg_manager(&temp_dir).await;
+    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id as u64, target_data_files_num * 3); // one for data file, one for deletion vector puffin, one for file indices.
+
+    // Check deletion vector puffin files' file id.
+    assert_eq!(snapshot.disk_files.len() as u64, target_data_files_num);
+    for (_, cur_disk_file_entry) in snapshot.disk_files.iter() {
+        assert!(cur_disk_file_entry.puffin_deletion_blob.is_some());
+    }
 }

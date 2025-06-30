@@ -17,7 +17,7 @@ use mockall::*;
 /// File parameters required for snapshot persistence.
 pub struct PersistenceFileParams {
     /// Used to generate unique file id.
-    pub(crate) table_auto_incr_id: u32,
+    pub(crate) table_auto_incr_ids: std::ops::Range<u32>,
 }
 
 /// Iceberg persistence results.

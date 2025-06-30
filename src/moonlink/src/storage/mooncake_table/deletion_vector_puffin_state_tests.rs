@@ -41,7 +41,7 @@ use crate::storage::cache::object_storage::test_utils::*;
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1LDWLWhgFP5-da8P50t-uZIO6a4lK2Na5P70ibNOWu-g/edit?usp=sharing
 use crate::storage::mooncake_table::state_test_utils::*;
-use crate::table_notify::TableNotify;
+use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableManager, MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig, TableManager,
 };
@@ -56,7 +56,7 @@ async fn prepare_test_deletion_vector_for_read(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
     use_batch_write: bool,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
 
@@ -403,7 +403,7 @@ async fn test_2_read_with_local_optimization(#[case] use_batch_write: bool) {
 async fn prepare_test_disk_files_with_deletion_vector_for_compaction(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableNotify>) {
+) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, table_notify) =
         create_mooncake_table_and_notify_for_compaction(temp_dir, cache).await;
 
