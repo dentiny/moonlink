@@ -742,7 +742,7 @@ impl IcebergTableManager {
 
     /// Commit transaction with retry.
     ///
-    /// TODO(hjiang): Add unit test; currently it's hard due to the difficulty to mock opendal.
+    /// TODO(hjiang): Add unit test; currently it's hard due to the difficulty to mock opendal or catalog.
     async fn commit_transaction_with_retry(&self, txn: Transaction) -> IcebergResult<IcebergTable> {
         let retry_strategy = ExponentialBackoff::from_millis(TABLE_COMMIT_RETRY_MIN_MS_DEFAULT)
             .factor(table_property::TABLE_COMMIT_RETRY_FACTOR)
