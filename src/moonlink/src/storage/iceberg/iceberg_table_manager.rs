@@ -6,13 +6,16 @@ use crate::storage::iceberg::deletion_vector::{
 };
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
-use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::{
     PersistenceFileParams, PersistenceResult, TableManager,
 };
+use crate::storage::iceberg::table_property::{
+    self, TABLE_COMMIT_RETRY_MAX_MS_DEFAULT, TABLE_COMMIT_RETRY_MIN_MS_DEFAULT,
+};
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
+use crate::storage::iceberg::{puffin_utils, tokio_retry_utils};
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
@@ -40,7 +43,9 @@ use iceberg::table::Table as IcebergTable;
 use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
-use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
+use iceberg::{Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableIdent};
+use tokio_retry2::strategy::{jitter, ExponentialBackoff};
+use tokio_retry2::{Retry, RetryError};
 use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
@@ -734,6 +739,33 @@ impl IcebergTableManager {
 
         Ok(remote_file_indices)
     }
+
+    /// Commit transaction with retry.
+    ///
+    /// TODO(hjiang): Add unit test; currently it's hard due to the difficulty to mock opendal.
+    async fn commit_transaction_with_retry(&self, txn: Transaction) -> IcebergResult<IcebergTable> {
+        let retry_strategy = ExponentialBackoff::from_millis(TABLE_COMMIT_RETRY_MIN_MS_DEFAULT)
+            .factor(table_property::TABLE_COMMIT_RETRY_FACTOR)
+            .max_delay(std::time::Duration::from_millis(
+                TABLE_COMMIT_RETRY_MAX_MS_DEFAULT,
+            ))
+            .map(jitter);
+
+        let catalog = &*self.catalog;
+        let iceberg_table = Retry::spawn(retry_strategy, || {
+            let txn = txn.clone();
+            async move {
+                let table = txn
+                    .commit(catalog)
+                    .await
+                    .map_err(tokio_retry_utils::iceberg_to_tokio_retry_error)?;
+                Ok::<IcebergTable, RetryError<IcebergError>>(table)
+            }
+        })
+        .await?;
+
+        Ok(iceberg_table)
+    }
 }
 
 /// TODO(hjiang): Parallelize all IO operations.
@@ -790,8 +822,9 @@ impl TableManager for IcebergTableManager {
             snapshot_payload.flush_lsn.to_string(),
         );
         txn = action.apply(txn)?;
+        let updated_iceberg_table = self.commit_transaction_with_retry(txn).await?;
+        self.iceberg_table = Some(updated_iceberg_table);
 
-        self.iceberg_table = Some(txn.commit(&*self.catalog).await?);
         self.catalog.clear_puffin_metadata();
 
         // NOTICE: persisted data files and file indices are returned in the order of (1) newly imported ones; (2) index merge ones; (3) data compacted ones.

@@ -3,7 +3,6 @@ use iceberg::Error as IcebergError;
 use tokio_retry2::RetryError as TokioRetryError;
 
 /// Convert iceberg error to tokio retry error. Only `Unexpected` iceberg error translates to transient error.
-#[allow(dead_code)]
 pub(crate) fn iceberg_to_tokio_retry_error(err: IcebergError) -> TokioRetryError<IcebergError> {
     match err.kind() {
         iceberg::ErrorKind::Unexpected => TokioRetryError::Transient {

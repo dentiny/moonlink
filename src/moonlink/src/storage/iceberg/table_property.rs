@@ -12,16 +12,18 @@ pub(crate) const METADATA_COMPRESSION_DEFAULT: &str = "none";
 
 /// Retry properties.
 pub(crate) const TABLE_COMMIT_RETRY_NUM: &str = "commit.retry.num-retries";
-pub(crate) const TABLE_COMMIT_RETRY_NUM_DEFAULT: u64 = 0;
+pub(crate) const TABLE_COMMIT_RETRY_NUM_DEFAULT: u64 = 3;
 
 pub(crate) const TABLE_COMMIT_RETRY_MIN_MS: &str = "commit.retry.min-wait-ms";
-pub(crate) const TABLE_COMMIT_RETRY_MIN_MS_DEFAULT: u64 = 0;
+pub(crate) const TABLE_COMMIT_RETRY_MIN_MS_DEFAULT: u64 = 200;
 
 pub(crate) const TABLE_COMMIT_RETRY_MAX_MS: &str = "commit.retry.max-wait-ms";
-pub(crate) const TABLE_COMMIT_RETRY_MAX_MS_DEFAULT: u64 = 0;
+pub(crate) const TABLE_COMMIT_RETRY_MAX_MS_DEFAULT: u64 = 30000; // 30 second
 
 pub(crate) const TABLE_COMMIT_RETRY_TIMEOUT_MS: &str = "commit.retry.total-timeout-ms";
-pub(crate) const TABLE_COMMIT_RETRY_TIMEOUT_MS_DEFAULT: u64 = 0;
+pub(crate) const TABLE_COMMIT_RETRY_TIMEOUT_MS_DEFAULT: u64 = 120000; // 2 min
+
+pub(crate) const TABLE_COMMIT_RETRY_FACTOR: u64 = 2;
 
 // Create iceberg table properties from table config.
 pub(crate) fn create_iceberg_table_properties() -> HashMap<String, String> {
