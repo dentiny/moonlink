@@ -1,6 +1,7 @@
 use crate::base_metadata_store::TableMetadataEntry;
 use crate::error::Result;
 use crate::postgres::config_utils;
+use crate::postgres::utils;
 use crate::{base_metadata_store::MetadataStoreTrait, error::Error};
 use moonlink::MoonlinkTableConfig;
 
@@ -13,6 +14,8 @@ use std::sync::Arc;
 
 /// SQL statements for moonlink metadata table schema.
 const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
+/// Database schema for moonlink.
+const MOONLINK_SCHEMA: &str = "mooncake";
 
 #[allow(dead_code)]
 pub struct PgMetadataStore {
@@ -68,20 +71,6 @@ impl MetadataStoreTrait for PgMetadataStore {
         Ok(metadata_entries)
     }
 
-    async fn schema_exists(&self, schema_name: &str) -> Result<bool> {
-        let row = {
-            let guard = self.postgres_client.lock().await;
-            guard
-                .query_opt(
-                    "SELECT 1 FROM pg_namespace WHERE nspname = $1;",
-                    &[&schema_name],
-                )
-                .await?
-        };
-
-        Ok(row.is_some())
-    }
-
     async fn store_table_config(
         &self,
         table_id: u32,
@@ -128,8 +117,8 @@ impl MetadataStoreTrait for PgMetadataStore {
 }
 
 impl PgMetadataStore {
-    /// Precondition: [`mooncake`] schema has been created in the current database.
-    pub async fn new(uri: &str) -> Result<Self> {
+    /// Attempt to create a metadata storage; if [`mooncake`] schema doesn't exist, current database is not managed by moonlink, return None.
+    pub async fn new(uri: &str) -> Result<Option<Self>> {
         let (postgres_client, connection) = connect(uri, NoTls).await?;
 
         // Spawn connection driver in background to keep eventloop alive.
@@ -138,14 +127,19 @@ impl PgMetadataStore {
                 eprintln!("Postgres connection error: {}", e);
             }
         });
+        let schema_exists = utils::schema_exists(&postgres_client, MOONLINK_SCHEMA).await?;
+        if !schema_exists {
+            return Ok(None);
+        }
 
+        // Create metadata storage table.
         postgres_client
             .simple_query(CREATE_TABLE_SCHEMA_SQL)
             .await?;
 
-        Ok(Self {
+        Ok(Some(Self {
             postgres_client: Arc::new(Mutex::new(postgres_client)),
             _pg_connection,
-        })
+        }))
     }
 }

@@ -41,7 +41,7 @@ mod tests {
     #[serial]
     async fn test_get_database_id() {
         let _test_environment = TestEnvironment::new(URI).await;
-        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap().unwrap();
         let database_id = metadata_store.get_database_id().await.unwrap();
         ma::assert_gt!(database_id, 0);
     }
@@ -53,7 +53,7 @@ mod tests {
         // Unused metadata storage, used to check it could be initialized for multiple times idempotently.
         let _metadata_store = PgMetadataStore::new(URI).await.unwrap();
         // Initialize for the second time.
-        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap().unwrap();
         let moonlink_table_config = get_moonlink_table_config();
 
         // Store moonlink table config to metadata storage.
@@ -71,7 +71,7 @@ mod tests {
     #[serial]
     async fn test_table_metadata_load_from_non_existent_table() {
         let _test_environment = TestEnvironment::new(URI).await;
-        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap().unwrap();
 
         // Load moonlink table config from metadata config.
         let metadata_entries = metadata_store
@@ -86,7 +86,7 @@ mod tests {
     #[serial]
     async fn test_table_metadata_store_for_duplicate_tables() {
         let _test_environment = TestEnvironment::new(URI).await;
-        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap().unwrap();
         let moonlink_table_config = get_moonlink_table_config();
 
         // Store moonlink table config to metadata storage.
@@ -107,7 +107,7 @@ mod tests {
     #[serial]
     async fn test_delete_table_metadata_store() {
         let _test_environment = TestEnvironment::new(URI).await;
-        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap().unwrap();
         let moonlink_table_config = get_moonlink_table_config();
 
         // Store moonlink table config to metadata storage.

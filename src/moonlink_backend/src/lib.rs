@@ -25,8 +25,6 @@ pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./temp/";
 pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./read_through_cache/";
 /// Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
-/// Database schema for moonlink.
-const MOONLINK_SCHEMA: &str = "mooncake";
 
 /// Get temporary directory under base path.
 fn get_temp_file_directory_under_base(base_path: &str) -> std::path::PathBuf {
@@ -151,20 +149,17 @@ where
     async fn recover_all_tables(&mut self, metadata_store_uris: Vec<String>) -> Result<()> {
         for cur_metadata_store_uri in metadata_store_uris.into_iter() {
             // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink.
-            let pg_metadata_store = PgMetadataStore::new(&cur_metadata_store_uri).await?;
-            let schema_exists = pg_metadata_store.schema_exists(MOONLINK_SCHEMA).await?;
-            if !schema_exists {
-                continue;
-            }
+            if let Some(pg_metadata_store) = PgMetadataStore::new(&cur_metadata_store_uri).await? {
+                // Get database id.
+                let database_id = pg_metadata_store.get_database_id().await?;
+                // Get all mooncake tables to recovery.
+                let table_metadata_entries =
+                    pg_metadata_store.get_all_table_metadata_entries().await?;
 
-            // Get database id.
-            let database_id = pg_metadata_store.get_database_id().await?;
-            // Get all mooncake tables to recovery.
-            let table_metadata_entries = pg_metadata_store.get_all_table_metadata_entries().await?;
-
-            // Load config and try recovery.
-            for cur_metadata_entry in table_metadata_entries.into_iter() {
-                self.recover_table(database_id, cur_metadata_entry).await?;
+                // Load config and try recovery.
+                for cur_metadata_entry in table_metadata_entries.into_iter() {
+                    self.recover_table(database_id, cur_metadata_entry).await?;
+                }
             }
         }
 
@@ -233,7 +228,8 @@ where
             let cur_metadata_store_client = match guard.entry(database_id.clone()) {
                 HashMapEntry::Occupied(entry) => entry.into_mut(),
                 HashMapEntry::Vacant(entry) => {
-                    let new_metadata_store = PgMetadataStore::new(&metadata_store_uri).await?;
+                    let new_metadata_store =
+                        PgMetadataStore::new(&metadata_store_uri).await?.unwrap();
                     entry.insert(new_metadata_store)
                 }
             };

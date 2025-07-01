@@ -23,11 +23,6 @@ pub trait MetadataStoreTrait: Send {
     #[allow(async_fn_in_trait)]
     async fn get_database_id(&self) -> Result<u32>;
 
-    /// Return whether the given schema exists.
-    /// Context: database concept hierarchy is database -> schema -> table.
-    #[allow(async_fn_in_trait)]
-    async fn schema_exists(&self, schema_name: &str) -> Result<bool>;
-
     /// Get all mooncake table metadata entries in the metadata storage table.
     /// Notice, schema existence should be checked beforehand, otherwise empty entries will be returned if schema doesn't exist.
     #[allow(async_fn_in_trait)]
