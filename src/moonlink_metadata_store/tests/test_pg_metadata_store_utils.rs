@@ -29,13 +29,16 @@ mod tests {
         // Re-create mooncake schema.
         postgres_client
             .simple_query(&format!(
-                "DROP SCHEMA IF EXISTS {0}; CREATE SCHEMA {0};",
+                "DROP SCHEMA IF EXISTS {0} CASCADE; CREATE SCHEMA {0};",
                 EXISTENT_SCHEMA
             ))
             .await
             .unwrap();
         postgres_client
-            .simple_query(&format!("DROP SCHEMA IF EXISTS {0};", NON_EXISTENT_SCHEMA))
+            .simple_query(&format!(
+                "DROP SCHEMA IF EXISTS {0} CASCADE;",
+                NON_EXISTENT_SCHEMA
+            ))
             .await
             .unwrap();
 

@@ -18,6 +18,9 @@ mod tests {
     const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const DST_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const METADATA_STORE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
+    /// Database schema for moonlink.
+    const MOONLINK_SCHEMA: &str = "mooncake";
+    /// SQL statements to create metadata storage table.
     const CREATE_TABLE_SCHEMA_SQL: &str =
         include_str!("../../moonlink_metadata_store/src/postgres/sql/create_tables.sql");
 
@@ -152,6 +155,10 @@ mod tests {
                  CREATE TABLE {0} (id BIGINT PRIMARY KEY, name TEXT);",
                 table_name
             ))
+            .await
+            .unwrap();
+        client
+            .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake")
             .await
             .unwrap();
         client
@@ -495,6 +502,35 @@ mod tests {
             .await
             .unwrap();
         assert!(metadata_entries.is_empty());
+    }
+
+    /// Test recovery, where database to recovery is not managed by moonlink.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn test_recovery_not_managed_by_moonlink() {
+        // Connect to Postgres.
+        let (client, connection) = connect(SRC_URI, NoTls).await.unwrap();
+        tokio::spawn(async move {
+            let _ = connection.await;
+        });
+
+        // Intentionally drop schema, which means current database is not managed by moonlink.
+        client
+            .simple_query(&format!(
+                "DROP SCHEMA IF EXISTS {0} CASCADE;",
+                MOONLINK_SCHEMA
+            ))
+            .await
+            .unwrap();
+
+        // Attempt recovery logic, no tables should be recovered.
+        let temp_dir = TempDir::new().unwrap();
+        let _backend = MoonlinkBackend::<DatabaseId, TableId>::new_with_recovery(
+            temp_dir.path().to_str().unwrap().to_string(),
+            /*metadata_store_uris=*/ vec![METADATA_STORE_URI.to_string()],
+        )
+        .await
+        .unwrap();
     }
 
     /// Test recovery.
