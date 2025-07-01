@@ -7,7 +7,7 @@ use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink_connectors::ReplicationManager;
-use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
+use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMetadataEntry};
 use moonlink_metadata_store::PgMetadataStore;
 use more_asserts as ma;
 use std::collections::hash_map::Entry as HashMapEntry;
@@ -17,14 +17,16 @@ use std::io::ErrorKind;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-// Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
-// The whole directory is cleaned up at moonlink backend start, to prevent file leak.
+/// Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
+/// The whole directory is cleaned up at moonlink backend start, to prevent file leak.
 pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./temp/";
-// Default object storage read-through cache directory under the above mooncake directory (which defaults to `PGDATA/pg_mooncake`).
-// The whole directory is cleaned up at moonlink backend start, to prevent file leak.
+/// Default object storage read-through cache directory under the above mooncake directory (which defaults to `PGDATA/pg_mooncake`).
+/// The whole directory is cleaned up at moonlink backend start, to prevent file leak.
 pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./read_through_cache/";
-// Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
+/// Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
+/// Database schema for moonlink.
+const MOONLINK_SCHEMA: &str = "mooncake";
 
 /// Get temporary directory under base path.
 fn get_temp_file_directory_under_base(base_path: &str) -> std::path::PathBuf {
@@ -52,8 +54,8 @@ pub fn recreate_directory(dir: &str) -> Result<()> {
 }
 
 pub struct MoonlinkBackend<
-    D: Eq + Hash + Clone + std::fmt::Display,
-    T: Eq + Hash + Clone + std::fmt::Display,
+    D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
+    T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 > {
     // Could be either relative or absolute path.
     replication_manager: RwLock<ReplicationManager<MooncakeTableId<D, T>>>,
@@ -91,8 +93,8 @@ fn create_default_object_storage_cache(
 
 impl<D, T> MoonlinkBackend<D, T>
 where
-    D: Eq + Hash + Clone + std::fmt::Display,
-    T: Eq + Hash + Clone + std::fmt::Display,
+    D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
+    T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 {
     pub fn new(base_path: String) -> Self {
         logging::init_logging();
@@ -113,14 +115,69 @@ where
         }
     }
 
+    /// Recovery the given table.
+    async fn recover_table(
+        &mut self,
+        src_uri: &str,
+        database_id: u32,
+        metadata_entry: TableMetadataEntry,
+    ) -> Result<()> {
+        let mooncake_table_id = MooncakeTableId {
+            database_id: D::from(database_id),
+            table_id: T::from(metadata_entry.table_id),
+        };
+
+        let mut manager = self.replication_manager.write().await;
+        manager
+            .add_table(
+                src_uri,
+                mooncake_table_id,
+                metadata_entry.table_id,
+                &metadata_entry.src_table_name,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Recovery all databases indicated by the connection strings.
+    ///
+    /// TODO(hjiang): Parallelize all IO operations.
+    async fn recover_all_tables(&mut self, uris: HashMap<String, String>) -> Result<()> {
+        for (src_uri, metadata_store_uri) in uris.into_iter() {
+            // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink.
+            let pg_metadata_store = PgMetadataStore::new(&metadata_store_uri).await?;
+            let schema_exists = pg_metadata_store.schema_exists(MOONLINK_SCHEMA).await?;
+            if !schema_exists {
+                continue;
+            }
+
+            // Get database id.
+            let database_id = pg_metadata_store.get_database_id().await?;
+            // Get all mooncake tables to recovery.
+            let table_metadata_entries = pg_metadata_store.get_all_table_metadata_entries().await?;
+
+            // Load config and try recovery.
+            for cur_metadata_entry in table_metadata_entries.into_iter() {
+                self.recover_table(&src_uri, database_id, cur_metadata_entry)
+                    .await?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// TODO(hjiang): Add this new initialization construct for dev purpose, should merge with [`new`] at the end of the day.
     ///
     /// # Arguments
     ///
     /// * uris: maps from source uris to metadata store uris.
-    pub fn new_with_recovery(base_path: String, uris: HashMap<String, String>) -> Self {
-        let backend = Self::new(base_path);
-        backend
+    pub async fn new_with_recovery(
+        base_path: String,
+        uris: HashMap<String, String>,
+    ) -> Result<Self> {
+        let mut backend = Self::new(base_path);
+        backend.recover_all_tables(uris).await?;
+        Ok(backend)
     }
 
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.

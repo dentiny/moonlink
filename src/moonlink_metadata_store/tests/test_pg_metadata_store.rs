@@ -20,6 +20,22 @@ mod tests {
 
     use serial_test::serial;
 
+    /// Test util function to get table metadata entries, and check whether it matches written one.
+    async fn check_persisted_metadata(pg_metadata_store: &PgMetadataStore) {
+        let metadata_entries = pg_metadata_store
+            .get_all_table_metadata_entries()
+            .await
+            .unwrap();
+        assert_eq!(metadata_entries.len(), 1);
+        let table_metadata_entry = &metadata_entries[0];
+        assert_eq!(table_metadata_entry.table_id, TABLE_ID);
+        assert_eq!(table_metadata_entry.src_table_name, TABLE_NAME);
+        assert_eq!(
+            table_metadata_entry.moonlink_table_config,
+            get_moonlink_table_config()
+        );
+    }
+
     #[tokio::test]
     #[serial]
     async fn test_get_database_id() {
@@ -46,8 +62,7 @@ mod tests {
             .unwrap();
 
         // Load moonlink table config from metadata config.
-        let actual_config = metadata_store.load_table_config(TABLE_ID).await.unwrap();
-        assert_eq!(moonlink_table_config, actual_config);
+        check_persisted_metadata(&metadata_store).await;
     }
 
     /// Test scenario: load from non-existent row.
@@ -58,8 +73,11 @@ mod tests {
         let metadata_store = PgMetadataStore::new(URI).await.unwrap();
 
         // Load moonlink table config from metadata config.
-        let res = metadata_store.load_table_config(TABLE_ID).await;
-        assert!(res.is_err());
+        let metadata_entries = metadata_store
+            .get_all_table_metadata_entries()
+            .await
+            .unwrap();
+        assert!(metadata_entries.is_empty());
     }
 
     /// Test scenario: store for duplicate table ids.
@@ -96,13 +114,17 @@ mod tests {
             .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
             .await
             .unwrap();
-        let actual_config = metadata_store.load_table_config(TABLE_ID).await.unwrap();
-        assert_eq!(moonlink_table_config, actual_config);
+
+        // Load and check moonlink table config from metadata config.
+        check_persisted_metadata(&metadata_store).await;
 
         // Delete moonlink table config to metadata storage and check.
         metadata_store.delete_table_config(TABLE_ID).await.unwrap();
-        let res = metadata_store.load_table_config(TABLE_ID).await;
-        assert!(res.is_err());
+        let metadata_entries = metadata_store
+            .get_all_table_metadata_entries()
+            .await
+            .unwrap();
+        assert_eq!(metadata_entries.len(), 0);
 
         // Delete for the second time also fails.
         let res = metadata_store.delete_table_config(TABLE_ID).await;
