@@ -104,8 +104,7 @@ impl ReplicationConnection {
             Some(slot_name.clone()),
             TableNamesFrom::Publication("moonlink_pub".to_string()),
         )
-        .await
-        .unwrap();
+        .await?;
 
         let (cmd_tx, cmd_rx) = mpsc::channel(8);
 
@@ -140,8 +139,7 @@ impl ReplicationConnection {
                 "ALTER TABLE {} REPLICA IDENTITY FULL;",
                 table_name
             ))
-            .await
-            .unwrap();
+            .await?;
         Ok(())
     }
 
@@ -151,15 +149,13 @@ impl ReplicationConnection {
                 "ALTER PUBLICATION moonlink_pub ADD TABLE {};",
                 table_name
             ))
-            .await
-            .unwrap();
+            .await?;
         self.postgres_client
             .simple_query(&format!(
                 "ALTER TABLE {} REPLICA IDENTITY FULL;",
                 table_name
             ))
-            .await
-            .unwrap();
+            .await?;
         Ok(())
     }
 
