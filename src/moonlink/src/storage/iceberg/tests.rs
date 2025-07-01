@@ -795,7 +795,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*table_id=*/ 1,
         path,
         identity_property,
         iceberg_table_config.clone(),
@@ -837,7 +837,7 @@ async fn test_skip_iceberg_snapshot() {
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*table_id=*/ 1,
         path,
         identity_property,
         iceberg_table_config.clone(),
@@ -895,7 +895,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*table_id=*/ 1,
         path,
         identity_property,
         iceberg_table_config.clone(),
@@ -1173,7 +1173,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*table_id=*/ 1,
         path,
         identity_property.clone(),
         iceberg_table_config.clone(),
@@ -1526,7 +1526,7 @@ async fn test_drop_table_at_creation() {
     let mut table = MooncakeTable::new(
         create_test_arrow_schema().as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*table_id=*/ 1,
         PathBuf::from(&path),
         mooncake_table_metadata.identity.clone(),
         iceberg_table_config.clone(),
@@ -1582,7 +1582,7 @@ async fn test_multiple_table_ids_for_deletion_vector() {
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ 1,
+        /*table_id=*/ 1,
         path,
         identity_property,
         iceberg_table_config.clone(),

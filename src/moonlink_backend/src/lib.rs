@@ -10,6 +10,7 @@ use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::PgMetadataStore;
 use more_asserts as ma;
+use std::collections::hash_map::Entry as HashMapEntry;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::io::ErrorKind;
@@ -140,11 +141,11 @@ where
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
             database_id: database_id.clone(),
-            table_id: table_id.clone(),
+            table_id,
         };
         let table_id = mooncake_table_id.get_table_id_value();
 
-        // Add column store table to replication, and create corresponding mooncake table.
+        // Add mooncake table to replication, and create corresponding mooncake table.
         let moonlink_table_config = {
             let mut manager = self.replication_manager.write().await;
             manager
@@ -155,14 +156,12 @@ where
         // Create metadata store entry.
         {
             let mut guard = self.metadata_store_clients.write().await;
-            let cur_metadata_store_client = if guard.contains_key(&database_id) {
-                guard.get(&database_id).unwrap()
-            } else {
-                let new_metadata_store = PgMetadataStore::new(&metadata_store_uri).await?;
-                assert!(guard
-                    .insert(database_id.clone(), new_metadata_store)
-                    .is_none());
-                guard.get(&database_id).unwrap()
+            let cur_metadata_store_client = match guard.entry(database_id.clone()) {
+                HashMapEntry::Occupied(entry) => entry.into_mut(),
+                HashMapEntry::Vacant(entry) => {
+                    let new_metadata_store = PgMetadataStore::new(&metadata_store_uri).await?;
+                    entry.insert(new_metadata_store)
+                }
             };
             cur_metadata_store_client
                 .store_table_config(table_id, &src_table_name, moonlink_table_config)
