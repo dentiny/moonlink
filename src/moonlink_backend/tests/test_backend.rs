@@ -473,19 +473,27 @@ mod tests {
         let metadata_store = PgMetadataStore::new(DST_URI).await.unwrap();
 
         // Check metadata storage after table creation.
-        let moonlink_table_config = metadata_store
-            .load_table_config(TABLE_ID as u32)
+        let metadata_entries = metadata_store
+            .get_all_table_metadata_entries()
             .await
             .unwrap();
+        assert_eq!(metadata_entries.len(), 1);
+        assert_eq!(metadata_entries[0].table_id, TABLE_ID as u32);
         assert_eq!(
-            moonlink_table_config.iceberg_table_config.table_name,
+            metadata_entries[0]
+                .moonlink_table_config
+                .iceberg_table_config
+                .table_name,
             format!("{}.{}", guard.database_id, TABLE_ID)
         );
 
         // Drop table and check metadata storage.
         backend.drop_table(guard.database_id, TABLE_ID).await;
-        let res = metadata_store.load_table_config(TABLE_ID as u32).await;
-        assert!(res.is_err());
+        let metadata_entries = metadata_store
+            .get_all_table_metadata_entries()
+            .await
+            .unwrap();
+        assert!(metadata_entries.is_empty());
     }
 
     /// Test recovery.

@@ -31,11 +31,6 @@ pub trait MetadataStoreTrait: Send {
     #[allow(async_fn_in_trait)]
     async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>>;
 
-    /// Load configuration for the given table.
-    /// Precondition: the requested table id has been record in the metadata storage.
-    #[allow(async_fn_in_trait)]
-    async fn load_table_config(&self, table_id: u32) -> Result<MoonlinkTableConfig>;
-
     /// Store table config for the given table.
     /// Precondition: the requested table id hasn't been recorded in the metadata storage.
     #[allow(async_fn_in_trait)]
