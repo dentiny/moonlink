@@ -5,6 +5,7 @@ use crate::error::Result;
 use moonlink::MoonlinkTableConfig;
 
 /// Metadata entry for each table.
+#[derive(Clone, Debug)]
 pub struct TableMetadataEntry {
     /// Table id.
     pub table_id: u32,

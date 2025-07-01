@@ -54,6 +54,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         mooncake_table_id: T,
         table_id: u32,
         table_name: &str,
+        override_table_base_path: Option<&str>,
     ) -> Result<MoonlinkTableConfig> {
         info!(%src_uri, table_name, "adding table through manager");
         if !self.connections.contains_key(src_uri) {
@@ -83,7 +84,12 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         }
 
         let (src_table_id, moonlink_table_config) = replication_connection
-            .add_table(table_name, &mooncake_table_id, table_id)
+            .add_table(
+                table_name,
+                &mooncake_table_id,
+                table_id,
+                override_table_base_path,
+            )
             .await?;
         self.table_info
             .insert(mooncake_table_id, (src_uri.to_string(), src_table_id));
@@ -115,8 +121,11 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         Ok(true)
     }
 
-    pub fn get_table_reader(&self, table_id: &T) -> &ReadStateManager {
-        let (uri, table_id) = self.table_info.get(table_id).expect("table not found");
+    pub fn get_table_reader(&self, mooncake_table_id: &T) -> &ReadStateManager {
+        let (uri, table_id) = self
+            .table_info
+            .get(mooncake_table_id)
+            .unwrap_or_else(|| panic!("table {} not found", mooncake_table_id));
         let connection = self.connections.get(uri).expect("connection not found");
         connection.get_table_reader(*table_id)
     }
