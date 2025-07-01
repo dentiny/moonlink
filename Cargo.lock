@@ -2481,6 +2481,7 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "moonlink",
+ "more-asserts",
  "postgres-types",
  "serde",
  "serde_json",

@@ -3,7 +3,7 @@ mod tests {
     use arrow_array::Int64Array;
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, PgMetadataStore};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use std::sync::Arc;
+    use std::{collections::HashMap, sync::Arc};
     use tempfile::TempDir;
     use tokio_postgres::{connect, types::PgLsn, Client, NoTls};
 
@@ -20,9 +20,8 @@ mod tests {
     const CREATE_TABLE_SCHEMA_SQL: &str =
         include_str!("../../moonlink_metadata_store/src/postgres/sql/create_tables.sql");
 
-    type DatabaseId = u64;
+    type DatabaseId = u32;
     type TableId = u64;
-    const DATABASE_ID: DatabaseId = 0;
     const TABLE_ID: TableId = 0;
 
     // ───────────────────── Helper functions & fixtures ─────────────────────
@@ -30,14 +29,16 @@ mod tests {
     struct TestGuard {
         backend: Arc<MoonlinkBackend<DatabaseId, TableId>>,
         tmp: Option<TempDir>,
+        database_id: DatabaseId,
     }
 
     impl TestGuard {
         async fn new(table_name: &'static str) -> (Self, Client) {
-            let (tmp, backend, client) = setup_backend(table_name).await;
+            let (tmp, backend, client, database_id) = setup_backend(table_name).await;
             let guard = Self {
                 backend: Arc::new(backend),
                 tmp: Some(tmp),
+                database_id,
             };
             (guard, client)
         }
@@ -51,13 +52,25 @@ mod tests {
 
             tokio::task::block_in_place(|| {
                 tokio::runtime::Handle::current().block_on(async move {
-                    let _ = backend.drop_table(DATABASE_ID, TABLE_ID).await;
+                    let _ = backend.drop_table(self.database_id, TABLE_ID).await;
                     let _ = backend.shutdown_connection(SRC_URI).await;
                     let _ = recreate_directory(DEFAULT_MOONLINK_TEMP_FILE_PATH);
                     drop(tmp);
                 });
             });
         }
+    }
+
+    /// Get current database id.
+    async fn get_current_database_id(client: &Client) -> u32 {
+        let row = client
+            .query_one(
+                "SELECT oid FROM pg_database WHERE datname = current_database()",
+                &[],
+            )
+            .await
+            .unwrap();
+        row.get(0)
     }
 
     /// Return the current WAL LSN as a simple `u64`.
@@ -100,7 +113,12 @@ mod tests {
     /// Moonlink.
     async fn setup_backend(
         table_name: &'static str,
-    ) -> (TempDir, MoonlinkBackend<DatabaseId, TableId>, Client) {
+    ) -> (
+        TempDir,
+        MoonlinkBackend<DatabaseId, TableId>,
+        Client,
+        DatabaseId,
+    ) {
         let temp_dir = TempDir::new().unwrap();
         let backend =
             MoonlinkBackend::<DatabaseId, TableId>::new(temp_dir.path().to_str().unwrap().into());
@@ -110,6 +128,9 @@ mod tests {
         tokio::spawn(async move {
             let _ = connection.await;
         });
+
+        // Get current database id.
+        let database_id = get_current_database_id(&client).await;
 
         // Clear any leftover replication slot from previous runs.
         let _ = client
@@ -138,7 +159,7 @@ mod tests {
             .unwrap();
         backend
             .create_table(
-                DATABASE_ID,
+                database_id,
                 /*table_id=*/ TABLE_ID,
                 DST_URI.to_string(),
                 /*src_table_name=*/ format!("public.{table_name}"),
@@ -147,7 +168,7 @@ mod tests {
             .await
             .unwrap();
 
-        (temp_dir, backend, client)
+        (temp_dir, backend, client, database_id)
     }
 
     /// Reusable helper for the "create table / insert rows / detect change"
@@ -155,6 +176,7 @@ mod tests {
     async fn smoke_create_and_insert(
         backend: &MoonlinkBackend<DatabaseId, TableId>,
         client: &Client,
+        database_id: DatabaseId,
         uri: &str,
     ) {
         client
@@ -172,7 +194,7 @@ mod tests {
 
         backend
             .create_table(
-                DATABASE_ID,
+                database_id,
                 TABLE_ID,
                 DST_URI.to_string(),
                 /*table_name=*/ "public.test".to_string(),
@@ -188,12 +210,12 @@ mod tests {
             .unwrap();
 
         let old = backend
-            .scan_table(DATABASE_ID, TABLE_ID, /*lsn=*/ None)
+            .scan_table(database_id, TABLE_ID, /*lsn=*/ None)
             .await
             .unwrap();
         let lsn = current_wal_lsn(client).await;
         let new = backend
-            .scan_table(DATABASE_ID, TABLE_ID, Some(lsn))
+            .scan_table(database_id, TABLE_ID, Some(lsn))
             .await
             .unwrap();
         assert_ne!(old.data, new.data);
@@ -229,9 +251,9 @@ mod tests {
         let (guard, client) = TestGuard::new("test").await;
         let backend = &guard.backend;
 
-        smoke_create_and_insert(backend, &client, SRC_URI).await;
-        backend.drop_table(DATABASE_ID, TABLE_ID).await;
-        smoke_create_and_insert(backend, &client, SRC_URI).await;
+        smoke_create_and_insert(backend, &client, guard.database_id, SRC_URI).await;
+        backend.drop_table(guard.database_id, TABLE_ID).await;
+        smoke_create_and_insert(backend, &client, guard.database_id, SRC_URI).await;
     }
 
     /// End-to-end: inserts should appear in `scan_table`.
@@ -249,7 +271,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, Some(lsn))
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn))
                 .await
                 .unwrap(),
         );
@@ -264,7 +286,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, Some(lsn))
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn))
                 .await
                 .unwrap(),
         );
@@ -286,7 +308,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, Some(lsn1))
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn1))
                 .await
                 .unwrap(),
         );
@@ -300,7 +322,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, Some(lsn2))
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn2))
                 .await
                 .unwrap(),
         );
@@ -324,7 +346,7 @@ mod tests {
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         backend
-            .create_snapshot(DATABASE_ID, TABLE_ID, lsn)
+            .create_snapshot(guard.database_id, TABLE_ID, lsn)
             .await
             .unwrap();
 
@@ -335,7 +357,7 @@ mod tests {
             .unwrap()
             .path()
             .join("public")
-            .join(format!("{}.{}", DATABASE_ID, TABLE_ID))
+            .join(format!("{}.{}", guard.database_id, TABLE_ID))
             .join("metadata");
         assert!(meta_dir.exists());
         assert!(meta_dir.read_dir().unwrap().next().is_some());
@@ -351,12 +373,12 @@ mod tests {
         let backend = &guard.backend;
 
         // Drop the table that setup_backend created so we can test the full cycle
-        backend.drop_table(DATABASE_ID, TABLE_ID).await;
+        backend.drop_table(guard.database_id, TABLE_ID).await;
 
         // First cycle: add table, insert data, verify it works
         backend
             .create_table(
-                DATABASE_ID,
+                guard.database_id,
                 TABLE_ID,
                 DST_URI.to_string(),
                 "public.repl_test".to_string(),
@@ -373,19 +395,19 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, None)
+                .scan_table(guard.database_id, TABLE_ID, None)
                 .await
                 .unwrap(),
         );
         assert_eq!(ids, HashSet::from([1]));
 
         // Drop the table (this should clean up the replication connection)
-        backend.drop_table(DATABASE_ID, TABLE_ID).await;
+        backend.drop_table(guard.database_id, TABLE_ID).await;
 
         // Second cycle: add table again, insert different data, verify it works
         backend
             .create_table(
-                DATABASE_ID,
+                guard.database_id,
                 TABLE_ID,
                 DST_URI.to_string(),
                 /*table_name=*/ "public.repl_test".to_string(),
@@ -402,7 +424,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, /*lsn=*/ None)
+                .scan_table(guard.database_id, TABLE_ID, /*lsn=*/ None)
                 .await
                 .unwrap(),
         );
@@ -430,7 +452,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(DATABASE_ID, TABLE_ID, Some(lsn_after_insert))
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn_after_insert))
                 .await
                 .unwrap(),
         );
@@ -451,18 +473,81 @@ mod tests {
         let metadata_store = PgMetadataStore::new(DST_URI).await.unwrap();
 
         // Check metadata storage after table creation.
-        let moonlink_table_config = metadata_store
-            .load_table_config(TABLE_ID as u32)
+        let metadata_entries = metadata_store
+            .get_all_table_metadata_entries()
             .await
             .unwrap();
+        assert_eq!(metadata_entries.len(), 1);
+        assert_eq!(metadata_entries[0].table_id, TABLE_ID as u32);
         assert_eq!(
-            moonlink_table_config.iceberg_table_config.table_name,
-            format!("{}.{}", DATABASE_ID, TABLE_ID)
+            metadata_entries[0]
+                .moonlink_table_config
+                .iceberg_table_config
+                .table_name,
+            format!("{}.{}", guard.database_id, TABLE_ID)
         );
 
         // Drop table and check metadata storage.
-        backend.drop_table(DATABASE_ID, TABLE_ID).await;
-        let res = metadata_store.load_table_config(TABLE_ID as u32).await;
-        assert!(res.is_err());
+        backend.drop_table(guard.database_id, TABLE_ID).await;
+        let metadata_entries = metadata_store
+            .get_all_table_metadata_entries()
+            .await
+            .unwrap();
+        assert!(metadata_entries.is_empty());
+    }
+
+    /// Test recovery.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn test_recovery() {
+        let (guard, client) = TestGuard::new("recovery").await;
+        let backend = &guard.backend;
+
+        // Drop the table that setup_backend created so we can test the full cycle
+        backend.drop_table(guard.database_id, TABLE_ID).await;
+
+        // First cycle: add table, insert data, verify it works
+        backend
+            .create_table(
+                guard.database_id,
+                TABLE_ID,
+                DST_URI.to_string(),
+                "public.recovery".to_string(),
+                SRC_URI.to_string(),
+            )
+            .await
+            .unwrap();
+
+        client
+            .simple_query("INSERT INTO recovery VALUES (1,'first');")
+            .await
+            .unwrap();
+        let lsn = current_wal_lsn(&client).await;
+        // Wait for a while so changes are streamed to mooncake table.
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        // Force create iceberg snapshot to test mooncake/iceberg table recovery.
+        backend
+            .create_snapshot(guard.database_id, TABLE_ID, lsn)
+            .await
+            .unwrap();
+
+        // Attempt recovery logic.
+        let temp_dir = TempDir::new().unwrap();
+        let uris = HashMap::<String, String>::from([(SRC_URI.to_string(), SRC_URI.to_string())]);
+        let backend = MoonlinkBackend::<DatabaseId, TableId>::new_with_recovery(
+            temp_dir.path().to_str().unwrap().to_string(),
+            uris,
+        )
+        .await
+        .unwrap();
+        let ids = ids_from_state(
+            &backend
+                .scan_table(guard.database_id, TABLE_ID, /*lsn=*/ None)
+                .await
+                .unwrap(),
+        );
+        assert_eq!(ids, HashSet::from([1]));
+
+        // TODO(hjiang): Add test cases to insert new rows to make sure recovered mooncake table works.
     }
 }

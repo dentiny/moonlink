@@ -1,3 +1,4 @@
+use crate::base_metadata_store::TableMetadataEntry;
 use crate::error::Result;
 use crate::postgres::config_utils;
 use crate::{base_metadata_store::MetadataStoreTrait, error::Error};
@@ -23,28 +24,64 @@ pub struct PgMetadataStore {
 
 #[async_trait]
 impl MetadataStoreTrait for PgMetadataStore {
-    async fn load_table_config(&self, table_id: u32) -> Result<MoonlinkTableConfig> {
+    async fn get_database_id(&self) -> Result<u32> {
+        let row = {
+            let guard = self.postgres_client.lock().await;
+            guard
+                .query_one(
+                    "SELECT oid FROM pg_database WHERE datname = current_database()",
+                    &[],
+                )
+                .await?
+        };
+        let oid = row.get("oid");
+        Ok(oid)
+    }
+
+    async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>> {
         let rows = {
             let guard = self.postgres_client.lock().await;
-
             guard
-                .query("SELECT * FROM mooncake.tables WHERE oid = $1", &[&table_id])
-                .await
-                .expect("Failed to query tables")
+                .query("SELECT oid, table_name, config FROM mooncake.tables", &[])
+                .await?
+        };
+
+        let mut metadata_entries = Vec::with_capacity(rows.len());
+        for cur_row in rows.into_iter() {
+            assert_eq!(cur_row.len(), 3);
+            let table_id = cur_row.get("oid");
+            let src_table_name = cur_row.get("table_name");
+            let serialized_config = cur_row.get("config");
+            let moonlink_table_config =
+                config_utils::deserialze_moonlink_table_config(serialized_config)?;
+            metadata_entries.push(TableMetadataEntry {
+                table_id,
+                src_table_name,
+                moonlink_table_config,
+            });
+        }
+        Ok(metadata_entries)
+    }
+
+    async fn schema_exists(&self, schema_name: &str) -> Result<bool> {
+        let rows = {
+            let guard = self.postgres_client.lock().await;
+            guard
+                .query(
+                    "SELECT 1 FROM pg_namespace WHERE nspname = $1;",
+                    &[&schema_name],
+                )
+                .await?
         };
 
         if rows.is_empty() {
-            return Err(Error::TableIdNotFound(table_id));
+            return Ok(false);
         }
-        if rows.len() != 1 {
-            return Err(Error::PostgresRowCountError(1, rows.len() as u32));
+        if rows.len() == 1 {
+            return Ok(true);
         }
 
-        let row = &rows[0];
-        let config_json = row.get("config");
-        let moonlink_config = config_utils::deserialze_moonlink_table_config(config_json)?;
-
-        Ok(moonlink_config)
+        Err(Error::PostgresRowCountError(1, rows.len() as u32))
     }
 
     async fn store_table_config(

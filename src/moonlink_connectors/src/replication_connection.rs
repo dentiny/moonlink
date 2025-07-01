@@ -273,11 +273,15 @@ impl ReplicationConnection {
         })
     }
 
+    /// # Arguments
+    ///
+    /// * override_table_base_path: directory for the table to add into replication, fallback to [`self.table_base_path`] if unassigned.
     async fn add_table_to_replication<T: std::fmt::Display>(
         &mut self,
         schema: &TableSchema,
         mooncake_table_id: &T,
         table_id: u32,
+        override_table_base_path: Option<&str>,
     ) -> Result<MoonlinkTableConfig> {
         let src_table_id = schema.src_table_id;
         debug!(src_table_id, "adding table to replication");
@@ -285,7 +289,7 @@ impl ReplicationConnection {
             mooncake_table_id.to_string(),
             table_id,
             schema,
-            Path::new(&self.table_base_path),
+            Path::new(override_table_base_path.unwrap_or(&self.table_base_path)),
             self.table_temp_files_directory.clone(),
             &self.replication_state,
             self.object_storage_cache.clone(),
@@ -360,6 +364,7 @@ impl ReplicationConnection {
         table_name: &str,
         external_table_id: &T,
         table_id: u32,
+        override_table_base_path: Option<&str>,
     ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
         info!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
@@ -367,7 +372,12 @@ impl ReplicationConnection {
         let table_schema = self.source.fetch_table_schema(table_name, None).await?;
 
         let moonlink_table_config = self
-            .add_table_to_replication(&table_schema, external_table_id, table_id)
+            .add_table_to_replication(
+                &table_schema,
+                external_table_id,
+                table_id,
+                override_table_base_path,
+            )
             .await?;
 
         self.add_table_to_publication(table_name).await?;
