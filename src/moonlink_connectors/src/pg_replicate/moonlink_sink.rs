@@ -2,7 +2,7 @@ use crate::pg_replicate::util::PostgresTableRow;
 use crate::pg_replicate::{
     conversions::{cdc_event::CdcEvent, table_row::TableRow},
     replication_state::ReplicationState,
-    table::RowstoreTableId,
+    table::SrcTableId,
 };
 use moonlink::TableEvent;
 use std::collections::{HashMap, HashSet};
@@ -16,12 +16,12 @@ use tracing::{debug, warn};
 #[derive(Default)]
 struct TransactionState {
     final_lsn: u64,
-    touched_tables: HashSet<RowstoreTableId>,
+    touched_tables: HashSet<SrcTableId>,
 }
 
 pub struct Sink {
-    event_senders: HashMap<RowstoreTableId, Sender<TableEvent>>,
-    commit_lsn_txs: HashMap<RowstoreTableId, watch::Sender<u64>>,
+    event_senders: HashMap<SrcTableId, Sender<TableEvent>>,
+    commit_lsn_txs: HashMap<SrcTableId, watch::Sender<u64>>,
     streaming_transactions_state: HashMap<u32, TransactionState>,
     transaction_state: TransactionState,
     replication_state: Arc<ReplicationState>,
@@ -45,16 +45,16 @@ impl Sink {
 impl Sink {
     pub fn add_table(
         &mut self,
-        rowstore_table_id: RowstoreTableId,
+        src_table_id: SrcTableId,
         event_sender: Sender<TableEvent>,
         commit_lsn_tx: watch::Sender<u64>,
     ) {
-        self.event_senders.insert(rowstore_table_id, event_sender);
-        self.commit_lsn_txs.insert(rowstore_table_id, commit_lsn_tx);
+        self.event_senders.insert(src_table_id, event_sender);
+        self.commit_lsn_txs.insert(src_table_id, commit_lsn_tx);
     }
-    pub fn drop_table(&mut self, rowstore_table_id: RowstoreTableId) {
-        self.event_senders.remove(&rowstore_table_id).unwrap();
-        self.commit_lsn_txs.remove(&rowstore_table_id).unwrap();
+    pub fn drop_table(&mut self, src_table_id: SrcTableId) {
+        self.event_senders.remove(&src_table_id).unwrap();
+        self.commit_lsn_txs.remove(&src_table_id).unwrap();
     }
 
     pub async fn process_cdc_event(&mut self, event: CdcEvent) -> Result<(), Infallible> {

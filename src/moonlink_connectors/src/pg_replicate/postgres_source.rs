@@ -18,7 +18,7 @@ use crate::pg_replicate::{
         cdc_event::{CdcEvent, CdcEventConversionError, CdcEventConverter},
         table_row::{TableRow, TableRowConversionError, TableRowConverter},
     },
-    table::{ColumnSchema, RowstoreTableId, TableName, TableSchema},
+    table::{ColumnSchema, SrcTableId, TableName, TableSchema},
 };
 
 pub enum TableNamesFrom {
@@ -49,7 +49,7 @@ pub enum PostgresSourceError {
 
 pub struct PostgresSource {
     replication_client: ReplicationClient,
-    table_schemas: HashMap<RowstoreTableId, TableSchema>,
+    table_schemas: HashMap<SrcTableId, TableSchema>,
     slot_name: Option<String>,
     publication: Option<String>,
     confirmed_flush_lsn: PgLsn,
@@ -62,7 +62,7 @@ pub struct CdcStreamConfig {
     pub publication: String,
     pub slot_name: String,
     pub confirmed_flush_lsn: PgLsn,
-    pub table_schemas: HashMap<RowstoreTableId, TableSchema>,
+    pub table_schemas: HashMap<SrcTableId, TableSchema>,
 }
 
 impl PostgresSource {
@@ -134,7 +134,7 @@ impl PostgresSource {
         })
     }
 
-    pub async fn get_table_schemas(&self) -> HashMap<RowstoreTableId, TableSchema> {
+    pub async fn get_table_schemas(&self) -> HashMap<SrcTableId, TableSchema> {
         self.table_schemas.clone()
     }
 
@@ -156,7 +156,7 @@ impl PostgresSource {
             .await?;
         // Add the table schema to the source so that we can use it to convert cdc events.
         self.table_schemas
-            .insert(table_schema.rowstore_table_id, table_schema.clone());
+            .insert(table_schema.src_table_id, table_schema.clone());
         debug!(table_name, "fetched table schema");
         Ok(table_schema)
     }
@@ -306,7 +306,7 @@ pin_project! {
     pub struct CdcStream {
         #[pin]
         stream: LogicalReplicationStream,
-        table_schemas: HashMap<RowstoreTableId, TableSchema>,
+        table_schemas: HashMap<SrcTableId, TableSchema>,
         postgres_epoch: SystemTime,
     }
 }
@@ -337,12 +337,12 @@ impl CdcStream {
 
     pub fn add_table_schema(self: Pin<&mut Self>, schema: TableSchema) {
         let this = self.project();
-        this.table_schemas.insert(schema.rowstore_table_id, schema);
+        this.table_schemas.insert(schema.src_table_id, schema);
     }
 
-    pub fn remove_table_schema(self: Pin<&mut Self>, rowstore_table_id: RowstoreTableId) {
+    pub fn remove_table_schema(self: Pin<&mut Self>, src_table_id: SrcTableId) {
         let this = self.project();
-        this.table_schemas.remove(&rowstore_table_id);
+        this.table_schemas.remove(&src_table_id);
     }
 }
 

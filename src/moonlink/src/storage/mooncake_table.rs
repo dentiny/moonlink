@@ -164,7 +164,7 @@ pub struct TableMetadata {
     /// table name
     pub(crate) name: String,
     /// table id
-    pub(crate) id: u64,
+    pub(crate) table_id: u32,
     /// table schema
     pub(crate) schema: Arc<Schema>,
     /// table config
@@ -230,7 +230,7 @@ impl Snapshot {
         let mut directory = PathBuf::from(&self.metadata.config.temp_files_directory);
         directory.push(format!(
             "inmemory_{}_{}_{}.parquet",
-            self.metadata.name, self.metadata.id, self.snapshot_version
+            self.metadata.name, self.metadata.table_id, self.snapshot_version
         ));
         directory
     }
@@ -442,7 +442,7 @@ impl MooncakeTable {
     pub async fn new(
         schema: Schema,
         name: String,
-        version: u64,
+        table_id: u32,
         base_path: PathBuf,
         identity: IdentityProp,
         iceberg_table_config: IcebergTableConfig,
@@ -451,7 +451,7 @@ impl MooncakeTable {
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {
             name,
-            id: version,
+            table_id,
             schema: Arc::new(schema.clone()),
             config: table_config.clone(),
             path: base_path,

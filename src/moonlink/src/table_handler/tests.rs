@@ -1100,7 +1100,7 @@ async fn test_iceberg_snapshot_failure_mock_test() {
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
-        id: 0,
+        table_id: 0,
         schema: Arc::new(default_schema()),
         config: mooncake_table_config.clone(),
         path: temp_dir.path().to_path_buf(),
@@ -1162,7 +1162,7 @@ async fn test_iceberg_drop_table_failure_mock_test() {
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
-        id: 0,
+        table_id: 0,
         schema: Arc::new(default_schema()),
         config: mooncake_table_config.clone(),
         path: temp_dir.path().to_path_buf(),

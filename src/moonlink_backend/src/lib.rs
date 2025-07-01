@@ -112,12 +112,6 @@ where
         }
     }
 
-    /// Get column store table id from its generic type.
-    fn get_columnstore_table_id(table_id: &T) -> Result<u32> {
-        let columnstore_table_id = table_id.to_string().parse::<u32>()?;
-        Ok(columnstore_table_id)
-    }
-
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
     pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
         let mut rx = {
@@ -144,18 +138,17 @@ where
         src_table_name: String,
         src_uri: String,
     ) -> Result<()> {
-        let columnstore_table_id = Self::get_columnstore_table_id(&table_id)?;
+        let mooncake_table_id = MooncakeTableId {
+            database_id: database_id.clone(),
+            table_id: table_id.clone(),
+        };
+        let table_id = mooncake_table_id.get_table_id_value();
 
         // Add column store table to replication, and create corresponding mooncake table.
         let moonlink_table_config = {
             let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id: database_id.clone(),
-                table_id: table_id.clone(),
-            };
-
             manager
-                .add_table(&src_uri, mooncake_table_id, &src_table_name)
+                .add_table(&src_uri, mooncake_table_id, table_id, &src_table_name)
                 .await?
         };
 
@@ -172,7 +165,7 @@ where
                 guard.get(&database_id).unwrap()
             };
             cur_metadata_store_client
-                .store_table_config(columnstore_table_id, &src_table_name, moonlink_table_config)
+                .store_table_config(table_id, &src_table_name, moonlink_table_config)
                 .await?;
         }
 
@@ -180,13 +173,15 @@ where
     }
 
     pub async fn drop_table(&self, database_id: D, table_id: T) {
-        let columnstore_table_id = Self::get_columnstore_table_id(&table_id).unwrap();
+        let mooncake_table_id = MooncakeTableId {
+            database_id: database_id.clone(),
+            table_id,
+        };
+        let table_id = mooncake_table_id.get_table_id_value();
+
         let table_exists = {
             let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id: database_id.clone(),
-                table_id,
-            };
+
             manager.drop_table(mooncake_table_id).await.unwrap()
         };
         if !table_exists {
@@ -197,10 +192,7 @@ where
             let mut guard = self.metadata_store_clients.write().await;
             guard.remove(&database_id).unwrap()
         };
-        metadata_store
-            .delete_table_config(columnstore_table_id)
-            .await
-            .unwrap()
+        metadata_store.delete_table_config(table_id).await.unwrap()
     }
 
     pub async fn scan_table(

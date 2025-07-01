@@ -43,26 +43,27 @@ fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
 
 /// Build all components needed to replicate `table_schema`.
 pub async fn build_table_components(
-    table_id: String,
+    mooncake_table_id: String,
+    table_id: u32,
     table_schema: &TableSchema,
     base_path: &Path,
     table_temp_files_directory: String,
     replication_state: &ReplicationState,
     object_storage_cache: ObjectStorageCache,
 ) -> Result<(TableResources, MoonlinkTableConfig)> {
-    let table_path = PathBuf::from(base_path).join(&table_id);
+    let table_path = PathBuf::from(base_path).join(&mooncake_table_id);
     tokio::fs::create_dir_all(&table_path).await.unwrap();
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri: base_path.to_str().unwrap().to_string(),
         namespace: vec![table_schema.table_name.schema.clone()],
-        table_name: table_id,
+        table_name: mooncake_table_id,
     };
     let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(
         arrow_schema,
         table_schema.table_name.to_string(),
-        table_schema.rowstore_table_id as u64,
+        table_id,
         table_path,
         identity,
         iceberg_table_config.clone(),

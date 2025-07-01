@@ -1,4 +1,4 @@
-use crate::pg_replicate::table::RowstoreTableId;
+use crate::pg_replicate::table::SrcTableId;
 use crate::Result;
 use crate::{PostgresSourceError, ReplicationConnection};
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
@@ -17,7 +17,7 @@ pub struct ReplicationManager<T: Clone + Eq + Hash + std::fmt::Display> {
     /// Maps from uri to replication connection.
     connections: HashMap<String, ReplicationConnection>,
     /// Maps from table id (string format) to (uri, row store table id).
-    table_info: HashMap<T, (String, RowstoreTableId)>,
+    table_info: HashMap<T, (String, SrcTableId)>,
     /// Base directory for mooncake tables.
     table_base_path: String,
     /// Base directory for temporary files used in union read.
@@ -51,7 +51,8 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     pub async fn add_table(
         &mut self,
         src_uri: &str,
-        columnstore_table_id: T,
+        mooncake_table_id: T,
+        table_id: u32,
         table_name: &str,
     ) -> Result<MoonlinkTableConfig> {
         info!(%src_uri, table_name, "adding table through manager");
@@ -81,15 +82,13 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             replication_connection.start_replication().await?;
         }
 
-        let (rowstore_table_id, moonlink_table_config) = replication_connection
-            .add_table(table_name, &columnstore_table_id)
+        let (src_table_id, moonlink_table_config) = replication_connection
+            .add_table(table_name, &mooncake_table_id, table_id)
             .await?;
-        self.table_info.insert(
-            columnstore_table_id,
-            (src_uri.to_string(), rowstore_table_id),
-        );
+        self.table_info
+            .insert(mooncake_table_id, (src_uri.to_string(), src_table_id));
 
-        info!(rowstore_table_id, "table added through manager");
+        info!(src_table_id, "table added through manager");
 
         Ok(moonlink_table_config)
     }

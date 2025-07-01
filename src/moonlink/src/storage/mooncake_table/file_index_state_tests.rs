@@ -200,7 +200,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
-        /*version=*/ TEST_TABLE_ID.0,
+        TEST_TABLE_ID.0,
         path,
         identity_property,
         iceberg_table_config.clone(),

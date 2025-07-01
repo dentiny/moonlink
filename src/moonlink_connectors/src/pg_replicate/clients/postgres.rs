@@ -1,9 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::pg_replicate::conversions::text::TextFormatConverter;
-use crate::pg_replicate::table::{
-    ColumnSchema, LookupKey, RowstoreTableId, TableName, TableSchema,
-};
+use crate::pg_replicate::table::{ColumnSchema, LookupKey, SrcTableId, TableName, TableSchema};
 use pg_escape::{quote_identifier, quote_literal};
 use postgres_replication::LogicalReplicationStream;
 use thiserror::Error;
@@ -132,7 +130,7 @@ impl ReplicationClient {
     /// Returns a vector of columns of a table, optionally filtered by a publication's column list
     pub async fn get_column_schemas(
         &self,
-        table_id: RowstoreTableId,
+        table_id: SrcTableId,
         table_name: &TableName,
         publication: Option<&str>,
     ) -> Result<Vec<ColumnSchema>, ReplicationClientError> {
@@ -273,7 +271,7 @@ impl ReplicationClient {
 
     async fn fetch_lookup_key(
         &self,
-        table_id: RowstoreTableId,
+        table_id: SrcTableId,
         published_column_names: HashSet<String>,
     ) -> Result<Option<LookupKey>, ReplicationClientError> {
         let index_rows = self.fetch_index_rows(table_id).await?;
@@ -320,7 +318,7 @@ impl ReplicationClient {
     /// Follows same definition as PG replica identity [https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-REPLICA-IDENTITY]
     async fn fetch_index_rows(
         &self,
-        rowstore_table_id: RowstoreTableId,
+        src_table_id: SrcTableId,
     ) -> Result<Vec<SimpleQueryRow>, ReplicationClientError> {
         let query = format!(
             "
@@ -341,7 +339,7 @@ impl ReplicationClient {
             AND (con.condeferrable IS NULL OR con.condeferrable = false)
             ORDER BY i.indisprimary DESC, c2.relname
             ",
-            rowstore_table_id
+            src_table_id
         );
 
         let result = self.postgres_client.simple_query(&query).await?;
@@ -357,7 +355,7 @@ impl ReplicationClient {
 
     async fn fetch_index_columns(
         &self,
-        rowstore_table_id: RowstoreTableId,
+        src_table_id: SrcTableId,
         indkey: &str,
     ) -> Result<Vec<(String, bool)>, ReplicationClientError> {
         let query = format!(
@@ -368,7 +366,7 @@ impl ReplicationClient {
             AND a.attnum = ANY(string_to_array('{}', ' ')::smallint[])
             ORDER BY array_position(string_to_array('{}', ' ')::smallint[], a.attnum)
             ",
-            rowstore_table_id, indkey, indkey
+            src_table_id, indkey, indkey
         );
 
         let result = self.postgres_client.simple_query(&query).await?;
@@ -388,15 +386,12 @@ impl ReplicationClient {
 
     pub async fn get_lookup_key(
         &self,
-        rowstore_table_id: RowstoreTableId,
+        src_table_id: SrcTableId,
         column_schemas: &Vec<ColumnSchema>,
     ) -> Result<LookupKey, ReplicationClientError> {
         let column_names: HashSet<String> =
             column_schemas.iter().map(|cs| cs.name.clone()).collect();
-        if let Some(unique_index_key) = self
-            .fetch_lookup_key(rowstore_table_id, column_names)
-            .await?
-        {
+        if let Some(unique_index_key) = self.fetch_lookup_key(src_table_id, column_names).await? {
             return Ok(unique_index_key);
         }
 
@@ -408,14 +403,14 @@ impl ReplicationClient {
         &self,
         table_names: &[TableName],
         publication: Option<&str>,
-    ) -> Result<HashMap<RowstoreTableId, TableSchema>, ReplicationClientError> {
+    ) -> Result<HashMap<SrcTableId, TableSchema>, ReplicationClientError> {
         let mut table_schemas = HashMap::new();
 
         for table_name in table_names {
             let table_schema = self
                 .get_table_schema(table_name.clone(), publication)
                 .await?;
-            table_schemas.insert(table_schema.rowstore_table_id, table_schema);
+            table_schemas.insert(table_schema.src_table_id, table_schema);
         }
 
         Ok(table_schemas)
@@ -426,34 +421,32 @@ impl ReplicationClient {
         table_name: TableName,
         publication: Option<&str>,
     ) -> Result<TableSchema, ReplicationClientError> {
-        let rowstore_table_id = self
-            .get_table_id(&table_name)
+        let src_table_id = self
+            .get_src_table_id(&table_name)
             .await?
             .ok_or(ReplicationClientError::MissingTable(table_name.clone()))?;
 
         let column_schemas = self
-            .get_column_schemas(rowstore_table_id, &table_name, publication)
+            .get_column_schemas(src_table_id, &table_name, publication)
             .await?;
-        let lookup_key = self
-            .get_lookup_key(rowstore_table_id, &column_schemas)
-            .await?;
+        let lookup_key = self.get_lookup_key(src_table_id, &column_schemas).await?;
 
         let table_schema = TableSchema {
             table_name,
-            rowstore_table_id,
+            src_table_id,
             column_schemas,
             lookup_key,
         };
         Ok(table_schema)
     }
 
-    /// Returns the table id (called relation id in Postgres) of a table
+    /// Returns the src table id (called relation id in Postgres) of a table
     /// Also checks whether the replica identity is default or full and
     /// returns an error if not.
-    pub async fn get_table_id(
+    pub async fn get_src_table_id(
         &self,
         table: &TableName,
-    ) -> Result<Option<RowstoreTableId>, ReplicationClientError> {
+    ) -> Result<Option<SrcTableId>, ReplicationClientError> {
         let quoted_schema = quote_literal(&table.schema);
         let quoted_name = quote_literal(&table.name);
 

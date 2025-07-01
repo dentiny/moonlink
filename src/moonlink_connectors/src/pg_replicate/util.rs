@@ -408,7 +408,7 @@ mod tests {
                 schema: "public".to_string(),
                 name: "test_table".to_string(),
             },
-            rowstore_table_id: 1,
+            src_table_id: 1,
             column_schemas: vec![
                 ColumnSchema {
                     name: "bool_field".to_string(),

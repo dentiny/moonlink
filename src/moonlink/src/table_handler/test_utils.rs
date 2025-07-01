@@ -156,7 +156,7 @@ impl TestEnvironment {
         let table_name = "table_name";
         let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
             name: table_name.to_string(),
-            id: 0,
+            table_id: 0,
             schema: Arc::new(default_schema()),
             config: mooncake_table_config.clone(),
             path: self.temp_dir.path().to_path_buf(),

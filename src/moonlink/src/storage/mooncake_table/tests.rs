@@ -232,7 +232,7 @@ async fn test_snapshot_initialization() -> Result<()> {
     let identity = IdentityProp::Keys(vec![0]);
     let metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
-        id: 1,
+        table_id: 1,
         schema: Arc::new(schema),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::new(),
@@ -410,7 +410,7 @@ async fn test_snapshot_load_failure() {
     let temp_dir = TempDir::new().unwrap();
     let table_metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
-        id: 1,
+        table_id: 1,
         schema: Arc::new(test_schema()),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),
@@ -443,7 +443,7 @@ async fn test_snapshot_store_failure() {
     let temp_dir = TempDir::new().unwrap();
     let table_metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
-        id: 1,
+        table_id: 1,
         schema: Arc::new(test_schema()),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),

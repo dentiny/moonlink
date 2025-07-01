@@ -134,7 +134,7 @@ impl SnapshotTableState {
     /// Util function to get table unique file id.
     fn get_table_unique_file_id(&self, file_id: FileId) -> TableUniqueFileId {
         TableUniqueFileId {
-            table_id: TableId(self.mooncake_table_metadata.id),
+            table_id: TableId(self.mooncake_table_metadata.table_id),
             file_id,
         }
     }
@@ -444,7 +444,7 @@ impl SnapshotTableState {
             // Tentatively decide data file to compact.
             let single_file_to_compact = SingleFileToCompact {
                 file_id: TableUniqueFileId {
-                    table_id: TableId(self.mooncake_table_metadata.id),
+                    table_id: TableId(self.mooncake_table_metadata.table_id),
                     file_id: cur_data_file.file_id(),
                 },
                 filepath: cur_data_file.file_path().to_string(),
@@ -929,7 +929,7 @@ impl SnapshotTableState {
     /// Import batch write and stream file indices into cache.
     /// Return evicted files to delete.
     async fn import_file_indices_into_cache(&mut self, task: &mut SnapshotTask) -> Vec<String> {
-        let table_id = TableId(self.mooncake_table_metadata.id);
+        let table_id = TableId(self.mooncake_table_metadata.table_id);
 
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];

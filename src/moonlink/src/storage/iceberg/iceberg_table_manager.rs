@@ -224,7 +224,7 @@ impl IcebergTableManager {
             .reserve(expected_file_indices_count);
         let mut file_indices = Vec::with_capacity(new_file_indices_count);
         for mut cur_iceberg_file_indice in file_index_blob.file_indices.into_iter() {
-            let table_id = TableId(self.mooncake_table_metadata.id);
+            let table_id = TableId(self.mooncake_table_metadata.table_id);
             let cur_mooncake_file_indice = cur_iceberg_file_indice
                 .as_mooncake_file_index(
                     &self.remote_data_file_to_file_id,
@@ -300,7 +300,7 @@ impl IcebergTableManager {
         let cur_file_id = *next_file_id;
         *next_file_id += 1;
         let unique_file_id = TableUniqueFileId {
-            table_id: TableId(self.mooncake_table_metadata.id),
+            table_id: TableId(self.mooncake_table_metadata.table_id),
             file_id: FileId(cur_file_id),
         };
         let (cache_handle, evicted_files_to_delete) = self
@@ -391,7 +391,7 @@ impl IcebergTableManager {
         let cur_file_idx =
             puffin_index - storage_utils::NUM_FILES_PER_FLUSH * unique_table_auto_incre_id_offset;
         TableUniqueFileId {
-            table_id: TableId(self.mooncake_table_metadata.id),
+            table_id: TableId(self.mooncake_table_metadata.table_id),
             file_id: FileId(get_unique_file_id_for_flush(
                 cur_table_auto_incr_id,
                 cur_file_idx,

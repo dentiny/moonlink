@@ -16,3 +16,13 @@ where
         write!(f, "{}.{}", self.database_id, self.table_id)
     }
 }
+
+impl<D, T> MooncakeTableId<D, T>
+where
+    T: Display,
+{
+    /// Get integer version of table id.
+    pub fn get_table_id_value(&self) -> u32 {
+        self.table_id.to_string().parse::<u32>().unwrap()
+    }
+}

@@ -647,7 +647,7 @@ async fn test_index_merge_and_create_snapshot() {
 
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "test_table".to_string(),
-        id: 0,
+        table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
         path: std::path::PathBuf::from(tmp_dir.path().to_str().unwrap().to_string()),

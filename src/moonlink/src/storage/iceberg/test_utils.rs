@@ -148,7 +148,7 @@ pub(crate) fn create_test_table_metadata_with_config(
 ) -> Arc<MooncakeTableMetadata> {
     Arc::new(MooncakeTableMetadata {
         name: "test_table".to_string(),
-        id: 0,
+        table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config,
         path: std::path::PathBuf::from(local_table_directory),

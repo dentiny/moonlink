@@ -63,7 +63,7 @@ pub struct FileId(pub(crate) u64);
 
 /// Unique table id.
 #[derive(Debug, Clone, PartialEq, Eq, Copy, Hash)]
-pub struct TableId(pub(crate) u64);
+pub struct TableId(pub(crate) u32);
 
 /// A globally unique id for a file.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
