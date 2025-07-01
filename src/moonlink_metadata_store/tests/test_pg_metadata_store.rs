@@ -30,6 +30,7 @@ mod tests {
         let table_metadata_entry = &metadata_entries[0];
         assert_eq!(table_metadata_entry.table_id, TABLE_ID);
         assert_eq!(table_metadata_entry.src_table_name, TABLE_NAME);
+        assert_eq!(table_metadata_entry.src_table_uri, URI);
         assert_eq!(
             table_metadata_entry.moonlink_table_config,
             get_moonlink_table_config()
@@ -57,7 +58,7 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
+            .store_table_config(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
             .await
             .unwrap();
 
@@ -90,13 +91,13 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
+            .store_table_config(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
             .await
             .unwrap();
 
         // Store moonlink table config to metadata storage.
         let res = metadata_store
-            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
+            .store_table_config(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
             .await;
         assert!(res.is_err());
     }
@@ -111,7 +112,7 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_config(TABLE_ID, TABLE_NAME, moonlink_table_config.clone())
+            .store_table_config(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
             .await
             .unwrap();
 

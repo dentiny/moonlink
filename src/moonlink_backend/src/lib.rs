@@ -118,7 +118,6 @@ where
     /// Recovery the given table.
     async fn recover_table(
         &mut self,
-        src_uri: &str,
         database_id: u32,
         metadata_entry: TableMetadataEntry,
     ) -> Result<()> {
@@ -130,7 +129,7 @@ where
         let mut manager = self.replication_manager.write().await;
         manager
             .add_table(
-                src_uri,
+                &metadata_entry.src_table_uri,
                 mooncake_table_id,
                 metadata_entry.table_id,
                 &metadata_entry.src_table_name,
@@ -149,10 +148,10 @@ where
     /// Recovery all databases indicated by the connection strings.
     ///
     /// TODO(hjiang): Parallelize all IO operations.
-    async fn recover_all_tables(&mut self, uris: HashMap<String, String>) -> Result<()> {
-        for (src_uri, metadata_store_uri) in uris.into_iter() {
+    async fn recover_all_tables(&mut self, metadata_store_uris: Vec<String>) -> Result<()> {
+        for cur_metadata_store_uri in metadata_store_uris.into_iter() {
             // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink.
-            let pg_metadata_store = PgMetadataStore::new(&metadata_store_uri).await?;
+            let pg_metadata_store = PgMetadataStore::new(&cur_metadata_store_uri).await?;
             let schema_exists = pg_metadata_store.schema_exists(MOONLINK_SCHEMA).await?;
             if !schema_exists {
                 continue;
@@ -165,8 +164,7 @@ where
 
             // Load config and try recovery.
             for cur_metadata_entry in table_metadata_entries.into_iter() {
-                self.recover_table(&src_uri, database_id, cur_metadata_entry)
-                    .await?;
+                self.recover_table(database_id, cur_metadata_entry).await?;
             }
         }
 
@@ -174,16 +172,12 @@ where
     }
 
     /// TODO(hjiang): Add this new initialization construct for dev purpose, should merge with [`new`] at the end of the day.
-    ///
-    /// # Arguments
-    ///
-    /// * uris: maps from source uris to metadata store uris.
     pub async fn new_with_recovery(
         base_path: String,
-        uris: HashMap<String, String>,
+        metadata_store_uris: Vec<String>,
     ) -> Result<Self> {
         let mut backend = Self::new(base_path);
-        backend.recover_all_tables(uris).await?;
+        backend.recover_all_tables(metadata_store_uris).await?;
         Ok(backend)
     }
 
@@ -244,7 +238,7 @@ where
                 }
             };
             cur_metadata_store_client
-                .store_table_config(table_id, &src_table_name, moonlink_table_config)
+                .store_table_config(table_id, &src_table_name, &src_uri, moonlink_table_config)
                 .await?;
         }
 

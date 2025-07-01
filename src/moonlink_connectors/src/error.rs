@@ -17,6 +17,9 @@ pub enum Error {
 
     #[error("Moonlink source error: {source}")]
     MoonlinkError { source: MoonlinkError },
+
+    #[error("IO error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 pub type Result<T> = result::Result<T, Error>;

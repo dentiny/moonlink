@@ -3,7 +3,7 @@ mod tests {
     use arrow_array::Int64Array;
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, PgMetadataStore};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use std::{collections::HashMap, sync::Arc};
+    use std::sync::Arc;
     use tempfile::TempDir;
     use tokio_postgres::{connect, types::PgLsn, Client, NoTls};
 
@@ -17,6 +17,7 @@ mod tests {
 
     const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const DST_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
+    const METADATA_STORE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const CREATE_TABLE_SCHEMA_SQL: &str =
         include_str!("../../moonlink_metadata_store/src/postgres/sql/create_tables.sql");
 
@@ -533,10 +534,9 @@ mod tests {
 
         // Attempt recovery logic.
         let temp_dir = TempDir::new().unwrap();
-        let uris = HashMap::<String, String>::from([(SRC_URI.to_string(), SRC_URI.to_string())]);
         let backend = MoonlinkBackend::<DatabaseId, TableId>::new_with_recovery(
             temp_dir.path().to_str().unwrap().to_string(),
-            uris,
+            /*metadata_store_uris=*/ vec![METADATA_STORE_URI.to_string()],
         )
         .await
         .unwrap();

@@ -42,21 +42,26 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows = {
             let guard = self.postgres_client.lock().await;
             guard
-                .query("SELECT oid, table_name, config FROM mooncake.tables", &[])
+                .query(
+                    "SELECT oid, table_name, uri, config FROM mooncake.tables",
+                    &[],
+                )
                 .await?
         };
 
         let mut metadata_entries = Vec::with_capacity(rows.len());
         for cur_row in rows.into_iter() {
-            assert_eq!(cur_row.len(), 3);
+            assert_eq!(cur_row.len(), 4);
             let table_id = cur_row.get("oid");
             let src_table_name = cur_row.get("table_name");
+            let src_table_uri = cur_row.get("uri");
             let serialized_config = cur_row.get("config");
             let moonlink_table_config =
                 config_utils::deserialze_moonlink_table_config(serialized_config)?;
             metadata_entries.push(TableMetadataEntry {
                 table_id,
                 src_table_name,
+                src_table_uri,
                 moonlink_table_config,
             });
         }
@@ -81,6 +86,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         &self,
         table_id: u32,
         table_name: &str,
+        table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let serialized_config =
@@ -90,9 +96,14 @@ impl MetadataStoreTrait for PgMetadataStore {
         // TODO(hjiang): Fill in other fields as well.
         let rows_affected = guard
             .execute(
-                "INSERT INTO mooncake.tables (oid, table_name, config)
-                VALUES ($1, $2, $3)",
-                &[&table_id, &table_name, &PgJson(&serialized_config)],
+                "INSERT INTO mooncake.tables (oid, table_name, uri, config)
+                VALUES ($1, $2, $3, $4)",
+                &[
+                    &table_id,
+                    &table_name,
+                    &table_uri,
+                    &PgJson(&serialized_config),
+                ],
             )
             .await?;
 

@@ -11,6 +11,8 @@ pub struct TableMetadataEntry {
     pub table_id: u32,
     /// Src table name.
     pub src_table_name: String,
+    /// Src table connection string.
+    pub src_table_uri: String,
     /// Moonlink table config, including mooncake and iceberg table config.
     pub moonlink_table_config: MoonlinkTableConfig,
 }
@@ -38,6 +40,7 @@ pub trait MetadataStoreTrait: Send {
         &self,
         table_id: u32,
         table_name: &str,
+        table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()>;
 
