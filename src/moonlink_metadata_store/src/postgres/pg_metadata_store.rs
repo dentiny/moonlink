@@ -23,6 +23,18 @@ pub struct PgMetadataStore {
 
 #[async_trait]
 impl MetadataStoreTrait for PgMetadataStore {
+    async fn get_database_id(&self) -> Result<u32> {
+        let guard = self.postgres_client.lock().await;
+        let row = guard
+            .query_one(
+                "SELECT oid FROM pg_database WHERE datname = current_database()",
+                &[],
+            )
+            .await?;
+        let oid = row.get("oid");
+        Ok(oid)
+    }
+
     async fn load_table_config(&self, table_id: u32) -> Result<MoonlinkTableConfig> {
         let rows = {
             let guard = self.postgres_client.lock().await;

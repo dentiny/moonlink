@@ -113,6 +113,16 @@ where
         }
     }
 
+    /// TODO(hjiang): Add this new initialization construct for dev purpose, should merge with [`new`] at the end of the day.
+    ///
+    /// # Arguments
+    ///
+    /// * uris: maps from source uris to metadata store uris.
+    pub fn new_with_recovery(base_path: String, uris: HashMap<String, String>) -> Self {
+        let backend = Self::new(base_path);
+        backend
+    }
+
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
     pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
         let mut rx = {

@@ -6,6 +6,10 @@ use moonlink::MoonlinkTableConfig;
 
 #[async_trait]
 pub trait MetadataStoreTrait: Send {
+    /// Get database id.
+    #[allow(async_fn_in_trait)]
+    async fn get_database_id(&self) -> Result<u32>;
+
     /// Load configuration for the given table.
     /// Precondition: the requested table id has been record in the metadata storage.
     #[allow(async_fn_in_trait)]

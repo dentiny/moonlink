@@ -1,10 +1,11 @@
 mod common;
 
+use common::test_environment::*;
+use common::test_utils::*;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::PgMetadataStore;
 
-use common::test_environment::*;
-use common::test_utils::*;
+use more_asserts as ma;
 
 /// Test connection string.
 const URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
@@ -18,6 +19,15 @@ mod tests {
     use super::*;
 
     use serial_test::serial;
+
+    #[tokio::test]
+    #[serial]
+    async fn test_get_database_id() {
+        let _test_environment = TestEnvironment::new(URI).await;
+        let metadata_store = PgMetadataStore::new(URI).await.unwrap();
+        let database_id = metadata_store.get_database_id().await.unwrap();
+        ma::assert_gt!(database_id, 0);
+    }
 
     #[tokio::test]
     #[serial]
