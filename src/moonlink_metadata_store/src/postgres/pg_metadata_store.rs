@@ -84,29 +84,6 @@ impl MetadataStoreTrait for PgMetadataStore {
         Err(Error::PostgresRowCountError(1, rows.len() as u32))
     }
 
-    async fn load_table_config(&self, table_id: u32) -> Result<MoonlinkTableConfig> {
-        let rows = {
-            let guard = self.postgres_client.lock().await;
-
-            guard
-                .query("SELECT * FROM mooncake.tables WHERE oid = $1", &[&table_id])
-                .await?
-        };
-
-        if rows.is_empty() {
-            return Err(Error::TableIdNotFound(table_id));
-        }
-        if rows.len() != 1 {
-            return Err(Error::PostgresRowCountError(1, rows.len() as u32));
-        }
-
-        let row = &rows[0];
-        let config_json = row.get("config");
-        let moonlink_config = config_utils::deserialze_moonlink_table_config(config_json)?;
-
-        Ok(moonlink_config)
-    }
-
     async fn store_table_config(
         &self,
         table_id: u32,

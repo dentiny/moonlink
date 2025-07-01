@@ -134,6 +134,13 @@ where
                 mooncake_table_id,
                 metadata_entry.table_id,
                 &metadata_entry.src_table_name,
+                /*override_table_base_path=*/
+                Some(
+                    &metadata_entry
+                        .moonlink_table_config
+                        .iceberg_table_config
+                        .warehouse_uri,
+                ),
             )
             .await?;
         Ok(())
@@ -216,7 +223,13 @@ where
         let moonlink_table_config = {
             let mut manager = self.replication_manager.write().await;
             manager
-                .add_table(&src_uri, mooncake_table_id, table_id, &src_table_name)
+                .add_table(
+                    &src_uri,
+                    mooncake_table_id,
+                    table_id,
+                    &src_table_name,
+                    /*override_table_base_path=*/ None,
+                )
                 .await?
         };
 

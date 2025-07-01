@@ -5,6 +5,7 @@ use crate::error::Result;
 use moonlink::MoonlinkTableConfig;
 
 /// Metadata entry for each table.
+#[derive(Clone, Debug)]
 pub struct TableMetadataEntry {
     /// Table id.
     pub table_id: u32,
@@ -29,11 +30,6 @@ pub trait MetadataStoreTrait: Send {
     /// Notice, schema existence should be checked beforehand, otherwise empty entries will be returned.
     #[allow(async_fn_in_trait)]
     async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>>;
-
-    /// Load configuration for the given table.
-    /// Precondition: the requested table id has been record in the metadata storage.
-    #[allow(async_fn_in_trait)]
-    async fn load_table_config(&self, table_id: u32) -> Result<MoonlinkTableConfig>;
 
     /// Store table config for the given table.
     /// Precondition: the requested table id hasn't been recorded in the metadata storage.
