@@ -404,6 +404,39 @@ async fn test_duplicate_deletion() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn test_table_recovery() {
+    let table_name = "table_recovery";
+    let row_identity = IdentityProp::Keys(vec![0]);
+
+    let context = TestContext::new(table_name);
+    let mut table = test_table(&context, table_name, row_identity.clone()).await;
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    table.register_table_notify(event_completion_tx).await;
+
+    // Write new rows and create iceberg snapshot.
+    let row = test_row(1, "John", 30);
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 100);
+    table.flush(/*lsn=*/ 100).await.unwrap();
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
+
+    // Recovery from iceberg snapshot and check mooncake table recovery.
+    let recovered_table = MooncakeTable::new(
+        test_schema(),
+        table_name.to_string(),
+        /*table_id=*/ 1,
+        context.path(),
+        row_identity.clone(),
+        test_iceberg_table_config(&context, table_name),
+        test_mooncake_table_config(&context),
+        ObjectStorageCache::default_for_test(&context.temp_dir),
+    )
+    .await
+    .unwrap();
+    assert_eq!(recovered_table.last_iceberg_snapshot_lsn.unwrap(), 100);
+}
+
 /// ---- Mock unit test ----
 #[tokio::test]
 async fn test_snapshot_load_failure() {

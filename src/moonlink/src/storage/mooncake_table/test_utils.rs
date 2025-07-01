@@ -15,8 +15,8 @@ use std::fs::{create_dir_all, File};
 use tempfile::{tempdir, TempDir};
 
 pub struct TestContext {
-    temp_dir: TempDir,
-    test_dir: PathBuf,
+    pub temp_dir: TempDir,
+    pub test_dir: PathBuf,
 }
 
 impl TestContext {
@@ -28,7 +28,7 @@ impl TestContext {
         Self { temp_dir, test_dir }
     }
 
-    fn path(&self) -> PathBuf {
+    pub fn path(&self) -> PathBuf {
         self.test_dir.clone()
     }
 }
@@ -58,19 +58,28 @@ pub fn test_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
     ])
 }
 
+/// Test util function to get iceberg table config for testing purpose.
+pub fn test_iceberg_table_config(context: &TestContext, table_name: &str) -> IcebergTableConfig {
+    IcebergTableConfig {
+        warehouse_uri: context.path().to_str().unwrap().to_string(),
+        namespace: vec!["default".to_string()],
+        table_name: table_name.to_string(),
+    }
+}
+
+/// Test util function to get mooncake table config.
+pub fn test_mooncake_table_config(context: &TestContext) -> MooncakeTableConfig {
+    MooncakeTableConfig::new(context.temp_dir.path().to_str().unwrap().to_string())
+}
+
 pub async fn test_table(
     context: &TestContext,
     table_name: &str,
     identity: IdentityProp,
 ) -> MooncakeTable {
     // TODO(hjiang): Hard-code iceberg table namespace and table name.
-    let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: context.path().to_str().unwrap().to_string(),
-        namespace: vec!["default".to_string()],
-        table_name: table_name.to_string(),
-    };
-    let mut table_config =
-        MooncakeTableConfig::new(context.temp_dir.path().to_str().unwrap().to_string());
+    let iceberg_table_config = test_iceberg_table_config(context, table_name);
+    let mut table_config = test_mooncake_table_config(context);
     table_config.batch_size = 2;
     MooncakeTable::new(
         test_schema(),

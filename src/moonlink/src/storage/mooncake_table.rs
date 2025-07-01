@@ -479,6 +479,7 @@ impl MooncakeTable {
     ) -> Result<Self> {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(0);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
+        let last_iceberg_snapshot_lsn = current_snapshot.data_file_flush_lsn;
 
         Ok(Self {
             mem_slice: MemSlice::new(
@@ -501,7 +502,7 @@ impl MooncakeTable {
             table_snapshot_watch_receiver,
             next_file_id,
             iceberg_table_manager: Some(table_manager),
-            last_iceberg_snapshot_lsn: None,
+            last_iceberg_snapshot_lsn,
             table_notify: None,
         })
     }
