@@ -148,10 +148,11 @@ where
     /// TODO(hjiang): Parallelize all IO operations.
     async fn recover_all_tables(&mut self, metadata_store_uris: Vec<String>) -> Result<()> {
         for cur_metadata_store_uri in metadata_store_uris.into_iter() {
-            // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink.
+            // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink. Skip recovery process.
             if let Some(pg_metadata_store) = PgMetadataStore::new(&cur_metadata_store_uri).await? {
                 // Get database id.
                 let database_id = pg_metadata_store.get_database_id().await?;
+
                 // Get all mooncake tables to recovery.
                 let table_metadata_entries =
                     pg_metadata_store.get_all_table_metadata_entries().await?;
@@ -228,6 +229,7 @@ where
             let cur_metadata_store_client = match guard.entry(database_id.clone()) {
                 HashMapEntry::Occupied(entry) => entry.into_mut(),
                 HashMapEntry::Vacant(entry) => {
+                    // Precondition: [`mooncake`] schema already exists in the current database.
                     let new_metadata_store =
                         PgMetadataStore::new(&metadata_store_uri).await?.unwrap();
                     entry.insert(new_metadata_store)
