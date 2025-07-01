@@ -275,7 +275,7 @@ impl ReplicationConnection {
 
     /// # Arguments
     ///
-    /// * override_table_base_path: directory for the table to add into replication, fallback to [`self.table_base_path`] if unassigned.
+    /// * override_table_base_path: mooncake table directory, fallback to [`self.table_base_path`] if unassigned.
     async fn add_table_to_replication<T: std::fmt::Display>(
         &mut self,
         schema: &TableSchema,

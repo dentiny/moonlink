@@ -11,7 +11,7 @@ pub struct TableMetadataEntry {
     pub table_id: u32,
     /// Src table name.
     pub src_table_name: String,
-    /// Moonlink table config.
+    /// Moonlink table config, including mooncake and iceberg table config.
     pub moonlink_table_config: MoonlinkTableConfig,
 }
 
@@ -27,7 +27,7 @@ pub trait MetadataStoreTrait: Send {
     async fn schema_exists(&self, schema_name: &str) -> Result<bool>;
 
     /// Get all mooncake table metadata entries in the metadata storage table.
-    /// Notice, schema existence should be checked beforehand, otherwise empty entries will be returned.
+    /// Notice, schema existence should be checked beforehand, otherwise empty entries will be returned if schema doesn't exist.
     #[allow(async_fn_in_trait)]
     async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>>;
 

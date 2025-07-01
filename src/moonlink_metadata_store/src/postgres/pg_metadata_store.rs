@@ -64,24 +64,17 @@ impl MetadataStoreTrait for PgMetadataStore {
     }
 
     async fn schema_exists(&self, schema_name: &str) -> Result<bool> {
-        let rows = {
+        let row = {
             let guard = self.postgres_client.lock().await;
             guard
-                .query(
+                .query_opt(
                     "SELECT 1 FROM pg_namespace WHERE nspname = $1;",
                     &[&schema_name],
                 )
                 .await?
         };
 
-        if rows.is_empty() {
-            return Ok(false);
-        }
-        if rows.len() == 1 {
-            return Ok(true);
-        }
-
-        Err(Error::PostgresRowCountError(1, rows.len() as u32))
+        Ok(row.is_some())
     }
 
     async fn store_table_config(
