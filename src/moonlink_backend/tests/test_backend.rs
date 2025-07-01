@@ -30,10 +30,19 @@ mod tests {
 
     // ───────────────────── Helper functions & fixtures ─────────────────────
 
+    #[derive(Clone, Debug, Eq, PartialEq)]
+    enum TestGuardMode {
+        /// Default test mode, which initiates all resource at construction and clean up at destruction.
+        Normal,
+        /// For crash mode, drop does nothing.
+        Crash,
+    }
+
     struct TestGuard {
         backend: Arc<MoonlinkBackend<DatabaseId, TableId>>,
         tmp: Option<TempDir>,
         database_id: DatabaseId,
+        test_mode: TestGuardMode,
     }
 
     impl TestGuard {
@@ -43,6 +52,7 @@ mod tests {
                 backend: Arc::new(backend),
                 tmp: Some(tmp),
                 database_id,
+                test_mode: TestGuardMode::Normal,
             };
             (guard, client)
         }
@@ -50,6 +60,10 @@ mod tests {
 
     impl Drop for TestGuard {
         fn drop(&mut self) {
+            if self.test_mode == TestGuardMode::Crash {
+                return;
+            }
+
             // move everything we need into the async block
             let backend = Arc::clone(&self.backend);
             let tmp = self.tmp.take();
@@ -62,6 +76,19 @@ mod tests {
                     drop(tmp);
                 });
             });
+        }
+    }
+
+    impl TestGuard {
+        /// Set test guard mode.
+        fn set_test_mode(&mut self, mode: TestGuardMode) {
+            self.test_mode = mode;
+        }
+
+        /// Take the ownership of testing directory.
+        fn take_test_directory(&mut self) -> TempDir {
+            assert!(self.tmp.is_some());
+            self.tmp.take().unwrap()
         }
     }
 
@@ -537,7 +564,10 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn test_recovery() {
-        let (guard, client) = TestGuard::new("recovery").await;
+        let (mut guard, client) = TestGuard::new("recovery").await;
+        guard.set_test_mode(TestGuardMode::Crash);
+
+        let database_id = guard.database_id;
         let backend = &guard.backend;
 
         // Drop the table that setup_backend created so we can test the full cycle
@@ -568,6 +598,13 @@ mod tests {
             .await
             .unwrap();
 
+        // Stop table handler.
+        backend.shutdown_connection(SRC_URI).await;
+        // Take the testing directory recovery from iceberg table.
+        let _testing_directory_before_recovery = guard.take_test_directory();
+        // Drop everything for the old backend.
+        drop(guard);
+
         // Attempt recovery logic.
         let temp_dir = TempDir::new().unwrap();
         let backend = MoonlinkBackend::<DatabaseId, TableId>::new_with_recovery(
@@ -578,12 +615,34 @@ mod tests {
         .unwrap();
         let ids = ids_from_state(
             &backend
-                .scan_table(guard.database_id, TABLE_ID, /*lsn=*/ None)
+                .scan_table(database_id, TABLE_ID, Some(lsn))
                 .await
                 .unwrap(),
         );
         assert_eq!(ids, HashSet::from([1]));
 
-        // TODO(hjiang): Add test cases to insert new rows to make sure recovered mooncake table works.
+        // Insert new rows to make sure recovered mooncake table works as usual.
+        client
+            .simple_query("INSERT INTO recovery VALUES (2,'second');")
+            .await
+            .unwrap();
+        let lsn = current_wal_lsn(&client).await;
+
+        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        // Force create iceberg snapshot to test mooncake/iceberg table recovery.
+        backend
+            .create_snapshot(database_id, TABLE_ID, lsn)
+            .await
+            .unwrap();
+
+        let ids = ids_from_state(
+            &backend
+                .scan_table(database_id, TABLE_ID, Some(lsn))
+                .await
+                .unwrap(),
+        );
+        assert_eq!(ids, HashSet::from([1, 2]));
+
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
     }
 }

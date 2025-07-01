@@ -17,7 +17,6 @@ const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
 /// Database schema for moonlink.
 const MOONLINK_SCHEMA: &str = "mooncake";
 
-#[allow(dead_code)]
 pub struct PgMetadataStore {
     /// Postgres client.
     postgres_client: Arc<Mutex<Client>>,

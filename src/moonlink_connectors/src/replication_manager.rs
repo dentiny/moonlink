@@ -1,6 +1,6 @@
 use crate::pg_replicate::table::SrcTableId;
+use crate::ReplicationConnection;
 use crate::Result;
-use crate::{PostgresSourceError, ReplicationConnection};
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -61,12 +61,8 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             debug!(%src_uri, "creating replication connection");
             // Lazily create the directory that will hold all tables.
             // This will not overwrite any existing directory.
-            tokio::fs::create_dir_all(&self.table_base_path)
-                .await
-                .map_err(PostgresSourceError::Io)?;
-            let base_path = tokio::fs::canonicalize(&self.table_base_path)
-                .await
-                .map_err(PostgresSourceError::Io)?;
+            tokio::fs::create_dir_all(&self.table_base_path).await?;
+            let base_path = tokio::fs::canonicalize(&self.table_base_path).await?;
             let replication_connection = ReplicationConnection::new(
                 src_uri.to_string(),
                 base_path.to_str().unwrap().to_string(),
@@ -102,22 +98,22 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     /// Drop table specified by the given table id.
     /// If the table is not tracked, logs a message and returns successfully.
     /// Return whether the table is tracked by moonlink.
-    pub async fn drop_table(&mut self, external_table_id: T) -> Result<bool> {
-        let (table_uri, table_id) = match self.table_info.get(&external_table_id) {
+    pub async fn drop_table(&mut self, mooncake_table_id: T) -> Result<bool> {
+        let (table_uri, src_table_id) = match self.table_info.get(&mooncake_table_id) {
             Some(info) => info.clone(),
             None => {
                 warn!("attempted to drop table that is not tracked by moonlink - table may already be dropped");
                 return Ok(false);
             }
         };
-        info!(table_id, %table_uri, "dropping table through manager");
+        info!(src_table_id, %table_uri, "dropping table through manager");
         let repl_conn = self.connections.get_mut(&table_uri).unwrap();
-        repl_conn.drop_table(table_id).await?;
+        repl_conn.drop_table(src_table_id).await?;
         if repl_conn.table_readers_count() == 0 {
             self.shutdown_connection(&table_uri);
         }
 
-        info!(table_id, "table dropped through manager");
+        info!(src_table_id, "table dropped through manager");
         Ok(true)
     }
 
@@ -126,7 +122,10 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             .table_info
             .get(mooncake_table_id)
             .unwrap_or_else(|| panic!("table {} not found", mooncake_table_id));
-        let connection = self.connections.get(uri).expect("connection not found");
+        let connection = self
+            .connections
+            .get(uri)
+            .unwrap_or_else(|| panic!("connection for {} not found", uri));
         connection.get_table_reader(*table_id)
     }
 
@@ -135,7 +134,10 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             .table_info
             .get(table_id)
             .unwrap_or_else(|| panic!("table {} not found", table_id));
-        let connection = self.connections.get_mut(uri).expect("connection not found");
+        let connection = self
+            .connections
+            .get_mut(uri)
+            .unwrap_or_else(|| panic!("connection {} not found", uri));
         connection.get_table_event_manager(*table_id)
     }
 

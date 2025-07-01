@@ -144,10 +144,8 @@ impl ReadStateManager {
         let is_snapshot_clean = current_snapshot_lsn == current_commit_lsn;
         let last_read_lsn = self.last_read_lsn.load(Ordering::Acquire);
         // All LSN is 0, which means there're completely no activities on the mooncake table, perform a read from snapshot.
-        let table_no_activity = last_read_lsn == 0
-            && current_snapshot_lsn == 0
-            && current_commit_lsn == 0
-            && current_replication_lsn == 0;
+        let table_no_activity =
+            last_read_lsn == 0 && current_snapshot_lsn == 0 && current_commit_lsn == 0;
 
         // There're two cases we need to read current snapshot:
         // 1. last read state is stale

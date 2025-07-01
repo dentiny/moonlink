@@ -41,6 +41,7 @@ pub enum Command {
     Shutdown,
 }
 
+/// Manages replication for table(s) within a database.
 pub struct ReplicationConnection {
     uri: String,
     table_base_path: String,
@@ -133,6 +134,7 @@ impl ReplicationConnection {
         self.replication_started
     }
 
+    /// Include full row in cdc stream (not just primary keys).
     async fn alter_table_replica_identity(&self, table_name: &str) -> Result<()> {
         self.postgres_client
             .simple_query(&format!(
@@ -147,12 +149,6 @@ impl ReplicationConnection {
         self.postgres_client
             .simple_query(&format!(
                 "ALTER PUBLICATION moonlink_pub ADD TABLE {};",
-                table_name
-            ))
-            .await?;
-        self.postgres_client
-            .simple_query(&format!(
-                "ALTER TABLE {} REPLICA IDENTITY FULL;",
                 table_name
             ))
             .await?;
@@ -358,7 +354,7 @@ impl ReplicationConnection {
     pub async fn add_table<T: std::fmt::Display>(
         &mut self,
         table_name: &str,
-        external_table_id: &T,
+        mooncake_table_id: &T,
         table_id: u32,
         override_table_base_path: Option<&str>,
     ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
@@ -370,7 +366,7 @@ impl ReplicationConnection {
         let moonlink_table_config = self
             .add_table_to_replication(
                 &table_schema,
-                external_table_id,
+                mooncake_table_id,
                 table_id,
                 override_table_base_path,
             )
