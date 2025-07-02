@@ -58,9 +58,7 @@ pub struct MoonlinkBackend<
     // Could be either relative or absolute path.
     replication_manager: RwLock<ReplicationManager<MooncakeTableId<D, T>>>,
     // Maps from metadata store connection string to metadata store client.
-    //
-    // TODO(hjiang): Store trait instead of concrete metadata store client.
-    metadata_store_clients: RwLock<HashMap<D, PgMetadataStore>>,
+    metadata_store_clients: RwLock<HashMap<D, Box<dyn MetadataStoreTrait>>>,
 }
 
 /// Util function to get filesystem size for cache directory
@@ -144,9 +142,15 @@ where
     }
 
     /// Recovery all databases indicated by the connection strings.
+    /// Return recovered metadata storage clients.
     ///
     /// TODO(hjiang): Parallelize all IO operations.
-    async fn recover_all_tables(&mut self, metadata_store_uris: Vec<String>) -> Result<()> {
+    async fn recover_all_tables(
+        &mut self,
+        metadata_store_uris: Vec<String>,
+    ) -> Result<HashMap<D, Box<dyn MetadataStoreTrait>>> {
+        let mut recovered_metadata_stores: HashMap<D, Box<dyn MetadataStoreTrait>> = HashMap::new();
+
         for cur_metadata_store_uri in metadata_store_uris.into_iter() {
             // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink. Skip recovery process.
             if let Some(pg_metadata_store) = PgMetadataStore::new(&cur_metadata_store_uri).await? {
@@ -161,10 +165,13 @@ where
                 for cur_metadata_entry in table_metadata_entries.into_iter() {
                     self.recover_table(database_id, cur_metadata_entry).await?;
                 }
+
+                // Place into metadata store clients map.
+                recovered_metadata_stores.insert(D::from(database_id), Box::new(pg_metadata_store));
             }
         }
 
-        Ok(())
+        Ok(recovered_metadata_stores)
     }
 
     /// TODO(hjiang): Add this new initialization construct for dev purpose, should merge with [`new`] at the end of the day.
@@ -173,7 +180,8 @@ where
         metadata_store_uris: Vec<String>,
     ) -> Result<Self> {
         let mut backend = Self::new(base_path);
-        backend.recover_all_tables(metadata_store_uris).await?;
+        let metadata_storage_clients = backend.recover_all_tables(metadata_store_uris).await?;
+        backend.metadata_store_clients = RwLock::new(metadata_storage_clients);
         Ok(backend)
     }
 
@@ -231,7 +239,7 @@ where
                 HashMapEntry::Vacant(entry) => {
                     // Precondition: [`mooncake`] schema already exists in the current database.
                     let new_metadata_store =
-                        PgMetadataStore::new(&metadata_store_uri).await?.unwrap();
+                        Box::new(PgMetadataStore::new(&metadata_store_uri).await?.unwrap());
                     entry.insert(new_metadata_store)
                 }
             };
