@@ -8,6 +8,7 @@ pub use moonlink::ReadState;
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMetadataEntry};
+use moonlink_metadata_store::metadata_store_utils;
 use moonlink_metadata_store::PgMetadataStore;
 use more_asserts as ma;
 use std::collections::hash_map::Entry as HashMapEntry;
@@ -58,7 +59,7 @@ pub struct MoonlinkBackend<
     // Could be either relative or absolute path.
     replication_manager: RwLock<ReplicationManager<MooncakeTableId<D, T>>>,
     // Maps from metadata store connection string to metadata store client.
-    metadata_store_clients: RwLock<HashMap<D, Box<dyn MetadataStoreTrait>>>,
+    metadata_store_accessors: RwLock<HashMap<D, Box<dyn MetadataStoreTrait>>>,
 }
 
 /// Util function to get filesystem size for cache directory
@@ -107,7 +108,7 @@ where
                 temp_files_dir.to_str().unwrap().to_string(),
                 create_default_object_storage_cache(cache_files_dir),
             )),
-            metadata_store_clients: RwLock::new(HashMap::new()),
+            metadata_store_accessors: RwLock::new(HashMap::new()),
         }
     }
 
@@ -153,13 +154,16 @@ where
 
         for cur_metadata_store_uri in metadata_store_uris.into_iter() {
             // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink. Skip recovery process.
-            if let Some(pg_metadata_store) = PgMetadataStore::new(&cur_metadata_store_uri).await? {
+            if let Some(metadata_store_accessor) =
+                metadata_store_utils::create_metadata_storage(&cur_metadata_store_uri).await?
+            {
                 // Get database id.
-                let database_id = pg_metadata_store.get_database_id().await?;
+                let database_id = metadata_store_accessor.get_database_id().await?;
 
                 // Get all mooncake tables to recovery.
-                let table_metadata_entries =
-                    pg_metadata_store.get_all_table_metadata_entries().await?;
+                let table_metadata_entries = metadata_store_accessor
+                    .get_all_table_metadata_entries()
+                    .await?;
 
                 // Load config and try recovery.
                 for cur_metadata_entry in table_metadata_entries.into_iter() {
@@ -167,7 +171,7 @@ where
                 }
 
                 // Place into metadata store clients map.
-                recovered_metadata_stores.insert(D::from(database_id), Box::new(pg_metadata_store));
+                recovered_metadata_stores.insert(D::from(database_id), metadata_store_accessor);
             }
         }
 
@@ -181,7 +185,7 @@ where
     ) -> Result<Self> {
         let mut backend = Self::new(base_path);
         let metadata_storage_clients = backend.recover_all_tables(metadata_store_uris).await?;
-        backend.metadata_store_clients = RwLock::new(metadata_storage_clients);
+        backend.metadata_store_accessors = RwLock::new(metadata_storage_clients);
         Ok(backend)
     }
 
@@ -233,8 +237,8 @@ where
 
         // Create metadata store entry.
         {
-            let mut guard = self.metadata_store_clients.write().await;
-            let cur_metadata_store_client = match guard.entry(database_id.clone()) {
+            let mut guard = self.metadata_store_accessors.write().await;
+            let cur_metadata_store_accessor = match guard.entry(database_id.clone()) {
                 HashMapEntry::Occupied(entry) => entry.into_mut(),
                 HashMapEntry::Vacant(entry) => {
                     // Precondition: [`mooncake`] schema already exists in the current database.
@@ -243,7 +247,7 @@ where
                     entry.insert(new_metadata_store)
                 }
             };
-            cur_metadata_store_client
+            cur_metadata_store_accessor
                 .store_table_config(table_id, &src_table_name, &src_uri, moonlink_table_config)
                 .await?;
         }
@@ -268,7 +272,7 @@ where
         }
 
         let metadata_store = {
-            let mut guard = self.metadata_store_clients.write().await;
+            let mut guard = self.metadata_store_accessors.write().await;
             guard.remove(&database_id).unwrap()
         };
         metadata_store.delete_table_config(table_id).await.unwrap()
