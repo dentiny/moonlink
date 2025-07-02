@@ -3,7 +3,6 @@ mod tests {
     use arrow_array::Int64Array;
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, PgMetadataStore};
     use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-    use std::sync::Arc;
     use tempfile::TempDir;
     use tokio_postgres::{connect, types::PgLsn, Client, NoTls};
 
@@ -39,7 +38,7 @@ mod tests {
     }
 
     struct TestGuard {
-        backend: Arc<MoonlinkBackend<DatabaseId, TableId>>,
+        backend: Option<MoonlinkBackend<DatabaseId, TableId>>,
         tmp: Option<TempDir>,
         database_id: DatabaseId,
         test_mode: TestGuardMode,
@@ -49,7 +48,7 @@ mod tests {
         async fn new(table_name: &'static str) -> (Self, Client) {
             let (tmp, backend, client, database_id) = setup_backend(table_name).await;
             let guard = Self {
-                backend: Arc::new(backend),
+                backend: Some(backend),
                 tmp: Some(tmp),
                 database_id,
                 test_mode: TestGuardMode::Normal,
@@ -65,7 +64,7 @@ mod tests {
             }
 
             // move everything we need into the async block
-            let backend = Arc::clone(&self.backend);
+            let backend = self.backend.take().unwrap();
             let tmp = self.tmp.take();
 
             tokio::task::block_in_place(|| {
@@ -284,7 +283,7 @@ mod tests {
     #[serial]
     async fn test_moonlink_service() {
         let (guard, client) = TestGuard::new("test").await;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         smoke_create_and_insert(backend, &client, guard.database_id, SRC_URI).await;
         backend.drop_table(guard.database_id, TABLE_ID).await;
@@ -296,7 +295,7 @@ mod tests {
     #[serial]
     async fn test_scan_returns_inserted_rows() {
         let (guard, client) = TestGuard::new("scan_test").await;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         client
             .simple_query("INSERT INTO scan_test VALUES (1,'a'),(2,'b');")
@@ -333,7 +332,7 @@ mod tests {
     #[serial]
     async fn test_scan_table_with_lsn() {
         let (guard, client) = TestGuard::new("lsn_test").await;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         client
             .simple_query("INSERT INTO lsn_test VALUES (1,'a');")
@@ -369,7 +368,7 @@ mod tests {
     #[serial]
     async fn test_create_iceberg_snapshot() {
         let (guard, client) = TestGuard::new("snapshot_test").await;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         client
             .simple_query("INSERT INTO snapshot_test VALUES (1,'a');")
@@ -409,7 +408,7 @@ mod tests {
     #[serial]
     async fn test_replication_connection_cleanup() {
         let (guard, client) = TestGuard::new("repl_test").await;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         // Drop the table that setup_backend created so we can test the full cycle
         backend.drop_table(guard.database_id, TABLE_ID).await;
@@ -476,7 +475,7 @@ mod tests {
     #[serial]
     async fn test_bulk_insert_one_million_rows() {
         let (guard, client) = TestGuard::new("bulk_test").await;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         client
             .simple_query(
@@ -508,7 +507,7 @@ mod tests {
     async fn test_metadata_store() {
         let (guard, _) = TestGuard::new("metadata_store").await;
         // Till now, table [`metadata_store`] has been created at both row storage and column storage database.
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
         let metadata_store = PgMetadataStore::new(DST_URI).await.unwrap().unwrap();
 
         // Check metadata storage after table creation.
@@ -572,7 +571,7 @@ mod tests {
         guard.set_test_mode(TestGuardMode::Crash);
 
         let database_id = guard.database_id;
-        let backend = &guard.backend;
+        let backend = guard.backend.as_ref().unwrap();
 
         // Drop the table that setup_backend created so we can test the full cycle
         backend.drop_table(guard.database_id, TABLE_ID).await;
