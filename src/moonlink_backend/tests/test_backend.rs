@@ -430,11 +430,11 @@ mod tests {
             .simple_query("INSERT INTO repl_test VALUES (1,'first');")
             .await
             .unwrap();
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let lsn = current_wal_lsn(&client).await;
 
         let ids = ids_from_state(
             &backend
-                .scan_table(guard.database_id, TABLE_ID, None)
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn))
                 .await
                 .unwrap(),
         );
@@ -459,11 +459,11 @@ mod tests {
             .simple_query("INSERT INTO repl_test VALUES (2,'second');")
             .await
             .unwrap();
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+        let lsn = current_wal_lsn(&client).await;
 
         let ids = ids_from_state(
             &backend
-                .scan_table(guard.database_id, TABLE_ID, /*lsn=*/ None)
+                .scan_table(guard.database_id, TABLE_ID, Some(lsn))
                 .await
                 .unwrap(),
         );
@@ -594,17 +594,20 @@ mod tests {
             .await
             .unwrap();
         let lsn = current_wal_lsn(&client).await;
-        // Wait for a while so changes are streamed to mooncake table.
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        // Force create iceberg snapshot to test mooncake/iceberg table recovery.
+
+        // Wait until changes reflected to mooncake snapshot, and force create iceberg snapshot to test mooncake/iceberg table recovery.
+        backend
+            .scan_table(guard.database_id, TABLE_ID, Some(lsn))
+            .await
+            .unwrap();
         backend
             .create_snapshot(guard.database_id, TABLE_ID, lsn)
             .await
             .unwrap();
 
-        // Stop table handler.
+        // Shutdown pg connection and table handler.
         backend.shutdown_connection(SRC_URI).await;
-        // Take the testing directory recovery from iceberg table.
+        // Take the testing directory, for recovery from iceberg table.
         let _testing_directory_before_recovery = guard.take_test_directory();
         // Drop everything for the old backend.
         drop(guard);
@@ -632,13 +635,7 @@ mod tests {
             .unwrap();
         let lsn = current_wal_lsn(&client).await;
 
-        tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-        // Force create iceberg snapshot to test mooncake/iceberg table recovery.
-        backend
-            .create_snapshot(database_id, TABLE_ID, lsn)
-            .await
-            .unwrap();
-
+        // Wait until changes reflected to mooncake snapshot, and force create iceberg snapshot to test mooncake/iceberg table recovery.
         let ids = ids_from_state(
             &backend
                 .scan_table(database_id, TABLE_ID, Some(lsn))
@@ -646,7 +643,5 @@ mod tests {
                 .unwrap(),
         );
         assert_eq!(ids, HashSet::from([1, 2]));
-
-        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
     }
 }
