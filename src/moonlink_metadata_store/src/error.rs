@@ -10,6 +10,9 @@ pub enum Error {
     #[error("metadata operation row number doesn't match {0} vs {1}")]
     PostgresRowCountError(u32, u32),
 
+    #[error("metadata access failed precondition: {0}")]
+    MetadataStoreFailedPrecondition(String),
+
     #[error("serde json error: {0}")]
     SerdeJsonError(#[from] SerdeJsonError),
 

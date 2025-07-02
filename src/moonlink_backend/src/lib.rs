@@ -145,6 +145,11 @@ where
     /// Recovery all databases indicated by the connection strings.
     /// Return recovered metadata storage clients.
     ///
+    /// Recovery process for each database:
+    /// - if schema not exist, skip
+    /// - if metadata table not exist, skip
+    /// - load metadata table, and perform recovery on all mooncake tables
+    ///
     /// TODO(hjiang): Parallelize all IO operations.
     async fn recover_all_tables(
         &mut self,
@@ -153,26 +158,36 @@ where
         let mut recovered_metadata_stores: HashMap<D, Box<dyn MetadataStoreTrait>> = HashMap::new();
 
         for cur_metadata_store_uri in metadata_store_uris.into_iter() {
-            // If "mooncake" schema doesn't exist for the given database, it means no table under the current database is managed by moonlink. Skip recovery process.
-            if let Some(metadata_store_accessor) =
-                metadata_store_utils::create_metadata_storage(&cur_metadata_store_uri).await?
-            {
-                // Get database id.
-                let database_id = metadata_store_accessor.get_database_id().await?;
+            let metadata_store_accessor =
+                metadata_store_utils::create_metadata_storage(cur_metadata_store_uri)?;
 
-                // Get all mooncake tables to recovery.
-                let table_metadata_entries = metadata_store_accessor
-                    .get_all_table_metadata_entries()
-                    .await?;
-
-                // Load config and try recovery.
-                for cur_metadata_entry in table_metadata_entries.into_iter() {
-                    self.recover_table(database_id, cur_metadata_entry).await?;
-                }
-
-                // Place into metadata store clients map.
-                recovered_metadata_stores.insert(D::from(database_id), metadata_store_accessor);
+            // Step-1: check schema existence, skip if not.
+            if !metadata_store_accessor.schema_exists().await? {
+                continue;
             }
+
+            // Skep-2: check metadata store table existence, skip if not.
+            if !metadata_store_accessor.metadata_table_exists().await? {
+                continue;
+            }
+
+            // Step-3: load persisted metadata from storage, perform recovery for each managed tables.
+            //
+            // Get database id.
+            let database_id = metadata_store_accessor.get_database_id().await?;
+
+            // Get all mooncake tables to recovery.
+            let table_metadata_entries = metadata_store_accessor
+                .get_all_table_metadata_entries()
+                .await?;
+
+            // Perform recovery on all managed tables.
+            for cur_metadata_entry in table_metadata_entries.into_iter() {
+                self.recover_table(database_id, cur_metadata_entry).await?;
+            }
+
+            // Place into metadata store clients map.
+            recovered_metadata_stores.insert(D::from(database_id), metadata_store_accessor);
         }
 
         Ok(recovered_metadata_stores)
@@ -241,14 +256,13 @@ where
             let cur_metadata_store_accessor = match guard.entry(database_id.clone()) {
                 HashMapEntry::Occupied(entry) => entry.into_mut(),
                 HashMapEntry::Vacant(entry) => {
-                    // Precondition: [`mooncake`] schema already exists in the current database.
                     let new_metadata_store =
-                        Box::new(PgMetadataStore::new(&metadata_store_uri).await?.unwrap());
+                        metadata_store_utils::create_metadata_storage(metadata_store_uri)?;
                     entry.insert(new_metadata_store)
                 }
             };
             cur_metadata_store_accessor
-                .store_table_config(table_id, &src_table_name, &src_uri, moonlink_table_config)
+                .store_table_metadata(table_id, &src_table_name, &src_uri, moonlink_table_config)
                 .await?;
         }
 
@@ -275,7 +289,10 @@ where
             let mut guard = self.metadata_store_accessors.write().await;
             guard.remove(&database_id).unwrap()
         };
-        metadata_store.delete_table_config(table_id).await.unwrap()
+        metadata_store
+            .delete_table_metadata(table_id)
+            .await
+            .unwrap()
     }
 
     pub async fn scan_table(

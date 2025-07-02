@@ -14,3 +14,25 @@ pub async fn schema_exists(postgres_client: &Client, schema_name: &str) -> Resul
 
     Ok(row.is_some())
 }
+
+/// Return whether the given <schema>.<table> exists in the current database.
+pub async fn table_exists(
+    postgres_client: &Client,
+    schema_name: &str,
+    table_name: &str,
+) -> Result<bool> {
+    let row = postgres_client
+        .query_opt(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = $1 AND table_name = $2;",
+            &[&schema_name, &table_name],
+        )
+        .await?;
+
+    Ok(row.is_some())
+}
+
+/// Create metadata storage table, which fails if the table already exists.
+pub async fn create_table(postgres_client: &Client, statements: &str) -> Result<()> {
+    postgres_client.simple_query(statements).await?;
+    Ok(())
+}

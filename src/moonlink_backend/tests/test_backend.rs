@@ -508,7 +508,7 @@ mod tests {
         let (guard, _) = TestGuard::new("metadata_store").await;
         // Till now, table [`metadata_store`] has been created at both row storage and column storage database.
         let backend = guard.backend.as_ref().unwrap();
-        let metadata_store = PgMetadataStore::new(DST_URI).await.unwrap().unwrap();
+        let metadata_store = PgMetadataStore::new(METADATA_STORE_URI.to_string()).unwrap();
 
         // Check metadata storage after table creation.
         let metadata_entries = metadata_store
