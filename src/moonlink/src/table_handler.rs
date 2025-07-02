@@ -30,7 +30,11 @@ pub struct EventSyncSender {
 
 impl TableHandler {
     /// Create a new TableHandler for the given schema and table name
-    pub async fn new(mut table: MooncakeTable, event_sync_sender: EventSyncSender) -> Self {
+    pub async fn new(
+        mut table: MooncakeTable,
+        event_sync_sender: EventSyncSender,
+        replication_lsn_rx: watch::Receiver<u64>,
+    ) -> Self {
         // Create channel for events
         let (event_sender, event_receiver) = mpsc::channel(100);
 
@@ -40,7 +44,8 @@ impl TableHandler {
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(
             async move {
-                Self::event_loop(event_sync_sender, event_receiver, table).await;
+                Self::event_loop(event_sync_sender, event_receiver, replication_lsn_rx, table)
+                    .await;
             }
             .instrument(info_span!("table_event_loop")),
         ));
@@ -62,6 +67,7 @@ impl TableHandler {
     async fn event_loop(
         event_sync_sender: EventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
+        replication_lsn_rx: watch::Receiver<u64>,
         mut table: MooncakeTable,
     ) {
         let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
@@ -279,17 +285,14 @@ impl TableHandler {
                         // ==============================
                         //
                         TableEvent::ForceSnapshot { lsn, tx } => {
-                            // A workaround to avoid create snapshot call gets stuck, when there's no write operations to the table.
-                            if !table_updated {
+                            // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.
+                            let last_iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
+                            let replication_lsn = *replication_lsn_rx.borrow();
+                            if is_iceberg_snapshot_satisfy_force_snapshot(lsn, last_iceberg_snapshot_lsn, replication_lsn, table_consistent_view_lsn) {
                                 tx.send(Ok(())).await.unwrap();
                                 continue;
                             }
 
-                            // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.
-                            let last_iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
-                            if last_iceberg_snapshot_lsn.is_some() && lsn <= last_iceberg_snapshot_lsn.unwrap() {
-                                tx.send(Ok(())).await.unwrap();
-                            }
                             // Iceberg snapshot LSN requirement is not met, record the required LSN, so later commit will pick up.
                             else {
                                 force_snapshot_lsns.entry(lsn).or_default().push(tx);
@@ -458,6 +461,34 @@ impl TableHandler {
             }
         }
     }
+}
+
+/// Decide whether current iceberg snapshot could serve the force iceberg snapshot request.
+pub(crate) fn is_iceberg_snapshot_satisfy_force_snapshot(
+    requested_lsn: u64,
+    iceberg_snapshot_lsn: Option<u64>,
+    replication_lsn: u64,
+    table_consistent_view_lsn: Option<u64>,
+) -> bool {
+    // Case-1: there're no activities in the current table, but replication LSN already covers requested LSN.
+    if iceberg_snapshot_lsn.is_none() && table_consistent_view_lsn.is_none() {
+        return replication_lsn >= requested_lsn;
+    }
+
+    // Case-2: iceberg snapshot LSN already satisfies.
+    if let Some(iceberg_snapshot_lsn) = iceberg_snapshot_lsn {
+        if iceberg_snapshot_lsn >= requested_lsn {
+            return true;
+        }
+    }
+
+    // Case-3: table's at a consistent state, which has been fully persisted into iceberg;
+    // meanwhile, replication LSN has covered the requested LSN.
+    if iceberg_snapshot_lsn == table_consistent_view_lsn && replication_lsn >= requested_lsn {
+        return true;
+    }
+
+    return false;
 }
 
 #[cfg(test)]
