@@ -2,7 +2,6 @@ use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::{io_utils, MooncakeTable};
 use crate::table_notify::TableEvent;
 use crate::{Error, Result};
-use more_asserts as ma;
 use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::{oneshot, watch};
@@ -367,13 +366,8 @@ impl TableHandler {
                                     iceberg_snapshot_result_consumed = false;
 
                                     // Notify all waiters with LSN satisfied.
-                                    let new_map = force_snapshot_lsns.split_off(&(iceberg_flush_lsn + 1));
-                                    for (requested_lsn, tx) in force_snapshot_lsns.iter() {
-                                        ma::assert_le!(*requested_lsn, iceberg_flush_lsn);
-                                        for cur_tx in tx {
-                                            cur_tx.send(Ok(())).await.unwrap();
-                                        }
-                                    }
+                                    let replication_lsn = *replication_lsn_rx.borrow();
+                                    let new_map = update_force_iceberg_snapshot_requests(force_snapshot_lsns, iceberg_flush_lsn, replication_lsn, table_consistent_view_lsn).await;
                                     force_snapshot_lsns = new_map;
                                 }
                                 Err(e) => {
@@ -489,6 +483,34 @@ pub(crate) fn is_iceberg_snapshot_satisfy_force_snapshot(
     }
 
     return false;
+}
+
+/// Update requested iceberg snapshot LSNs.
+async fn update_force_iceberg_snapshot_requests(
+    force_snapshot_lsns: BTreeMap<u64, Vec<Sender<Result<()>>>>,
+    iceberg_snapshot_lsn: u64,
+    replication_lsn: u64,
+    table_consistent_view_lsn: Option<u64>,
+) -> BTreeMap<u64, Vec<Sender<Result<()>>>> {
+    let mut updated_requests = BTreeMap::new();
+
+    // TODO(hjiang): Could be optimized, since as long as we found the first requested LSN which doesn't satisfy, we could directly place all left requests to updated lsns.
+    for (requested_lsn, senders) in force_snapshot_lsns.into_iter() {
+        if is_iceberg_snapshot_satisfy_force_snapshot(
+            requested_lsn,
+            Some(iceberg_snapshot_lsn),
+            replication_lsn,
+            table_consistent_view_lsn,
+        ) {
+            for sender in senders {
+                sender.send(Ok(())).await.unwrap();
+            }
+        } else {
+            updated_requests.insert(requested_lsn, senders);
+        }
+    }
+
+    updated_requests
 }
 
 #[cfg(test)]
