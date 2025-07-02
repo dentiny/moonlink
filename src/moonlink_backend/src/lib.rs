@@ -9,7 +9,6 @@ use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMetadataEntry};
 use moonlink_metadata_store::metadata_store_utils;
-use moonlink_metadata_store::PgMetadataStore;
 use more_asserts as ma;
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::collections::HashMap;

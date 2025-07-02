@@ -52,4 +52,65 @@ mod tests {
                 .unwrap()
         );
     }
+
+    #[tokio::test]
+    #[serial]
+    async fn test_table_exists() {
+        const EXISTENT_SCHEMA: &str = "existent_schema";
+        const NON_EXISTENT_SCHEMA: &str = "non_existent_schema";
+        const EXISTENT_TABLE: &str = "existent_table";
+
+        let (postgres_client, connection) = connect(URI, NoTls).await.unwrap();
+
+        // Spawn connection driver in background to keep eventloop alive.
+        let _pg_connection = tokio::spawn(async move {
+            if let Err(e) = connection.await {
+                eprintln!("Postgres connection error: {}", e);
+            }
+        });
+
+        // Re-create mooncake schema.
+        postgres_client
+            .simple_query(&format!(
+                "DROP SCHEMA IF EXISTS {0} CASCADE; CREATE SCHEMA {0};",
+                EXISTENT_SCHEMA
+            ))
+            .await
+            .unwrap();
+        postgres_client
+            .simple_query(&format!(
+                "DROP SCHEMA IF EXISTS {0} CASCADE;",
+                NON_EXISTENT_SCHEMA
+            ))
+            .await
+            .unwrap();
+
+        // Check table existence.
+        //
+        // Case-1: schema existent, but table non-existent.
+        assert!(
+            !PgUtils::table_exists(&postgres_client, EXISTENT_SCHEMA, EXISTENT_TABLE)
+                .await
+                .unwrap()
+        );
+        // Case-2: schema non-existent.
+        assert!(
+            !PgUtils::table_exists(&postgres_client, NON_EXISTENT_SCHEMA, EXISTENT_TABLE)
+                .await
+                .unwrap()
+        );
+        // Case-3: schema existent and table existent.
+        postgres_client
+            .simple_query(&format!(
+                "CREATE TABLE {0}.{1} (id INT);",
+                EXISTENT_SCHEMA, EXISTENT_TABLE,
+            ))
+            .await
+            .unwrap();
+        assert!(
+            PgUtils::table_exists(&postgres_client, EXISTENT_SCHEMA, EXISTENT_TABLE)
+                .await
+                .unwrap()
+        );
+    }
 }
