@@ -144,9 +144,6 @@ impl ReadStateManager {
         let is_snapshot_clean = current_snapshot_lsn == current_commit_lsn;
         let last_read_lsn = self.last_read_lsn.load(Ordering::Acquire);
 
-        // There're two cases we need to read current snapshot:
-        // 1. last read state is stale
-        // or 2. there's no activity in the current table
         if last_read_lsn < current_snapshot_lsn {
             // If the snapshot is fully committed and replication has progressed further,
             // we can consider the state valid up to the replication LSN.
