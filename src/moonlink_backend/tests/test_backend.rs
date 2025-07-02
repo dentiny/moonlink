@@ -377,9 +377,13 @@ mod tests {
             .unwrap();
         let lsn = current_wal_lsn(&client).await;
 
-        // It's not guaranteed whether "table insertion" or "create iceberg snapshot" reaches table handler eventloop first, add a sleep to reduce flakiness.
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        // Read snapshot of the latest LSN to make sure all changes are synchronized to mooncake snapshot.
+        backend
+            .scan_table(guard.database_id, TABLE_ID, Some(lsn))
+            .await
+            .unwrap();
 
+        // After all changes reflected at mooncake snapshot, trigger an iceberg snapshot.
         backend
             .create_snapshot(guard.database_id, TABLE_ID, lsn)
             .await
