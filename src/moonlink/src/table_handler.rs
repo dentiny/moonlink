@@ -88,9 +88,6 @@ impl TableHandler {
         // To simplify state management, we have at most one ongoing maintainance operation at the same time.
         let mut maintainance_ongoing = false;
 
-        // Whether current table receives any update events.
-        let mut table_updated = false;
-
         // Whether requested to drop table.
         let mut drop_table_requested = false;
 
@@ -189,10 +186,6 @@ impl TableHandler {
                         | TableEvent::ReadRequest { .. }
                         | TableEvent::EvictedDataFilesToDelete { .. } => table_consistent_view_lsn,
                         _ => None,
-                    };
-                    table_updated = match event {
-                        TableEvent::ForceSnapshot { .. } => table_updated,
-                        _ => true,
                     };
 
                     match event {
