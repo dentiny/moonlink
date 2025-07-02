@@ -3,7 +3,6 @@ use tokio_postgres::{connect, Client, NoTls};
 use crate::error::Result;
 
 /// A wrapper around tokio postgres client and connection.
-
 pub(super) struct PgClientWrapper {
     /// Postgres client.
     pub(super) postgres_client: Client,

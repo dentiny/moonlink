@@ -158,7 +158,7 @@ where
 
         for cur_metadata_store_uri in metadata_store_uris.into_iter() {
             let metadata_store_accessor =
-                metadata_store_utils::create_metadata_storage(cur_metadata_store_uri)?;
+                metadata_store_utils::create_metadata_store_accessor(cur_metadata_store_uri)?;
 
             // Step-1: check schema existence, skip if not.
             if !metadata_store_accessor.schema_exists().await? {
@@ -256,7 +256,7 @@ where
                 HashMapEntry::Occupied(entry) => entry.into_mut(),
                 HashMapEntry::Vacant(entry) => {
                     let new_metadata_store =
-                        metadata_store_utils::create_metadata_storage(metadata_store_uri)?;
+                        metadata_store_utils::create_metadata_store_accessor(metadata_store_uri)?;
                     entry.insert(new_metadata_store)
                 }
             };

@@ -26,6 +26,10 @@ pub struct TableMetadataEntry {
 
 #[async_trait]
 pub trait MetadataStoreTrait: Send + Sync {
+    /// Get database id.
+    #[allow(async_fn_in_trait)]
+    async fn get_database_id(&self) -> Result<u32>;
+
     /// Return whether schema exists.
     #[allow(async_fn_in_trait)]
     async fn schema_exists(&self) -> Result<bool>;
@@ -33,10 +37,6 @@ pub trait MetadataStoreTrait: Send + Sync {
     /// Return whether metadata table exists.
     #[allow(async_fn_in_trait)]
     async fn metadata_table_exists(&self) -> Result<bool>;
-
-    /// Get database id.
-    #[allow(async_fn_in_trait)]
-    async fn get_database_id(&self) -> Result<u32>;
 
     /// Get all mooncake table metadata entries in the metadata storage table.
     ///
@@ -46,7 +46,7 @@ pub trait MetadataStoreTrait: Send + Sync {
     #[allow(async_fn_in_trait)]
     async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>>;
 
-    /// Store table config for the given mooncake table.
+    /// Store table metadata for the given mooncake table.
     /// Metadata table will be created if it doesn't exists.
     ///
     /// Precondition:

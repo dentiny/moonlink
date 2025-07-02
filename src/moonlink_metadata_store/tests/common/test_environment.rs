@@ -1,7 +1,8 @@
 /// Test environment to setup and cleanup a test case.
-use tokio_postgres::{connect, NoTls};
+use tokio_postgres::{connect, Client, NoTls};
 
 pub(crate) struct TestEnvironment {
+    postgres_client: Client,
     _connection_handle: tokio::task::JoinHandle<()>,
 }
 
@@ -22,6 +23,17 @@ impl TestEnvironment {
             .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake;")
             .await
             .unwrap();
-        Self { _connection_handle }
+        Self {
+            postgres_client,
+            _connection_handle,
+        }
+    }
+
+    /// Delete moonlink schema.
+    pub(crate) async fn delete_mooncake_schema(&self) {
+        self.postgres_client
+            .simple_query("DROP SCHEMA IF EXISTS mooncake")
+            .await
+            .unwrap();
     }
 }
