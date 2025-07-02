@@ -18,7 +18,7 @@ pub struct TableMetadataEntry {
 }
 
 #[async_trait]
-pub trait MetadataStoreTrait: Send {
+pub trait MetadataStoreTrait: Send + Sync {
     /// Get database id.
     #[allow(async_fn_in_trait)]
     async fn get_database_id(&self) -> Result<u32>;
