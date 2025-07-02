@@ -420,18 +420,16 @@ impl TableHandler {
                     // Check whether a flush and force snapshot is needed.
                     if !force_snapshot_lsns.is_empty() {
                         if let Some(commit_lsn) = table_consistent_view_lsn {
-                            if *force_snapshot_lsns.iter().next().as_ref().unwrap().0 <= commit_lsn {
-                                table.flush(/*lsn=*/ commit_lsn).await.unwrap();
-                                reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
-                                table.create_snapshot(SnapshotOption {
-                                    force_create: true,
-                                    skip_iceberg_snapshot: iceberg_snapshot_ongoing,
-                                    skip_file_indices_merge: maintainance_ongoing,
-                                    skip_data_file_compaction: maintainance_ongoing,
-                                });
-                                mooncake_snapshot_ongoing = true;
-                                continue;
-                            }
+                            table.flush(commit_lsn).await.unwrap();
+                            reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
+                            table.create_snapshot(SnapshotOption {
+                                force_create: true,
+                                skip_iceberg_snapshot: iceberg_snapshot_ongoing,
+                                skip_file_indices_merge: maintainance_ongoing,
+                                skip_data_file_compaction: maintainance_ongoing,
+                            });
+                            mooncake_snapshot_ongoing = true;
+                            continue;
                         }
                     }
 
