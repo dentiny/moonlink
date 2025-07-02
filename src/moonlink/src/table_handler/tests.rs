@@ -3,6 +3,7 @@ use iceberg::{Error as IcebergError, ErrorKind};
 use tempfile::tempdir;
 
 use super::test_utils::*;
+use super::TableEvent;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
@@ -260,6 +261,7 @@ async fn test_streaming_transaction_periodic_flush() {
     env.set_table_commit_lsn(0);
     env.set_replication_lsn(initial_read_lsn_target + 5);
 
+    env.set_snapshot_lsn(0);
     env.verify_snapshot(initial_read_lsn_target, &[]).await;
 
     // --- Phase 4: Append more data to the same transaction AFTER the periodic flush ---
@@ -300,6 +302,7 @@ async fn test_stream_delete_previously_flushed_row_same_xact() {
     // Phase 3: Verify data is NOT visible before commit
     env.set_table_commit_lsn(0);
     env.set_replication_lsn(stream_commit_lsn + 5);
+    env.set_snapshot_lsn(0);
     env.verify_snapshot(stream_commit_lsn, &[]).await;
 
     // Phase 4: Commit the streaming transaction
@@ -331,6 +334,7 @@ async fn test_stream_delete_from_stream_memslice_row() {
     // Phase 3: Verify data is NOT visible before commit
     env.set_table_commit_lsn(0);
     env.set_replication_lsn(stream_commit_lsn + 5);
+    env.set_snapshot_lsn(0);
     env.verify_snapshot(stream_commit_lsn, &[]).await;
 
     // Phase 4: Commit the streaming transaction
@@ -1089,6 +1093,61 @@ async fn test_flush_lsn_consistency_across_snapshots() {
             .unwrap();
         assert_eq!(snapshot.data_file_flush_lsn, Some(lsn));
     }
+
+    env.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_initial_copy_basic() {
+    let mut env = TestEnvironment::default().await;
+    // Get a direct sender so we can emit raw TableEvents.
+    let sender = env.handler.get_event_sender();
+
+    // Start initial copy workflow.
+    sender
+        .send(TableEvent::StartInitialCopy)
+        .await
+        .expect("send start initial copy");
+
+    // Simulate the copy process delivering an existing row.
+    // This row gets appended directly to main mem_slice.
+    sender
+        .send(TableEvent::Append {
+            row: create_row(1, "Alice", 30),
+            xact_id: None,
+            is_copied: true,
+        })
+        .await
+        .expect("send copied row");
+
+    // A new row arrives while copy is running.
+    env.append_row(2, "Bob", 40, None).await;
+    env.commit(10).await; // Buffered until copy finishes
+
+    // During initial copy: commit LSN stays 0 (no actual commits applied)
+    // Only replication LSN advances to track CDC stream progress
+    env.set_replication_lsn(10);
+
+    env.set_snapshot_lsn(0);
+    // During initial copy, should see empty table (no commits applied yet)
+    env.verify_snapshot(0, &[]).await; // Should see empty table during initial copy
+
+    // Finish the copy which applies buffered changes.
+    sender
+        .send(TableEvent::FinishInitialCopy)
+        .await
+        .expect("send finish initial copy");
+
+    // After FinishInitialCopy, we need to commit and flush to create a snapshot
+    // This makes the buffered data and copied data visible together
+    env.commit(10).await;
+    env.flush_table(10).await;
+
+    // Now set the LSNs and verify both Alice (copied) and Bob (buffered) are visible
+    env.set_table_commit_lsn(10);
+    env.set_replication_lsn(10);
+
+    env.verify_snapshot(10, &[1, 2]).await;
 
     env.shutdown().await;
 }

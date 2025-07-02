@@ -16,6 +16,7 @@ use more_asserts as ma;
 pub(super) struct TransactionStreamState {
     mem_slice: MemSlice,
     local_deletions: Vec<ProcessedDeletionRecord>,
+    buffered_deletions: Vec<RawDeletionRecord>,
     pending_deletions_in_main_mem_slice: Vec<RawDeletionRecord>,
     index_bloom_filter: BloomFilter,
     flushed_file_index: MooncakeIndex,
@@ -34,6 +35,7 @@ pub struct TransactionStreamCommit {
     flushed_files: hashbrown::HashMap<MooncakeDataFileRef, DiskFileEntry>,
     local_deletions: Vec<ProcessedDeletionRecord>,
     pending_deletions: Vec<RawDeletionRecord>,
+    buffered_deletions: Vec<RawDeletionRecord>,
 }
 
 impl TransactionStreamCommit {
@@ -67,6 +69,7 @@ impl TransactionStreamState {
         Self {
             mem_slice: MemSlice::new(schema, batch_size, identity),
             local_deletions: Vec::new(),
+            buffered_deletions: Vec::new(),
             pending_deletions_in_main_mem_slice: Vec::new(),
             index_bloom_filter: BloomFilter::with_num_bits(1 << 24).expected_items(1_000_000),
             flushed_file_index: MooncakeIndex::new(),
@@ -132,11 +135,18 @@ impl MooncakeTable {
             pos: None,
             row_identity: self.metadata.identity.extract_identity_columns(row),
         };
+
+        let in_initial_copy = self.is_in_initial_copy();
         let stream_state = Self::get_or_create_stream_state(
             &mut self.transaction_stream_states,
             &self.metadata,
             xact_id,
         );
+        if in_initial_copy {
+            stream_state.buffered_deletions.push(record);
+            return;
+        }
+
         // it is very unlikely to delete a row in current transaction,
         // only very weird query shape could do it.
         // use a bloom filter to skip any index lookup (which could be costly)
@@ -245,17 +255,19 @@ impl MooncakeTable {
         Ok(())
     }
 
-    pub async fn commit_transaction_stream(&mut self, xact_id: u32, lsn: u64) -> Result<()> {
+    /// Prepare a transaction stream commit without applying it to the table.
+    /// This is useful when buffering events during initial copy. The returned
+    /// `TransactionStreamCommit` can later be applied via
+    /// `commit_transaction_stream` logic.
+    pub async fn prepare_transaction_stream_commit(
+        &mut self,
+        xact_id: u32,
+        lsn: u64,
+    ) -> Result<TransactionStreamCommit> {
         self.flush_transaction_stream(xact_id).await?;
         if let Some(mut stream_state) = self.transaction_stream_states.remove(&xact_id) {
-            let snapshot_task = &mut self.next_snapshot_task;
-            snapshot_task.new_commit_lsn = lsn;
-
-            // We update our delete records with the last lsn of the transaction
-            // Note that in the stream case we dont have this until commit time
             for deletion in stream_state.pending_deletions_in_main_mem_slice.iter_mut() {
                 let pos = deletion.pos.unwrap();
-                // If the row is no longer in memslice, it must be flushed, let snapshot task find it.
                 if !self.mem_slice.try_delete_at_pos(pos) {
                     deletion.pos = None;
                 }
@@ -272,15 +284,33 @@ impl MooncakeTable {
                 flushed_files: stream_state.flushed_files,
                 local_deletions: stream_state.local_deletions,
                 pending_deletions: stream_state.pending_deletions_in_main_mem_slice,
+                buffered_deletions: stream_state.buffered_deletions,
             };
-            snapshot_task
-                .new_streaming_xact
-                .push(TransactionStreamOutput::Commit(commit));
-            snapshot_task.new_flush_lsn = Some(lsn);
-            Ok(())
+            Ok(commit)
         } else {
             Err(Error::TransactionNotFound(xact_id))
         }
+    }
+
+    /// Commit a transaction stream commit.
+    /// This is used to commit a transaction stream commit that was buffered during initial copy.
+    /// It will be applied to the table at the end of initial copy.
+    pub async fn commit_transaction_stream(
+        &mut self,
+        mut commit: TransactionStreamCommit,
+    ) -> Result<()> {
+        let lsn = commit.commit_lsn;
+        self.next_snapshot_task.new_commit_lsn = lsn;
+        let buffered_deletions: Vec<_> = commit.buffered_deletions.drain(..).collect();
+        for mut deletion in buffered_deletions.into_iter() {
+            deletion.lsn = lsn - 1;
+            self.next_snapshot_task.new_deletions.push(deletion);
+        }
+        self.next_snapshot_task
+            .new_streaming_xact
+            .push(TransactionStreamOutput::Commit(commit));
+        self.next_snapshot_task.new_flush_lsn = Some(lsn);
+        Ok(())
     }
 }
 

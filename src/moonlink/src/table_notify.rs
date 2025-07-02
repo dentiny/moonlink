@@ -26,6 +26,7 @@ pub enum TableEvent {
     Append {
         row: MoonlinkRow,
         xact_id: Option<u32>,
+        is_copied: bool,
     },
     /// Delete a row from the table
     Delete {
@@ -93,4 +94,8 @@ pub enum TableEvent {
         /// Evicted data files by object storage cache.
         evicted_data_files: Vec<String>,
     },
+    /// Start initial table copy.
+    StartInitialCopy,
+    /// Finish initial table copy and merge buffered changes.
+    FinishInitialCopy,
 }

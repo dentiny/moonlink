@@ -1,4 +1,6 @@
-use crate::pg_replicate::postgres_source::{CdcStreamError, PostgresSourceError};
+use crate::pg_replicate::postgres_source::{
+    CdcStreamError, PostgresSourceError, TableCopyStreamError,
+};
 use moonlink::Error as MoonlinkError;
 use std::result;
 use thiserror::Error;
@@ -14,6 +16,9 @@ pub enum Error {
 
     #[error("Postgres cdc stream error: {0}")]
     CdcStreamError(#[from] CdcStreamError),
+
+    #[error("Table copy stream error: {0}")]
+    TableCopyStreamError(#[from] TableCopyStreamError),
 
     #[error("Moonlink source error: {source}")]
     MoonlinkError { source: MoonlinkError },

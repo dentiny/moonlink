@@ -61,6 +61,7 @@ pub struct TestEnvironment {
     read_state_manager: Option<Arc<ReadStateManager>>,
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
+    snapshot_lsn_tx: watch::Sender<u64>,
     pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
@@ -91,6 +92,7 @@ impl TestEnvironment {
     ) -> Self {
         let (replication_tx, replication_rx) = watch::channel(0u64);
         let (last_commit_tx, last_commit_rx) = watch::channel(0u64);
+        let snapshot_lsn_tx = mooncake_table.get_snapshot_watch_sender().clone();
         let read_state_manager = Some(Arc::new(ReadStateManager::new(
             &mooncake_table,
             replication_rx.clone(),
@@ -121,6 +123,7 @@ impl TestEnvironment {
             read_state_manager,
             replication_tx,
             last_commit_tx,
+            snapshot_lsn_tx,
             table_event_manager,
             temp_dir,
             object_storage_cache,
@@ -193,7 +196,12 @@ impl TestEnvironment {
 
     pub async fn append_row(&self, id: i32, name: &str, age: i32, xact_id: Option<u32>) {
         let row = create_row(id, name, age);
-        self.send_event(TableEvent::Append { row, xact_id }).await;
+        self.send_event(TableEvent::Append {
+            is_copied: false,
+            row,
+            xact_id,
+        })
+        .await;
     }
 
     pub async fn delete_row(&self, id: i32, name: &str, age: i32, lsn: u64, xact_id: Option<u32>) {
@@ -258,6 +266,12 @@ impl TestEnvironment {
         self.replication_tx
             .send(lsn)
             .expect("Failed to send replication LSN");
+    }
+
+    pub fn set_snapshot_lsn(&self, lsn: u64) {
+        self.snapshot_lsn_tx
+            .send(lsn)
+            .expect("Failed to send snapshot LSN");
     }
 
     pub async fn verify_snapshot(&self, target_lsn: u64, expected_ids: &[i32]) {
