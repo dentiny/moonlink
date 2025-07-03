@@ -1220,10 +1220,14 @@ async fn test_initial_copy_basic() {
         .await
         .expect("send finish initial copy");
 
+    println!("finish initial copy");
+
     // After FinishInitialCopy, we need to commit and flush to create a snapshot
     // This makes the buffered data and copied data visible together
     env.commit(10).await;
     env.flush_table(10).await;
+
+    println!("commit and flush table");
 
     // Now set the LSNs and verify both Alice (copied) and Bob (buffered) are visible
     env.set_table_commit_lsn(10);

@@ -6,6 +6,8 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
@@ -1494,13 +1496,26 @@ async fn test_filesystem_sync_snapshots() {
 
 #[tokio::test]
 #[cfg(feature = "storage-s3")]
-async fn test_object_storage_sync_snapshots() {
-    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_minio_bucket_and_warehouse();
+async fn test_s3_sync_snapshots() {
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
     s3_test_utils::object_store_test_utils::create_test_s3_bucket(bucket_name.clone())
         .await
         .unwrap();
     mooncake_table_snapshot_persist_impl(warehouse_uri).await;
     s3_test_utils::object_store_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_gcs_sync_snapshots() {
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::object_store_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
+    gcs_test_utils::object_store_test_utils::delete_test_gcs_bucket(bucket_name.clone())
         .await
         .unwrap();
 }

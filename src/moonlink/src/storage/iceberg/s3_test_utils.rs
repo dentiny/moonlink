@@ -1,5 +1,6 @@
 /// This module provides a few test util functions.
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
+use crate::storage::iceberg::object_storage_test_utils::*;
 
 use rand::Rng;
 
@@ -16,12 +17,6 @@ pub(crate) static MINIO_ACCESS_KEY_ID: &str = "minioadmin";
 pub(crate) static MINIO_SECRET_ACCESS_KEY: &str = "minioadmin";
 #[allow(dead_code)]
 pub(crate) static MINIO_ENDPOINT: &str = "http://minio:9000";
-#[allow(dead_code)]
-static TEST_RETRY_COUNT: usize = 5;
-#[allow(dead_code)]
-static TEST_RETRY_INIT_MILLISEC: u64 = 100;
-#[allow(dead_code)]
-static TEST_BUCKET_NAME_LEN: usize = 10;
 
 /// Create a S3 catalog, which communicates with local minio server.
 #[allow(dead_code)]
@@ -37,7 +32,7 @@ pub(crate) fn create_minio_s3_catalog(bucket: &str, warehouse_uri: &str) -> File
 }
 
 #[allow(dead_code)]
-pub(crate) fn get_test_minio_bucket_and_warehouse(
+pub(crate) fn get_test_s3_bucket_and_warehouse(
 ) -> (String /*bucket_name*/, String /*warehouse_url*/) {
     // minio bucket name only allows lowercase case letters, digits and hyphen.
     const TEST_BUCKET_NAME_LEN: usize = 12;

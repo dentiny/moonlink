@@ -15,8 +15,14 @@ pub(super) mod tokio_retry_utils;
 pub(super) mod utils;
 pub(super) mod validation;
 
+#[cfg(any(feature = "storage-s3", feature = "storage-gcs"))]
+mod object_storage_test_utils;
+
 #[cfg(feature = "storage-s3")]
 mod s3_test_utils;
+
+#[cfg(feature = "storage-gcs")]
+mod gcs_test_utils;
 
 #[cfg(test)]
 mod tests;
@@ -35,3 +41,6 @@ mod catalog_test_utils;
 
 #[cfg(test)]
 mod file_catalog_test_utils;
+
+#[cfg(test)]
+mod file_catalog_test;
