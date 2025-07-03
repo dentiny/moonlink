@@ -25,7 +25,8 @@ use std::sync::Arc;
 async fn test_table_handler() {
     let mut env = TestEnvironment::default().await;
 
-    env.append_row(1, "John", 30, None).await;
+    env.append_row(1, "John", 30, /*lsn=*/ 0, /*xact_id=*/ None)
+        .await;
     env.commit(1).await;
 
     env.set_readable_lsn_with_cap(1, 100); // table_commit_lsn = 1, replication_lsn = 100
@@ -42,7 +43,8 @@ async fn test_table_handler_flush() {
 
     let rows_data = vec![(1, "Alice", 25), (2, "Bob", 30), (3, "Charlie", 35)];
     for (id, name, age) in rows_data {
-        env.append_row(id, name, age, None).await;
+        env.append_row(id, name, age, /*lsn=*/ 0, /*xact_id=*/ None)
+            .await;
     }
 
     env.commit(1).await;
@@ -76,11 +78,13 @@ async fn test_append_with_small_disk_slice() {
 
     // Append two rows, which appears in two parquet files.
     env.append_row(
-        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*xact_id=*/ None,
+        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*lsn=*/ 0,
+        /*xact_id=*/ None,
     )
     .await;
     env.append_row(
-        /*id=*/ 2, /*name=*/ "Blob", /*age=*/ 20, /*xact_id=*/ None,
+        /*id=*/ 2, /*name=*/ "Blob", /*age=*/ 20, /*lsn=*/ 0,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 10).await;
@@ -97,7 +101,7 @@ async fn test_streaming_append_and_commit() {
     let mut env = TestEnvironment::default().await;
     let xact_id = 101;
 
-    env.append_row(10, "Transaction-User", 25, Some(xact_id))
+    env.append_row(10, "Transaction-User", 25, /*lsn=*/ 50, Some(xact_id))
         .await;
     env.stream_commit(101, xact_id).await;
 
@@ -112,9 +116,9 @@ async fn test_streaming_delete() {
     let mut env = TestEnvironment::default().await;
     let xact_id = 101;
 
-    env.append_row(10, "Transaction-User1", 25, Some(xact_id))
+    env.append_row(10, "Transaction-User1", 25, /*lsn=*/ 10, Some(xact_id))
         .await;
-    env.append_row(11, "Transaction-User2", 30, Some(xact_id))
+    env.append_row(11, "Transaction-User2", 30, /*lsn=*/ 20, Some(xact_id))
         .await;
 
     // LSN for delete op (100) can be different from the stream commit LSN (101)
@@ -134,8 +138,14 @@ async fn test_streaming_abort() {
 
     // Baseline data
     let baseline_xact_id = 100;
-    env.append_row(1, "Baseline-User", 20, Some(baseline_xact_id))
-        .await;
+    env.append_row(
+        1,
+        "Baseline-User",
+        20,
+        /*lsn=*/ 50,
+        Some(baseline_xact_id),
+    )
+    .await;
     env.stream_commit(100, baseline_xact_id).await;
 
     // Set table_commit_tx to allow ReadStateManager to know LSN 100 is committed.
@@ -143,8 +153,14 @@ async fn test_streaming_abort() {
 
     // Transaction to be aborted
     let abort_xact_id = 102;
-    env.append_row(20, "UserToAbort", 40, Some(abort_xact_id))
-        .await;
+    env.append_row(
+        20,
+        "UserToAbort",
+        40,
+        /*lsn=*/ 120,
+        Some(abort_xact_id),
+    )
+    .await;
     env.stream_abort(abort_xact_id).await;
 
     // Now enable reading up to LSN 100 by setting replication_tx.
@@ -161,10 +177,22 @@ async fn test_concurrent_streaming_transactions() {
     let xact_id_1 = 103; // Will be committed
     let xact_id_2 = 104; // Will be aborted
 
-    env.append_row(30, "Transaction1-User", 35, Some(xact_id_1))
-        .await;
-    env.append_row(40, "Transaction2-User", 45, Some(xact_id_2))
-        .await;
+    env.append_row(
+        30,
+        "Transaction1-User",
+        35,
+        /*lsn=*/ 50,
+        Some(xact_id_1),
+    )
+    .await;
+    env.append_row(
+        40,
+        "Transaction2-User",
+        45,
+        /*lsn=*/ 75,
+        Some(xact_id_2),
+    )
+    .await;
 
     env.stream_commit(103, xact_id_1).await; // Commit transaction 1 at LSN 103
     env.stream_abort(xact_id_2).await; // Abort transaction 2
@@ -191,7 +219,7 @@ async fn test_stream_delete_unflushed_non_streamed_row() {
 
     // --- Phase 1: Setup - Insert a row non-streamingly ---
     // This row (PK=1) will be added to pending writes.
-    env.append_row(1, "Target User", 30, None).await;
+    env.append_row(1, "Target User", 30, /*lsn=*/ 5, None).await;
 
     // Commit the non-streaming operation. This moves the row to the main mem_slice.
     // It is now "committed" at initial_insert_lsn but not yet flushed to disk.
@@ -252,9 +280,9 @@ async fn test_streaming_transaction_periodic_flush() {
     let final_read_lsn_target = commit_lsn; // For verifying all data post-commit
 
     // --- Phase 1: Append some data to the streaming transaction ---
-    env.append_row(10, "StreamUser1-Part1", 25, Some(xact_id))
+    env.append_row(10, "StreamUser1-Part1", 25, /*lsn=*/ 0, Some(xact_id))
         .await;
-    env.append_row(11, "StreamUser2-Part1", 30, Some(xact_id))
+    env.append_row(11, "StreamUser2-Part1", 30, /*lsn=*/ 0, Some(xact_id))
         .await;
 
     // --- Phase 2: Perform a periodic flush of the transaction stream ---
@@ -268,7 +296,7 @@ async fn test_streaming_transaction_periodic_flush() {
     env.verify_snapshot(initial_read_lsn_target, &[]).await;
 
     // --- Phase 4: Append more data to the same transaction AFTER the periodic flush ---
-    env.append_row(12, "StreamUser3-Part2", 35, Some(xact_id))
+    env.append_row(12, "StreamUser3-Part2", 35, /*lsn=*/ 10, Some(xact_id))
         .await;
 
     // --- Phase 5: Commit the streaming transaction ---
@@ -292,15 +320,21 @@ async fn test_stream_delete_previously_flushed_row_same_xact() {
     let stream_commit_lsn = 40;
 
     // Phase 1: Append Row A (ID:10) to stream, then periodic flush
-    env.append_row(10, "UserA-StreamFlush", 25, Some(xact_id))
+    env.append_row(10, "UserA-StreamFlush", 25, /*lsn=*/ 0, Some(xact_id))
         .await;
     env.stream_flush(xact_id).await; // Row A now in a xact-specific disk slice
 
     // Phase 2: In same stream, delete Row A (ID:10), append Row B (ID:11)
     env.delete_row(10, "UserA-StreamFlush", 25, 0, Some(xact_id))
         .await; // LSN placeholder
-    env.append_row(11, "UserB-StreamSurvived", 30, Some(xact_id))
-        .await;
+    env.append_row(
+        11,
+        "UserB-StreamSurvived",
+        30,
+        /*lsn=*/ 0,
+        Some(xact_id),
+    )
+    .await;
 
     // Phase 3: Verify data is NOT visible before commit
     env.set_table_commit_lsn(0);
@@ -325,14 +359,20 @@ async fn test_stream_delete_from_stream_memslice_row() {
     let xact_id = 402;
     let stream_commit_lsn = 41;
 
-    env.append_row(20, "UserC-StreamMem", 35, Some(xact_id))
+    env.append_row(20, "UserC-StreamMem", 35, /*lsn=*/ 0, Some(xact_id))
         .await;
 
     // Phase 2: Delete Row C (ID:20) from stream's mem_slice, append Row D (ID:21)
     env.delete_row(20, "UserC-StreamMem", 35, 0, Some(xact_id))
         .await; // LSN placeholder
-    env.append_row(21, "UserD-StreamSurvived", 40, Some(xact_id))
-        .await;
+    env.append_row(
+        21,
+        "UserD-StreamSurvived",
+        40,
+        /*lsn=*/ 0,
+        Some(xact_id),
+    )
+    .await;
 
     // Phase 3: Verify data is NOT visible before commit
     env.set_table_commit_lsn(0);
@@ -360,7 +400,8 @@ async fn test_stream_delete_from_main_disk_row() {
     let stream_commit_lsn = 42;
 
     // Phase 1: Setup - Append Row G (ID:40), commit, and explicitly flush it to main disk
-    env.append_row(40, "UserG-MainDisk", 50, None).await;
+    env.append_row(40, "UserG-MainDisk", 50, /*lsn=*/ 0, None)
+        .await;
     env.commit(main_commit_lsn_flushed).await;
     env.flush_table(main_commit_lsn_flushed).await; // Explicit flush
     env.set_table_commit_lsn(main_commit_lsn_flushed);
@@ -370,8 +411,14 @@ async fn test_stream_delete_from_main_disk_row() {
     // Phase 2: Start streaming transaction, delete Row G (ID:40), append Row H (ID:41)
     env.delete_row(40, "UserG-MainDisk", 50, 0, Some(xact_id))
         .await; // LSN placeholder
-    env.append_row(41, "UserH-StreamSurvived", 55, Some(xact_id))
-        .await;
+    env.append_row(
+        41,
+        "UserH-StreamSurvived",
+        55,
+        /*lsn=*/ 40,
+        Some(xact_id),
+    )
+    .await;
 
     // Phase 3: Verify data is NOT visible before stream commit (Row G should still be there)
     // table_commit_lsn is still main_commit_lsn_flushed (5)
@@ -401,8 +448,14 @@ async fn test_streaming_transaction_periodic_flush_then_abort() {
     let read_lsn_after_abort = baseline_commit_lsn + 5;
 
     // --- Phase 1: Setup - Commit baseline data ---
-    env.append_row(1, "BaselineUser", 30, Some(baseline_xact_id))
-        .await;
+    env.append_row(
+        1,
+        "BaselineUser",
+        30,
+        /*lsn=*/ 0,
+        Some(baseline_xact_id),
+    )
+    .await;
     env.stream_commit(baseline_commit_lsn, baseline_xact_id)
         .await;
     env.set_table_commit_lsn(baseline_commit_lsn); // ReadStateManager knows LSN 50 is committed
@@ -410,13 +463,25 @@ async fn test_streaming_transaction_periodic_flush_then_abort() {
     env.verify_snapshot(baseline_commit_lsn, &[1]).await;
 
     // --- Phase 3: Append Row A (ID:10) and periodically flush it ---
-    env.append_row(10, "UserA-ToAbort-Flushed", 25, Some(aborted_xact_id))
-        .await;
+    env.append_row(
+        10,
+        "UserA-ToAbort-Flushed",
+        25,
+        /*lsn=*/ 100,
+        Some(aborted_xact_id),
+    )
+    .await;
     env.stream_flush(aborted_xact_id).await; // Row A now in a xact-specific disk slice, uncommitted
 
     // --- Phase 4: Append Row B (ID:11) (stays in stream's mem-slice) ---
-    env.append_row(11, "UserB-ToAbort-Mem", 35, Some(aborted_xact_id))
-        .await;
+    env.append_row(
+        11,
+        "UserB-ToAbort-Mem",
+        35,
+        /*lsn=*/ 100,
+        Some(aborted_xact_id),
+    )
+    .await;
 
     // --- Phase 5: Attempt to delete baseline Row (ID:1) within the aborted transaction ---
     env.delete_row(1, "BaselineUser", 30, 0, Some(aborted_xact_id))
@@ -459,7 +524,8 @@ async fn test_drop_table_with_data() {
 
     // Write a few records to trigger mooncake and iceberg snapshot.
     env.append_row(
-        /*id=*/ 0, /*name=*/ "Bob", /*age=*/ 10, /*xact_id=*/ None,
+        /*id=*/ 0, /*name=*/ "Bob", /*age=*/ 10, /*lsn=*/ 0,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 1).await;
@@ -521,7 +587,8 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     // ---- Create snapshot after new records appended ----
     // Append a new row to the mooncake table.
     env.append_row(
-        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*xact_id=*/ None,
+        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*lsn=*/ 0,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 1).await;
@@ -557,7 +624,8 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     // Attempt an iceberg snapshot, which is a future flush LSN, and contains both new records and deletion records.
     let mut rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 5).await;
     env.append_row(
-        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 20, /*xact_id=*/ None,
+        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 20, /*lsn=*/ 2,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 3).await;
@@ -714,6 +782,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
         /*id=*/ 1,
         /*name=*/ "John",
         /*age=*/ 30,
+        /*lsn=*/ 0,
         /*xact_id=*/ Some(0),
     )
     .await;
@@ -753,6 +822,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
         /*id=*/ 2,
         /*name=*/ "Bob",
         /*age=*/ 20,
+        /*lsn=*/ 2,
         /*xact_id=*/ Some(3),
     )
     .await;
@@ -943,17 +1013,19 @@ async fn test_multiple_snapshot_requests() {
 
     // Append a new row to the mooncake table.
     env.append_row(
-        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*xact_id=*/ None,
+        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*lsn=*/ 0,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 1).await;
 
     // Append a new row to the mooncake table.
     env.append_row(
-        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 20, /*xact_id=*/ None,
+        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 20, /*lsn=*/ 2,
+        /*xact_id=*/ None,
     )
     .await;
-    env.commit(/*lsn=*/ 2).await;
+    env.commit(/*lsn=*/ 3).await;
 
     for mut rx in rx_vec.into_iter() {
         rx.recv().await.unwrap().unwrap();
@@ -1002,7 +1074,7 @@ async fn test_flush_lsn_ordering() {
     assert_eq!(*flush_lsn_rx.borrow(), 0);
 
     // Commit data at LSN 10
-    env.append_row(1, "Alice", 25, None).await;
+    env.append_row(1, "Alice", 25, /*lsn=*/ 5, None).await;
     env.commit(10).await;
 
     // Request iceberg snapshot at LSN 10
@@ -1014,7 +1086,7 @@ async fn test_flush_lsn_ordering() {
     assert_eq!(*flush_lsn_rx.borrow(), 10);
 
     // Commit data at LSN 20
-    env.append_row(2, "Bob", 30, None).await;
+    env.append_row(2, "Bob", 30, /*lsn=*/ 15, None).await;
     env.commit(20).await;
 
     // Request iceberg snapshot at LSN 20
@@ -1038,13 +1110,13 @@ async fn test_flush_lsn_out_of_order_lsn_operations() {
     let mut flush_lsn_rx = env.table_event_manager.subscribe_flush_lsn();
 
     // Commit operations out of chronological order but in LSN order
-    env.append_row(1, "User1", 25, None).await;
+    env.append_row(1, "User1", 25, /*lsn=*/ 25, None).await;
     env.commit(30).await;
 
-    env.append_row(2, "User2", 30, None).await;
+    env.append_row(2, "User2", 30, /*lsn=*/ 15, None).await;
     env.commit(20).await; // Lower LSN after higher LSN
 
-    env.append_row(3, "User3", 35, None).await;
+    env.append_row(3, "User3", 35, /*lsn=*/ 35, None).await;
     env.commit(40).await;
 
     // Request snapshot at LSN 40 (should include all committed data)
@@ -1075,8 +1147,14 @@ async fn test_flush_lsn_consistency_across_snapshots() {
 
     for lsn in test_lsns {
         // Add data and commit
-        env.append_row(lsn as i32, &format!("User{}", lsn), 25, None)
-            .await;
+        env.append_row(
+            lsn as i32,
+            &format!("User{}", lsn),
+            25,
+            /*lsn=*/ lsn - 5,
+            None,
+        )
+        .await;
         env.commit(lsn).await;
 
         // Create snapshot
@@ -1118,13 +1196,14 @@ async fn test_initial_copy_basic() {
         .send(TableEvent::Append {
             row: create_row(1, "Alice", 30),
             xact_id: None,
+            lsn: 5,
             is_copied: true,
         })
         .await
         .expect("send copied row");
 
     // A new row arrives while copy is running.
-    env.append_row(2, "Bob", 40, None).await;
+    env.append_row(2, "Bob", 40, /*lsn=*/ 5, None).await;
     env.commit(10).await; // Buffered until copy finishes
 
     // During initial copy: commit LSN stays 0 (no actual commits applied)
@@ -1207,7 +1286,8 @@ async fn test_iceberg_snapshot_failure_mock_test() {
 
     // Append rows to trigger mooncake and iceberg snapshot.
     env.append_row(
-        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*xact_id=*/ None,
+        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*lsn=*/ 5,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 10).await;
@@ -1323,9 +1403,9 @@ async fn test_discard_duplicate_writes() {
     let env = TestEnvironment::new_with_mooncake_table(temp_dir, mooncake_table).await;
 
     // Perform non-streaming write operation which should be discarded.
-    env.begin(/*lsn=*/ 0).await;
     env.append_row(
-        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*xact_id=*/ None,
+        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*lsn=*/ 0,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 0).await;
@@ -1335,15 +1415,16 @@ async fn test_discard_duplicate_writes() {
         /*id=*/ 2,
         /*name=*/ "Bob",
         /*age=*/ 20,
+        /*lsn=*/ 2,
         /*xact_id=*/ Some(0),
     )
     .await;
     env.stream_commit(/*lsn=*/ 2, /*xact_id=*/ 0).await;
 
     // Append a real row by non-streaming write, which should appear in the later read operation.
-    env.begin(/*lsn=*/ 30).await;
     env.append_row(
-        /*id=*/ 30, /*name=*/ "Car", /*age=*/ 30, /*xact_id=*/ None,
+        /*id=*/ 30, /*name=*/ "Car", /*age=*/ 30, /*lsn=*/ 25,
+        /*xact_id=*/ None,
     )
     .await;
     env.commit(/*lsn=*/ 30).await;
@@ -1353,6 +1434,7 @@ async fn test_discard_duplicate_writes() {
         /*id=*/ 40,
         /*name=*/ "Dog",
         /*age=*/ 40,
+        /*lsn=*/ 25,
         /*xact_id=*/ Some(40),
     )
     .await;
