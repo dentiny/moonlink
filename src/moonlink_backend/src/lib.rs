@@ -31,6 +31,9 @@ where
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 {
+    // # Arguments
+    //
+    // * metadata_store_uris: connection strings for metadata storage database.
     pub async fn new(base_path: String, metadata_store_uris: Vec<String>) -> Result<Self> {
         logging::init_logging();
 
