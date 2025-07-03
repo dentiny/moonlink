@@ -316,7 +316,10 @@ pin_project! {
         // Buffered unprocessed messages due to missing table schema.
         unprocessed_replication_messages: HashMap<SrcTableId, Vec<ReplicationMessage<LogicalReplicationMessage>>>,
         // Buffered process messages due to missing table schema, which are ready to emit.
-        // Results are stored in the order of postgres cdc stream messages.
+        //
+        // cdc events ordering guarantee:
+        // - Within each table, results are stored in the order of postgres cdc replication messages.
+        // - Across different tables, cdc events could be reordered.
         ready_cdc_events: VecDeque<Result<CdcEvent, CdcEventConversionError>>,
     }
 }
@@ -373,6 +376,7 @@ impl Stream for CdcStream {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.as_mut().project();
 
+        // Emit already processed messages before processing new-coming ones to guarantee replication ordering.
         if !this.ready_cdc_events.is_empty() {
             let cur_cdc_event = this.ready_cdc_events.pop_front().unwrap();
             match cur_cdc_event {
