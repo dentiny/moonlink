@@ -194,6 +194,11 @@ impl TestEnvironment {
 
     // --- Operation Helpers ---
 
+    // Begin a non-streaming transaction.
+    pub async fn begin(&self, lsn: u64) {
+        self.send_event(TableEvent::Begin { lsn }).await
+    }
+
     pub async fn append_row(&self, id: i32, name: &str, age: i32, xact_id: Option<u32>) {
         let row = create_row(id, name, age);
         self.send_event(TableEvent::Append {

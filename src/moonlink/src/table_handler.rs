@@ -205,7 +205,7 @@ impl TableHandler {
                         // ==============================
                         //
                         TableEvent::Begin { lsn } => {
-                            current_non_streaming_txn_kept = lsn <= initial_persistence_lsn;
+                            current_non_streaming_txn_kept = lsn > initial_persistence_lsn;
                         }
                         TableEvent::Append { is_copied, row, xact_id } => {
                             if !current_non_streaming_txn_kept {
@@ -287,6 +287,9 @@ impl TableHandler {
                                         warn!(error = %e, "flush failed in commit");
                                     }
                                 }
+                            } else {
+                                // Reset discard state.
+                                current_non_streaming_txn_kept = true;
                             }
 
                             if force_snapshot {

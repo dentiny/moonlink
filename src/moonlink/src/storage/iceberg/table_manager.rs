@@ -21,7 +21,7 @@ pub struct PersistenceFileParams {
 }
 
 /// Iceberg persistence results.
-#[derive(Clone, Debug)]
+#[derive(Clone, Default, Debug)]
 pub struct PersistenceResult {
     /// Imported data files, which only contain remote file paths.
     /// NOTICE: It's guaranteed that remote data files contain imported data files and compacted new files; and are placed in this order.

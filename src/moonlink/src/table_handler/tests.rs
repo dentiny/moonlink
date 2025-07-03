@@ -7,15 +7,18 @@ use super::TableEvent;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
+use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::MockTableManager;
 use crate::storage::MooncakeTable;
+use crate::storage::PersistenceResult;
 use crate::storage::TableManager;
 use crate::table_handler::is_iceberg_snapshot_satisfy_force_snapshot;
 use crate::ObjectStorageCache;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -1267,6 +1270,98 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     // Drop table and block wait its completion, check whether error status is correctly propagated.
     let res = env.drop_table().await;
     assert!(res.is_err());
+}
+
+/// Testing scenario: write operations no later than persisted LSN shall be discarded.
+#[tokio::test]
+async fn test_discard_duplicate_writes() {
+    let temp_dir = tempdir().unwrap();
+    let mooncake_table_config =
+        MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+    let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
+        name: "table_name".to_string(),
+        table_id: 0,
+        schema: Arc::new(default_schema()),
+        config: mooncake_table_config.clone(),
+        path: temp_dir.path().to_path_buf(),
+        identity: crate::row::IdentityProp::Keys(vec![0]),
+    });
+
+    let mut mock_mooncake_snapshot = MooncakeSnapshot::new(mooncake_table_metadata.clone());
+    mock_mooncake_snapshot.data_file_flush_lsn = Some(10);
+    let mut mock_table_manager = MockTableManager::new();
+    mock_table_manager
+        .expect_load_snapshot_from_table()
+        .times(1)
+        .returning(move || {
+            let mock_mooncake_snapshot_copy = mock_mooncake_snapshot.clone();
+            Box::pin(async move {
+                Ok((/*next_file_id=*/ 0, mock_mooncake_snapshot_copy))
+            })
+        });
+    mock_table_manager
+        .expect_sync_snapshot()
+        .times(1)
+        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+            Box::pin(async move {
+                let mock_persistence_result = PersistenceResult {
+                    remote_data_files: snapshot_payload.import_payload.data_files.clone(),
+                    remote_file_indices: snapshot_payload.import_payload.file_indices.clone(),
+                    puffin_blob_ref: HashMap::new(),
+                };
+                Ok(mock_persistence_result)
+            })
+        });
+
+    let mooncake_table = MooncakeTable::new_with_table_manager(
+        mooncake_table_metadata,
+        Box::new(mock_table_manager),
+        ObjectStorageCache::default_for_test(&temp_dir),
+    )
+    .await
+    .unwrap();
+    let env = TestEnvironment::new_with_mooncake_table(temp_dir, mooncake_table).await;
+
+    // Perform non-streaming write operation which should be discarded.
+    env.begin(/*lsn=*/ 0).await;
+    env.append_row(
+        /*id=*/ 1, /*name=*/ "John", /*age=*/ 30, /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(/*lsn=*/ 0).await;
+
+    // Perform a streaming write operation which should be discarded.
+    env.append_row(
+        /*id=*/ 2,
+        /*name=*/ "Bob",
+        /*age=*/ 20,
+        /*xact_id=*/ Some(0),
+    )
+    .await;
+    env.stream_commit(/*lsn=*/ 2, /*xact_id=*/ 0).await;
+
+    // Append a real row by non-streaming write, which should appear in the later read operation.
+    env.begin(/*lsn=*/ 30).await;
+    env.append_row(
+        /*id=*/ 30, /*name=*/ "Car", /*age=*/ 30, /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(/*lsn=*/ 30).await;
+
+    // Append a real row by streaming write, which should appear in the later read operation.
+    env.append_row(
+        /*id=*/ 40,
+        /*name=*/ "Dog",
+        /*age=*/ 40,
+        /*xact_id=*/ Some(40),
+    )
+    .await;
+    env.stream_commit(/*lsn=*/ 40, /*xact_id=*/ 40).await;
+
+    // Perform a read operation, and check results.
+    env.set_table_commit_lsn(40);
+    env.set_replication_lsn(40);
+    env.verify_snapshot(40, &[30, 40]).await;
 }
 
 /// ---- Util functions unit test ----

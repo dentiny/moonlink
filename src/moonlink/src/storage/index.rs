@@ -11,6 +11,8 @@ use persisted_bucket_hash_map::GlobalIndex;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
+
+#[derive(Clone)]
 pub struct MooncakeIndex {
     pub(crate) in_memory_index: HashSet<IndexPtr>,
     pub(crate) file_indices: Vec<FileIndex>,

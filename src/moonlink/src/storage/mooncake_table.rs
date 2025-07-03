@@ -195,6 +195,7 @@ pub(crate) struct DiskFileEntry {
 /// Snapshot contains state of the table at a given time.
 /// A snapshot maps directly to an iceberg snapshot.
 ///
+#[derive(Clone)]
 pub struct Snapshot {
     /// table metadata
     pub(crate) metadata: Arc<TableMetadata>,
