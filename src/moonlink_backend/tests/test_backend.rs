@@ -14,31 +14,12 @@ mod tests {
     use serial_test::serial;
     use std::collections::HashSet;
 
-    use moonlink_backend::{recreate_directory, MoonlinkBackend};
+    use moonlink_backend::MoonlinkBackend;
 
     const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const DST_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
 
     // ───────────────────────────── Tests ─────────────────────────────
-
-    /// Low-level filesystem helper: directory (re)creation.
-    #[test]
-    #[serial]
-    fn test_recreate_directory() {
-        let tmp = TempDir::new().unwrap();
-        let file = tmp.path().join("tmp.txt");
-        std::fs::write(&file, b"x").unwrap();
-        assert!(file.exists());
-
-        // idempotent "wipe" of an existing dir
-        recreate_directory(tmp.path().to_str().unwrap()).unwrap();
-        assert!(!file.exists());
-
-        // creation of a brand-new path
-        let inner = tmp.path().join("sub");
-        recreate_directory(inner.to_str().unwrap()).unwrap();
-        assert!(inner.exists());
-    }
 
     /// Validate `create_table` and `drop_table` across successive uses.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -309,7 +290,7 @@ mod tests {
 
         // Attempt recovery logic, no tables should be recovered.
         let temp_dir = TempDir::new().unwrap();
-        let _backend = MoonlinkBackend::<DatabaseId, TableId>::new_with_recovery(
+        let _backend = MoonlinkBackend::<DatabaseId, TableId>::new(
             temp_dir.path().to_str().unwrap().to_string(),
             /*metadata_store_uris=*/ vec![METADATA_STORE_URI.to_string()],
         )
@@ -367,7 +348,7 @@ mod tests {
 
         // Attempt recovery logic.
         let temp_dir = TempDir::new().unwrap();
-        let backend = MoonlinkBackend::<DatabaseId, TableId>::new_with_recovery(
+        let backend = MoonlinkBackend::<DatabaseId, TableId>::new(
             temp_dir.path().to_str().unwrap().to_string(),
             /*metadata_store_uris=*/ vec![METADATA_STORE_URI.to_string()],
         )

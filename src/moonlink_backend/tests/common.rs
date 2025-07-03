@@ -7,9 +7,8 @@ use tokio_postgres::{connect, types::PgLsn, Client, NoTls};
 use std::{collections::HashSet, fs::File};
 
 use moonlink::decode_read_state_for_testing;
-use moonlink_backend::{
-    recreate_directory, MoonlinkBackend, ReadState, DEFAULT_MOONLINK_TEMP_FILE_PATH,
-};
+use moonlink_backend::file_utils::{recreate_directory, DEFAULT_MOONLINK_TEMP_FILE_PATH};
+use moonlink_backend::{MoonlinkBackend, ReadState};
 
 #[allow(dead_code)]
 pub const METADATA_STORE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
@@ -251,8 +250,12 @@ async fn setup_backend(
     DatabaseId,
 ) {
     let temp_dir = TempDir::new().unwrap();
-    let backend =
-        MoonlinkBackend::<DatabaseId, TableId>::new(temp_dir.path().to_str().unwrap().into());
+    let backend = MoonlinkBackend::<DatabaseId, TableId>::new(
+        temp_dir.path().to_str().unwrap().into(),
+        /*uris=*/ vec![],
+    )
+    .await
+    .unwrap();
 
     // Connect to Postgres.
     let (client, connection) = connect(SRC_URI, NoTls).await.unwrap();
