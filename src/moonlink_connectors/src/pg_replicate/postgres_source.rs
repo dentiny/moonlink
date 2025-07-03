@@ -357,6 +357,8 @@ impl CdcStream {
         if let Some(unprocessed_messages) =
             this.unprocessed_replication_messages.remove(&cur_table_id)
         {
+            let new_len = this.ready_cdc_events.len() + unprocessed_messages.len();
+            this.ready_cdc_events.reserve(new_len);
             for cur_msg in unprocessed_messages.into_iter() {
                 let res = CdcEventConverter::try_from(cur_msg, &this.table_schemas);
                 this.ready_cdc_events.push_back(res);
