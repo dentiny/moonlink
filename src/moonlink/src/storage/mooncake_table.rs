@@ -561,7 +561,7 @@ impl MooncakeTable {
         if contains_new_writes(iceberg_snapshot_res) {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn || flush_lsn == 0,
+                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
                 "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
                 self.last_iceberg_snapshot_lsn,
                 flush_lsn,
