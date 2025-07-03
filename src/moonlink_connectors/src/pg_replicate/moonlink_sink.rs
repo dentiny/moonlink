@@ -120,8 +120,6 @@ impl Sink {
     }
 
     pub async fn process_cdc_event(&mut self, event: CdcEvent) -> Result<(), Infallible> {
-        println!("receive cdc {:?}", event);
-
         match event {
             CdcEvent::Begin(begin_body) => {
                 debug!(final_lsn = begin_body.final_lsn(), "begin transaction");

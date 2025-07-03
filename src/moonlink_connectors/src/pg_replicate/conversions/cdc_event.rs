@@ -133,19 +133,17 @@ impl CdcEventConverter {
     fn get_column_schemas(
         table_id: SrcTableId,
         table_schemas: &HashMap<SrcTableId, TableSchema>,
-    ) -> &Vec<ColumnSchema> {
-        &table_schemas
+    ) -> Result<&Vec<ColumnSchema>, CdcEventConversionError> {
+        Ok(&table_schemas
             .get(&table_id)
             .ok_or(CdcEventConversionError::MissingSchema(table_id))?
-            .column_schemas
+            .column_schemas)
     }
 
     pub fn try_from(
         value: ReplicationMessage<LogicalReplicationMessage>,
         table_schemas: &HashMap<SrcTableId, TableSchema>,
     ) -> Result<CdcEvent, CdcEventConversionError> {
-        println!("raw cdc event : {:?}", value);
-
         match value {
             ReplicationMessage::XLogData(xlog_data) => match xlog_data.into_data() {
                 LogicalReplicationMessage::Begin(begin_body) => Ok(CdcEvent::Begin(begin_body)),
@@ -159,7 +157,7 @@ impl CdcEventConverter {
                 LogicalReplicationMessage::Type(type_body) => Ok(CdcEvent::Type(type_body)),
                 LogicalReplicationMessage::Insert(insert_body) => {
                     let table_id = insert_body.rel_id();
-                    let column_schemas = Self::get_column_schemas(table_id, table_schemas);
+                    let column_schemas = Self::get_column_schemas(table_id, table_schemas)?;
                     Ok(Self::try_from_insert_body(
                         table_id,
                         column_schemas,
@@ -168,7 +166,7 @@ impl CdcEventConverter {
                 }
                 LogicalReplicationMessage::Update(update_body) => {
                     let table_id = update_body.rel_id();
-                    let column_schemas = Self::get_column_schemas(table_id, table_schemas);
+                    let column_schemas = Self::get_column_schemas(table_id, table_schemas)?;
                     Ok(Self::try_from_update_body(
                         table_id,
                         column_schemas,
@@ -177,7 +175,7 @@ impl CdcEventConverter {
                 }
                 LogicalReplicationMessage::Delete(delete_body) => {
                     let table_id = delete_body.rel_id();
-                    let column_schemas = Self::get_column_schemas(table_id, table_schemas);
+                    let column_schemas = Self::get_column_schemas(table_id, table_schemas)?;
                     Ok(Self::try_from_delete_body(
                         table_id,
                         column_schemas,
