@@ -101,7 +101,7 @@ impl Sink {
         Ok(())
     }
 
-    /// Get final lsn for the current operation.
+    /// Get final lsn for the current transaction.
     fn get_final_lsn(&mut self, table_id: SrcTableId, xact_id: Option<u32>) -> u64 {
         if let Some(xid) = xact_id {
             self.streaming_transactions_state
