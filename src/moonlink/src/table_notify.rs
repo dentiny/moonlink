@@ -22,6 +22,11 @@ pub enum TableEvent {
     /// Replication events
     /// ==============================
     ///
+    /// Marks the beginning of a non-streaming transaction.
+    Begin {
+        /// The final LSN of the current transaction.
+        lsn: u64,
+    },
     /// Append a row to the table
     Append {
         row: MoonlinkRow,
