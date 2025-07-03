@@ -8,6 +8,7 @@ use std::{
 use futures::{ready, Stream};
 use pin_project_lite::pin_project;
 use postgres_replication::LogicalReplicationStream;
+use std::collections::VecDeque;
 use thiserror::Error;
 use tokio_postgres::{tls::NoTlsStream, types::PgLsn, Connection, CopyOutStream, Socket};
 use tracing::{debug, error, info_span, warn, Instrument};
@@ -18,8 +19,9 @@ use crate::pg_replicate::{
         cdc_event::{CdcEvent, CdcEventConversionError, CdcEventConverter},
         table_row::{TableRow, TableRowConversionError, TableRowConverter},
     },
-    table::{ColumnSchema, SrcTableId, TableName, TableSchema},
+    table::{self, ColumnSchema, SrcTableId, TableName, TableSchema},
 };
+use postgres_replication::protocol::{LogicalReplicationMessage, ReplicationMessage};
 
 pub enum TableNamesFrom {
     Vec(Vec<TableName>),
@@ -247,6 +249,8 @@ impl PostgresSource {
             stream,
             table_schemas: config.table_schemas,
             postgres_epoch,
+            unprocessed_replication_messages: HashMap::new(),
+            ready_cdc_events: VecDeque::new(),
         })
     }
 }
@@ -308,6 +312,12 @@ pin_project! {
         stream: LogicalReplicationStream,
         table_schemas: HashMap<SrcTableId, TableSchema>,
         postgres_epoch: SystemTime,
+
+        // Buffered unprocessed messages due to missing table schema.
+        unprocessed_replication_messages: HashMap<SrcTableId, Vec<ReplicationMessage<LogicalReplicationMessage>>>,
+        // Buffered process messages due to missing table schema, which are ready to emit.
+        // Results are stored in the order of postgres cdc stream messages.
+        ready_cdc_events: VecDeque<Result<CdcEvent, CdcEventConversionError>>,
     }
 }
 
@@ -337,7 +347,18 @@ impl CdcStream {
 
     pub fn add_table_schema(self: Pin<&mut Self>, schema: TableSchema) {
         let this = self.project();
-        this.table_schemas.insert(schema.src_table_id, schema);
+        let cur_table_id = schema.src_table_id;
+        this.table_schemas.insert(cur_table_id, schema);
+
+        // Check unprocessed replication messages due to missing table schema.
+        if let Some(unprocessed_messages) =
+            this.unprocessed_replication_messages.remove(&cur_table_id)
+        {
+            for cur_msg in unprocessed_messages.into_iter() {
+                let res = CdcEventConverter::try_from(cur_msg, &this.table_schemas);
+                this.ready_cdc_events.push_back(res);
+            }
+        }
     }
 
     pub fn remove_table_schema(self: Pin<&mut Self>, src_table_id: SrcTableId) {
@@ -349,13 +370,41 @@ impl CdcStream {
 impl Stream for CdcStream {
     type Item = Result<CdcEvent, CdcStreamError>;
 
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let this = self.project();
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.as_mut().project();
+
+        if !this.ready_cdc_events.is_empty() {
+            let cur_cdc_event = this.ready_cdc_events.pop_front().unwrap();
+            match cur_cdc_event {
+                Ok(row) => {
+                    return Poll::Ready(Some(Ok(row)));
+                }
+                Err(e) => {
+                    return Poll::Ready(Some(Err(e.into())));
+                }
+            }
+        }
+
         match ready!(this.stream.poll_next(cx)) {
-            Some(Ok(msg)) => match CdcEventConverter::try_from(msg, &this.table_schemas) {
-                Ok(row) => Poll::Ready(Some(Ok(row))),
-                Err(e) => Poll::Ready(Some(Err(e.into()))),
-            },
+            Some(Ok(msg)) => {
+                // On recovery, it's non-deterministic on the order of setting table schema and resending cdc stream, which is prune to suffer missing schema error.
+                // Here we buffer unfound schema, which will gets populated when schema is set.
+                let table_id = CdcEventConverter::try_get_table_id(&msg);
+                if let Some(table_id) = table_id {
+                    if !this.table_schemas.contains_key(&table_id) {
+                        this.unprocessed_replication_messages
+                            .entry(table_id)
+                            .or_default()
+                            .push(msg);
+                        return Poll::Pending;
+                    }
+                }
+
+                match CdcEventConverter::try_from(msg, &this.table_schemas) {
+                    Ok(row) => Poll::Ready(Some(Ok(row))),
+                    Err(e) => Poll::Ready(Some(Err(e.into()))),
+                }
+            }
             Some(Err(e)) => Poll::Ready(Some(Err(e.into()))),
             None => Poll::Ready(None),
         }
