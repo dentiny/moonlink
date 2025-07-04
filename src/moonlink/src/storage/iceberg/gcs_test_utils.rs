@@ -1,4 +1,5 @@
-use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::object_storage_test_utils::*;
 
 /// Fake GCS related constants.
@@ -13,9 +14,9 @@ pub(crate) static GCS_TEST_ENDPOINT: &str = "http://gcs.local:4443";
 pub(crate) static GCS_TEST_PROJECT: &str = "fake-project";
 
 #[allow(dead_code)]
-pub(crate) fn create_gcs_catalog_config(warehouse_uri: &str) -> CatalogConfig {
+pub(crate) fn create_gcs_catalog_config(warehouse_uri: &str) -> FileSystemConfig {
     let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
-    CatalogConfig::Gcs {
+    FileSystemConfig::Gcs {
         bucket: bucket.to_string(),
         endpoint: GCS_TEST_ENDPOINT.to_string(),
         disable_auth: true,

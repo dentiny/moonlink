@@ -1,4 +1,5 @@
 use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
@@ -63,34 +64,13 @@ static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(10)
 static RETRY_DELAY_FACTOR: f32 = 1.5;
 static MAX_RETRY_COUNT: usize = 5;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum CatalogConfig {
-    #[cfg(feature = "storage-fs")]
-    FileSystem,
-    #[cfg(feature = "storage-s3")]
-    S3 {
-        access_key_id: String,
-        secret_access_key: String,
-        region: String,
-        bucket: String,
-        endpoint: String,
-    },
-    #[cfg(feature = "storage-gcs")]
-    Gcs {
-        project: String,
-        bucket: String,
-        endpoint: String,
-        disable_auth: bool,
-    },
-}
-
 #[derive(Debug)]
 pub struct FileCatalog {
     /// Catalog configurations.
-    config: CatalogConfig,
+    config: FileSystemConfig,
     /// Similar to opendal operator, which also provides an abstraction above different storage backends.
     file_io: FileIO,
-    /// Operator to manager all IO operations.
+    /// Operator to manager all IO operations.n
     operator: OnceCell<Operator>,
     /// Table location.
     warehouse_location: String,
@@ -106,7 +86,7 @@ pub struct FileCatalog {
 
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
-    pub fn new(warehouse_location: String, config: CatalogConfig) -> IcebergResult<Self> {
+    pub fn new(warehouse_location: String, config: FileSystemConfig) -> IcebergResult<Self> {
         let file_io = utils::create_file_io(&config)?;
         Ok(Self {
             config,
@@ -138,7 +118,7 @@ impl FileCatalog {
             .get_or_try_init(|| async {
                 match &self.config {
                     #[cfg(feature = "storage-fs")]
-                    CatalogConfig::FileSystem => {
+                    &FileSystemConfig::FileSystem => {
                         let builder = services::Fs::default().root(&self.warehouse_location);
                         let op = Operator::new(builder)
                             .expect("failed to create fs operator")
@@ -147,7 +127,7 @@ impl FileCatalog {
                         Ok(op)
                     }
                     #[cfg(feature = "storage-gcs")]
-                    CatalogConfig::Gcs {
+                    FileSystemConfig::Gcs {
                         bucket,
                         endpoint,
                         disable_auth,
@@ -170,7 +150,7 @@ impl FileCatalog {
                         Ok(op)
                     }
                     #[cfg(feature = "storage-s3")]
-                    CatalogConfig::S3 {
+                    FileSystemConfig::S3 {
                         access_key_id,
                         secret_access_key,
                         region,

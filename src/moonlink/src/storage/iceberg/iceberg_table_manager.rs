@@ -1,10 +1,10 @@
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
     MOONCAKE_DELETION_VECTOR_NUM_ROWS,
 };
-use crate::storage::iceberg::file_catalog::CatalogConfig;
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -64,14 +64,14 @@ pub struct IcebergTableConfig {
     /// Iceberg table name.
     pub table_name: String,
     // Catalog config.
-    pub catalog_config: CatalogConfig,
+    pub catalog_config: FileSystemConfig,
 }
 
 impl IcebergTableConfig {
     const DEFAULT_WAREHOUSE_URI: &str = "/tmp/moonlink_iceberg";
     const DEFAULT_NAMESPACE: &str = "namespace";
     const DEFAULT_TABLE: &str = "table";
-    const DEFAULT_CATALOG_CONFIG: CatalogConfig = CatalogConfig::FileSystem;
+    const DEFAULT_CATALOG_CONFIG: FileSystemConfig = FileSystemConfig::FileSystem;
 }
 
 impl Default for IcebergTableConfig {

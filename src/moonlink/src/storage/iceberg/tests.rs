@@ -2,7 +2,7 @@ use crate::row::IdentityProp as RowIdentity;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
-use crate::storage::iceberg::file_catalog::CatalogConfig;
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
@@ -131,7 +131,7 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
             panic!("GCS support not enabled. Enable `storage-gcs` feature.");
         }
     } else {
-        CatalogConfig::FileSystem
+        FileSystemConfig::FileSystem
     };
 
     IcebergTableConfig {

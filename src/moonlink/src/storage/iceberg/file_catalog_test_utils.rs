@@ -8,7 +8,8 @@ use iceberg::{
 use std::sync::Arc;
 use tempfile::TempDir;
 
-use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::iceberg::file_catalog::FileCatalog;
 
 /// Test struct which mimics [`TableCommit`], to workaround the limitation that [`TableCommit`] is not exposed to public.
 #[repr(C)]
@@ -21,7 +22,7 @@ pub(crate) struct TableCommitProxy {
 /// Test util to create file catalog.
 pub(crate) fn create_test_file_catalog(tmp_dir: &TempDir) -> FileCatalog {
     let warehouse_path = tmp_dir.path().to_str().unwrap();
-    FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {}).unwrap()
+    FileCatalog::new(warehouse_path.to_string(), FileSystemConfig::FileSystem {}).unwrap()
 }
 
 // Test util function to get iceberg schema,

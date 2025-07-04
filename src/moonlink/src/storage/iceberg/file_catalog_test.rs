@@ -1,6 +1,7 @@
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::catalog_test_utils;
+use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::file_catalog::NAMESPACE_INDICATOR_OBJECT_NAME;
-use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
 use crate::storage::iceberg::file_catalog_test_utils::*;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::iceberg::gcs_test_utils;
@@ -49,7 +50,7 @@ async fn test_local_iceberg_table_creation() {
     let temp_dir = TempDir::new().unwrap();
     let warehouse_path = temp_dir.path().to_str().unwrap();
     let catalog =
-        FileCatalog::new(warehouse_path.to_string(), CatalogConfig::FileSystem {}).unwrap();
+        FileCatalog::new(warehouse_path.to_string(), FileSystemConfig::FileSystem {}).unwrap();
     let namespace_ident = NamespaceIdent::from_strs([NAMESPACE]).unwrap();
     let _ = catalog
         .create_namespace(&namespace_ident, /*properties=*/ HashMap::new())

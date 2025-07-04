@@ -1,5 +1,6 @@
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 /// This module provides a few test util functions.
-use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
+use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::object_storage_test_utils::*;
 
 /// Minio related constants.
@@ -18,9 +19,9 @@ pub(crate) static S3_TEST_ENDPOINT: &str = "http://minio:9000";
 
 /// Create a S3 catalog config.
 #[allow(dead_code)]
-pub(crate) fn create_s3_catalog_config(warehouse_uri: &str) -> CatalogConfig {
+pub(crate) fn create_s3_catalog_config(warehouse_uri: &str) -> FileSystemConfig {
     let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
-    CatalogConfig::S3 {
+    FileSystemConfig::S3 {
         access_key_id: S3_TEST_ACCESS_KEY_ID.to_string(),
         secret_access_key: S3_TEST_SECRET_ACCESS_KEY.to_string(),
         region: "auto".to_string(), // minio doesn't care about region.

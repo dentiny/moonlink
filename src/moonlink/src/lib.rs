@@ -10,7 +10,7 @@ pub use storage::storage_utils::create_data_file;
 pub(crate) use storage::NonEvictableHandle;
 pub use storage::SnapshotReadOutput;
 pub use storage::{
-    CatalogConfig, EventSyncReceiver, IcebergTableConfig, IcebergTableManager, MooncakeTable,
+    EventSyncReceiver, FileSystemConfig, IcebergTableConfig, IcebergTableManager, MooncakeTable,
     MooncakeTableConfig, TableEventManager, TableManager,
 };
 pub use storage::{MoonlinkTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};

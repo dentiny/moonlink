@@ -1,4 +1,5 @@
-use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::iceberg::file_catalog::FileCatalog;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
@@ -101,7 +102,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
         let absolute_path = url.path();
         return Ok(Box::new(FileCatalog::new(
             absolute_path.to_string(),
-            CatalogConfig::FileSystem {},
+            FileSystemConfig::FileSystem {},
         )?));
     }
 
@@ -201,7 +202,7 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
 async fn copy_from_local_to_remote(
     src: &str,
     dst: &str,
-    catalog_config: &CatalogConfig,
+    catalog_config: &FileSystemConfig,
 ) -> IcebergResult<()> {
     let src = FileIOBuilder::new_fs_io().build()?.new_input(src)?;
     let dst = create_output_file(catalog_config, dst)?;
@@ -218,7 +219,7 @@ pub(crate) async fn write_record_batch_to_iceberg(
     table: &IcebergTable,
     local_filepath: &String,
     table_metadata: &IcebergTableMetadata,
-    catalog_config: &CatalogConfig,
+    catalog_config: &FileSystemConfig,
 ) -> IcebergResult<DataFile> {
     let filename = Path::new(local_filepath)
         .file_name()
@@ -246,7 +247,7 @@ pub(crate) async fn write_record_batch_to_iceberg(
 pub(crate) async fn upload_index_file(
     table: &IcebergTable,
     local_index_filepath: &str,
-    catalog_config: &CatalogConfig,
+    catalog_config: &FileSystemConfig,
 ) -> IcebergResult<String> {
     let filename = Path::new(local_index_filepath)
         .file_name()
@@ -261,12 +262,12 @@ pub(crate) async fn upload_index_file(
 }
 
 /// Create iceberg [`FileIO`].
-pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
+pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO> {
     match config {
         #[cfg(feature = "storage-fs")]
-        CatalogConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
+        FileSystemConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
         #[cfg(feature = "storage-gcs")]
-        CatalogConfig::Gcs {
+        FileSystemConfig::Gcs {
             project,
             endpoint,
             disable_auth,
@@ -284,7 +285,7 @@ pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
             file_io_builder.build()
         }
         #[cfg(feature = "storage-s3")]
-        CatalogConfig::S3 {
+        FileSystemConfig::S3 {
             access_key_id,
             secret_access_key,
             region,
@@ -300,7 +301,10 @@ pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
 }
 
 /// Create output file.
-pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergResult<OutputFile> {
+pub(crate) fn create_output_file(
+    config: &FileSystemConfig,
+    dst: &str,
+) -> IcebergResult<OutputFile> {
     let file_io = create_file_io(config)?;
     // [`new_output`] requires input to start with schema.
     Ok(file_io.new_output(dst)?)
