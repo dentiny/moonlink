@@ -76,7 +76,7 @@ pub enum CatalogConfig {
         endpoint: String,
     },
     #[cfg(feature = "storage-gcs")]
-    GCS {
+    Gcs {
         project: String,
         bucket: String,
         endpoint: String,
@@ -147,7 +147,7 @@ impl FileCatalog {
                         Ok(op)
                     }
                     #[cfg(feature = "storage-gcs")]
-                    CatalogConfig::GCS {
+                    CatalogConfig::Gcs {
                         bucket,
                         endpoint,
                         disable_auth,

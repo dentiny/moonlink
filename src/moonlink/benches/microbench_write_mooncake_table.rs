@@ -51,6 +51,7 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
         warehouse_uri: base_path.to_str().unwrap().to_string(),
         namespace: vec!["default".to_string()],
         table_name: table_name.to_string(),
+        catalog_config: moonlink::CatalogConfig::FileSystem,
     };
     let rt = Runtime::new().unwrap();
     let table_config = MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());

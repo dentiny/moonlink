@@ -17,7 +17,7 @@ pub(crate) static GCS_TEST_PROJECT: &str = "fake-project";
 #[allow(dead_code)]
 pub(crate) fn create_gcs_catalog_config(warehouse_uri: &str) -> CatalogConfig {
     let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
-    CatalogConfig::GCS {
+    CatalogConfig::Gcs {
         bucket: bucket.to_string(),
         endpoint: GCS_TEST_ENDPOINT.to_string(),
         disable_auth: true,

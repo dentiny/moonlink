@@ -50,9 +50,10 @@ fn bench_write(c: &mut Criterion) {
                 // Create a temporary warehouse location for each benchmark suite, otherwise iceberg table manager loads previous states.
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
-                let iceberg_table_config = IcebergTableConfig::builder()
-                    .warehouse_uri(temp_warehouse_uri)
-                    .build();
+                let iceberg_table_config = IcebergTableConfig {
+                    warehouse_uri: temp_warehouse_uri,
+                    ..Default::default()
+                };
                 let table_config =
                     MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
                 let mut table = MooncakeTable::new(
@@ -84,9 +85,10 @@ fn bench_write(c: &mut Criterion) {
                 // Create a temporary warehouse location for each benchmark suite, otherwise iceberg table manager loads previous states.
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
-                let iceberg_table_config = IcebergTableConfig::builder()
-                    .warehouse_uri(temp_warehouse_uri)
-                    .build();
+                let iceberg_table_config = IcebergTableConfig {
+                    warehouse_uri: temp_warehouse_uri,
+                    ..Default::default()
+                };
                 let table_config =
                     MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
                 let mut table = MooncakeTable::new(
@@ -121,9 +123,10 @@ fn bench_write(c: &mut Criterion) {
                 // Create a temporary warehouse location for each benchmark suite, otherwise iceberg table manager loads previous states.
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
-                let iceberg_table_config = IcebergTableConfig::builder()
-                    .warehouse_uri(temp_warehouse_uri)
-                    .build();
+                let iceberg_table_config = IcebergTableConfig {
+                    warehouse_uri: temp_warehouse_uri,
+                    ..Default::default()
+                };
                 let table_config =
                     MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
                 let mut table = rt

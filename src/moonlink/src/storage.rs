@@ -11,6 +11,7 @@ pub(crate) mod storage_utils;
 pub use cache::object_storage::cache_config::ObjectStorageCacheConfig;
 pub(crate) use cache::object_storage::cache_handle::NonEvictableHandle;
 pub use cache::object_storage::object_storage_cache::ObjectStorageCache;
+pub use iceberg::file_catalog::CatalogConfig;
 pub use iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 pub use iceberg::table_event_manager::{EventSyncReceiver, TableEventManager};
 pub use iceberg::table_manager::TableManager;

@@ -1,5 +1,4 @@
 /// Testing utils for object storage.
-
 #[allow(dead_code)]
 pub(crate) const TEST_RETRY_COUNT: usize = 2;
 #[allow(dead_code)]

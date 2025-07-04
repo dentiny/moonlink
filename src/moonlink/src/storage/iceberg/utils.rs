@@ -95,7 +95,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
                 line!()
             );
 
-            return Ok(Box::new(gcs_test_utils::create_gcs_catalog(&warehouse_uri)));
+            return Ok(Box::new(gcs_test_utils::create_gcs_catalog(warehouse_uri)));
         }
     }
 
@@ -284,7 +284,7 @@ pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
         #[cfg(feature = "storage-fs")]
         CatalogConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
         #[cfg(feature = "storage-gcs")]
-        CatalogConfig::GCS {
+        CatalogConfig::Gcs {
             project,
             endpoint,
             disable_auth,
@@ -340,7 +340,7 @@ pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergRe
             file_io.new_output(dst)?
         }
         #[cfg(feature = "storage-gcs")]
-        CatalogConfig::GCS { bucket, .. } => {
+        CatalogConfig::Gcs { bucket, .. } => {
             println!("dst = {}, bucket = {}", dst, bucket);
 
             let relative: String = dst
