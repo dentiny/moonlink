@@ -1094,7 +1094,7 @@ impl MooncakeTable {
             .update_snapshot(next_snapshot_task, opt)
             .await;
         table_notify
-            .send(TableEvent::MooncakeTableSnapshot {
+            .send(TableEvent::MooncakeTableSnapshotResult {
                 lsn: snapshot_result.commit_lsn,
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,

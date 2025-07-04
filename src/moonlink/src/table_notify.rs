@@ -57,8 +57,10 @@ pub enum TableEvent {
     /// Table internal events
     /// ==============================
     ///
+    /// Periodical mooncake snapshot.
+    PeriodicalMooncakeTableSnapshot,
     /// Mooncake snapshot completes.
-    MooncakeTableSnapshot {
+    MooncakeTableSnapshotResult {
         /// Mooncake snapshot LSN.
         lsn: u64,
         /// Payload used to create an iceberg snapshot.

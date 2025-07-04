@@ -13,6 +13,9 @@ use tracing::{debug, error, info_span, warn};
 
 /// Handler for table operations
 pub struct TableHandler {
+    /// Handle to periodical mooncake snapshot.
+    _periodical_mooncake_snapshot_handle: JoinHandle<()>,
+
     /// Handle to the event processing task
     _event_handle: Option<JoinHandle<()>>,
 
@@ -41,6 +44,25 @@ impl TableHandler {
         // Create channel for internal control events.
         table.register_table_notify(event_sender.clone()).await;
 
+        // Spawn the task to notify periodical mooncake snapshot.
+        let event_sender_for_periodical_snapshot = event_sender.clone();
+        let periodic_mooncake_snapshot_handle = tokio::spawn(async move {
+            let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
+
+            loop {
+                tokio::select! {
+                    _ = periodic_snapshot_interval.tick() => {
+                        if let Err(err) = event_sender_for_periodical_snapshot.send(TableEvent::PeriodicalMooncakeTableSnapshot).await {
+                            error!(error = %err, "failed to send event to notify periodical snapshot");
+                        }
+                    }
+                    else => {
+                        break;
+                    }
+                }
+            }
+        });
+
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(
             async move {
@@ -53,6 +75,7 @@ impl TableHandler {
         // Create the handler
         Self {
             _event_handle: event_handle,
+            _periodical_mooncake_snapshot_handle: periodic_mooncake_snapshot_handle,
             event_sender,
         }
     }
@@ -70,8 +93,6 @@ impl TableHandler {
         replication_lsn_rx: watch::Receiver<u64>,
         mut table: MooncakeTable,
     ) {
-        let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
-
         // Initial persisted LSN.
         //
         // On moonlink recovery, it's possible that moonlink hasn't sent back latest flush LSN back to source table, so source database (i.e. postgres) will replay unacknowledged parts, which might contain already persisted content.
@@ -196,7 +217,8 @@ impl TableHandler {
                         TableEvent::Commit { lsn, .. } => Some(lsn),
                         // All events apart from replication events don't affect whether mooncake is at a committed state.
                         TableEvent::ForceSnapshot { .. }
-                        | TableEvent::MooncakeTableSnapshot { .. }
+                        | TableEvent::PeriodicalMooncakeTableSnapshot
+                        | TableEvent::MooncakeTableSnapshotResult { .. }
                         | TableEvent::IcebergSnapshot { .. }
                         | TableEvent::IndexMerge { .. }
                         | TableEvent::DataCompaction { .. }
@@ -279,7 +301,7 @@ impl TableHandler {
                                     .prepare_transaction_stream_commit(xid, lsn)
                                     .await.unwrap();
                                 if let Err(e) = table.commit_transaction_stream(commit).await {
-                                    warn!(error = %e, "stream commit flush failed");
+                                    error!(error = %e, "stream commit flush failed");
                                 }
                             }
                             // Handle non-streaming write situation.
@@ -287,7 +309,7 @@ impl TableHandler {
                                 table.commit(lsn);
                                 if table.should_flush() || force_snapshot {
                                     if let Err(e) = table.flush(lsn).await {
-                                        warn!(error = %e, "flush failed in commit");
+                                        error!(error = %e, "flush failed in commit");
                                     }
                                 }
                             }
@@ -312,10 +334,10 @@ impl TableHandler {
                             }
                             if table.is_in_initial_copy() {
                                 if let Err(e) = table.flush_transaction_stream(INITIAL_COPY_XACT_ID).await {
-                                    warn!(error = %e, "explicit flush failed");
+                                    error!(error = %e, "explicit flush failed");
                                 }
                             } else if let Err(e) = table.flush(lsn).await {
-                                warn!(error = %e, "explicit flush failed");
+                                error!(error = %e, "explicit flush failed");
                             }
                         }
                         TableEvent::StreamFlush { xact_id } => {
@@ -367,7 +389,7 @@ impl TableHandler {
                         TableEvent::FinishInitialCopy => {
                             debug!("finishing initial copy");
                             if let Err(e) = table.finish_initial_copy().await {
-                                warn!(error = %e, "failed to finish initial copy");
+                                error!(error = %e, "failed to finish initial copy");
                             }
 
                             // Force create the snapshot with LSN 0
@@ -383,7 +405,38 @@ impl TableHandler {
                         // Table internal events
                         // ==============================
                         //
-                        TableEvent::MooncakeTableSnapshot { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
+                        TableEvent::PeriodicalMooncakeTableSnapshot => {
+                            // Only create a periodic snapshot if there isn't already one in progress
+                            if mooncake_snapshot_ongoing {
+                                continue;
+                            }
+
+                            // Check whether a flush and force snapshot is needed.
+                            if !force_snapshot_lsns.is_empty() {
+                                if let Some(commit_lsn) = table_consistent_view_lsn {
+                                    table.flush(commit_lsn).await.unwrap();
+                                    reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
+                                    assert!(table.create_snapshot(SnapshotOption {
+                                        force_create: true,
+                                        skip_iceberg_snapshot: iceberg_snapshot_ongoing,
+                                        skip_file_indices_merge: maintainance_ongoing,
+                                        skip_data_file_compaction: maintainance_ongoing,
+                                    }));
+                                    mooncake_snapshot_ongoing = true;
+                                    continue;
+                                }
+                            }
+
+                            // Fallback to normal periodic snapshot.
+                            reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
+                            mooncake_snapshot_ongoing = table.create_snapshot(SnapshotOption {
+                                force_create: false,
+                                skip_iceberg_snapshot: iceberg_snapshot_ongoing,
+                                skip_file_indices_merge: maintainance_ongoing,
+                                skip_data_file_compaction: maintainance_ongoing,
+                            });
+                        }
+                        TableEvent::MooncakeTableSnapshotResult { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
                             // Spawn a detached best-effort task to delete evicted object storage cache.
                             start_task_to_delete_evicted(evicted_data_files_to_delete);
 
@@ -479,38 +532,6 @@ impl TableHandler {
                             start_task_to_delete_evicted(evicted_data_files);
                         }
                     }
-                }
-                // Periodic snapshot based on time
-                _ = periodic_snapshot_interval.tick() => {
-                    // Only create a periodic snapshot if there isn't already one in progress
-                    if mooncake_snapshot_ongoing {
-                        continue;
-                    }
-
-                    // Check whether a flush and force snapshot is needed.
-                    if !force_snapshot_lsns.is_empty() {
-                        if let Some(commit_lsn) = table_consistent_view_lsn {
-                            table.flush(commit_lsn).await.unwrap();
-                            reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
-                            assert!(table.create_snapshot(SnapshotOption {
-                                force_create: true,
-                                skip_iceberg_snapshot: iceberg_snapshot_ongoing,
-                                skip_file_indices_merge: maintainance_ongoing,
-                                skip_data_file_compaction: maintainance_ongoing,
-                            }));
-                            mooncake_snapshot_ongoing = true;
-                            continue;
-                        }
-                    }
-
-                    // Fallback to normal periodic snapshot.
-                    reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
-                    mooncake_snapshot_ongoing = table.create_snapshot(SnapshotOption {
-                        force_create: false,
-                        skip_iceberg_snapshot: iceberg_snapshot_ongoing,
-                        skip_file_indices_merge: maintainance_ongoing,
-                        skip_data_file_compaction: maintainance_ongoing,
-                    });
                 }
                 // If all senders have been dropped, exit the loop
                 else => {

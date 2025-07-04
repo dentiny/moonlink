@@ -252,7 +252,7 @@ pub(crate) async fn get_mooncake_snapshot_result(
 ) {
     let notification = notify_rx.recv().await.unwrap();
     match notification {
-        TableEvent::MooncakeTableSnapshot {
+        TableEvent::MooncakeTableSnapshotResult {
             lsn,
             iceberg_snapshot_payload,
             file_indice_merge_payload,

@@ -166,7 +166,7 @@ pub async fn snapshot(
     assert!(table.create_snapshot(SnapshotOption::default()));
     let table_notify = notify_rx.recv().await.unwrap();
     match table_notify {
-        TableEvent::MooncakeTableSnapshot {
+        TableEvent::MooncakeTableSnapshotResult {
             lsn,
             iceberg_snapshot_payload,
             data_compaction_payload,

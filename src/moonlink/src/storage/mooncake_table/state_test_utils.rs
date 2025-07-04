@@ -642,7 +642,7 @@ async fn sync_mooncake_snapshot(
     Vec<String>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::MooncakeTableSnapshot {
+    if let TableEvent::MooncakeTableSnapshotResult {
         iceberg_snapshot_payload,
         file_indice_merge_payload,
         data_compaction_payload,
