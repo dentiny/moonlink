@@ -1,14 +1,18 @@
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
+#[cfg(test)]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
+#[cfg(test)]
 use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::iceberg::file_catalog::FileCatalog;
 #[cfg(feature = "storage-gcs")]
+#[cfg(test)]
 use crate::storage::iceberg::gcs_test_utils as iceberg_gcs_test_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::parquet_utils;
 #[cfg(feature = "storage-s3")]
+#[cfg(test)]
 use crate::storage::iceberg::s3_test_utils as iceberg_s3_test_utils;
 use crate::storage::iceberg::table_property;
 
@@ -79,6 +83,7 @@ pub fn is_file_index(entry: &ManifestEntry) -> bool {
 pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
     // Special handle testing situation.
     #[cfg(feature = "storage-s3")]
+    #[cfg(test)]
     {
         if warehouse_uri.starts_with(s3_test_utils::S3_TEST_WAREHOUSE_URI_PREFIX) {
             return Ok(Box::new(iceberg_s3_test_utils::create_test_s3_catalog(
@@ -87,6 +92,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
         }
     }
     #[cfg(feature = "storage-gcs")]
+    #[cfg(test)]
     {
         if warehouse_uri.starts_with(gcs_test_utils::GCS_TEST_WAREHOUSE_URI_PREFIX) {
             return Ok(Box::new(iceberg_gcs_test_utils::create_gcs_catalog(
@@ -313,7 +319,7 @@ pub(crate) fn create_output_file(
 ) -> IcebergResult<OutputFile> {
     let file_io = create_file_io(config)?;
     // [`new_output`] requires input to start with schema.
-    Ok(file_io.new_output(dst)?)
+    file_io.new_output(dst)
 }
 
 /// Util function to convert the given error to iceberg "unexpected" error.

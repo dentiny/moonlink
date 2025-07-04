@@ -16,9 +16,11 @@ pub(super) mod utils;
 pub(super) mod validation;
 
 #[cfg(feature = "storage-s3")]
+#[cfg(test)]
 mod s3_test_utils;
 
 #[cfg(feature = "storage-gcs")]
+#[cfg(test)]
 mod gcs_test_utils;
 
 #[cfg(test)]
