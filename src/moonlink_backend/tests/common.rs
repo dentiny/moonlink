@@ -277,6 +277,16 @@ async fn setup_backend(
         .simple_query("SELECT pg_drop_replication_slot('moonlink_slot_postgres')")
         .await;
 
+    // Reset metadata storage.
+    client
+        .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake")
+        .await
+        .unwrap();
+    client
+        .simple_query("DROP TABLE IF EXISTS mooncake.tables")
+        .await
+        .unwrap();
+
     // Re-create the working table.
     if let Some(table_name) = table_name {
         client
@@ -285,14 +295,6 @@ async fn setup_backend(
                  CREATE TABLE {0} (id BIGINT PRIMARY KEY, name TEXT);",
                 table_name
             ))
-            .await
-            .unwrap();
-        client
-            .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake")
-            .await
-            .unwrap();
-        client
-            .simple_query("DROP TABLE IF EXISTS mooncake.tables")
             .await
             .unwrap();
         backend
