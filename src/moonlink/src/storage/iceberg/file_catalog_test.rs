@@ -85,7 +85,7 @@ async fn create_s3_catalog() -> FileCatalog {
     s3_test_utils::object_store_test_utils::create_test_s3_bucket(bucket_name.clone())
         .await
         .unwrap();
-    s3_test_utils::create_minio_s3_catalog(&bucket_name, &warehouse_uri)
+    s3_test_utils::create_minio_s3_catalog(&warehouse_uri)
 }
 // Create GCS catalog with local fake gcs deployment and a random bucket.
 #[cfg(feature = "storage-gcs")]
@@ -97,7 +97,7 @@ async fn create_gcs_catalog() -> FileCatalog {
     gcs_test_utils::object_store_test_utils::create_test_gcs_bucket(bucket_name.clone())
         .await
         .unwrap();
-    gcs_test_utils::create_gcs_catalog(&bucket_name, &warehouse_uri)
+    gcs_test_utils::create_gcs_catalog(&warehouse_uri)
 }
 
 // Test util function to create a new table.

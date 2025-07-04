@@ -178,8 +178,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
 
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri,
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        ..Default::default()
     };
     let schema = create_test_arrow_schema();
 

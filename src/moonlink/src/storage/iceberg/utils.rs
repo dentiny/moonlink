@@ -4,7 +4,7 @@ use crate::storage::iceberg::parquet_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
 #[cfg(feature = "storage-gcs")]
-use crate::storage::iceberg::gcs_test_utils;
+use crate::storage::iceberg::gcs_test_utils::{self, GCS_ENDPOINT};
 use crate::storage::iceberg::table_property;
 
 use std::collections::HashMap;
@@ -13,7 +13,7 @@ use url::Url;
 
 use arrow_schema::Schema as ArrowSchema;
 use iceberg::arrow as IcebergArrow;
-use iceberg::io::FileIOBuilder;
+use iceberg::io::{FileIO, FileIOBuilder, OutputFile};
 use iceberg::spec::DataFile;
 use iceberg::spec::TableMetadata as IcebergTableMetadata;
 use iceberg::spec::{DataContentType, DataFileFormat, ManifestEntry};
@@ -76,9 +76,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     #[cfg(feature = "storage-s3")]
     {
         if warehouse_uri.starts_with(s3_test_utils::MINIO_TEST_WAREHOUSE_URI_PREFIX) {
-            let test_bucket = s3_test_utils::get_test_minio_bucket(warehouse_uri);
             return Ok(Box::new(s3_test_utils::create_minio_s3_catalog(
-                &test_bucket,
                 warehouse_uri,
             )));
         }
@@ -93,7 +91,6 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
             println!("test bucket: {}, warehouse uri: {} -- {:?}:{:?}", test_bucket, warehouse_uri, file!(), line!());
             
             return Ok(Box::new(gcs_test_utils::create_gcs_catalog(
-                &test_bucket,
                 &warehouse_uri,
             )));
         }
@@ -207,15 +204,23 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
 }
 
 /// Copy source filepath to destination filepath.
-async fn copy_from_local_to_remote(src: &str, dst: &str) -> IcebergResult<()> {
+async fn copy_from_local_to_remote(src: &str, dst: &str, catalog_config: &CatalogConfig) -> IcebergResult<()> {
+
+    println!("copy {} to {}", src, dst);
+
     let src = FileIOBuilder::new_fs_io().build()?.new_input(src)?;
-    let dst = FileIOBuilder::new(get_url_scheme(dst))
-        .build()?
-        .new_output(dst)?;
+
+    println!("src input file done");
+
+    let dst =  create_output_file(catalog_config, dst)?;
+
+    println!("dst input file done");
 
     // TODO(hjiang): Switch to parallel chunk-based reading if source file large.
     let bytes = src.read().await?;
     dst.write(bytes).await?;
+
+    println!("copy over");
 
     Ok(())
 }
@@ -225,6 +230,7 @@ pub(crate) async fn write_record_batch_to_iceberg(
     table: &IcebergTable,
     local_filepath: &String,
     table_metadata: &IcebergTableMetadata,
+    catalog_config: &CatalogConfig,
 ) -> IcebergResult<DataFile> {
     let filename = Path::new(local_filepath)
         .file_name()
@@ -236,7 +242,7 @@ pub(crate) async fn write_record_batch_to_iceberg(
     let remote_filepath = location_generator.generate_location(&filename);
 
     // Import local parquet file to remote.
-    copy_from_local_to_remote(local_filepath, &remote_filepath).await?;
+    copy_from_local_to_remote(local_filepath, &remote_filepath, catalog_config).await?;
 
     // Get data file from local parquet file.
     let data_file = parquet_utils::get_data_file_from_local_parquet_file(
@@ -260,6 +266,7 @@ fn get_url_scheme(url: &str) -> String {
 pub(crate) async fn upload_index_file(
     table: &IcebergTable,
     local_index_filepath: &str,
+    catalog_config: &CatalogConfig,
 ) -> IcebergResult<String> {
     let filename = Path::new(local_index_filepath)
         .file_name()
@@ -269,8 +276,75 @@ pub(crate) async fn upload_index_file(
         .to_string();
     let location_generator = DefaultLocationGenerator::new(table.metadata().clone()).unwrap();
     let remote_filepath = location_generator.generate_location(&filename);
-    copy_from_local_to_remote(local_index_filepath, &remote_filepath).await?;
+    copy_from_local_to_remote(local_index_filepath, &remote_filepath, catalog_config).await?;
     Ok(remote_filepath)
+}
+
+/// Create iceberg [`FileIO`].
+pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
+    match config {
+        #[cfg(feature = "storage-fs")]
+        CatalogConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
+        #[cfg(feature = "storage-gcs")]
+        CatalogConfig::GCS {
+            bucket,
+            endpoint,
+        } => FileIOBuilder::new("GCS")
+            .with_prop("gcs.project-id", "fake-project")
+            .with_prop("gcs.no-auth", "true")
+            .with_prop("gcs.allow-anonymous", "true")
+            .with_prop("gcs.disable-config-load", "true")
+            .with_prop("gcs.service.path", GCS_ENDPOINT)
+            .build(),
+        #[cfg(feature = "storage-s3")]
+        CatalogConfig::S3 {
+            access_key_id,
+            secret_access_key,
+            region,
+            endpoint,
+            ..
+        } => FileIOBuilder::new("s3")
+            .with_prop(iceberg::io::S3_REGION, region)
+            .with_prop(iceberg::io::S3_ENDPOINT, endpoint)
+            .with_prop(iceberg::io::S3_ACCESS_KEY_ID, access_key_id)
+            .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key)
+            .build(),
+    }
+}
+
+/// Create output file.
+pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergResult<OutputFile> {
+    println!("before create file io for outout fiel");
+
+    let file_io = create_file_io(config)?;
+
+    println!("after create file io for outout fiel");
+
+    Ok(match config {
+        #[cfg(feature = "storage-fs")]
+        CatalogConfig::FileSystem => {
+            file_io.new_output(dst)?
+        }
+        #[cfg(feature = "storage-s3")]
+        CatalogConfig::S3 { bucket, .. } => {
+            let relative = dst.strip_prefix(&format!("s3://{}/", bucket)).unwrap().to_string();
+
+            println!("relative = {}", relative);
+
+            file_io.new_output(dst)?
+        }
+        #[cfg(feature = "storage-gcs")]
+        CatalogConfig::GCS { bucket, .. } => {
+
+            println!("dst = {}, bucket = {}", dst, bucket);
+
+            let relative: String = dst.strip_prefix(&format!("gs://{}/", bucket)).unwrap().to_string();
+
+            println!("relative = {}", relative);
+
+            file_io.new_output(dst)?
+        }
+    })
 }
 
 /// Util function to convert the given error to iceberg "unexpected" error.

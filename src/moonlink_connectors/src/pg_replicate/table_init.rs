@@ -58,6 +58,7 @@ pub async fn build_table_components(
         warehouse_uri: base_path.to_str().unwrap().to_string(),
         namespace: vec![table_schema.table_name.schema.clone()],
         table_name: mooncake_table_id,
+        ..Default::default()
     };
     let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(

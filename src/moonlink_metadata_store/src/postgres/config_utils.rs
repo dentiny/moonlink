@@ -52,6 +52,7 @@ pub(crate) fn deserialze_moonlink_table_config(
             warehouse_uri: parsed.iceberg_table_config.warehouse_uri,
             namespace: vec![parsed.iceberg_table_config.namespace],
             table_name: parsed.iceberg_table_config.table_name,
+            ..Default::default()
         },
         ..Default::default()
     };

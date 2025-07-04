@@ -64,6 +64,7 @@ pub fn test_iceberg_table_config(context: &TestContext, table_name: &str) -> Ice
         warehouse_uri: context.path().to_str().unwrap().to_string(),
         namespace: vec!["default".to_string()],
         table_name: table_name.to_string(),
+        ..Default::default()
     }
 }
 

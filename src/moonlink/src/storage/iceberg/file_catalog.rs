@@ -4,6 +4,7 @@ use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
 };
 use crate::storage::iceberg::utils::to_iceberg_error;
+use crate::storage::iceberg::utils;
 
 use futures::future::join_all;
 use futures::TryStreamExt;
@@ -62,7 +63,7 @@ static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(10)
 static RETRY_DELAY_FACTOR: f32 = 1.5;
 static MAX_RETRY_COUNT: usize = 2;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum CatalogConfig {
     #[cfg(feature = "storage-fs")]
     FileSystem,
@@ -79,37 +80,6 @@ pub enum CatalogConfig {
         bucket: String,
         endpoint: String,
     },
-}
-
-/// Create `FileIO` object based on the catalog config.
-fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
-    match config {
-        #[cfg(feature = "storage-fs")]
-        CatalogConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
-        #[cfg(feature = "storage-gcs")]
-        CatalogConfig::GCS {
-            bucket,
-            endpoint,
-        } => FileIOBuilder::new("GCS")
-            .with_prop("gcs.project-id", "fake-project")
-            .with_prop("gcs.no-auth", "true")
-            .with_prop("gcs.allow-anonymous", "true")
-            .with_prop("gcs.disable-config-load", "true")
-            .build(),
-        #[cfg(feature = "storage-s3")]
-        CatalogConfig::S3 {
-            access_key_id,
-            secret_access_key,
-            region,
-            endpoint,
-            ..
-        } => FileIOBuilder::new("s3")
-            .with_prop(iceberg::io::S3_REGION, region)
-            .with_prop(iceberg::io::S3_ENDPOINT, endpoint)
-            .with_prop(iceberg::io::S3_ACCESS_KEY_ID, access_key_id)
-            .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key)
-            .build(),
-    }
 }
 
 #[derive(Debug)]
@@ -135,10 +105,7 @@ pub struct FileCatalog {
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
     pub fn new(warehouse_location: String, config: CatalogConfig) -> IcebergResult<Self> {
-
-        println!("file catalog warehpusr = {}", warehouse_location);
-
-        let file_io = create_file_io(&config)?;
+        let file_io = utils::create_file_io(&config)?;
         Ok(Self {
             config,
             file_io,
@@ -716,13 +683,7 @@ impl Catalog for FileCatalog {
 
     /// Drop a table from the catalog.
     async fn drop_table(&self, table: &TableIdent) -> IcebergResult<()> {
-
-        println!("before drop table!!!");
-
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
-
-        println!("before remove directory {:?}", directory);
-
         self.remove_directory(&directory)
             .await
             .map_err(|e| IcebergError::new(

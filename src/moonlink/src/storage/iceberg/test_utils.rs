@@ -200,8 +200,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
 
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri,
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        ..Default::default()
     };
     let schema = create_test_arrow_schema();
 

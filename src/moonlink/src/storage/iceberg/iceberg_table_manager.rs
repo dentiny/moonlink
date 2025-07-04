@@ -4,6 +4,7 @@ use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
     MOONCAKE_DELETION_VECTOR_NUM_ROWS,
 };
+use crate::storage::iceberg::file_catalog::CatalogConfig;
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -43,7 +44,7 @@ use iceberg::table::Table as IcebergTable;
 use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
-use iceberg::{Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableIdent};
+use iceberg::{Catalog, Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableIdent};
 use tokio_retry2::strategy::{jitter, ExponentialBackoff};
 use tokio_retry2::{Retry, RetryError};
 use typed_builder::TypedBuilder;
@@ -55,22 +56,33 @@ const MOONCAKE_TABLE_FLUSH_LSN: &str = "mooncake-table-flush-lsn";
 /// TODO(hjiang): Consider using `Option<>` to represent uninitialized, which is more rust-idiometic.
 const UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW: usize = 0;
 
-#[derive(Clone, Debug, PartialEq, TypedBuilder)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct IcebergTableConfig {
     /// Table warehouse location.
-    #[builder(default = "/tmp/moonlink_iceberg".to_string())]
     pub warehouse_uri: String,
     /// Namespace for the iceberg table.
-    #[builder(default = vec!["default".to_string()])]
     pub namespace: Vec<String>,
     /// Iceberg table name.
-    #[builder(default = "table".to_string())]
     pub table_name: String,
+    // Catalog config.
+    pub catalog_config: CatalogConfig,
+}
+
+impl IcebergTableConfig {
+    const DEFAULT_WAREHOUSE_URI: &str = "/tmp/moonlink_iceberg";
+    const DEFAULT_NAMESPACE: &str = "namespace";
+    const DEFAULT_TABLE: &str = "table";
+    const DEFAULT_CATALOG_CONFIG: CatalogConfig = CatalogConfig::FileSystem;
 }
 
 impl Default for IcebergTableConfig {
     fn default() -> Self {
-        Self::builder().build()
+        Self {
+            warehouse_uri: Self::DEFAULT_WAREHOUSE_URI.to_string(),
+            namespace: vec![Self::DEFAULT_NAMESPACE.to_string()],
+            table_name: Self::DEFAULT_TABLE.to_string(),
+            catalog_config: Self::DEFAULT_CATALOG_CONFIG,
+        }
     }
 }
 
@@ -481,6 +493,7 @@ impl IcebergTableManager {
                 self.iceberg_table.as_ref().unwrap(),
                 local_data_file.file_path(),
                 self.iceberg_table.as_ref().unwrap().metadata(),
+                &self.config.catalog_config,
             )
             .await?;
 
@@ -664,6 +677,7 @@ impl IcebergTableManager {
                 let remote_index_block = utils::upload_index_file(
                     self.iceberg_table.as_ref().unwrap(),
                     cur_index_block.index_file.file_path(),
+                    &self.config.catalog_config,
                 )
                 .await?;
                 local_index_file_to_remote.insert(

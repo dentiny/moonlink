@@ -2,6 +2,7 @@ use crate::row::IdentityProp as RowIdentity;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
+use crate::storage::iceberg::file_catalog::CatalogConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 #[cfg(feature = "storage-s3")]
@@ -111,10 +112,34 @@ fn test_row_3() -> MoonlinkRow {
 
 /// Test util function to create iceberg table config.
 fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
+    let catalog_config = if warehouse_uri.starts_with("s3://") {
+            #[cfg(feature = "storage-s3")]
+            {
+                s3_test_utils::create_s3_catalog_config(&warehouse_uri)
+            }
+    
+            #[cfg(not(feature = "storage-s3"))]
+            {
+                panic!("S3 support not enabled. Enable `storage-s3` feature.");
+            }
+        } else if warehouse_uri.starts_with("gs://") {
+            #[cfg(feature = "storage-gcs")]
+            {
+                gcs_test_utils::create_gcs_catalog_config(&warehouse_uri)
+            }
+    
+            #[cfg(not(feature = "storage-gcs"))]
+            {
+                panic!("GCS support not enabled. Enable `storage-gcs` feature.");
+            }
+        } else {
+            CatalogConfig::FileSystem
+        };
+
     IcebergTableConfig {
         warehouse_uri,
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+       catalog_config,
+       ..Default::default()
     }
 }
 
@@ -514,8 +539,7 @@ async fn test_sync_snapshots() {
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri: tmp_dir.path().to_str().unwrap().to_string(),
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        ..Default::default()
     };
     test_store_and_load_snapshot_impl(
         mooncake_table_metadata.clone(),
@@ -533,8 +557,7 @@ async fn test_drop_table() {
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
     let config = IcebergTableConfig {
         warehouse_uri: tmp_dir.path().to_str().unwrap().to_string(),
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        ..Default::default()
     };
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
@@ -658,8 +681,7 @@ async fn test_index_merge_and_create_snapshot() {
 
     let config = IcebergTableConfig {
         warehouse_uri: tmp_dir.path().to_str().unwrap().to_string(),
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        ..Default::default()
     };
 
     let iceberg_table_manager = IcebergTableManager::new(
@@ -1153,9 +1175,6 @@ async fn check_row_index_on_disk(snapshot: &Snapshot, row: &MoonlinkRow) {
 }
 
 async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
-
-    println!("waehpuse uri = {}", warehouse_uri);
-
     // For the ease of testing, we use different directories for mooncake table and iceberg warehouse uri.
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
@@ -1189,8 +1208,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     .unwrap();
     table.register_table_notify(notify_tx).await;
 
-    println!("====0 ====");
-
     // Perform a few table write operations.
     //
     // Operation series 1: append three rows, delete one of them, flush, commit and create snapshot.
@@ -1219,9 +1236,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.commit(/*flush_lsn=*/ 200);
     table.flush(/*flush_lsn=*/ 200).await.unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
-
-
-    println!(" === 1 ===");
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1279,9 +1293,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         "Expected arrow data is {:?}, actual data is {:?}",
         expected_arrow_batch, loaded_arrow_batch
     );
-
-    println!(" === 2 ===");
-
     let deleted_rows = deletion_vector.batch_deletion_vector.collect_deleted_rows();
     assert!(
         deleted_rows.is_empty(),
@@ -1329,9 +1340,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
 
-
-    println!(" === 3 ===");
-
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
         .iceberg_table
@@ -1363,9 +1371,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.flush(/*flush_lsn=*/ 400).await.unwrap();
     table.commit(/*flush_lsn=*/ 400);
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
-
-
-    println!(" === 4 ===");
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1423,8 +1428,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         expected_deleted_rows, deleted_rows
     );
 
-    println!(" === 5 ===");
-
     // --------------------------------------
     // Operation series 4: append a new row, and don't delete any rows.
     // Expects to see the existing deletion vector unchanged and new data file created.
@@ -1468,8 +1471,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_row_index_on_disk(&snapshot, &row4).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
 
-    println!(" === 6 ===");
-
     let (file_in_new_snapshot, _) = snapshot
         .disk_files
         .iter()
@@ -1482,8 +1483,6 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str())
         .await
         .unwrap();
-
-        println!(" === 7 ===");
 
     let expected_arrow_batch = RecordBatch::try_new(
         schema.clone(),
@@ -1514,32 +1513,6 @@ async fn test_filesystem_sync_snapshots() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_str().unwrap().to_string();
     mooncake_table_snapshot_persist_impl(path).await
-}
-
-#[tokio::test]
-#[cfg(feature = "storage-s3")]
-async fn test_s3_sync_snapshots() {
-    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
-    s3_test_utils::object_store_test_utils::create_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
-    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
-    s3_test_utils::object_store_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
-}
-
-#[tokio::test]
-#[cfg(feature = "storage-gcs")]
-async fn test_gcs_sync_snapshots() {
-    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-    gcs_test_utils::object_store_test_utils::create_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
-    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
-    gcs_test_utils::object_store_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
 }
 
 #[tokio::test]

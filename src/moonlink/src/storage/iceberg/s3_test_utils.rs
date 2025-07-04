@@ -18,16 +18,23 @@ pub(crate) static MINIO_SECRET_ACCESS_KEY: &str = "minioadmin";
 #[allow(dead_code)]
 pub(crate) static MINIO_ENDPOINT: &str = "http://minio:9000";
 
-/// Create a S3 catalog, which communicates with local minio server.
+/// Create a S3 catalog config.
 #[allow(dead_code)]
-pub(crate) fn create_minio_s3_catalog(bucket: &str, warehouse_uri: &str) -> FileCatalog {
-    let catalog_config = CatalogConfig::S3 {
+pub(crate) fn create_s3_catalog_config(warehouse_uri: &str) -> CatalogConfig {
+    let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
+    CatalogConfig::S3 {
         access_key_id: MINIO_ACCESS_KEY_ID.to_string(),
         secret_access_key: MINIO_SECRET_ACCESS_KEY.to_string(),
         region: "auto".to_string(), // minio doesn't care about region.
         bucket: bucket.to_string(),
         endpoint: MINIO_ENDPOINT.to_string(),
-    };
+    }
+}
+
+/// Create a S3 catalog, which communicates with local minio server.
+#[allow(dead_code)]
+pub(crate) fn create_minio_s3_catalog(warehouse_uri: &str) -> FileCatalog {
+    let catalog_config = create_s3_catalog_config(warehouse_uri);
     FileCatalog::new(warehouse_uri.to_string(), catalog_config).unwrap()
 }
 

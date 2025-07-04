@@ -1,6 +1,7 @@
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
 use crate::storage::iceberg::object_storage_test_utils::*;
 
+use iceberg::Catalog;
 use rand::Rng;
 
 /// Fake GCS related constants.
@@ -13,14 +14,17 @@ pub(crate) static GCS_TEST_WAREHOUSE_URI_PREFIX: &str = "gs://test-gcs-warehouse
 pub(crate) static GCS_ENDPOINT: &str = "http://gcs.local:4443";
 
 #[allow(dead_code)]
-pub(crate) fn create_gcs_catalog(bucket: &str, warehouse_uri: &str) -> FileCatalog {
-
-    println!("test: bucket {} warehouse {}", bucket, warehouse_uri);
-
-    let catalog_config = CatalogConfig::GCS {
+pub(crate) fn create_gcs_catalog_config(warehouse_uri: &str) -> CatalogConfig {
+    let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
+    CatalogConfig::GCS {
         bucket: bucket.to_string(),
         endpoint: GCS_ENDPOINT.to_string(),
-    };
+    }
+}
+
+#[allow(dead_code)]
+pub(crate) fn create_gcs_catalog(warehouse_uri: &str) -> FileCatalog {
+    let catalog_config = create_gcs_catalog_config(warehouse_uri);
     FileCatalog::new(warehouse_uri.to_string(), catalog_config).unwrap()
 }
 
@@ -70,9 +74,6 @@ pub(crate) mod object_store_test_utils {
             .post(&url)
             .json(&serde_json::json!({ "name": *bucket }))
             .send().await?;
-        
-        println!("create bucket {} bucket {}", url, *bucket);
-
         if res.status() != StatusCode::OK {
             return Err(IcebergError::new(
                 iceberg::ErrorKind::Unexpected,
