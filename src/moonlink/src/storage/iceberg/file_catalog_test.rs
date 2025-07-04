@@ -1,23 +1,22 @@
 use crate::storage::iceberg::catalog_test_utils;
+use crate::storage::iceberg::file_catalog::NAMESPACE_INDICATOR_OBJECT_NAME;
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
 use crate::storage::iceberg::file_catalog_test_utils::*;
-#[cfg(feature = "storage-s3")]
-use crate::storage::iceberg::s3_test_utils;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
-use crate::storage::iceberg::file_catalog::NAMESPACE_INDICATOR_OBJECT_NAME;
+#[cfg(feature = "storage-s3")]
+use crate::storage::iceberg::s3_test_utils;
 
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::TempDir;
 
-use iceberg::{
-    Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent, TableUpdate,
-};
-use iceberg::{Error as IcebergError, TableRequirement};
 use iceberg::spec::{SnapshotReference, SnapshotRetention, MAIN_BRANCH};
 use iceberg::Result as IcebergResult;
+use iceberg::{
+    Catalog, NamespaceIdent, TableCommit, TableCreation, TableIdent, TableRequirement, TableUpdate,
+};
 use uuid::Uuid;
 
 /// Test util function to get subdirectories and folders under the given folder.
@@ -92,7 +91,10 @@ async fn create_s3_catalog() -> FileCatalog {
 async fn create_gcs_catalog() -> FileCatalog {
     let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
 
-    println!("bucket name = {}, warehpuse = {}", bucket_name, warehouse_uri);
+    println!(
+        "bucket name = {}, warehpuse = {}",
+        bucket_name, warehouse_uri
+    );
 
     gcs_test_utils::object_store_test_utils::create_test_gcs_bucket(bucket_name.clone())
         .await

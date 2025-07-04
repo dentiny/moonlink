@@ -44,10 +44,9 @@ use iceberg::table::Table as IcebergTable;
 use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::writer::file_writer::location_generator::DefaultLocationGenerator;
 use iceberg::writer::file_writer::location_generator::LocationGenerator;
-use iceberg::{Catalog, Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableIdent};
+use iceberg::{Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableIdent};
 use tokio_retry2::strategy::{jitter, ExponentialBackoff};
 use tokio_retry2::{Retry, RetryError};
-use typed_builder::TypedBuilder;
 use uuid::Uuid;
 
 /// Key for iceberg table property, to record flush lsn.

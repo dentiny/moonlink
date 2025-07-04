@@ -3,11 +3,11 @@ use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
 };
-use crate::storage::iceberg::utils::to_iceberg_error;
 use crate::storage::iceberg::utils;
+#[cfg(feature = "storage-gcs")]
+use futures::TryStreamExt;
 
 use futures::future::join_all;
-use futures::TryStreamExt;
 use std::collections::{HashMap, HashSet};
 /// This module contains the file-based catalog implementation, which relies on version hint file to decide current version snapshot.
 /// Dispite a few limitation (i.e. atomic rename for local filesystem), it's not a problem for moonlink, which guarantees at most one writer at the same time (for nows).
@@ -40,7 +40,7 @@ use std::path::PathBuf;
 use std::vec;
 
 use async_trait::async_trait;
-use iceberg::io::{FileIO, FileIOBuilder};
+use iceberg::io::FileIO;
 use iceberg::puffin::PuffinWriter;
 use iceberg::spec::{TableMetadata, TableMetadataBuilder};
 use iceberg::table::Table;
@@ -77,8 +77,10 @@ pub enum CatalogConfig {
     },
     #[cfg(feature = "storage-gcs")]
     GCS {
+        project: String,
         bucket: String,
         endpoint: String,
+        disable_auth: bool,
     },
 }
 
@@ -145,17 +147,22 @@ impl FileCatalog {
                         Ok(op)
                     }
                     #[cfg(feature = "storage-gcs")]
-                    CatalogConfig::GCS { 
+                    CatalogConfig::GCS {
                         bucket,
-                        endpoint, 
+                        endpoint,
+                        disable_auth,
+                        ..
                     } => {
-                        let builder = services::Gcs::default()
+                        let mut builder = services::Gcs::default()
                             .root("/")
                             .bucket(bucket)
-                            .endpoint(endpoint)
-                            .disable_config_load()
-                            .disable_vm_metadata()
-                            .allow_anonymous();
+                            .endpoint(endpoint);
+                        if *disable_auth {
+                            builder = builder
+                                .disable_config_load()
+                                .disable_vm_metadata()
+                                .allow_anonymous();
+                        }
                         let op = Operator::new(builder)
                             .expect("failed to create gcs operator")
                             .layer(retry_layer)
@@ -251,16 +258,13 @@ impl FileCatalog {
         content: &str,
     ) -> Result<(), Box<dyn Error>> {
         let data = content.as_bytes().to_vec();
-        let operator = self.get_operator()
-            .await?;
-        operator.write(object_filepath, data)
-            .await
-            .map_err(|e| {
-                IcebergError::new(
-                    iceberg::ErrorKind::Unexpected,
-                    format!("Failed to write content: {}", e),
-                )
-            })?;
+        let operator = self.get_operator().await?;
+        operator.write(object_filepath, data).await.map_err(|e| {
+            IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!("Failed to write content: {}", e),
+            )
+        })?;
         Ok(())
     }
 
@@ -273,11 +277,11 @@ impl FileCatalog {
         } else {
             format!("{}/", directory)
         };
-    
+
         let operator = self.get_operator().await?;
         let mut lister = operator.lister(&path).await?;
         let mut entries = Vec::new();
-        
+
         while let Some(entry) = lister.try_next().await? {
             // List operation returns target path.
             if entry.path() != path {
@@ -294,11 +298,11 @@ impl FileCatalog {
                 operator.delete(&entry_path).await?;
             }
         }
-    
+
         if !path.is_empty() && path != "/" {
             operator.remove_all(&path).await?;
         }
-    
+
         Ok(())
     }
 
@@ -684,12 +688,12 @@ impl Catalog for FileCatalog {
     /// Drop a table from the catalog.
     async fn drop_table(&self, table: &TableIdent) -> IcebergResult<()> {
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
-        self.remove_directory(&directory)
-            .await
-            .map_err(|e| IcebergError::new(
-                iceberg::ErrorKind::Unexpected, 
+        self.remove_directory(&directory).await.map_err(|e| {
+            IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
                 format!("Failed to delete directory {}: {:?}", directory, e),
-            ))?;
+            )
+        })?;
         Ok(())
     }
 
@@ -703,10 +707,15 @@ impl Catalog for FileCatalog {
         let exists = self
             .object_exists(version_hint_filepath.to_str().unwrap())
             .await
-            .map_err(|e| IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to check version hint file existencee {:?}: {:?}", version_hint_filepath, e),
-            ))?;
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to check version hint file existencee {:?}: {:?}",
+                        version_hint_filepath, e
+                    ),
+                )
+            })?;
         Ok(exists)
     }
 
@@ -765,10 +774,15 @@ impl Catalog for FileCatalog {
         let version_hint_path = format!("{}/version-hint.text", metadata_directory);
         self.write_object(&version_hint_path, &format!("{version}"))
             .await
-            .map_err(|e| IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to write version hint file existencee {}: {:?}", version_hint_path, e),
-            ))?;
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to write version hint file existencee {}: {:?}",
+                        version_hint_path, e
+                    ),
+                )
+            })?;
 
         Table::builder()
             .identifier(commit.identifier().clone())

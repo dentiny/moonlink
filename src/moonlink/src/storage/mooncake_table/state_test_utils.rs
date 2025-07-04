@@ -157,7 +157,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_compaction(
             new_data_file_count: 0,
             ..Default::default()
         },
-    // Trigger compaction as long as there're two data files.
+        // Trigger compaction as long as there're two data files.
         data_compaction_config: DataCompactionConfig {
             data_file_final_size: u64::MAX,
             data_file_to_compact: 2,

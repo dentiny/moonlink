@@ -3,12 +3,12 @@ use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::file_catalog::CatalogConfig;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
-#[cfg(feature = "storage-gcs")]
-use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
@@ -113,33 +113,33 @@ fn test_row_3() -> MoonlinkRow {
 /// Test util function to create iceberg table config.
 fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
     let catalog_config = if warehouse_uri.starts_with("s3://") {
-            #[cfg(feature = "storage-s3")]
-            {
-                s3_test_utils::create_s3_catalog_config(&warehouse_uri)
-            }
-    
-            #[cfg(not(feature = "storage-s3"))]
-            {
-                panic!("S3 support not enabled. Enable `storage-s3` feature.");
-            }
-        } else if warehouse_uri.starts_with("gs://") {
-            #[cfg(feature = "storage-gcs")]
-            {
-                gcs_test_utils::create_gcs_catalog_config(&warehouse_uri)
-            }
-    
-            #[cfg(not(feature = "storage-gcs"))]
-            {
-                panic!("GCS support not enabled. Enable `storage-gcs` feature.");
-            }
-        } else {
-            CatalogConfig::FileSystem
-        };
+        #[cfg(feature = "storage-s3")]
+        {
+            s3_test_utils::create_s3_catalog_config(&warehouse_uri)
+        }
+
+        #[cfg(not(feature = "storage-s3"))]
+        {
+            panic!("S3 support not enabled. Enable `storage-s3` feature.");
+        }
+    } else if warehouse_uri.starts_with("gs://") {
+        #[cfg(feature = "storage-gcs")]
+        {
+            gcs_test_utils::create_gcs_catalog_config(&warehouse_uri)
+        }
+
+        #[cfg(not(feature = "storage-gcs"))]
+        {
+            panic!("GCS support not enabled. Enable `storage-gcs` feature.");
+        }
+    } else {
+        CatalogConfig::FileSystem
+    };
 
     IcebergTableConfig {
         warehouse_uri,
-       catalog_config,
-       ..Default::default()
+        catalog_config,
+        ..Default::default()
     }
 }
 

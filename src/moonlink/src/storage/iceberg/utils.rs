@@ -1,10 +1,10 @@
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
+#[cfg(feature = "storage-gcs")]
+use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::parquet_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
-#[cfg(feature = "storage-gcs")]
-use crate::storage::iceberg::gcs_test_utils::{self, GCS_ENDPOINT};
 use crate::storage::iceberg::table_property;
 
 use std::collections::HashMap;
@@ -84,15 +84,18 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     #[cfg(feature = "storage-gcs")]
     {
         if warehouse_uri.starts_with(gcs_test_utils::GCS_TEST_WAREHOUSE_URI_PREFIX) {
-
             // let (test_bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-            
+
             let test_bucket = gcs_test_utils::get_test_gcs_bucket(warehouse_uri);
-            println!("test bucket: {}, warehouse uri: {} -- {:?}:{:?}", test_bucket, warehouse_uri, file!(), line!());
-            
-            return Ok(Box::new(gcs_test_utils::create_gcs_catalog(
-                &warehouse_uri,
-            )));
+            println!(
+                "test bucket: {}, warehouse uri: {} -- {:?}:{:?}",
+                test_bucket,
+                warehouse_uri,
+                file!(),
+                line!()
+            );
+
+            return Ok(Box::new(gcs_test_utils::create_gcs_catalog(&warehouse_uri)));
         }
     }
 
@@ -204,15 +207,18 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
 }
 
 /// Copy source filepath to destination filepath.
-async fn copy_from_local_to_remote(src: &str, dst: &str, catalog_config: &CatalogConfig) -> IcebergResult<()> {
-
+async fn copy_from_local_to_remote(
+    src: &str,
+    dst: &str,
+    catalog_config: &CatalogConfig,
+) -> IcebergResult<()> {
     println!("copy {} to {}", src, dst);
 
     let src = FileIOBuilder::new_fs_io().build()?.new_input(src)?;
 
     println!("src input file done");
 
-    let dst =  create_output_file(catalog_config, dst)?;
+    let dst = create_output_file(catalog_config, dst)?;
 
     println!("dst input file done");
 
@@ -254,14 +260,6 @@ pub(crate) async fn write_record_batch_to_iceberg(
     Ok(data_file)
 }
 
-/// Get URL scheme for the given path.
-fn get_url_scheme(url: &str) -> String {
-    let url = Url::parse(url)
-        .or_else(|_| Url::from_file_path(url))
-        .unwrap_or_else(|_| panic!("Cannot get URL scheme from {:?}", url));
-    url.scheme().to_string()
-}
-
 /// Copy the given local index file to iceberg table, and return filepath within iceberg table.
 pub(crate) async fn upload_index_file(
     table: &IcebergTable,
@@ -287,15 +285,22 @@ pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
         CatalogConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
         #[cfg(feature = "storage-gcs")]
         CatalogConfig::GCS {
-            bucket,
+            project,
             endpoint,
-        } => FileIOBuilder::new("GCS")
-            .with_prop("gcs.project-id", "fake-project")
-            .with_prop("gcs.no-auth", "true")
-            .with_prop("gcs.allow-anonymous", "true")
-            .with_prop("gcs.disable-config-load", "true")
-            .with_prop("gcs.service.path", GCS_ENDPOINT)
-            .build(),
+            disable_auth,
+            ..
+        } => {
+            let mut file_io_builder = FileIOBuilder::new("GCS")
+                .with_prop(iceberg::io::GCS_PROJECT_ID, project)
+                .with_prop(iceberg::io::GCS_SERVICE_PATH, endpoint);
+            if *disable_auth {
+                file_io_builder = file_io_builder
+                    .with_prop(iceberg::io::GCS_NO_AUTH, "true")
+                    .with_prop(iceberg::io::GCS_ALLOW_ANONYMOUS, "true")
+                    .with_prop(iceberg::io::GCS_DISABLE_CONFIG_LOAD, "true");
+            }
+            file_io_builder.build()
+        }
         #[cfg(feature = "storage-s3")]
         CatalogConfig::S3 {
             access_key_id,
@@ -322,12 +327,13 @@ pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergRe
 
     Ok(match config {
         #[cfg(feature = "storage-fs")]
-        CatalogConfig::FileSystem => {
-            file_io.new_output(dst)?
-        }
+        CatalogConfig::FileSystem => file_io.new_output(dst)?,
         #[cfg(feature = "storage-s3")]
         CatalogConfig::S3 { bucket, .. } => {
-            let relative = dst.strip_prefix(&format!("s3://{}/", bucket)).unwrap().to_string();
+            let relative = dst
+                .strip_prefix(&format!("s3://{}/", bucket))
+                .unwrap()
+                .to_string();
 
             println!("relative = {}", relative);
 
@@ -335,10 +341,12 @@ pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergRe
         }
         #[cfg(feature = "storage-gcs")]
         CatalogConfig::GCS { bucket, .. } => {
-
             println!("dst = {}, bucket = {}", dst, bucket);
 
-            let relative: String = dst.strip_prefix(&format!("gs://{}/", bucket)).unwrap().to_string();
+            let relative: String = dst
+                .strip_prefix(&format!("gs://{}/", bucket))
+                .unwrap()
+                .to_string();
 
             println!("relative = {}", relative);
 
@@ -350,16 +358,4 @@ pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergRe
 /// Util function to convert the given error to iceberg "unexpected" error.
 pub(crate) fn to_iceberg_error<E: std::fmt::Debug>(err: E) -> IcebergError {
     IcebergError::new(iceberg::ErrorKind::Unexpected, format!("Error: {:?}", err))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_get_url_scheme() {
-        assert_eq!(get_url_scheme("/tmp/iceberg_table"), "file");
-        assert_eq!(get_url_scheme("file:///tmp/iceberg_table"), "file");
-        assert_eq!(get_url_scheme("s3://bucket/iceberg_table"), "s3");
-    }
 }

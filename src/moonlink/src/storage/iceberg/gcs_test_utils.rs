@@ -1,7 +1,6 @@
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
 use crate::storage::iceberg::object_storage_test_utils::*;
 
-use iceberg::Catalog;
 use rand::Rng;
 
 /// Fake GCS related constants.
@@ -11,14 +10,18 @@ pub(crate) static GCS_TEST_BUCKET_PREFIX: &str = "test-gcs-warehouse-";
 #[allow(dead_code)]
 pub(crate) static GCS_TEST_WAREHOUSE_URI_PREFIX: &str = "gs://test-gcs-warehouse-";
 #[allow(dead_code)]
-pub(crate) static GCS_ENDPOINT: &str = "http://gcs.local:4443";
+pub(crate) static GCS_TEST_ENDPOINT: &str = "http://gcs.local:4443";
+#[allow(dead_code)]
+pub(crate) static GCS_TEST_PROJECT: &str = "fake-project";
 
 #[allow(dead_code)]
 pub(crate) fn create_gcs_catalog_config(warehouse_uri: &str) -> CatalogConfig {
     let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
     CatalogConfig::GCS {
         bucket: bucket.to_string(),
-        endpoint: GCS_ENDPOINT.to_string(),
+        endpoint: GCS_TEST_ENDPOINT.to_string(),
+        disable_auth: true,
+        project: GCS_TEST_PROJECT.to_string(),
     }
 }
 
@@ -69,11 +72,15 @@ pub(crate) mod object_store_test_utils {
 
     async fn create_gcs_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
         let client = reqwest::Client::new();
-        let url = format!("{}/storage/v1/b?project=fake-project", GCS_ENDPOINT);
+        let url = format!(
+            "{}/storage/v1/b?project={}",
+            GCS_TEST_ENDPOINT, GCS_TEST_PROJECT
+        );
         let res = client
             .post(&url)
             .json(&serde_json::json!({ "name": *bucket }))
-            .send().await?;
+            .send()
+            .await?;
         if res.status() != StatusCode::OK {
             return Err(IcebergError::new(
                 iceberg::ErrorKind::Unexpected,
@@ -89,11 +96,14 @@ pub(crate) mod object_store_test_utils {
 
     async fn delete_gcs_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
         let client = reqwest::Client::new();
-        let url = format!("{}/storage/v1/b/{}", GCS_ENDPOINT, bucket);
+        let url = format!("{}/storage/v1/b/{}", GCS_TEST_ENDPOINT, bucket);
         let res = client.delete(&url).send().await.map_err(|e| {
             IcebergError::new(
                 iceberg::ErrorKind::Unexpected,
-                format!("Failed to delete bucket {} in fake-gcs-server: {}", bucket, e),
+                format!(
+                    "Failed to delete bucket {} in fake-gcs-server: {}",
+                    bucket, e
+                ),
             )
         })?;
 
