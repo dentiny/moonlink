@@ -1,8 +1,6 @@
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
 use crate::storage::iceberg::object_storage_test_utils::*;
 
-use rand::Rng;
-
 /// Fake GCS related constants.
 ///
 #[allow(dead_code)]
@@ -43,19 +41,7 @@ pub(crate) fn get_test_gcs_bucket(warehouse_uri: &str) -> String {
 
 #[allow(dead_code)]
 pub(crate) fn get_test_gcs_bucket_and_warehouse() -> (String /*bucket*/, String /*warehouse_uri*/) {
-    const TEST_BUCKET_NAME_LEN: usize = 12;
-    const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-";
-    let mut rng = rand::rng();
-    let random_string: String = (0..TEST_BUCKET_NAME_LEN)
-        .map(|_| {
-            let idx = rng.random_range(0..ALLOWED_CHARS.len());
-            ALLOWED_CHARS[idx] as char
-        })
-        .collect();
-    (
-        format!("{}{}", GCS_TEST_BUCKET_PREFIX, random_string),
-        format!("{}{}", GCS_TEST_WAREHOUSE_URI_PREFIX, random_string),
-    )
+    get_bucket_and_warehouse(GCS_TEST_BUCKET_PREFIX, GCS_TEST_WAREHOUSE_URI_PREFIX)
 }
 
 #[cfg(test)]

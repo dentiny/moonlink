@@ -3,8 +3,8 @@
 pub(crate) const TEST_RETRY_COUNT: usize = 2;
 #[allow(dead_code)]
 pub(crate) const TEST_RETRY_INIT_MILLISEC: u64 = 100;
-#[allow(dead_code)]
-pub(crate) const TEST_BUCKET_NAME_LEN: usize = 10;
+
+use rand::Rng;
 
 /// Get object storage bucket name from warehouse uri.
 pub(crate) fn get_bucket_from_warehouse_uri(warehouse_uri: &str) -> String {
@@ -22,6 +22,26 @@ pub(crate) fn get_bucket_from_warehouse_uri(warehouse_uri: &str) -> String {
         .and_then(|rest| rest.split('/').next())
         .unwrap_or_default()
         .to_string()
+}
+
+/// Create bucket and warehouse.
+pub(crate) fn get_bucket_and_warehouse(
+    bucket_prefix: &str,
+    warehouse_uri_prefix: &str,
+) -> (String /*bucket_name*/, String /*warehouse_url*/) {
+    const TEST_BUCKET_NAME_LEN: usize = 15;
+    const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = rand::rng();
+    let random_string: String = (0..TEST_BUCKET_NAME_LEN)
+        .map(|_| {
+            let idx = rng.random_range(0..ALLOWED_CHARS.len());
+            ALLOWED_CHARS[idx] as char
+        })
+        .collect();
+    (
+        format!("{}{}", bucket_prefix, random_string),
+        format!("{}{}", warehouse_uri_prefix, random_string),
+    )
 }
 
 #[cfg(test)]

@@ -61,7 +61,7 @@ pub(super) const NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
 static MIN_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(10);
 static RETRY_DELAY_FACTOR: f32 = 1.5;
-static MAX_RETRY_COUNT: usize = 2;
+static MAX_RETRY_COUNT: usize = 5;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum CatalogConfig {
@@ -269,6 +269,8 @@ impl FileCatalog {
     }
 
     /// Remove the whole directory.
+    ///
+    /// TODO(hjiang): Check whether we could unify the implementation with [`remove_directory`].
     #[tracing::instrument(name = "remove_directory", skip_all)]
     #[cfg(feature = "storage-gcs")]
     async fn remove_directory(&self, directory: &str) -> Result<(), Box<dyn Error>> {

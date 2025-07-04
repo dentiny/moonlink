@@ -2,32 +2,30 @@
 use crate::storage::iceberg::file_catalog::{CatalogConfig, FileCatalog};
 use crate::storage::iceberg::object_storage_test_utils::*;
 
-use rand::Rng;
-
 /// Minio related constants.
 ///
 /// Local minio warehouse needs special handling, so we simply prefix with special token.
 #[allow(dead_code)]
-pub(crate) static MINIO_TEST_BUCKET_PREFIX: &str = "test-minio-warehouse-";
+pub(crate) static S3_TEST_BUCKET_PREFIX: &str = "test-minio-warehouse-";
 #[allow(dead_code)]
-pub(crate) static MINIO_TEST_WAREHOUSE_URI_PREFIX: &str = "s3://test-minio-warehouse-";
+pub(crate) static S3_TEST_WAREHOUSE_URI_PREFIX: &str = "s3://test-minio-warehouse-";
 #[allow(dead_code)]
-pub(crate) static MINIO_ACCESS_KEY_ID: &str = "minioadmin";
+pub(crate) static S3_TEST_ACCESS_KEY_ID: &str = "minioadmin";
 #[allow(dead_code)]
-pub(crate) static MINIO_SECRET_ACCESS_KEY: &str = "minioadmin";
+pub(crate) static S3_TEST_SECRET_ACCESS_KEY: &str = "minioadmin";
 #[allow(dead_code)]
-pub(crate) static MINIO_ENDPOINT: &str = "http://minio:9000";
+pub(crate) static S3_TEST_ENDPOINT: &str = "http://minio:9000";
 
 /// Create a S3 catalog config.
 #[allow(dead_code)]
 pub(crate) fn create_s3_catalog_config(warehouse_uri: &str) -> CatalogConfig {
     let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
     CatalogConfig::S3 {
-        access_key_id: MINIO_ACCESS_KEY_ID.to_string(),
-        secret_access_key: MINIO_SECRET_ACCESS_KEY.to_string(),
+        access_key_id: S3_TEST_ACCESS_KEY_ID.to_string(),
+        secret_access_key: S3_TEST_SECRET_ACCESS_KEY.to_string(),
         region: "auto".to_string(), // minio doesn't care about region.
         bucket: bucket.to_string(),
-        endpoint: MINIO_ENDPOINT.to_string(),
+        endpoint: S3_TEST_ENDPOINT.to_string(),
     }
 }
 
@@ -41,29 +39,16 @@ pub(crate) fn create_minio_s3_catalog(warehouse_uri: &str) -> FileCatalog {
 #[allow(dead_code)]
 pub(crate) fn get_test_s3_bucket_and_warehouse(
 ) -> (String /*bucket_name*/, String /*warehouse_url*/) {
-    // minio bucket name only allows lowercase case letters, digits and hyphen.
-    const TEST_BUCKET_NAME_LEN: usize = 12;
-    const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-";
-    let mut rng = rand::rng();
-    let random_string: String = (0..TEST_BUCKET_NAME_LEN)
-        .map(|_| {
-            let idx = rng.random_range(0..ALLOWED_CHARS.len());
-            ALLOWED_CHARS[idx] as char
-        })
-        .collect();
-    (
-        format!("{}{}", MINIO_TEST_BUCKET_PREFIX, random_string),
-        format!("{}{}", MINIO_TEST_WAREHOUSE_URI_PREFIX, random_string),
-    )
+    get_bucket_and_warehouse(S3_TEST_BUCKET_PREFIX, S3_TEST_WAREHOUSE_URI_PREFIX)
 }
 
 #[allow(dead_code)]
 pub(crate) fn get_test_minio_bucket(warehouse_uri: &str) -> String {
     let random_string = warehouse_uri
-        .strip_prefix(MINIO_TEST_WAREHOUSE_URI_PREFIX)
+        .strip_prefix(S3_TEST_WAREHOUSE_URI_PREFIX)
         .unwrap()
         .to_string();
-    format!("{}{}", MINIO_TEST_BUCKET_PREFIX, random_string)
+    format!("{}{}", S3_TEST_BUCKET_PREFIX, random_string)
 }
 
 #[cfg(test)]
@@ -92,12 +77,12 @@ pub(crate) mod object_store_test_utils {
         let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
         let string_to_sign = format!("PUT\n\n\n{}\n/{}", date, bucket);
 
-        let mut mac = HmacSha1::new_from_slice(MINIO_SECRET_ACCESS_KEY.as_bytes()).unwrap();
+        let mut mac = HmacSha1::new_from_slice(S3_TEST_SECRET_ACCESS_KEY.as_bytes()).unwrap();
         mac.update(string_to_sign.as_bytes());
         let signature = base64.encode(mac.finalize().into_bytes());
 
-        let auth_header = format!("AWS {}:{}", MINIO_ACCESS_KEY_ID, signature);
-        let url = format!("{}/{}", MINIO_ENDPOINT, bucket);
+        let auth_header = format!("AWS {}:{}", S3_TEST_ACCESS_KEY_ID, signature);
+        let url = format!("{}/{}", S3_TEST_ENDPOINT, bucket);
         let client = reqwest::Client::new();
         client
             .put(&url)
@@ -141,11 +126,11 @@ pub(crate) mod object_store_test_utils {
         let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
         let string_to_sign = format!("DELETE\n\n\n{}\n/{}", date, bucket);
 
-        let mut mac = HmacSha1::new_from_slice(MINIO_SECRET_ACCESS_KEY.as_bytes()).unwrap();
+        let mut mac = HmacSha1::new_from_slice(S3_TEST_SECRET_ACCESS_KEY.as_bytes()).unwrap();
         mac.update(string_to_sign.as_bytes());
         let signature = base64.encode(mac.finalize().into_bytes());
-        let auth_header = format!("AWS {}:{}", MINIO_ACCESS_KEY_ID, signature);
-        let url = format!("{}/{}", MINIO_ENDPOINT, bucket);
+        let auth_header = format!("AWS {}:{}", S3_TEST_ACCESS_KEY_ID, signature);
+        let url = format!("{}/{}", S3_TEST_ENDPOINT, bucket);
 
         let client = reqwest::Client::new();
         client

@@ -117,7 +117,6 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
         {
             s3_test_utils::create_s3_catalog_config(&warehouse_uri)
         }
-
         #[cfg(not(feature = "storage-s3"))]
         {
             panic!("S3 support not enabled. Enable `storage-s3` feature.");
@@ -127,7 +126,6 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
         {
             gcs_test_utils::create_gcs_catalog_config(&warehouse_uri)
         }
-
         #[cfg(not(feature = "storage-gcs"))]
         {
             panic!("GCS support not enabled. Enable `storage-gcs` feature.");

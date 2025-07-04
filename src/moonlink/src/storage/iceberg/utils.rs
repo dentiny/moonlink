@@ -75,7 +75,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     // Special handle testing situation.
     #[cfg(feature = "storage-s3")]
     {
-        if warehouse_uri.starts_with(s3_test_utils::MINIO_TEST_WAREHOUSE_URI_PREFIX) {
+        if warehouse_uri.starts_with(s3_test_utils::S3_TEST_WAREHOUSE_URI_PREFIX) {
             return Ok(Box::new(s3_test_utils::create_minio_s3_catalog(
                 warehouse_uri,
             )));
@@ -84,17 +84,6 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     #[cfg(feature = "storage-gcs")]
     {
         if warehouse_uri.starts_with(gcs_test_utils::GCS_TEST_WAREHOUSE_URI_PREFIX) {
-            // let (test_bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-
-            let test_bucket = gcs_test_utils::get_test_gcs_bucket(warehouse_uri);
-            println!(
-                "test bucket: {}, warehouse uri: {} -- {:?}:{:?}",
-                test_bucket,
-                warehouse_uri,
-                file!(),
-                line!()
-            );
-
             return Ok(Box::new(gcs_test_utils::create_gcs_catalog(warehouse_uri)));
         }
     }
@@ -207,26 +196,19 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
 }
 
 /// Copy source filepath to destination filepath.
+///
+/// TODO(hjiang): Extract into filesystem utils.
 async fn copy_from_local_to_remote(
     src: &str,
     dst: &str,
     catalog_config: &CatalogConfig,
 ) -> IcebergResult<()> {
-    println!("copy {} to {}", src, dst);
-
     let src = FileIOBuilder::new_fs_io().build()?.new_input(src)?;
-
-    println!("src input file done");
-
     let dst = create_output_file(catalog_config, dst)?;
-
-    println!("dst input file done");
 
     // TODO(hjiang): Switch to parallel chunk-based reading if source file large.
     let bytes = src.read().await?;
     dst.write(bytes).await?;
-
-    println!("copy over");
 
     Ok(())
 }
@@ -319,40 +301,9 @@ pub(crate) fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
 
 /// Create output file.
 pub(crate) fn create_output_file(config: &CatalogConfig, dst: &str) -> IcebergResult<OutputFile> {
-    println!("before create file io for outout fiel");
-
     let file_io = create_file_io(config)?;
-
-    println!("after create file io for outout fiel");
-
-    Ok(match config {
-        #[cfg(feature = "storage-fs")]
-        CatalogConfig::FileSystem => file_io.new_output(dst)?,
-        #[cfg(feature = "storage-s3")]
-        CatalogConfig::S3 { bucket, .. } => {
-            let relative = dst
-                .strip_prefix(&format!("s3://{}/", bucket))
-                .unwrap()
-                .to_string();
-
-            println!("relative = {}", relative);
-
-            file_io.new_output(dst)?
-        }
-        #[cfg(feature = "storage-gcs")]
-        CatalogConfig::Gcs { bucket, .. } => {
-            println!("dst = {}, bucket = {}", dst, bucket);
-
-            let relative: String = dst
-                .strip_prefix(&format!("gs://{}/", bucket))
-                .unwrap()
-                .to_string();
-
-            println!("relative = {}", relative);
-
-            file_io.new_output(dst)?
-        }
-    })
+    // [`new_output`] requires input to start with schema.
+    Ok(file_io.new_output(dst)?)
 }
 
 /// Util function to convert the given error to iceberg "unexpected" error.
