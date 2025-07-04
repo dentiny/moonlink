@@ -294,12 +294,12 @@ impl TableHandler {
 
                             if force_snapshot {
                                 reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
-                                table.create_snapshot(SnapshotOption {
+                                assert!(table.create_snapshot(SnapshotOption {
                                     force_create: true,
                                     skip_iceberg_snapshot: iceberg_snapshot_ongoing,
                                     skip_file_indices_merge: maintainance_ongoing,
                                     skip_data_file_compaction: maintainance_ongoing,
-                                });
+                                }));
                                 mooncake_snapshot_ongoing = true;
                             }
                         }
@@ -369,6 +369,15 @@ impl TableHandler {
                             if let Err(e) = table.finish_initial_copy().await {
                                 warn!(error = %e, "failed to finish initial copy");
                             }
+
+                            // Force create the snapshot with LSN 0
+                            assert!(table.create_snapshot(SnapshotOption {
+                                force_create: true,
+                                skip_iceberg_snapshot: true,
+                                skip_file_indices_merge: true,
+                                skip_data_file_compaction: true,
+                            }));
+                            mooncake_snapshot_ongoing = true;
                         }
                         // ==============================
                         // Table internal events
@@ -483,12 +492,12 @@ impl TableHandler {
                         if let Some(commit_lsn) = table_consistent_view_lsn {
                             table.flush(commit_lsn).await.unwrap();
                             reset_iceberg_state_at_mooncake_snapshot(&mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing);
-                            table.create_snapshot(SnapshotOption {
+                            assert!(table.create_snapshot(SnapshotOption {
                                 force_create: true,
                                 skip_iceberg_snapshot: iceberg_snapshot_ongoing,
                                 skip_file_indices_merge: maintainance_ongoing,
                                 skip_data_file_compaction: maintainance_ongoing,
-                            });
+                            }));
                             mooncake_snapshot_ongoing = true;
                             continue;
                         }

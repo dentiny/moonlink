@@ -807,6 +807,7 @@ impl MooncakeTable {
     }
 
     /// If a mooncake snapshot is not going to be created, return false immediately.
+    #[must_use]
     pub fn create_snapshot(&mut self, opt: SnapshotOption) -> bool {
         if !self.next_snapshot_task.should_create_snapshot() && !opt.force_create {
             return false;
@@ -915,16 +916,8 @@ impl MooncakeTable {
         self.in_initial_copy = false;
         // Second: apply all buffered streaming transaction commits
         for commit in commits {
-            let _ = self.commit_transaction_stream(commit).await;
+            self.commit_transaction_stream(commit).await?;
         }
-
-        // Force create the snapshot with LSN 0
-        self.create_snapshot(SnapshotOption {
-            force_create: true,
-            skip_iceberg_snapshot: true,
-            skip_file_indices_merge: true,
-            skip_data_file_compaction: true,
-        });
 
         Ok(())
     }
