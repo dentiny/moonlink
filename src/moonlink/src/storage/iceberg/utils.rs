@@ -1,11 +1,15 @@
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::gcs_test_utils;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::iceberg::file_catalog::FileCatalog;
 #[cfg(feature = "storage-gcs")]
-use crate::storage::iceberg::gcs_test_utils;
+use crate::storage::iceberg::gcs_test_utils as iceberg_gcs_test_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::parquet_utils;
 #[cfg(feature = "storage-s3")]
-use crate::storage::iceberg::s3_test_utils;
+use crate::storage::iceberg::s3_test_utils as iceberg_s3_test_utils;
 use crate::storage::iceberg::table_property;
 
 use std::collections::HashMap;
@@ -77,7 +81,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     #[cfg(feature = "storage-s3")]
     {
         if warehouse_uri.starts_with(s3_test_utils::S3_TEST_WAREHOUSE_URI_PREFIX) {
-            return Ok(Box::new(s3_test_utils::create_minio_s3_catalog(
+            return Ok(Box::new(iceberg_s3_test_utils::create_test_s3_catalog(
                 warehouse_uri,
             )));
         }
@@ -85,7 +89,9 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
     #[cfg(feature = "storage-gcs")]
     {
         if warehouse_uri.starts_with(gcs_test_utils::GCS_TEST_WAREHOUSE_URI_PREFIX) {
-            return Ok(Box::new(gcs_test_utils::create_gcs_catalog(warehouse_uri)));
+            return Ok(Box::new(iceberg_gcs_test_utils::create_gcs_catalog(
+                warehouse_uri,
+            )));
         }
     }
 

@@ -4,11 +4,11 @@ use crate::row::RowValue;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
-use crate::storage::iceberg::gcs_test_utils;
+use crate::storage::filesystem::gcs::gcs_test_utils;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
-#[cfg(feature = "storage-s3")]
-use crate::storage::iceberg::s3_test_utils;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
@@ -115,7 +115,7 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
     let catalog_config = if warehouse_uri.starts_with("s3://") {
         #[cfg(feature = "storage-s3")]
         {
-            s3_test_utils::create_s3_catalog_config(&warehouse_uri)
+            s3_test_utils::create_s3_filesystem_config(&warehouse_uri)
         }
         #[cfg(not(feature = "storage-s3"))]
         {
@@ -124,7 +124,7 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
     } else if warehouse_uri.starts_with("gs://") {
         #[cfg(feature = "storage-gcs")]
         {
-            gcs_test_utils::create_gcs_catalog_config(&warehouse_uri)
+            gcs_test_utils::create_gcs_filesystem_config(&warehouse_uri)
         }
         #[cfg(not(feature = "storage-gcs"))]
         {
