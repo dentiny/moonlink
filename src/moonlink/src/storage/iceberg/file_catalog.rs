@@ -6,6 +6,7 @@ use crate::storage::iceberg::puffin_writer_proxy::{
 use crate::storage::iceberg::utils::to_iceberg_error;
 
 use futures::future::join_all;
+use futures::TryStreamExt;
 use std::collections::{HashMap, HashSet};
 /// This module contains the file-based catalog implementation, which relies on version hint file to decide current version snapshot.
 /// Dispite a few limitation (i.e. atomic rename for local filesystem), it's not a problem for moonlink, which guarantees at most one writer at the same time (for nows).
@@ -59,7 +60,7 @@ pub(super) const NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
 static MIN_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
 static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(10);
 static RETRY_DELAY_FACTOR: f32 = 1.5;
-static MAX_RETRY_COUNT: usize = 5;
+static MAX_RETRY_COUNT: usize = 2;
 
 #[derive(Debug)]
 pub enum CatalogConfig {
@@ -90,6 +91,10 @@ fn create_file_io(config: &CatalogConfig) -> IcebergResult<FileIO> {
             bucket,
             endpoint,
         } => FileIOBuilder::new("GCS")
+            .with_prop("gcs.project-id", "fake-project")
+            .with_prop("gcs.no-auth", "true")
+            .with_prop("gcs.allow-anonymous", "true")
+            .with_prop("gcs.disable-config-load", "true")
             .build(),
         #[cfg(feature = "storage-s3")]
         CatalogConfig::S3 {
@@ -130,6 +135,9 @@ pub struct FileCatalog {
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
     pub fn new(warehouse_location: String, config: CatalogConfig) -> IcebergResult<Self> {
+
+        println!("file catalog warehpusr = {}", warehouse_location);
+
         let file_io = create_file_io(&config)?;
         Ok(Self {
             config,
@@ -174,9 +182,15 @@ impl FileCatalog {
                         bucket,
                         endpoint, 
                     } => {
-                        let builder = services::Gcs::default();
+                        let builder = services::Gcs::default()
+                            .root("/")
+                            .bucket(bucket)
+                            .endpoint(endpoint)
+                            .disable_config_load()
+                            .disable_vm_metadata()
+                            .allow_anonymous();
                         let op = Operator::new(builder)
-                            .expect("failed to create s3 operator")
+                            .expect("failed to create gcs operator")
                             .layer(retry_layer)
                             .finish();
                         Ok(op)
@@ -270,9 +284,9 @@ impl FileCatalog {
         content: &str,
     ) -> Result<(), Box<dyn Error>> {
         let data = content.as_bytes().to_vec();
-        self.get_operator()
-            .await?
-            .write(object_filepath, data)
+        let operator = self.get_operator()
+            .await?;
+        operator.write(object_filepath, data)
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -285,6 +299,44 @@ impl FileCatalog {
 
     /// Remove the whole directory.
     #[tracing::instrument(name = "remove_directory", skip_all)]
+    #[cfg(feature = "storage-gcs")]
+    async fn remove_directory(&self, directory: &str) -> Result<(), Box<dyn Error>> {
+        let path = if directory.ends_with('/') {
+            directory.to_string()
+        } else {
+            format!("{}/", directory)
+        };
+    
+        let operator = self.get_operator().await?;
+        let mut lister = operator.lister(&path).await?;
+        let mut entries = Vec::new();
+        
+        while let Some(entry) = lister.try_next().await? {
+            // List operation returns target path.
+            if entry.path() != path {
+                entries.push(entry.path().to_string());
+            }
+        }
+        for entry_path in entries {
+            if entry_path == path {
+                continue;
+            }
+            if entry_path.ends_with('/') {
+                Box::pin(self.remove_directory(&entry_path)).await?;
+            } else {
+                operator.delete(&entry_path).await?;
+            }
+        }
+    
+        if !path.is_empty() && path != "/" {
+            operator.remove_all(&path).await?;
+        }
+    
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "remove_directory", skip_all)]
+    #[cfg(not(feature = "storage-gcs"))]
     async fn remove_directory(&self, directory: &str) -> Result<(), Box<dyn Error>> {
         let op = self.get_operator().await.unwrap().clone();
         op.remove_all(directory).await?;
@@ -664,10 +716,19 @@ impl Catalog for FileCatalog {
 
     /// Drop a table from the catalog.
     async fn drop_table(&self, table: &TableIdent) -> IcebergResult<()> {
+
+        println!("before drop table!!!");
+
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
+
+        println!("before remove directory {:?}", directory);
+
         self.remove_directory(&directory)
             .await
-            .map_err(to_iceberg_error)?;
+            .map_err(|e| IcebergError::new(
+                iceberg::ErrorKind::Unexpected, 
+                format!("Failed to delete directory {}: {:?}", directory, e),
+            ))?;
         Ok(())
     }
 
@@ -681,7 +742,10 @@ impl Catalog for FileCatalog {
         let exists = self
             .object_exists(version_hint_filepath.to_str().unwrap())
             .await
-            .map_err(to_iceberg_error)?;
+            .map_err(|e| IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!("Failed to check version hint file existencee {:?}: {:?}", version_hint_filepath, e),
+            ))?;
         Ok(exists)
     }
 
@@ -740,7 +804,10 @@ impl Catalog for FileCatalog {
         let version_hint_path = format!("{}/version-hint.text", metadata_directory);
         self.write_object(&version_hint_path, &format!("{version}"))
             .await
-            .map_err(to_iceberg_error)?;
+            .map_err(|e| IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!("Failed to write version hint file existencee {}: {:?}", version_hint_path, e),
+            ))?;
 
         Table::builder()
             .identifier(commit.identifier().clone())

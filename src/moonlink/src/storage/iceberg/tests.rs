@@ -1153,6 +1153,9 @@ async fn check_row_index_on_disk(snapshot: &Snapshot, row: &MoonlinkRow) {
 }
 
 async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
+
+    println!("waehpuse uri = {}", warehouse_uri);
+
     // For the ease of testing, we use different directories for mooncake table and iceberg warehouse uri.
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
@@ -1186,6 +1189,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     .unwrap();
     table.register_table_notify(notify_tx).await;
 
+    println!("====0 ====");
+
     // Perform a few table write operations.
     //
     // Operation series 1: append three rows, delete one of them, flush, commit and create snapshot.
@@ -1214,6 +1219,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.commit(/*flush_lsn=*/ 200);
     table.flush(/*flush_lsn=*/ 200).await.unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+
+    println!(" === 1 ===");
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1272,6 +1280,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         expected_arrow_batch, loaded_arrow_batch
     );
 
+    println!(" === 2 ===");
+
     let deleted_rows = deletion_vector.batch_deletion_vector.collect_deleted_rows();
     assert!(
         deleted_rows.is_empty(),
@@ -1319,6 +1329,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
 
+
+    println!(" === 3 ===");
+
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
         .iceberg_table
@@ -1350,6 +1363,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     table.flush(/*flush_lsn=*/ 400).await.unwrap();
     table.commit(/*flush_lsn=*/ 400);
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+
+    println!(" === 4 ===");
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1407,6 +1423,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         expected_deleted_rows, deleted_rows
     );
 
+    println!(" === 5 ===");
+
     // --------------------------------------
     // Operation series 4: append a new row, and don't delete any rows.
     // Expects to see the existing deletion vector unchanged and new data file created.
@@ -1450,6 +1468,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_row_index_on_disk(&snapshot, &row4).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
 
+    println!(" === 6 ===");
+
     let (file_in_new_snapshot, _) = snapshot
         .disk_files
         .iter()
@@ -1462,6 +1482,8 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let loaded_arrow_batch = load_arrow_batch(file_io, loaded_path.file_path().as_str())
         .await
         .unwrap();
+
+        println!(" === 7 ===");
 
     let expected_arrow_batch = RecordBatch::try_new(
         schema.clone(),

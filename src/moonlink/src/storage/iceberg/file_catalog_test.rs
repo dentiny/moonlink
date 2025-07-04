@@ -91,6 +91,9 @@ async fn create_s3_catalog() -> FileCatalog {
 #[cfg(feature = "storage-gcs")]
 async fn create_gcs_catalog() -> FileCatalog {
     let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+
+    println!("bucket name = {}, warehpuse = {}", bucket_name, warehouse_uri);
+
     gcs_test_utils::object_store_test_utils::create_test_gcs_bucket(bucket_name.clone())
         .await
         .unwrap();
@@ -399,6 +402,8 @@ async fn test_catalog_namespace_operations_s3() -> IcebergResult<()> {
 #[tokio::test]
 #[cfg(feature = "storage-gcs")]
 async fn test_catalog_namespace_operations_gcs() -> IcebergResult<()> {
+    println!("test_catalog_namespace_operations_gcs");
+
     let catalog = create_gcs_catalog().await;
     test_catalog_namespace_operations_impl(catalog).await
 }

@@ -14,6 +14,9 @@ pub(crate) static GCS_ENDPOINT: &str = "http://gcs.local:4443";
 
 #[allow(dead_code)]
 pub(crate) fn create_gcs_catalog(bucket: &str, warehouse_uri: &str) -> FileCatalog {
+
+    println!("test: bucket {} warehouse {}", bucket, warehouse_uri);
+
     let catalog_config = CatalogConfig::GCS {
         bucket: bucket.to_string(),
         endpoint: GCS_ENDPOINT.to_string(),
@@ -21,8 +24,18 @@ pub(crate) fn create_gcs_catalog(bucket: &str, warehouse_uri: &str) -> FileCatal
     FileCatalog::new(warehouse_uri.to_string(), catalog_config).unwrap()
 }
 
+/// Get GCS bucket name from the warehouse uri.
 #[allow(dead_code)]
-pub(crate) fn get_test_gcs_bucket_and_warehouse() -> (String, String) {
+pub(crate) fn get_test_gcs_bucket(warehouse_uri: &str) -> String {
+    let random_string = warehouse_uri
+        .strip_prefix(GCS_TEST_WAREHOUSE_URI_PREFIX)
+        .unwrap()
+        .to_string();
+    format!("{}{}", GCS_TEST_BUCKET_PREFIX, random_string)
+}
+
+#[allow(dead_code)]
+pub(crate) fn get_test_gcs_bucket_and_warehouse() -> (String /*bucket*/, String /*warehouse_uri*/) {
     const TEST_BUCKET_NAME_LEN: usize = 12;
     const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-";
     let mut rng = rand::rng();
@@ -52,13 +65,13 @@ pub(crate) mod object_store_test_utils {
 
     async fn create_gcs_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
         let client = reqwest::Client::new();
-        let url = format!("{}/storage/v1/b/{}", GCS_ENDPOINT, bucket);
-        let res = client.put(&url).send().await.map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to create bucket {} in fake-gcs-server: {}", bucket, e),
-            )
-        })?;
+        let url = format!("{}/storage/v1/b?project=fake-project", GCS_ENDPOINT);
+        let res = client
+            .post(&url)
+            .json(&serde_json::json!({ "name": *bucket }))
+            .send().await?;
+        
+        println!("create bucket {} bucket {}", url, *bucket);
 
         if res.status() != StatusCode::OK {
             return Err(IcebergError::new(

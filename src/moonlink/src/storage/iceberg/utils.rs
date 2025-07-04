@@ -3,6 +3,8 @@ use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::parquet_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::iceberg::s3_test_utils;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::iceberg::gcs_test_utils;
 use crate::storage::iceberg::table_property;
 
 use std::collections::HashMap;
@@ -78,6 +80,21 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
             return Ok(Box::new(s3_test_utils::create_minio_s3_catalog(
                 &test_bucket,
                 warehouse_uri,
+            )));
+        }
+    }
+    #[cfg(feature = "storage-gcs")]
+    {
+        if warehouse_uri.starts_with(gcs_test_utils::GCS_TEST_WAREHOUSE_URI_PREFIX) {
+
+            // let (test_bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+            
+            let test_bucket = gcs_test_utils::get_test_gcs_bucket(warehouse_uri);
+            println!("test bucket: {}, warehouse uri: {} -- {:?}:{:?}", test_bucket, warehouse_uri, file!(), line!());
+            
+            return Ok(Box::new(gcs_test_utils::create_gcs_catalog(
+                &test_bucket,
+                &warehouse_uri,
             )));
         }
     }
