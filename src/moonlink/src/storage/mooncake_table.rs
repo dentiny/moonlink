@@ -321,10 +321,17 @@ impl SnapshotTask {
     }
 
     pub fn should_create_snapshot(&self) -> bool {
+        // If mooncake has new transaction commits.
         self.new_commit_lsn > 0
+        // If mooncake table accumulated large enough writes.
             || !self.new_disk_slices.is_empty()
             || self.new_deletions.len()
                 >= self.mooncake_table_config.snapshot_deletion_record_count()
+            // If iceberg snapshot is already performed, update mooncake snapshot accordingly.
+            // On local filesystem, potentially we could double storage as soon as possible.
+            || !self.iceberg_persisted_records.import_result.is_empty()
+            || !self.iceberg_persisted_records.index_merge_result.is_empty()
+            || !self.iceberg_persisted_records.data_compaction_result.is_empty()
     }
 
     /// Get newly created data files, including both batch write ones and stream write ones.
