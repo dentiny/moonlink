@@ -240,14 +240,11 @@ impl TableHandler {
                                 if let Err(e) = table.append(row) {
                                     warn!(error = %e, "failed to append row");
                                 }
-                                if table.should_flush() {
-                                    if let Err(e) = table.flush(0).await {
-                                        warn!(error = %e, "flush failed in append");
-                                    }
-                                }
+                                // TODO: optimize initial copy performance; current implement would buffer everything in memory.
                                 continue;
                             }
 
+                            // If mooncake is at initial copy state, buffer all changes to stream batches, which get applied when initial copy finished.
                             let xid = xact_id.unwrap_or(INITIAL_COPY_XACT_ID);
 
                             if let Err(e) = table.append_in_stream_batch(row, xid) {

@@ -39,6 +39,10 @@ pub struct TransactionStreamCommit {
 }
 
 impl TransactionStreamCommit {
+    /// Get commit LSN.
+    pub(crate) fn get_commit_lsn(&self) -> u64 {
+        self.commit_lsn
+    }
     /// Get flushed data files for the current streaming commit.
     pub(crate) fn get_flushed_data_files(&self) -> Vec<MooncakeDataFileRef> {
         self.flushed_files.keys().cloned().collect::<Vec<_>>()
