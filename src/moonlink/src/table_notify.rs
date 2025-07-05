@@ -50,7 +50,12 @@ pub enum TableEvent {
     /// ==============================
     ///
     /// Force a mooncake and iceberg snapshot.
-    ForceSnapshot { lsn: u64, tx: Sender<Result<()>> },
+    /// - If [`lsn`] unassigned, will force snapshot on the latest committed LSN.
+    /// - If [`tx`] assigned, snapshot result will be sent back.
+    ForceSnapshot {
+        lsn: Option<u64>,
+        tx: Option<Sender<Result<()>>>,
+    },
     /// Drop table.
     DropTable,
     /// ==============================

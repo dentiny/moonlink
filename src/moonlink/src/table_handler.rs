@@ -16,6 +16,9 @@ pub struct TableHandler {
     /// Handle to periodical mooncake snapshot.
     _periodical_mooncake_snapshot_handle: JoinHandle<()>,
 
+    /// Handle to periodical force snapshot.
+    _periodical_force_snapshot_handle: JoinHandle<()>,
+
     /// Handle to the event processing task
     _event_handle: Option<JoinHandle<()>>,
 
@@ -63,6 +66,25 @@ impl TableHandler {
             }
         });
 
+        // Spawn the task to notify periodical force snapshot.
+        let event_sender_for_periodical_force_snapshot = event_sender.clone();
+        let periodic_force_snapshot_handle = tokio::spawn(async move {
+            let mut periodic_force_snapshot_interval = time::interval(Duration::from_secs(300));
+
+            loop {
+                tokio::select! {
+                    _ = periodic_force_snapshot_interval.tick() => {
+                        if let Err(err) = event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None, tx: None }).await {
+                            error!(error = %err, "failed to send event to notify periodical force snapshot");
+                        }
+                    }
+                    else => {
+                        break;
+                    }
+                }
+            }
+        });
+
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(
             async move {
@@ -75,6 +97,7 @@ impl TableHandler {
         // Create the handler
         Self {
             _event_handle: event_handle,
+            _periodical_force_snapshot_handle: periodic_force_snapshot_handle,
             _periodical_mooncake_snapshot_handle: periodic_mooncake_snapshot_handle,
             event_sender,
         }
@@ -111,10 +134,14 @@ impl TableHandler {
         };
 
         // Requested minimum LSN for a force snapshot request.
-        let mut force_snapshot_lsns: BTreeMap<u64, Vec<Sender<Result<()>>>> = BTreeMap::new();
+        let mut force_snapshot_lsns: BTreeMap<u64, Vec<Option<Sender<Result<()>>>>> =
+            BTreeMap::new();
 
         // Record LSN if the last handled table event is committed, which indicates mooncake table stays at a consistent view, so table could be flushed safely.
         let mut table_consistent_view_lsn: Option<u64> = None;
+
+        // Latest commit LSN, used for periodical force snapshot.
+        let mut latest_commit_lsn: Option<u64> = None;
 
         // Whether there's an ongoing mooncake snapshot operation.
         let mut mooncake_snapshot_ongoing = false;
@@ -225,6 +252,11 @@ impl TableHandler {
                         | TableEvent::ReadRequest { .. }
                         | TableEvent::EvictedDataFilesToDelete { .. } => table_consistent_view_lsn,
                         _ => None,
+                    };
+                    latest_commit_lsn = if table_consistent_view_lsn.is_some() {
+                        table_consistent_view_lsn
+                    } else {
+                        latest_commit_lsn
                     };
 
                     match event {
@@ -360,17 +392,36 @@ impl TableHandler {
                         // ==============================
                         //
                         TableEvent::ForceSnapshot { lsn, tx } => {
+                            let requested_lsn = if lsn.is_some() {
+                                lsn
+                            } else if latest_commit_lsn.is_some() {
+                                latest_commit_lsn
+                            } else {
+                                None
+                            };
+
+                            // Fast-path: nothing to snapshot.
+                            if requested_lsn.is_none() {
+                                if let Some(tx) = tx {
+                                    tx.send(Ok(())).await.unwrap();
+                                }
+                                continue;
+                            }
+
                             // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.
+                            let requested_lsn = requested_lsn.unwrap();
                             let last_iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
                             let replication_lsn = *replication_lsn_rx.borrow();
-                            if is_iceberg_snapshot_satisfy_force_snapshot(lsn, last_iceberg_snapshot_lsn, replication_lsn, table_consistent_view_lsn) {
-                                tx.send(Ok(())).await.unwrap();
+                            if is_iceberg_snapshot_satisfy_force_snapshot(requested_lsn, last_iceberg_snapshot_lsn, replication_lsn, table_consistent_view_lsn) {
+                                if let Some(tx) = tx {
+                                    tx.send(Ok(())).await.unwrap();
+                                }
                                 continue;
                             }
 
                             // Iceberg snapshot LSN requirement is not met, record the required LSN, so later commit will pick up.
                             else {
-                                force_snapshot_lsns.entry(lsn).or_default().push(tx);
+                                force_snapshot_lsns.entry(requested_lsn).or_default().push(tx);
                             }
                         }
                         // Branch to drop the iceberg table and clear pinned data files from the global object storage cache, only used when the whole table requested to drop.
@@ -500,7 +551,9 @@ impl TableHandler {
                                     for (_, tx) in force_snapshot_lsns.iter() {
                                         for cur_tx in tx {
                                             let err = Error::IcebergMessage(format!("Failed to create iceberg snapshot: {:?}", e));
-                                            cur_tx.send(Err(err)).await.unwrap();
+                                            if let Some(cur_tx) = cur_tx {
+                                                cur_tx.send(Err(err)).await.unwrap();
+                                            }
                                         }
                                     }
                                     force_snapshot_lsns.clear();
@@ -579,11 +632,11 @@ pub(crate) fn is_iceberg_snapshot_satisfy_force_snapshot(
 
 /// Update requested iceberg snapshot LSNs.
 async fn update_force_iceberg_snapshot_requests(
-    force_snapshot_lsns: BTreeMap<u64, Vec<Sender<Result<()>>>>,
+    force_snapshot_lsns: BTreeMap<u64, Vec<Option<Sender<Result<()>>>>>,
     iceberg_snapshot_lsn: u64,
     replication_lsn: u64,
     table_consistent_view_lsn: Option<u64>,
-) -> BTreeMap<u64, Vec<Sender<Result<()>>>> {
+) -> BTreeMap<u64, Vec<Option<Sender<Result<()>>>>> {
     let mut updated_requests = BTreeMap::new();
 
     // TODO(hjiang): Could be optimized, since as long as we found the first requested LSN which doesn't satisfy, we could directly place all left requests to updated lsns.
@@ -594,8 +647,8 @@ async fn update_force_iceberg_snapshot_requests(
             replication_lsn,
             table_consistent_view_lsn,
         ) {
-            for sender in senders {
-                sender.send(Ok(())).await.unwrap();
+            for cur_sender in senders.into_iter().flatten() {
+                cur_sender.send(Ok(())).await.unwrap();
             }
         } else {
             updated_requests.insert(requested_lsn, senders);

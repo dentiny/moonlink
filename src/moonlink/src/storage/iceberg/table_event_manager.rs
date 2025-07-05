@@ -43,7 +43,10 @@ impl TableEventManager {
     pub async fn initiate_snapshot(&mut self, lsn: u64) -> mpsc::Receiver<Result<()>> {
         let (tx, rx) = mpsc::channel(1);
         self.table_event_tx
-            .send(TableEvent::ForceSnapshot { lsn, tx })
+            .send(TableEvent::ForceSnapshot {
+                lsn: Some(lsn),
+                tx: Some(tx),
+            })
             .await
             .unwrap();
         rx
