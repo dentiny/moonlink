@@ -1240,6 +1240,24 @@ async fn test_initial_copy_basic() {
 }
 
 #[tokio::test]
+async fn test_periodical_force_snapshot_with_empty_table() {
+    let env = TestEnvironment::default().await;
+    // Get a direct sender so we can emit raw TableEvents.
+    let sender = env.handler.get_event_sender();
+
+    // Mimic force snapshot.
+    let (tx, mut rx) = mpsc::channel(1);
+    sender
+        .send(TableEvent::ForceSnapshot {
+            lsn: None,
+            tx: Some(tx),
+        })
+        .await
+        .unwrap();
+    rx.recv().await.unwrap().unwrap();
+}
+
+#[tokio::test]
 async fn test_periodical_force_snapshot() {
     let env = TestEnvironment::default().await;
     // Get a direct sender so we can emit raw TableEvents.
