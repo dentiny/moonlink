@@ -1,5 +1,5 @@
 use crate::storage::mooncake_table::SnapshotOption;
-use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
+use crate::storage::mooncake_table::{INITIAL_COPY_CDC_XACT_ID, INITIAL_COPY_XACT_ID};
 use crate::storage::{io_utils, MooncakeTable};
 use crate::table_notify::TableEvent;
 use crate::{Error, Result};
@@ -236,16 +236,22 @@ impl TableHandler {
                             if to_discard(lsn) {
                                 continue;
                             }
-                            if is_copied || (!table.is_in_initial_copy() && xact_id.is_none()) {
+
+                            // General non-streaming append.
+                            if !table.is_in_initial_copy() && xact_id.is_none() {
                                 if let Err(e) = table.append(row) {
                                     warn!(error = %e, "failed to append row");
                                 }
-                                // TODO: optimize initial copy performance; current implement would buffer everything in memory.
                                 continue;
                             }
 
-                            // If mooncake is at initial copy state, buffer all changes to stream batches, which get applied when initial copy finished.
-                            let xid = xact_id.unwrap_or(INITIAL_COPY_XACT_ID);
+                            let xid = if is_copied {
+                                // For initial copy operations, leverage streaming write operation as well.
+                                INITIAL_COPY_XACT_ID
+                            } else {
+                                // If mooncake is at initial copy state, buffer all cdc changes to stream batches, which get applied when initial copy finished.
+                                xact_id.unwrap_or(INITIAL_COPY_CDC_XACT_ID)
+                            };
 
                             if let Err(e) = table.append_in_stream_batch(row, xid) {
                                 warn!(error = %e, "failed to append row in batch");
@@ -267,7 +273,7 @@ impl TableHandler {
                                 continue;
                             }
 
-                            let xid = xact_id.unwrap_or(INITIAL_COPY_XACT_ID);
+                            let xid = xact_id.unwrap_or(INITIAL_COPY_CDC_XACT_ID);
                             table.delete_in_stream_batch(row, xid).await;
                         }
                         TableEvent::Commit { lsn, xact_id } => {
@@ -281,7 +287,7 @@ impl TableHandler {
 
                             // Handle initial copy situation.
                             if table.is_in_initial_copy() {
-                                let xid = xact_id.unwrap_or(INITIAL_COPY_XACT_ID);
+                                let xid = xact_id.unwrap_or(INITIAL_COPY_CDC_XACT_ID);
                                 let commit = table
                                     .prepare_transaction_stream_commit(xid, lsn)
                                     .await.unwrap();
@@ -330,7 +336,7 @@ impl TableHandler {
                                 continue;
                             }
                             if table.is_in_initial_copy() {
-                                if let Err(e) = table.flush_transaction_stream(INITIAL_COPY_XACT_ID).await {
+                                if let Err(e) = table.flush_transaction_stream(INITIAL_COPY_CDC_XACT_ID).await {
                                     error!(error = %e, "explicit flush failed");
                                 }
                             } else if let Err(e) = table.flush(lsn).await {

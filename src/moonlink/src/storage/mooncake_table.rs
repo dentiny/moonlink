@@ -61,7 +61,9 @@ use transaction_stream::{
 };
 
 /// Special transaction id used when buffering CDC events during initial table copy.
-pub(crate) const INITIAL_COPY_XACT_ID: u32 = u32::MAX;
+pub(crate) const INITIAL_COPY_CDC_XACT_ID: u32 = u32::MAX;
+/// Special transaction id used for initial copy append operation.
+pub(crate) const INITIAL_COPY_XACT_ID: u32 = u32::MAX - 1;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IcebergPersistenceConfig {
@@ -909,24 +911,36 @@ impl MooncakeTable {
     /// Exit initial copy mode and commit all buffered changes.
     pub async fn finish_initial_copy(&mut self) -> Result<()> {
         assert!(self.in_initial_copy);
+        self.in_initial_copy = false;
 
-        // First: commit the copied rows that were added directly to main mem_slice
+        // First: commit the initial copied rows that were added directly to streaming write buffer
         // Use LSN 0 to ensure copied data comes before any CDC events
-        self.commit(0);
-        self.flush(0).await?;
+        if self
+            .transaction_stream_states
+            .contains_key(&INITIAL_COPY_XACT_ID)
+        {
+            let initial_copy_stream_commit = self
+                .prepare_transaction_stream_commit(
+                    /*xact_id*/ INITIAL_COPY_XACT_ID,
+                    /*lsn=*/ 0,
+                )
+                .await
+                .unwrap();
+            self.commit_transaction_stream(initial_copy_stream_commit)
+                .await
+                .unwrap();
+        }
 
-        let commits = self
+        let buffered_commits = self
             .initial_copy_buffered_commits
             .drain(..)
             .collect::<Vec<_>>();
-
-        self.in_initial_copy = false;
 
         // Second: apply all buffered streaming transaction commits
         //
         // Used to check flush LSN doesn't regress.
         let mut prev_flush_lsn = 0;
-        for commit in commits {
+        for commit in buffered_commits {
             ma::assert_lt!(prev_flush_lsn, commit.get_commit_lsn());
             prev_flush_lsn = commit.get_commit_lsn();
             self.commit_transaction_stream(commit).await?;
