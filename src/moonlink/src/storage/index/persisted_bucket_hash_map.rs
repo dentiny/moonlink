@@ -1,4 +1,5 @@
 use crate::create_data_file;
+use crate::storage::async_bitwriter::BitWriter as AsyncBitWriter;
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use crate::NonEvictableHandle;
 use futures::executor::block_on;
@@ -15,7 +16,6 @@ use tokio::fs::File as AsyncFile;
 use tokio::io::BufWriter as AsyncBufWriter;
 use tokio_bitstream_io::{
     BigEndian as AsyncBigEndian, BitRead as AsyncBitRead, BitReader as AsyncBitReader,
-    BitWrite as AsyncBitWrite, BitWriter as AsyncBitWriter,
 };
 
 // Constants
@@ -350,33 +350,36 @@ impl IndexBlockBuilder {
         }
     }
 
-    pub async fn write_entry(
+    /// Append current entry to the index block, and return whether buffer inside of bitwriter is full and should be flushed.
+    pub fn write_entry(
         &mut self,
         hash: u64,
         seg_idx: usize,
         row_idx: usize,
         metadata: &GlobalIndex,
-    ) {
+    ) -> bool {
         while (hash >> metadata.hash_lower_bits) != self.current_bucket as u64 {
             self.current_bucket += 1;
             self.buckets[self.current_bucket as usize] = self.current_entry;
         }
-        self.entry_writer
-            .write(
-                metadata.hash_lower_bits,
-                hash & ((1 << metadata.hash_lower_bits) - 1),
-            )
-            .await
-            .unwrap();
-        self.entry_writer
-            .write(metadata.seg_id_bits, seg_idx as u32)
-            .await
-            .unwrap();
-        self.entry_writer
-            .write(metadata.row_id_bits, row_idx as u32)
-            .await
-            .unwrap();
+        let _ = self.entry_writer.write(
+            metadata.hash_lower_bits,
+            hash & ((1 << metadata.hash_lower_bits) - 1),
+        );
+        let _ = self
+            .entry_writer
+            .write(metadata.seg_id_bits, seg_idx as u32);
+        let to_flush = self
+            .entry_writer
+            .write(metadata.row_id_bits, row_idx as u32);
         self.current_entry += 1;
+
+        to_flush
+    }
+
+    /// Flush buffered entries written to disk.
+    pub async fn flush(&mut self) {
+        self.entry_writer.flush().await.unwrap()
     }
 
     pub async fn build(mut self, metadata: &GlobalIndex, file_id: u64) -> IndexBlock {
@@ -387,12 +390,12 @@ impl IndexBlockBuilder {
             * (metadata.hash_lower_bits + metadata.seg_id_bits + metadata.row_id_bits) as u64;
         let buckets = std::mem::take(&mut self.buckets);
         for cur_bucket in buckets {
-            self.entry_writer
-                .write(metadata.bucket_bits, cur_bucket)
-                .await
-                .unwrap();
+            let to_flush = self.entry_writer.write(metadata.bucket_bits, cur_bucket);
+            if to_flush {
+                self.entry_writer.flush().await.unwrap();
+            }
         }
-        self.entry_writer.byte_align().await.unwrap();
+        self.entry_writer.byte_align();
         self.entry_writer.flush().await.unwrap();
         drop(self.entry_writer);
         IndexBlock::new(
@@ -502,9 +505,11 @@ impl GlobalIndexBuilder {
         let mut index_block_builder =
             IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
         for entry in iter {
-            index_block_builder
-                .write_entry(entry.0, entry.1, entry.2, &global_index)
-                .await;
+            let to_flush =
+                index_block_builder.write_entry(entry.0, entry.1, entry.2, &global_index);
+            if to_flush {
+                index_block_builder.flush().await;
+            }
         }
         index_blocks.push(index_block_builder.build(&global_index, file_id).await);
         global_index.index_blocks = index_blocks;
@@ -544,9 +549,11 @@ impl GlobalIndexBuilder {
         let mut index_block_builder =
             IndexBlockBuilder::new(0, num_buckets + 1, self.directory.clone()).await;
         while let Some(entry) = iter.next().await {
-            index_block_builder
-                .write_entry(entry.0, entry.1, entry.2, &global_index)
-                .await;
+            let to_flush =
+                index_block_builder.write_entry(entry.0, entry.1, entry.2, &global_index);
+            if to_flush {
+                index_block_builder.flush().await;
+            }
         }
 
         let mut index_blocks = Vec::new();
@@ -627,9 +634,11 @@ impl GlobalIndexBuilder {
                     _ => panic!("Expected DiskFile variant"),
                 };
                 let new_seg_idx = get_seg_idx(new_record_location);
-                index_block_builder
-                    .write_entry(hash, new_seg_idx, new_row_idx, &global_index)
-                    .await;
+                let to_flush =
+                    index_block_builder.write_entry(hash, new_seg_idx, new_row_idx, &global_index);
+                if to_flush {
+                    index_block_builder.flush().await;
+                }
             }
             // The record doesn't exist in compacted data files, which means the corresponding row doesn't exist in the data file after compaction, simply ignore.
         }
