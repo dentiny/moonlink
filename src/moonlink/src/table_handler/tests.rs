@@ -1,6 +1,7 @@
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::{Error as IcebergError, ErrorKind};
 use tempfile::tempdir;
+use tokio::sync::mpsc;
 
 use super::test_utils::*;
 use super::TableEvent;
@@ -1236,6 +1237,37 @@ async fn test_initial_copy_basic() {
     env.verify_snapshot(10, &[1, 2]).await;
 
     env.shutdown().await;
+}
+
+#[tokio::test]
+async fn test_periodical_force_snapshot() {
+    let env = TestEnvironment::default().await;
+    // Get a direct sender so we can emit raw TableEvents.
+    let sender = env.handler.get_event_sender();
+
+    // Append rows to the table.
+    env.append_row(2, "Bob", 40, /*lsn=*/ 5, None).await;
+    env.commit(10).await;
+
+    // Mimic force snapshot.
+    let (tx, mut rx) = mpsc::channel(1);
+    sender
+        .send(TableEvent::ForceSnapshot {
+            lsn: None,
+            tx: Some(tx),
+        })
+        .await
+        .unwrap();
+    rx.recv().await.unwrap().unwrap();
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 10);
 }
 
 /// ---- Mock unit test ----
