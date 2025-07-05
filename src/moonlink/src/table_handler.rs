@@ -13,11 +13,8 @@ use tracing::{debug, error, info_span, warn};
 
 /// Handler for table operations
 pub struct TableHandler {
-    /// Handle to periodical mooncake snapshot.
-    _periodical_mooncake_snapshot_handle: JoinHandle<()>,
-
-    /// Handle to periodical force snapshot.
-    _periodical_force_snapshot_handle: JoinHandle<()>,
+    /// Handle to periodical events.
+    _periodic_event_handle: JoinHandle<()>,
 
     /// Handle to the event processing task
     _event_handle: Option<JoinHandle<()>>,
@@ -47,10 +44,12 @@ impl TableHandler {
         // Create channel for internal control events.
         table.register_table_notify(event_sender.clone()).await;
 
-        // Spawn the task to notify periodical mooncake snapshot.
+        // Spawn the task to notify periodical events.
         let event_sender_for_periodical_snapshot = event_sender.clone();
-        let periodic_mooncake_snapshot_handle = tokio::spawn(async move {
+        let event_sender_for_periodical_force_snapshot = event_sender.clone();
+        let periodic_event_handle = tokio::spawn(async move {
             let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
+            let mut periodic_force_snapshot_interval = time::interval(Duration::from_secs(300));
 
             loop {
                 tokio::select! {
@@ -59,20 +58,6 @@ impl TableHandler {
                             error!(error = %err, "failed to send event to notify periodical snapshot");
                         }
                     }
-                    else => {
-                        break;
-                    }
-                }
-            }
-        });
-
-        // Spawn the task to notify periodical force snapshot.
-        let event_sender_for_periodical_force_snapshot = event_sender.clone();
-        let periodic_force_snapshot_handle = tokio::spawn(async move {
-            let mut periodic_force_snapshot_interval = time::interval(Duration::from_secs(300));
-
-            loop {
-                tokio::select! {
                     _ = periodic_force_snapshot_interval.tick() => {
                         if let Err(err) = event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None, tx: None }).await {
                             error!(error = %err, "failed to send event to notify periodical force snapshot");
@@ -97,8 +82,7 @@ impl TableHandler {
         // Create the handler
         Self {
             _event_handle: event_handle,
-            _periodical_force_snapshot_handle: periodic_force_snapshot_handle,
-            _periodical_mooncake_snapshot_handle: periodic_mooncake_snapshot_handle,
+            _periodic_event_handle: periodic_event_handle,
             event_sender,
         }
     }
