@@ -127,13 +127,20 @@ pub fn read_ids_from_parquet(path: &str) -> Vec<Option<i64>> {
         .unwrap()
         .build()
         .unwrap();
-    let batch = reader.into_iter().next().unwrap().unwrap();
-    let col = batch
-        .column(0)
-        .as_any()
-        .downcast_ref::<Int64Array>()
-        .unwrap();
-    (0..col.len()).map(|i| Some(col.value(i))).collect()
+    let mut res = vec![];
+    for batch in reader.into_iter() {
+        let batch = batch.unwrap();
+        let col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .unwrap();
+        let cur_ids = (0..col.len())
+            .map(|i| Some(col.value(i)))
+            .collect::<Vec<Option<i64>>>();
+        res.extend(cur_ids);
+    }
+    res
 }
 
 /// Extract **all** primary-key IDs referenced in `read_state`.
