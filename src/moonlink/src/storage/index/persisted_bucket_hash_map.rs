@@ -350,7 +350,7 @@ impl IndexBlockBuilder {
         }
     }
 
-    /// Return whether buffer inside of bitwriter is full and could be flushed.
+    /// Append current entry to the index block, and return whether buffer inside of bitwriter is full and should be flushed.
     pub fn write_entry(
         &mut self,
         hash: u64,
@@ -377,7 +377,7 @@ impl IndexBlockBuilder {
         to_flush
     }
 
-    /// Flush the buffer inside of bitwriter.
+    /// Flush buffered entries written to disk.
     pub async fn flush(&mut self) {
         self.entry_writer.flush().await.unwrap()
     }
