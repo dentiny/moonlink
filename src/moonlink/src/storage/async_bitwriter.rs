@@ -6,8 +6,11 @@ use tokio_bitstream_io::{BitQueue, Endianness, Numeric};
 /// Buffer size, which controls the flush threshold.
 const BUFFER_SIZE: usize = 4096;
 
-/// [`BitWriter`] implement asynchronous write for bits; to avoid excessive runtime rescheduling caused by `await`,
-/// it takes cooperative interface, which means it requires users to explicit flush.
+/// [`BitWriter`] implement asynchronous write for bits;
+/// - To avoid excessive runtime rescheduling caused by `await`, it takes cooperative interface, which means it requires users to explicit flush.
+/// - To avoid excessive syscalls, bits are buffered in-memory until it reaches flush threshold.
+///
+/// TODO(hjiang): Add example and maybe doc test.
 #[allow(dead_code)]
 pub struct BitWriter<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> {
     /// Async writer.
@@ -74,9 +77,8 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
         }
 
         // Write bytes to the inactive buffer first, which will be switch to the active one later.
-        assert_eq!(self.inactive_buffer_pos, 0);
-        self.buffers[1 - self.active_index][0] = byte;
-        self.inactive_buffer_pos = 1;
+        self.buffers[1 - self.active_index][self.inactive_buffer_pos] = byte;
+        self.inactive_buffer_pos += 1;
         true
     }
 
@@ -108,27 +110,22 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
         }
 
         let mut acc = BitQueue::<E, U>::from_value(value, bits);
-        let bits_to_fill = 8 - self.bitqueue.len();
-        let n = bits_to_fill.min(acc.len());
-        self.bitqueue.push(n, acc.pop(n).to_u8());
+        let mut to_flush = false;
+        while !acc.is_empty() {
+            let bits_to_fill = 8 - self.bitqueue.len();
+            let n = bits_to_fill.min(acc.len());
+            let bits_chunk = acc.pop(n).to_u8();
+            self.bitqueue.push(n, bits_chunk);
 
-        // Attempt to place the already full bitqueue into buffer.
-        if self.bitqueue.is_full() {
-            let byte = self.bitqueue.pop(8);
-
-            // Current buffer is full, fill in left bits into bitqueue and notify flush.
-            if self.buffer_byte(byte) {
-                let left_bits = bits - n;
-                self.bitqueue.push(left_bits, acc.pop(left_bits).to_u8());
-                return true;
+            if self.bitqueue.is_full() {
+                let byte = self.bitqueue.pop(8);
+                if self.buffer_byte(byte) {
+                    to_flush = true;
+                }
             }
-
-            // Current buffer is not full, directly enqueue to bit queue.
-            let left_bits = bits - n;
-            self.bitqueue.push(left_bits, acc.pop(left_bits).to_u8());
         }
 
-        false
+        to_flush
     }
 
     /// Fill in bits into bitqueue, until the buffer is aligned.
@@ -291,5 +288,26 @@ mod tests {
             assert_eq!(*actual, (i % 128) as u8, "mismatch at index {}", i);
         }
         assert!(switched, "buffer switch did not occur");
+    }
+
+    /// Testing scenario: value to append is larger than bitqueue capacity.
+    #[tokio::test]
+    async fn test_bitwriter_write_u16_cross_byte_boundary() {
+        use tokio::io::BufWriter;
+        use tokio_bitstream_io::BigEndian;
+
+        let inner = Vec::new();
+        let writer = BufWriter::new(inner);
+        let mut bit_writer = BitWriter::<_, BigEndian>::new(writer);
+
+        // Write a full u16 = 0b10101010_11001100 = 0xAA, 0xCC
+        let flush_required = bit_writer.write::<u16>(16, 0b1010_1010_1100_1100);
+        assert!(!flush_required);
+
+        bit_writer.byte_align();
+        bit_writer.flush().await.unwrap();
+
+        let result = bit_writer.writer.into_inner();
+        assert_eq!(result, vec![0xAA, 0xCC]);
     }
 }
