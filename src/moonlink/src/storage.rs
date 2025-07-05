@@ -1,3 +1,4 @@
+pub(crate) mod async_bitwriter;
 pub(crate) mod cache;
 pub(crate) mod compaction;
 pub(crate) mod filesystem;
