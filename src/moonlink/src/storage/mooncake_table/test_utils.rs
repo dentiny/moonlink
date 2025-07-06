@@ -186,26 +186,6 @@ pub async fn snapshot(
     }
 }
 
-/// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.
-pub async fn create_iceberg_snapshot(
-    table: &mut MooncakeTable,
-    iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
-    completion_rx: &mut Receiver<TableEvent>,
-) -> Result<IcebergSnapshotResult> {
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
-    let notification = completion_rx.recv().await.unwrap();
-    match notification {
-        TableEvent::IcebergSnapshot {
-            iceberg_snapshot_result,
-        } => iceberg_snapshot_result,
-        _ => {
-            panic!(
-                "Expects to receive iceberg snapshot completion notification, but receives others."
-            )
-        }
-    }
-}
-
 pub async fn append_commit_flush_snapshot(
     table: &mut MooncakeTable,
     completion_rx: &mut Receiver<TableEvent>,

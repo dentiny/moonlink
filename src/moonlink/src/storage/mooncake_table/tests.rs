@@ -1,7 +1,7 @@
 use super::test_utils::*;
 use super::*;
 use crate::storage::iceberg::table_manager::MockTableManager;
-use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use iceberg::{Error as IcebergError, ErrorKind};
 use rstest::*;

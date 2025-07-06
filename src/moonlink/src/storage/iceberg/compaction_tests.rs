@@ -27,9 +27,9 @@ use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::{FileIndex, MooncakeIndex};
-use crate::storage::mooncake_table::state_test_utils::*;
 use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::storage_utils::{
