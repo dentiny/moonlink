@@ -3,7 +3,8 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use tempfile::TempDir;
 
-use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
+use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::{DiskFileEntry, Snapshot};
 use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, ProcessedDeletionRecord};
 use crate::storage::{MooncakeTable, PuffinBlobRef};
@@ -231,4 +232,19 @@ pub(crate) async fn get_new_compacted_local_file_size_and_id(
     assert!(is_local_file(new_compacted_file, temp_dir));
     let new_compacted_data_file_size = disk_file_entry.file_size;
     (new_compacted_data_file_size, new_compacted_file.file_id())
+}
+
+/// Test util function to get index block files, and the overall file size.
+pub(crate) fn get_index_block_files(
+    file_indices: Vec<GlobalIndex>,
+) -> (Vec<MooncakeDataFileRef>, u64) {
+    let mut index_block_files = vec![];
+    let mut overall_file_size = 0;
+    for cur_file_index in file_indices.iter() {
+        for cur_index_block in cur_file_index.index_blocks.iter() {
+            index_block_files.push(cur_index_block.index_file.clone());
+            overall_file_size += cur_index_block.file_size;
+        }
+    }
+    (index_block_files, overall_file_size)
 }

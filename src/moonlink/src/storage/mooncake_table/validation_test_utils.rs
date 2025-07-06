@@ -1,8 +1,11 @@
 /// This module contains testing utils for validation.
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::puffin_utils;
+use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::DiskFileEntry;
 use crate::storage::mooncake_table::Snapshot;
+use crate::storage::storage_utils::FileId;
+use crate::ObjectStorageCache;
 
 use iceberg::io::FileIOBuilder;
 use std::collections::HashSet;
@@ -85,4 +88,21 @@ pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_u
     }
 
     assert_eq!(index_referenced_data_filepaths, data_filepaths);
+}
+
+/// Test util function to check certain data file doesn't exist in non evictable cache.
+pub(crate) async fn check_file_not_pinned(
+    object_storage_cache: &ObjectStorageCache,
+    file_id: FileId,
+) {
+    let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
+    let table_unique_file_id = get_unique_table_file_id(file_id);
+    assert!(!non_evicted_file_ids.contains(&table_unique_file_id));
+}
+
+/// Test util function to check certain data file exists in non evictable cache.
+pub(crate) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache, file_id: FileId) {
+    let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
+    let table_unique_file_id = get_unique_table_file_id(file_id);
+    assert!(non_evicted_file_ids.contains(&table_unique_file_id));
 }

@@ -1,4 +1,3 @@
-
 use arrow_array::RecordBatch;
 use iceberg::io::FileIO;
 use iceberg::io::FileRead;

@@ -1177,3 +1177,6 @@ pub(crate) mod validation_test_utils;
 
 #[cfg(test)]
 pub(crate) mod table_operation_test_utils;
+
+#[cfg(test)]
+pub(crate) mod test_utils_commons;

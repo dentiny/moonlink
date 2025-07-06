@@ -49,8 +49,9 @@ use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
+use crate::storage::mooncake_table::test_utils_commons::*;
+use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::MooncakeTableConfig;
-use crate::storage::mooncake_table::{state_test_utils::*, IcebergPersistenceConfig};
 use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableConfig, IcebergTableManager, MooncakeTable, ObjectStorageCache,
