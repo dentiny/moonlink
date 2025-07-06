@@ -140,18 +140,33 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
 
         let mut acc = BitQueue::<E, U>::from_value(value, bits);
         let mut to_flush = false;
-        while !acc.is_empty() {
-            let bits_to_fill = Self::BITQUEUE_SIZE - self.bitqueue.len();
-            let n = bits_to_fill.min(acc.len());
+
+        // First try to fill bitqueue, and flush to buffer if possible.
+        let bits_to_fill = Self::BITQUEUE_SIZE - self.bitqueue.len();
+        let n = bits_to_fill.min(acc.len());
+        let bits_chunk = acc.pop(n).to_u8();
+        self.bitqueue.push(n, bits_chunk);
+
+        // Bitqueue hasn't been full, no need to flush to buffer.
+        if !self.bitqueue.is_full() {
+            return false;
+        }
+
+        // Bitqueue is already full, transfer to buffer.
+        let byte = self.bitqueue.pop(Self::BITQUEUE_SIZE);
+        to_flush |= self.buffer_byte(byte);
+
+        // Now try to move bits in "bytes granularity" directly to buffer, without going through bitqueue.
+        while acc.len() >= Self::BITQUEUE_SIZE {
+            let byte = acc.pop(Self::BITQUEUE_SIZE).to_u8();
+            to_flush |= self.buffer_byte(byte);
+        }
+
+        // Enqueue left bits to bitqueue.
+        if !acc.is_empty() {
+            let n = acc.len();
             let bits_chunk = acc.pop(n).to_u8();
             self.bitqueue.push(n, bits_chunk);
-
-            if self.bitqueue.is_full() {
-                let byte = self.bitqueue.pop(Self::BITQUEUE_SIZE);
-                if self.buffer_byte(byte) {
-                    to_flush = true;
-                }
-            }
         }
 
         to_flush
