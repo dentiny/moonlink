@@ -191,101 +191,77 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rstest::rstest;
     use tokio::io::BufWriter;
     use tokio_bitstream_io::BigEndian;
 
+    /// Test [`write_bit`] intereface.
     #[tokio::test]
-    async fn test_bitwriter_flush_empty() {
+    #[rstest]
+    #[case(0)]
+    #[case(10)]
+    #[case(5000 * 8)]
+    async fn test_bitwriter_write_bit(#[case] iterations: usize) {
         let inner = Vec::new();
         let writer = BufWriter::new(inner);
-        let mut bit_writer = BitWriter::<_, BigEndian>::new(writer);
-        bit_writer.flush().await.unwrap();
-
-        let result = bit_writer.writer.into_inner();
-        assert!(result.is_empty());
-    }
-
-    #[tokio::test]
-    async fn test_bitwriter_buffered_write_and_flush() {
-        let inner = Vec::new();
-        let writer = BufWriter::new(inner);
-        let mut bit_writer = BitWriter::<_, BigEndian>::new(writer);
-
-        assert!(!bit_writer.write_bit(true));
-        assert!(!bit_writer.write_bit(false));
-        assert!(!bit_writer.write_bit(true));
-        assert!(!bit_writer.write_bit(true));
-        assert!(!bit_writer.write_bit(false));
-        assert!(!bit_writer.write_bit(false));
-        assert!(!bit_writer.write_bit(false));
-        assert!(!bit_writer.write_bit(true)); // 0b10110001 = 0xB1
-
-        assert!(!bit_writer.write::<u8>(4, 0b1111)); // write 4 bits: 1111
-        bit_writer.byte_align(); // pad 4 bits: 0xF0
-
-        bit_writer.flush().await.unwrap();
-        let result = bit_writer.writer.into_inner();
-        assert_eq!(result, vec![0xB1, 0xF0]);
-    }
-
-    /// Testing scenario: write 1 bit every time, and overall writes require buffer switching.
-    #[tokio::test]
-    async fn test_bitwriter_1bit_flush_across_buffers() {
-        let inner = Vec::new();
-        let writer = BufWriter::new(inner);
-        let mut bit_writer = BitWriter::<_, BigEndian>::new(writer);
-
+        let mut bit_writer = BitWriter::<_, tokio_bitstream_io::BigEndian>::new(writer);
         let mut switched = false;
-        let mut bit_index: u8 = 0;
-
-        for _ in 0..(5000 * 8) {
+        for _ in 0..iterations {
             let to_flush = bit_writer.write_bit(true);
             if to_flush {
                 switched = true;
                 bit_writer.flush().await.unwrap();
-            }
-            bit_index += 1;
-            if bit_index == 8 {
-                bit_index = 0;
             }
         }
 
         bit_writer.byte_align();
         bit_writer.flush().await.unwrap();
 
+        // Build expected byte buffer.
         let result = bit_writer.writer.into_inner();
-        assert_eq!(result.len(), 5000);
-        for (i, byte) in result.iter().enumerate() {
-            assert_eq!(*byte, 0b1111_1111, "mismatch at index {}", i);
+        let full_bytes = iterations / 8;
+        let remaining_bits = iterations % 8;
+        let mut expected = vec![0xFF; full_bytes];
+        if remaining_bits > 0 {
+            let partial = 0xFF << (8 - remaining_bits);
+            expected.push(partial);
         }
-        assert!(switched);
+        assert_eq!(result, expected);
+        if iterations >= BUFFER_SIZE * 8 {
+            assert!(switched);
+        }
     }
 
-    /// Testing scenario: write aligned 8 bits everytime, and overall writes requires buffer switching.
+    /// Test [`write`] interface.
     #[tokio::test]
-    async fn test_bitwriter_aligned_8bit_flush_across_buffers() {
+    #[rstest]
+    #[case(0)]
+    #[case(10)]
+    #[case(5000)]
+    async fn test_bitwriter_write_aligned_bytes(#[case] iterations: usize) {
         let inner = Vec::new();
         let writer = BufWriter::new(inner);
-        let mut bit_writer = BitWriter::<_, BigEndian>::new(writer);
+        let mut bit_writer = BitWriter::<_, tokio_bitstream_io::BigEndian>::new(writer);
 
         let mut switched = false;
-        for i in 0..5000 {
+        for i in 0..iterations {
             let to_flush = bit_writer.write::<u8>(8, (i % 256) as u8);
             if to_flush {
                 switched = true;
                 bit_writer.flush().await.unwrap();
             }
         }
-
         bit_writer.byte_align();
         bit_writer.flush().await.unwrap();
 
         let result = bit_writer.writer.into_inner();
-        assert_eq!(result.len(), 5000);
+        assert_eq!(result.len(), iterations);
         for (i, byte) in result.iter().enumerate() {
             assert_eq!(*byte, (i % 256) as u8, "mismatch at index {}", i);
         }
-        assert!(switched);
+        if iterations >= BUFFER_SIZE {
+            assert!(switched);
+        }
     }
 
     /// Testing scenario: write unaligned 7 bits everytime, and overall writes requires buffer switching.
@@ -333,7 +309,7 @@ mod tests {
         assert!(switched);
     }
 
-    /// Testing scenario: value to append is larger than bitqueue capacity.
+    /// Testing scenario: value to append is larger than bitqueue capacity, but aligned in bytes unit.
     #[tokio::test]
     async fn test_bitwriter_write_u16_cross_bitqueue_boundary() {
         let inner = Vec::new();
@@ -349,5 +325,24 @@ mod tests {
 
         let result = bit_writer.writer.into_inner();
         assert_eq!(result, vec![0xAA, 0xCC]);
+    }
+
+    /// Testing scenario: value to append is larger than bitqueue capacity, and not aligned in bytes unit.
+    #[tokio::test]
+    async fn test_bitwriter_write_u18_cross_bitqueue_boundary() {
+        let inner = Vec::new();
+        let writer = BufWriter::new(inner);
+        let mut bit_writer = BitWriter::<_, BigEndian>::new(writer);
+
+        // 18 bits: 0b10_1010_1011_0011_0011 = 0xAA, 0xCC, 0xC0
+        let value: u32 = 0b10_1010_1011_0011_0011;
+        let flush_required = bit_writer.write::<u32>(18, value);
+        assert!(!flush_required);
+
+        bit_writer.byte_align();
+        bit_writer.flush().await.unwrap();
+
+        let result = bit_writer.writer.into_inner();
+        assert_eq!(result, vec![0xAA, 0xCC, 0xC0]);
     }
 }
