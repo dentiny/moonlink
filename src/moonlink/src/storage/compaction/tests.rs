@@ -2,8 +2,8 @@ use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFilePar
 use crate::storage::compaction::table_compaction::{DataCompactionPayload, SingleFileToCompact};
 use crate::storage::compaction::test_utils;
 use crate::storage::compaction::test_utils::get_record_location_mapping;
-use crate::storage::iceberg::test_utils as iceberg_test_utils;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::storage_utils::{
     self, get_unique_file_id_for_flush, MooncakeDataFileRef, TableId, TableUniqueFileId,
 };
@@ -80,11 +80,7 @@ async fn test_data_file_compaction_1() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     // Check compaction results.
@@ -165,11 +161,7 @@ async fn test_data_file_compaction_2() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     // Check compaction results.
@@ -255,11 +247,7 @@ async fn test_data_file_compaction_3() {
     // Check compaction results.
     //
     // Check remap results.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     // Check remap results.
@@ -332,11 +320,7 @@ async fn test_data_file_compaction_4() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     // Check compaction results.
@@ -447,11 +431,7 @@ async fn test_data_file_compaction_5() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     // Check compaction results.
@@ -571,11 +551,7 @@ async fn test_data_file_compaction_6() {
     // Check compaction results.
     //
     // Check remap results.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     // Check remap results.
@@ -679,11 +655,7 @@ async fn test_multiple_compacted_data_files_1() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
 
     let old_file_id_1 = FileId(0);
@@ -814,11 +786,7 @@ async fn test_multiple_compacted_data_files_2() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
     assert!(compaction_result.new_data_files.is_empty());
     assert!(compaction_result.remapped_data_files.is_empty());
@@ -877,11 +845,7 @@ async fn test_large_number_of_data_files() {
     };
 
     // Perform compaction.
-    let builder = CompactionBuilder::new(
-        payload,
-        iceberg_test_utils::create_test_arrow_schema(),
-        file_params,
-    );
+    let builder = CompactionBuilder::new(payload, create_test_arrow_schema(), file_params);
     let compaction_result = builder.build().await.unwrap();
     assert_eq!(
         compaction_result.remapped_data_files.len(),

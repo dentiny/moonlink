@@ -9,18 +9,17 @@ use crate::row::MoonlinkRow;
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
-use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
-use crate::storage::mooncake_table::table_accessor_test_utils::*;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::{
-    DataCompactionPayload, DataCompactionResult, DiskFileEntry, FileIndiceMergePayload,
+    DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload,
     FileIndiceMergeResult, IcebergPersistenceConfig, IcebergSnapshotPayload, IcebergSnapshotResult,
-    MooncakeTableConfig, Snapshot, SnapshotOption,
+    MooncakeTableConfig, SnapshotOption,
 };
 use crate::storage::storage_utils::{
-    FileId, MooncakeDataFileRef, ProcessedDeletionRecord, TableId, TableUniqueFileId,
+    FileId, MooncakeDataFileRef, TableId, TableUniqueFileId,
 };
-use crate::storage::{io_utils, PuffinBlobRef};
+use crate::storage::io_utils;
 use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,
@@ -119,16 +118,6 @@ pub(crate) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache,
     let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
     let table_unique_file_id = get_unique_table_file_id(file_id);
     assert!(non_evicted_file_ids.contains(&table_unique_file_id));
-}
-
-/// Test util function to get iceberg table config.
-pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
-    IcebergTableConfig {
-        warehouse_uri: temp_dir.path().to_str().unwrap().to_string(),
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
-        ..Default::default()
-    }
 }
 
 /// Test util function to create mooncake table and table notify for compaction test.

@@ -45,9 +45,9 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
 use crate::row::{MoonlinkRow, RowValue};
-use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::table_accessor_test_utils::*;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::{state_test_utils::*, IcebergPersistenceConfig};
 use crate::table_notify::TableEvent;

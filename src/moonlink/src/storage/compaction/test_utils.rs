@@ -12,13 +12,13 @@ use crate::storage::iceberg::deletion_vector::{
 };
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_writer_proxy;
-use crate::storage::iceberg::test_utils as iceberg_test_utils;
 use crate::storage::iceberg::test_utils::load_arrow_batch;
 use crate::storage::index::persisted_bucket_hash_map::{
     test_get_hashes_for_index, GlobalIndexBuilder,
 };
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::storage_utils::{FileId, TableUniqueFileId};
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use crate::storage::PuffinBlobRef;
@@ -47,7 +47,7 @@ fn get_hash_for_row(val1: i32, val2: &str, val3: i32) -> u64 {
 
 /// Test util function to dump parquet files to local filesystem.
 pub(crate) fn create_test_batch_1() -> RecordBatch {
-    let arrow_schema = iceberg_test_utils::create_test_arrow_schema();
+    let arrow_schema = create_test_arrow_schema();
     RecordBatch::try_new(
         arrow_schema.clone(),
         vec![
@@ -59,7 +59,7 @@ pub(crate) fn create_test_batch_1() -> RecordBatch {
     .unwrap()
 }
 pub(crate) fn create_test_batch_2() -> RecordBatch {
-    let arrow_schema = iceberg_test_utils::create_test_arrow_schema();
+    let arrow_schema = create_test_arrow_schema();
     RecordBatch::try_new(
         arrow_schema.clone(),
         vec![
@@ -79,12 +79,8 @@ pub(crate) async fn dump_arrow_record_batches(
     let write_file = tokio::fs::File::create(data_file.file_path())
         .await
         .unwrap();
-    let mut writer = AsyncArrowWriter::try_new(
-        write_file,
-        iceberg_test_utils::create_test_arrow_schema(),
-        /*props=*/ None,
-    )
-    .unwrap();
+    let mut writer =
+        AsyncArrowWriter::try_new(write_file, create_test_arrow_schema(), /*props=*/ None).unwrap();
     for cur_record_batch in record_batches.iter() {
         writer.write(cur_record_batch).await.unwrap();
     }
@@ -279,7 +275,7 @@ fn get_uncompacted_arrow_batches(file_idx: usize, old_row_indices: &[usize]) -> 
         }
     }
     RecordBatch::try_new(
-        iceberg_test_utils::create_test_arrow_schema(),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(id_col)),    // id column
             Arc::new(StringArray::from(name_col)), // name column
@@ -306,7 +302,7 @@ fn get_compacted_arrow_batch(old_row_indices: Vec<usize>) -> RecordBatch {
     }
 
     RecordBatch::try_new(
-        iceberg_test_utils::create_test_arrow_schema(),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(id_col)),    // id column
             Arc::new(StringArray::from(name_col)), // name column

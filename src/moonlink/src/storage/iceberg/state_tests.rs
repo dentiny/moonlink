@@ -33,11 +33,11 @@ use crate::row::RowValue;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::{
-    check_deletion_vector_consistency_for_snapshot, create_table_and_iceberg_manager,
-    load_arrow_batch, validate_recovered_snapshot,
+    check_deletion_vector_consistency_for_snapshot, load_arrow_batch, validate_recovered_snapshot,
 };
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::MooncakeTable;

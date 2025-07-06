@@ -47,6 +47,7 @@ use crate::{
     IcebergTableManager, MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig, TableManager,
 };
 
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 /// ========================
 /// Test util function for read
 /// ========================
