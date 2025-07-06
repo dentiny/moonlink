@@ -25,13 +25,12 @@
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::table_manager::TableManager;
-use crate::storage::iceberg::test_utils::{
-    check_deletion_vector_consistency_for_snapshot, load_arrow_batch, validate_recovered_snapshot,
-};
+use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::{FileIndex, MooncakeIndex};
 use crate::storage::mooncake_table::state_test_utils::*;
 use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,

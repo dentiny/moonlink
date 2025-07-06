@@ -18,6 +18,7 @@ use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::state_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot;

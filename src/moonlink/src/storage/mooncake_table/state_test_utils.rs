@@ -10,16 +10,14 @@ use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
+use crate::storage::io_utils;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::{
-    DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload,
-    FileIndiceMergeResult, IcebergPersistenceConfig, IcebergSnapshotPayload, IcebergSnapshotResult,
-    MooncakeTableConfig, SnapshotOption,
+    DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload, FileIndiceMergeResult,
+    IcebergPersistenceConfig, IcebergSnapshotPayload, IcebergSnapshotResult, MooncakeTableConfig,
+    SnapshotOption,
 };
-use crate::storage::storage_utils::{
-    FileId, MooncakeDataFileRef, TableId, TableUniqueFileId,
-};
-use crate::storage::io_utils;
+use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, TableId, TableUniqueFileId};
 use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableConfig, MooncakeTable, NonEvictableHandle, ObjectStorageCache,

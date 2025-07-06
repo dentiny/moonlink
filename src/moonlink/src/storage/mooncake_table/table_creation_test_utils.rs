@@ -4,9 +4,7 @@ use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
-use crate::storage::mooncake_table::{
-    MooncakeTableConfig, TableMetadata as MooncakeTableMetadata,
-};
+use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableEvent;
 use crate::ObjectStorageCache;
