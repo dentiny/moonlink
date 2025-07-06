@@ -591,7 +591,7 @@ pub(crate) async fn perform_index_merge_for_test(
         skip_file_indices_merge: false,
         skip_data_file_compaction: true,
     }));
-    let (_, _, _, evicted_files_to_delete) = sync_mooncake_snapshot(receiver).await;
+    let (_, _, _, evicted_files_to_delete) = sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_files_to_delete.clone())
         .await
@@ -619,7 +619,7 @@ pub(crate) async fn perform_data_compaction_for_test(
         skip_file_indices_merge: true,
         skip_data_file_compaction: false,
     }));
-    let (_, _, _, evicted_files_to_delete) = sync_mooncake_snapshot(receiver).await;
+    let (_, _, _, evicted_files_to_delete) = sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_files_to_delete.clone())
         .await
@@ -634,6 +634,7 @@ pub(crate) async fn perform_data_compaction_for_test(
 ///
 /// Test util function to block wait and get iceberg / file indices merge payload.
 async fn sync_mooncake_snapshot(
+    table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
 ) -> (
     Option<IcebergSnapshotPayload>,
@@ -642,6 +643,7 @@ async fn sync_mooncake_snapshot(
     Vec<String>,
 ) {
     let notification = receiver.recv().await.unwrap();
+    table.mark_mooncake_snapshot_completed();
     if let TableEvent::MooncakeTableSnapshotResult {
         iceberg_snapshot_payload,
         file_indice_merge_payload,
@@ -712,7 +714,7 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
         skip_file_indices_merge: false,
     });
     assert!(mooncake_snapshot_created);
-    sync_mooncake_snapshot(receiver).await
+    sync_mooncake_snapshot(table, receiver).await
 }
 
 // Test util function, which updates mooncake table snapshot and create iceberg snapshot in a serial fashion.
@@ -743,7 +745,7 @@ async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
     receiver: &mut Receiver<TableEvent>,
 ) {
     let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(receiver).await;
+        sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_data_files_to_delete)
         .await
@@ -788,7 +790,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
 
     // Create iceberg snapshot.
     let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(receiver).await;
+        sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_data_files_to_delete)
         .await
@@ -803,7 +805,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     // Get data compaction payload.
     assert!(table.create_snapshot(force_snapshot_option.clone()));
     let (iceberg_snapshot_payload, _, data_compaction_payload, evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(receiver).await;
+        sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_data_files_to_delete)
         .await
@@ -853,7 +855,7 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
 
     // Create iceberg snapshot.
     let (iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(receiver).await;
+        sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_data_files_to_delete)
         .await
@@ -868,7 +870,7 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
     // Perform index merge.
     assert!(table.create_snapshot(force_snapshot_option.clone()));
     let (iceberg_snapshot_payload, file_indice_merge_payload, _, evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(receiver).await;
+        sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(evicted_data_files_to_delete)
         .await
@@ -887,4 +889,5 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
         skip_data_file_compaction: false,
     }));
     sync_mooncake_snapshot_and_create_new_by_iceberg_payload(table, receiver).await;
+    sync_mooncake_snapshot(table, receiver).await;
 }

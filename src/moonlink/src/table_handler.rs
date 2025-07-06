@@ -478,6 +478,9 @@ impl TableHandler {
                             // Spawn a detached best-effort task to delete evicted object storage cache.
                             start_task_to_delete_evicted(evicted_data_files_to_delete);
 
+                            // Mark mooncake snapshot as completed.
+                            table.mark_mooncake_snapshot_completed();
+
                             // Drop table if requested, and table at a clean state.
                             if drop_table_requested && !iceberg_snapshot_ongoing {
                                 drop_table(&mut table, event_sync_sender).await;

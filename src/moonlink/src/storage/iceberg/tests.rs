@@ -884,7 +884,8 @@ async fn test_skip_iceberg_snapshot() {
         skip_file_indices_merge: false,
         skip_data_file_compaction: false,
     }));
-    let (_, iceberg_snapshot_payload, _, _, _) = get_mooncake_snapshot_result(&mut notify_rx).await;
+    let (_, iceberg_snapshot_payload, _, _, _) =
+        get_mooncake_snapshot_result(&mut table, &mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
 }
 

@@ -242,6 +242,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
 
 /// Test util function to block wait a mooncake snapshot and get its result.
 pub(crate) async fn get_mooncake_snapshot_result(
+    table: &mut MooncakeTable,
     notify_rx: &mut Receiver<TableEvent>,
 ) -> (
     u64,
@@ -251,6 +252,7 @@ pub(crate) async fn get_mooncake_snapshot_result(
     Vec<String>,
 ) {
     let notification = notify_rx.recv().await.unwrap();
+    table.mark_mooncake_snapshot_completed();
     match notification {
         TableEvent::MooncakeTableSnapshotResult {
             lsn,
@@ -283,7 +285,7 @@ pub(crate) async fn create_mooncake_snapshot(
     Vec<String>,
 ) {
     assert!(table.create_snapshot(SnapshotOption::default()));
-    get_mooncake_snapshot_result(notify_rx).await
+    get_mooncake_snapshot_result(table, notify_rx).await
 }
 
 /// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.

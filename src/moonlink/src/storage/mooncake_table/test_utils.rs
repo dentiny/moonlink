@@ -165,6 +165,7 @@ pub async fn snapshot(
 ) {
     assert!(table.create_snapshot(SnapshotOption::default()));
     let table_notify = notify_rx.recv().await.unwrap();
+    table.mark_mooncake_snapshot_completed();
     match table_notify {
         TableEvent::MooncakeTableSnapshotResult {
             lsn,

@@ -433,6 +433,8 @@ pub struct MooncakeTable {
 
     /// Current snapshot of the table
     snapshot: Arc<RwLock<SnapshotTableState>>,
+    /// Whether there's ongoing mooncake snapshot.
+    mooncake_snapshot_ongoing: bool,
 
     table_snapshot_watch_sender: watch::Sender<u64>,
     table_snapshot_watch_receiver: watch::Receiver<u64>,
@@ -522,6 +524,7 @@ impl MooncakeTable {
                 )
                 .await?,
             )),
+            mooncake_snapshot_ongoing: false,
             next_snapshot_task: SnapshotTask::new(table_metadata.as_ref().config.clone()),
             transaction_stream_states: HashMap::new(),
             table_snapshot_watch_sender,
@@ -799,6 +802,10 @@ impl MooncakeTable {
 
     // Create a snapshot of the last committed version, return current snapshot's version and payload to perform iceberg snapshot.
     fn create_snapshot_impl(&mut self, opt: SnapshotOption) {
+        // Check invariant: there should be at most one ongoing mooncake snapshot.
+        assert!(!self.mooncake_snapshot_ongoing);
+        self.mooncake_snapshot_ongoing = true;
+
         self.next_snapshot_task.new_rows = Some(self.mem_slice.get_latest_rows());
         let next_snapshot_task = std::mem::take(&mut self.next_snapshot_task);
         self.next_snapshot_task = SnapshotTask::new(self.metadata.config.clone());
@@ -823,6 +830,12 @@ impl MooncakeTable {
         }
         self.create_snapshot_impl(opt);
         true
+    }
+
+    /// Notify mooncake snapshot as completed.
+    pub fn mark_mooncake_snapshot_completed(&mut self) {
+        assert!(self.mooncake_snapshot_ongoing);
+        self.mooncake_snapshot_ongoing = false;
     }
 
     /// Perform index merge, whose completion will be notified separately in async style.
@@ -1076,7 +1089,9 @@ impl MooncakeTable {
 
     /// Create an iceberg snapshot.
     pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
+        // Check invariant: there's at most one ongoing iceberg snapshot.
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
+
         // Create a detached task, whose completion will be notified separately.
         let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
         let table_auto_incr_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
