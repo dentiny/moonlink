@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use itertools::Itertools;
 use tempfile::TempDir;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
@@ -13,6 +11,7 @@ use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::test_utils::*;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
+use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, DataCompactionResult, DiskFileEntry, FileIndiceMergePayload,
     FileIndiceMergeResult, IcebergPersistenceConfig, IcebergSnapshotPayload, IcebergSnapshotResult,
@@ -31,30 +30,30 @@ use crate::{
 /// This module contains util functions for state-based tests.
 ///
 /// Test constant to mimic an infinitely large object storage cache.
-pub(super) const INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE: u64 = u64::MAX;
+pub(crate) const INFINITE_LARGE_OBJECT_STORAGE_CACHE_SIZE: u64 = u64::MAX;
 /// File index blocks are always pinned at cache, whose size is much less than data file.
 /// Test constant to allow only one data file and multiple index block files in object storage cache.
 const INDEX_BLOCK_FILES_SIZE_UPPER_BOUND: u64 = 100;
-pub(super) const ONE_FILE_CACHE_SIZE: u64 = FAKE_FILE_SIZE + INDEX_BLOCK_FILES_SIZE_UPPER_BOUND;
+pub(crate) const ONE_FILE_CACHE_SIZE: u64 = FAKE_FILE_SIZE + INDEX_BLOCK_FILES_SIZE_UPPER_BOUND;
 /// Iceberg test namespace and table name.
-pub(super) const ICEBERG_TEST_NAMESPACE: &str = "namespace";
-pub(super) const ICEBERG_TEST_TABLE: &str = "test_table";
+pub(crate) const ICEBERG_TEST_NAMESPACE: &str = "namespace";
+pub(crate) const ICEBERG_TEST_TABLE: &str = "test_table";
 /// Test constant for table id.
-pub(super) const TEST_TABLE_ID: TableId = TableId(0);
+pub(crate) const TEST_TABLE_ID: TableId = TableId(0);
 /// File attributes for a fake file.
 ///
 /// File id for the fake file.
-pub(super) const FAKE_FILE_ID: TableUniqueFileId = TableUniqueFileId {
+pub(crate) const FAKE_FILE_ID: TableUniqueFileId = TableUniqueFileId {
     table_id: TEST_TABLE_ID,
     file_id: FileId(100),
 };
 /// Fake file size.
-pub(super) const FAKE_FILE_SIZE: u64 = 1 << 30; // 1GiB
+pub(crate) const FAKE_FILE_SIZE: u64 = 1 << 30; // 1GiB
 /// Fake filename.
-pub(super) const FAKE_FILE_NAME: &str = "fake-file-name";
+pub(crate) const FAKE_FILE_NAME: &str = "fake-file-name";
 
 /// Test util function to get unique table file id.
-pub(super) fn get_unique_table_file_id(file_id: FileId) -> TableUniqueFileId {
+pub(crate) fn get_unique_table_file_id(file_id: FileId) -> TableUniqueFileId {
     TableUniqueFileId {
         table_id: TEST_TABLE_ID,
         file_id,
@@ -62,7 +61,7 @@ pub(super) fn get_unique_table_file_id(file_id: FileId) -> TableUniqueFileId {
 }
 
 /// Test util function to decide whether a given file is remote file.
-pub(super) fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
+pub(crate) fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
     // Local filesystem directory for iceberg warehouse.
     let mut temp_pathbuf = temp_dir.path().to_path_buf();
     temp_pathbuf.push(ICEBERG_TEST_NAMESPACE); // iceberg namespace
@@ -72,12 +71,12 @@ pub(super) fn is_remote_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> 
 }
 
 /// Test util function to decide whether a given file is local file.
-pub(super) fn is_local_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
+pub(crate) fn is_local_file(file: &MooncakeDataFileRef, temp_dir: &TempDir) -> bool {
     !is_remote_file(file, temp_dir)
 }
 
 /// Test util function to get fake file path.
-pub(super) fn get_fake_file_path(temp_dir: &TempDir) -> String {
+pub(crate) fn get_fake_file_path(temp_dir: &TempDir) -> String {
     temp_dir
         .path()
         .join(FAKE_FILE_NAME)
@@ -87,7 +86,7 @@ pub(super) fn get_fake_file_path(temp_dir: &TempDir) -> String {
 }
 
 /// Test util function to import a second object storage cache entry.
-pub(super) async fn import_fake_cache_entry(
+pub(crate) async fn import_fake_cache_entry(
     temp_dir: &TempDir,
     cache: &mut ObjectStorageCache,
 ) -> NonEvictableHandle {
@@ -106,7 +105,7 @@ pub(super) async fn import_fake_cache_entry(
 }
 
 /// Test util function to check certain data file doesn't exist in non evictable cache.
-pub(super) async fn check_file_not_pinned(
+pub(crate) async fn check_file_not_pinned(
     object_storage_cache: &ObjectStorageCache,
     file_id: FileId,
 ) {
@@ -116,14 +115,14 @@ pub(super) async fn check_file_not_pinned(
 }
 
 /// Test util function to check certain data file exists in non evictable cache.
-pub(super) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache, file_id: FileId) {
+pub(crate) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache, file_id: FileId) {
     let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
     let table_unique_file_id = get_unique_table_file_id(file_id);
     assert!(non_evicted_file_ids.contains(&table_unique_file_id));
 }
 
 /// Test util function to get iceberg table config.
-pub(super) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
+pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
     IcebergTableConfig {
         warehouse_uri: temp_dir.path().to_str().unwrap().to_string(),
         namespace: vec!["namespace".to_string()],
@@ -133,7 +132,7 @@ pub(super) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
 }
 
 /// Test util function to create mooncake table and table notify for compaction test.
-pub(super) async fn create_mooncake_table_and_notify_for_compaction(
+pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
@@ -185,7 +184,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_compaction(
 }
 
 /// Test util function to get index block files, and the overall file size.
-pub(super) fn get_index_block_files(
+pub(crate) fn get_index_block_files(
     file_indices: Vec<GlobalIndex>,
 ) -> (Vec<MooncakeDataFileRef>, u64) {
     let mut index_block_files = vec![];
@@ -204,7 +203,7 @@ pub(super) fn get_index_block_files(
 ///  ===================================
 ///
 /// Test util function to create an infinitely large object storage cache.
-pub(super) fn create_infinite_object_storage_cache(
+pub(crate) fn create_infinite_object_storage_cache(
     temp_dir: &TempDir,
     optimize_local_filesystem: bool,
 ) -> ObjectStorageCache {
@@ -217,7 +216,7 @@ pub(super) fn create_infinite_object_storage_cache(
 }
 
 /// Test util function to create an object storage cache, with size of only one file.
-pub(super) fn create_object_storage_cache_with_one_file_size(
+pub(crate) fn create_object_storage_cache_with_one_file_size(
     temp_dir: &TempDir,
     optimize_local_filesystem: bool,
 ) -> ObjectStorageCache {
@@ -234,7 +233,7 @@ pub(super) fn create_object_storage_cache_with_one_file_size(
 /// ===================================
 ///
 /// Test util function to drop read states, and apply the synchronized response to mooncake table.
-pub(super) async fn drop_read_states(
+pub(crate) async fn drop_read_states(
     read_states: Vec<Arc<ReadState>>,
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
@@ -247,7 +246,7 @@ pub(super) async fn drop_read_states(
 
 /// Test util function to drop read states and create a mooncake snapshot to reflect.
 /// Return evicted files to delete.
-pub(super) async fn drop_read_states_and_create_mooncake_snapshot(
+pub(crate) async fn drop_read_states_and_create_mooncake_snapshot(
     read_states: Vec<Arc<ReadState>>,
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
@@ -258,7 +257,7 @@ pub(super) async fn drop_read_states_and_create_mooncake_snapshot(
 }
 
 /// Test util function to create mooncake table and table notify for read test.
-pub(super) async fn create_mooncake_table_and_notify_for_read(
+pub(crate) async fn create_mooncake_table_and_notify_for_read(
     temp_dir: &TempDir,
     object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
@@ -299,235 +298,6 @@ pub(super) async fn create_mooncake_table_and_notify_for_read(
 }
 
 /// ===================================
-/// Accessors for mooncake table
-/// ===================================
-///
-/// Test util function to get disk files for the given mooncake table.
-pub(crate) async fn get_disk_files_for_snapshot(
-    table: &MooncakeTable,
-) -> HashMap<MooncakeDataFileRef, DiskFileEntry> {
-    let guard = table.snapshot.read().await;
-    guard.current_snapshot.disk_files.clone()
-}
-
-/// Test util function to get sorted data file filepaths for the given mooncake table, and assert on expected disk file number.
-pub(crate) async fn get_disk_files_for_snapshot_and_assert(
-    table: &MooncakeTable,
-    expected_file_num: usize,
-) -> Vec<String> {
-    let guard = table.snapshot.read().await;
-    assert_eq!(guard.current_snapshot.disk_files.len(), expected_file_num);
-    let data_files = guard
-        .current_snapshot
-        .disk_files
-        .keys()
-        .map(|f| f.file_path().to_string())
-        .sorted()
-        .collect::<Vec<_>>();
-    data_files
-}
-
-/// Test util to get all index block file ids for the table, and assert there's only one file.
-pub(super) async fn get_only_index_block_file_id(
-    table: &MooncakeTable,
-    temp_dir: &TempDir,
-    is_local: bool,
-) -> FileId {
-    let mut file_ids = vec![];
-
-    let guard = table.snapshot.read().await;
-    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-        for cur_index_block in cur_file_index.index_blocks.iter() {
-            assert!(cur_index_block.cache_handle.is_some());
-            file_ids.push(cur_index_block.index_file.file_id());
-            if is_local {
-                assert!(is_local_file(&cur_index_block.index_file, temp_dir));
-            } else {
-                assert!(is_remote_file(&cur_index_block.index_file, temp_dir));
-            }
-        }
-    }
-
-    assert_eq!(file_ids.len(), 1);
-    file_ids[0]
-}
-
-/// Test util to get all index block file ids for the table, and assert there's only one file.
-pub(super) async fn get_only_index_block_filepath(table: &MooncakeTable) -> String {
-    let mut index_block_filepaths = vec![];
-
-    let guard = table.snapshot.read().await;
-    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-        for cur_index_block in cur_file_index.index_blocks.iter() {
-            assert!(cur_index_block.cache_handle.is_some());
-            index_block_filepaths.push(cur_index_block.index_file.file_path().to_string());
-        }
-    }
-
-    assert_eq!(index_block_filepaths.len(), 1);
-    index_block_filepaths[0].clone()
-}
-
-/// Test util to get the only puffin blob ref for the given mooncake snapshot.
-pub(super) fn get_only_puffin_blob_ref_from_snapshot(snapshot: &Snapshot) -> PuffinBlobRef {
-    let disk_files = snapshot.disk_files.clone();
-    assert_eq!(disk_files.len(), 1);
-    disk_files
-        .iter()
-        .next()
-        .unwrap()
-        .1
-        .puffin_deletion_blob
-        .as_ref()
-        .unwrap()
-        .clone()
-}
-
-/// Test util to get the only puffin blob ref for the given mooncake table.
-pub(super) async fn get_only_puffin_blob_ref_from_table(table: &MooncakeTable) -> PuffinBlobRef {
-    let guard = table.snapshot.read().await;
-    let disk_files = guard.current_snapshot.disk_files.clone();
-    assert_eq!(disk_files.len(), 1);
-    disk_files
-        .iter()
-        .next()
-        .unwrap()
-        .1
-        .puffin_deletion_blob
-        .as_ref()
-        .unwrap()
-        .clone()
-}
-
-/// Test util to get data files and index block filepaths for the given mooncake table, filepaths returned in alphabetical order.
-pub(super) async fn get_data_files_and_index_block_files(table: &MooncakeTable) -> Vec<String> {
-    let mut files = vec![];
-
-    let guard = table.snapshot.read().await;
-
-    // Check and get data files.
-    let disk_files = guard.current_snapshot.disk_files.clone();
-    for (cur_file, _) in disk_files.iter() {
-        files.push(cur_file.file_path().to_string());
-    }
-
-    // Check and get index block files.
-    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-        for cur_index_block in cur_file_index.index_blocks.iter() {
-            files.push(cur_index_block.index_file.file_path().to_string());
-        }
-    }
-
-    files.sort();
-    files
-}
-
-///Test util function to assert there's only one data file in table snapshot, and it indicates remote file.
-pub(super) async fn get_only_remote_data_file_id(
-    table: &MooncakeTable,
-    temp_dir: &TempDir,
-) -> FileId {
-    let guard = table.snapshot.read().await;
-    let disk_files = &guard.current_snapshot.disk_files;
-    assert_eq!(disk_files.len(), 1);
-    let data_file = disk_files.iter().next().unwrap().0;
-    assert!(is_remote_file(data_file, temp_dir));
-    data_file.file_id()
-}
-
-/// Test util function to assert there's only one data file in table snapshot, and it indicates local file.
-pub(super) async fn get_only_local_data_file_id(
-    table: &MooncakeTable,
-    temp_dir: &TempDir,
-) -> FileId {
-    let guard = table.snapshot.read().await;
-    let disk_files = &guard.current_snapshot.disk_files;
-    assert_eq!(disk_files.len(), 1);
-    let (data_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-
-    assert_eq!(
-        data_file.file_path(),
-        &disk_file_entry
-            .cache_handle
-            .as_ref()
-            .unwrap()
-            .cache_entry
-            .cache_filepath
-    );
-    assert!(is_local_file(data_file, temp_dir));
-
-    data_file.file_id()
-}
-
-/// Test util function to get committed and uncommitted deletion logs states.
-pub(crate) async fn get_deletion_logs_for_snapshot(
-    table: &MooncakeTable,
-) -> (
-    Vec<ProcessedDeletionRecord>,
-    Vec<Option<ProcessedDeletionRecord>>,
-) {
-    let guard = table.snapshot.read().await;
-    (
-        guard.committed_deletion_log.clone(),
-        guard.uncommitted_deletion_log.clone(),
-    )
-}
-
-/// Test util function to get all index block filepaths from the given mooncake table, returned in alphabetic order.
-pub(super) async fn get_index_block_filepaths(table: &MooncakeTable) -> Vec<String> {
-    let guard = table.snapshot.read().await;
-    let mut index_block_files = vec![];
-    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-        for cur_index_block in cur_file_index.index_blocks.iter() {
-            index_block_files.push(cur_index_block.index_file.file_path().clone());
-        }
-    }
-
-    index_block_files.sort();
-    index_block_files
-}
-
-/// Test util function to get overall file size for all index block files from the given mooncake table.
-pub(super) async fn get_index_block_files_size(table: &MooncakeTable) -> u64 {
-    let guard = table.snapshot.read().await;
-    let mut index_blocks_file_size = 0;
-    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-        for cur_index_block in cur_file_index.index_blocks.iter() {
-            index_blocks_file_size += cur_index_block.file_size;
-        }
-    }
-    index_blocks_file_size
-}
-
-/// Test util function to get index block file ids for the given mooncake table.
-pub(super) async fn get_index_block_file_ids(table: &MooncakeTable) -> Vec<FileId> {
-    let guard = table.snapshot.read().await;
-    let mut index_block_files = vec![];
-    for cur_file_index in guard.current_snapshot.indices.file_indices.iter() {
-        for cur_index_block in cur_file_index.index_blocks.iter() {
-            index_block_files.push(cur_index_block.index_file.file_id());
-        }
-    }
-    index_block_files
-}
-
-/// Test util to get new compacted data file size and file id for the given mooncake table.
-/// Assert the file is of local filepath, and there's only one new compacted data file.
-pub(super) async fn get_new_compacted_local_file_size_and_id(
-    table: &MooncakeTable,
-    temp_dir: &TempDir,
-) -> (usize, FileId) {
-    let disk_files = get_disk_files_for_snapshot(table).await;
-    assert_eq!(disk_files.len(), 1);
-    let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
-    assert!(disk_file_entry.cache_handle.is_some());
-    assert!(is_local_file(new_compacted_file, temp_dir));
-    let new_compacted_data_file_size = disk_file_entry.file_size;
-    (new_compacted_data_file_size, new_compacted_file.file_id())
-}
-
-/// ===================================
 /// Operation for mooncake table
 /// ===================================
 ///
@@ -553,14 +323,14 @@ pub(crate) async fn sync_delete_evicted_files(
 
 /// -------- Request read --------
 /// Perform a read request for the given table.
-pub(super) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> SnapshotReadOutput {
+pub(crate) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> SnapshotReadOutput {
     let mut guard = table.snapshot.write().await;
     guard.request_read().await.unwrap()
 }
 
 /// Block wait read request to finish, and set the result to the snapshot buffer.
 /// Precondition: there's ongoing read request.
-pub(super) async fn sync_read_request_for_test(
+pub(crate) async fn sync_read_request_for_test(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
 ) {

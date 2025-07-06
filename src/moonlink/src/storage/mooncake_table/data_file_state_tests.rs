@@ -71,6 +71,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::cache::object_storage::test_utils::*;
 use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::table_notify::TableEvent;
 use crate::{MooncakeTable, ObjectStorageCache};
 

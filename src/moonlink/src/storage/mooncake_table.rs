@@ -1165,3 +1165,6 @@ mod deletion_vector_puffin_state_tests;
 
 #[cfg(test)]
 mod file_index_state_tests;
+
+#[cfg(test)]
+pub(crate) mod table_accessor_test_utils;

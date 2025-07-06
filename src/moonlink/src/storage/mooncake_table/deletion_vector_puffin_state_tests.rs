@@ -41,6 +41,7 @@ use crate::storage::cache::object_storage::test_utils::*;
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1LDWLWhgFP5-da8P50t-uZIO6a4lK2Na5P70ibNOWu-g/edit?usp=sharing
 use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableManager, MooncakeTable, ObjectStorageCache, ObjectStorageCacheConfig, TableManager,
