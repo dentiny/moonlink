@@ -975,11 +975,41 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
+    /// Validate mooncake table invariants.
+    fn validate_mooncake_table_invariants(&self, task: &SnapshotTask, opt: &SnapshotOption) {
+        if let Some(new_flush_lsn) = task.new_flush_lsn {
+            if self.current_snapshot.data_file_flush_lsn.is_some() {
+                // Invariant-1: flush LSN doesn't regress.
+                //
+                // Force snapshot not change table states, it's possible to use the latest flush LSN.
+                if opt.force_create {
+                    ma::assert_le!(
+                        self.current_snapshot.data_file_flush_lsn.unwrap(),
+                        new_flush_lsn
+                    );
+                }
+                // Otherwise, flush LSN always progresses.
+                else {
+                    ma::assert_lt!(
+                        self.current_snapshot.data_file_flush_lsn.unwrap(),
+                        new_flush_lsn
+                    );
+                }
+
+                // Invariant-2: flush must follow a commit, but commit doesn't need to be followed by a flush.
+                ma::assert_ge!(task.new_commit_lsn, new_flush_lsn);
+            }
+        }
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
+        // Validate mooncake table operation invariants.
+        self.validate_mooncake_table_invariants(&task, &opt);
+
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
 
