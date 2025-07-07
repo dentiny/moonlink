@@ -368,6 +368,8 @@ impl SnapshotTableState {
     /// also import local write through cache to globally managed object storage cache, so they could be pinned and evicted when necessary.
     ///
     /// Return evicted data files to delete when unreference existing disk file entries.
+    ///
+    /// TODO(hjiang): Update current snapshot for index merge results.
     async fn update_current_snapshot_with_iceberg_snapshot(
         &mut self,
         task: &SnapshotTask,
