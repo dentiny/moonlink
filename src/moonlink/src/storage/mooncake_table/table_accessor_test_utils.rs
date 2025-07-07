@@ -277,9 +277,7 @@ pub(crate) fn get_index_block_files(
 }
 
 /// Test util function to get index block filepath from file indices, and assert there's only one index block file within it.
-pub(crate) fn get_only_index_block_file_from_file_indices(
-    file_indices: &Vec<GlobalIndex>,
-) -> String {
+pub(crate) fn get_only_index_block_file_from_file_indices(file_indices: &[GlobalIndex]) -> String {
     assert_eq!(file_indices.len(), 1);
     let index_blocks = file_indices[0].index_blocks.clone();
     assert_eq!(index_blocks.len(), 1);
