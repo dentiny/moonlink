@@ -13,7 +13,6 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fmt, vec};
 use tokio::fs::File as AsyncFile;
-use tokio::io::BufWriter as AsyncBufWriter;
 use tokio_bitstream_io::{
     BigEndian as AsyncBigEndian, BitRead as AsyncBitRead, BitReader as AsyncBitReader,
 };
@@ -324,7 +323,7 @@ struct IndexBlockBuilder {
     bucket_end_idx: u32,
     buckets: Vec<u32>,
     file_path: PathBuf,
-    entry_writer: AsyncBitWriter<AsyncBufWriter<AsyncFile>, AsyncBigEndian>,
+    entry_writer: AsyncBitWriter<AsyncFile, AsyncBigEndian>,
     current_bucket: u32,
     current_entry: u32,
 }
@@ -336,8 +335,7 @@ impl IndexBlockBuilder {
         let file_path = directory.join(&file_name);
 
         let file = AsyncFile::create(&file_path).await.unwrap();
-        let buf_writer = AsyncBufWriter::new(file);
-        let entry_writer = AsyncBitWriter::endian(buf_writer, AsyncBigEndian);
+        let entry_writer = AsyncBitWriter::endian(file, AsyncBigEndian);
 
         Self {
             bucket_start_idx,
