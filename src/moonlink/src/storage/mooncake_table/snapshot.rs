@@ -210,7 +210,7 @@ impl SnapshotTableState {
 
     /// Update current mooncake snapshot with persisted deletion vector.
     /// Return the evicted files to delete.
-    async fn update_current_snapshot_with_iceberg_snapshot(
+    async fn update_deletion_vector_to_persisted(
         &mut self,
         puffin_blob_ref: HashMap<FileId, PuffinBlobRef>,
     ) -> Vec<String> {
@@ -361,22 +361,24 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
+    /// Update current snapshot with iceberg persistence result.
     /// Before iceberg snapshot, mooncake snapshot records local write through cache in disk file (which is local filepath).
     /// After a successful iceberg snapshot, update current snapshot's disk files and file indices to reference to remote paths,
     /// also import local write through cache to globally managed object storage cache, so they could be pinned and evicted when necessary.
     ///
     /// Return evicted data files to delete when unreference existing disk file entries.
-    async fn update_local_path_to_persisted_by_imported(
+    async fn update_current_snapshot_with_iceberg_snapshot(
         &mut self,
         task: &SnapshotTask,
     ) -> Vec<String> {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
-        // Handle imported new data files and file indices.
+        // Step-1: Handle imported new data files.
         let (updated_file_ids, cur_evicted_files) = self.update_data_files_to_persisted(task).await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
+        // Step-2: Handle imported file indices.
         let cur_evicted_files = self
             .update_file_indices_to_persisted(
                 task.iceberg_persisted_records
@@ -384,6 +386,17 @@ impl SnapshotTableState {
                     .new_file_indices
                     .clone(),
                 updated_file_ids,
+            )
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+
+        // Step-3: Handle imported deletion vector.
+        let cur_evicted_files = self
+            .update_deletion_vector_to_persisted(
+                task.iceberg_persisted_records
+                    .import_result
+                    .puffin_blob_ref
+                    .clone(),
             )
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
@@ -1020,25 +1033,10 @@ impl SnapshotTableState {
         evicted_data_files_to_delete.extend(completed_read_evicted_data_files);
 
         // Reflect iceberg snapshot to mooncake snapshot.
-        //
-        // There're a few things to do:
-        // 1. Prune unpersisted fields.
-        // 2. Update persisted data files and index blocks from local path to remote path, and import into cache.
-        // 3. Update mooncake snapshot with index merge and data compaction results.
-        //
-        // Update data files and file indices' local file path to remote file path, it only applies to newly imported data files and file indices,
-        // because both index merge and data compaction only apply to those already persisted into iceberg table.
-        let persistence_evicted_data_files =
-            self.update_local_path_to_persisted_by_imported(&task).await;
-        evicted_data_files_to_delete.extend(persistence_evicted_data_files);
-
-        // Update deletion vector puffin persisted in the iceberg table.
-        let puffin_evicted_data_files = self
-            .update_current_snapshot_with_iceberg_snapshot(std::mem::take(
-                &mut task.iceberg_persisted_records.import_result.puffin_blob_ref,
-            ))
+        let persistence_evicted_data_files = self
+            .update_current_snapshot_with_iceberg_snapshot(&task)
             .await;
-        evicted_data_files_to_delete.extend(puffin_evicted_data_files);
+        evicted_data_files_to_delete.extend(persistence_evicted_data_files);
 
         // Import all new file indices, including newly imported ones, merged ones, and compacted ones into cache.
         // So it should happen before reflecting index merge and data compaction result into mooncake snapshot, and before integrating stream transactions and disk slices.
