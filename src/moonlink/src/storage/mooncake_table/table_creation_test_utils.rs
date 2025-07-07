@@ -33,15 +33,15 @@ pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {
     Arc::new(ArrowSchema::new(vec![
         Field::new("id", DataType::Int32, false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "1".to_string(),
+            "0".to_string(),
         )])),
         Field::new("name", DataType::Utf8, true).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "2".to_string(),
+            "1".to_string(),
         )])),
         Field::new("age", DataType::Int32, false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "3".to_string(),
+            "2".to_string(),
         )])),
     ]))
 }

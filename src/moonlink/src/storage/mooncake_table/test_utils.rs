@@ -5,9 +5,9 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::snapshot::PuffinDeletionBlobAtRead;
 use crate::storage::mooncake_table::snapshot_read_output::DataFileForRead;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use arrow::array::Int32Array;
-use arrow::datatypes::{DataType, Field};
 use futures::future::join_all;
 use iceberg::io::FileIOBuilder;
 use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
@@ -32,23 +32,6 @@ impl TestContext {
     pub fn path(&self) -> PathBuf {
         self.test_dir.clone()
     }
-}
-
-pub fn test_schema() -> Schema {
-    Schema::new(vec![
-        Field::new("id", DataType::Int32, false).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "1".to_string(),
-        )])),
-        Field::new("name", DataType::Utf8, true).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "2".to_string(),
-        )])),
-        Field::new("age", DataType::Int32, false).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "3".to_string(),
-        )])),
-    ])
 }
 
 pub fn test_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
@@ -84,7 +67,7 @@ pub async fn test_table(
     let mut table_config = test_mooncake_table_config(context);
     table_config.batch_size = 2;
     MooncakeTable::new(
-        test_schema(),
+        (*create_test_arrow_schema()).clone(),
         table_name.to_string(),
         1,
         context.path(),

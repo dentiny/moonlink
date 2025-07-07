@@ -1,6 +1,7 @@
 use super::test_utils::*;
 use super::*;
 use crate::storage::iceberg::table_manager::MockTableManager;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use iceberg::{Error as IcebergError, ErrorKind};
@@ -248,12 +249,12 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
 
 #[tokio::test]
 async fn test_snapshot_initialization() -> Result<()> {
-    let schema = test_schema();
+    let schema = create_test_arrow_schema();
     let identity = IdentityProp::Keys(vec![0]);
     let metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
         table_id: 1,
-        schema: Arc::new(schema),
+        schema: schema,
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::new(),
         identity,
@@ -443,7 +444,7 @@ async fn test_table_recovery() {
 
     // Recovery from iceberg snapshot and check mooncake table recovery.
     let recovered_table = MooncakeTable::new(
-        test_schema(),
+        (*create_test_arrow_schema()).clone(),
         table_name.to_string(),
         /*table_id=*/ 1,
         context.path(),
@@ -464,7 +465,7 @@ async fn test_snapshot_load_failure() {
     let table_metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
         table_id: 1,
-        schema: Arc::new(test_schema()),
+        schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),
         identity: IdentityProp::Keys(vec![0]),
@@ -497,7 +498,7 @@ async fn test_snapshot_store_failure() {
     let table_metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
         table_id: 1,
-        schema: Arc::new(test_schema()),
+        schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),
         identity: IdentityProp::Keys(vec![0]),
