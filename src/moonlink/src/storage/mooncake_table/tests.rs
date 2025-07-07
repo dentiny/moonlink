@@ -266,6 +266,51 @@ async fn test_snapshot_initialization() -> Result<()> {
 }
 
 #[tokio::test]
+async fn test_force_snapshot_without_new_commits() {
+    let row = test_row(1, "Row 1", 31);
+
+    let context = TestContext::new("force_snapshot_without_new_commits");
+    let mut table = test_table(
+        &context,
+        "force_snapshot_without_new_commits",
+        IdentityProp::FullRow,
+    )
+    .await;
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    table.register_table_notify(event_completion_tx).await;
+
+    // Perform and check initial append operation.
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 100);
+    table.flush(/*lsn=*/ 100).await.unwrap();
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
+
+    // Now there're no new commits, create a force snapshot again.
+    //
+    // Force snapshot is possible to flush with latest commit LSN if table at clean state.
+    table.flush(/*lsn=*/ 100).await.unwrap();
+    create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
+    {
+        let mut table_snapshot = table.snapshot.write().await;
+        let SnapshotReadOutput {
+            data_file_paths,
+            puffin_cache_handles,
+            position_deletes,
+            deletion_vectors,
+            ..
+        } = table_snapshot.request_read().await.unwrap();
+        verify_files_and_deletions(
+            get_data_files_for_read(&data_file_paths).as_slice(),
+            get_deletion_puffin_files_for_read(&puffin_cache_handles).as_slice(),
+            position_deletes,
+            deletion_vectors,
+            /*expected_ids=*/ &[1],
+        )
+        .await;
+    }
+}
+
+#[tokio::test]
 async fn test_full_row_with_duplication_and_identical() -> Result<()> {
     let context = TestContext::new("full_row_with_duplication_and_identical");
     let mut table = test_table(

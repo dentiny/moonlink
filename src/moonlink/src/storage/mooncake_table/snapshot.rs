@@ -1016,7 +1016,18 @@ impl SnapshotTableState {
                 }
 
                 // Invariant-2: flush must follow a commit, but commit doesn't need to be followed by a flush.
-                ma::assert_ge!(task.new_commit_lsn, new_flush_lsn);
+                //
+                // Force snapshot could flush as long as the table at a clean state (aka, no uncommitted states), possible to go without commit at current snapshot iteration.
+                if opt.force_create {
+                    assert!(
+                        task.new_commit_lsn == 0 || task.new_commit_lsn >= new_flush_lsn,
+                        "New commit LSN is {}, new flush LSN is {}",
+                        task.new_commit_lsn,
+                        new_flush_lsn
+                    );
+                } else {
+                    ma::assert_ge!(task.new_commit_lsn, new_flush_lsn);
+                }
             }
         }
     }
