@@ -258,6 +258,34 @@ pub(crate) struct IcebergPersistedRecords {
     data_compaction_result: IcebergSnapshotDataCompactionResult,
 }
 
+impl IcebergPersistedRecords {
+    /// Get persisted data files.
+    pub fn get_persisted_data_files(&self) -> Vec<MooncakeDataFileRef> {
+        let mut persisted_data_files = vec![];
+        persisted_data_files.extend(self.import_result.new_data_files.iter().cloned());
+        persisted_data_files.extend(
+            self.data_compaction_result
+                .new_data_files_to_import
+                .iter()
+                .cloned(),
+        );
+        persisted_data_files
+    }
+
+    /// Get persisted file indices.
+    pub fn get_persisted_file_indices(&self) -> Vec<FileIndex> {
+        let mut persisted_file_indices = vec![];
+        persisted_file_indices.extend(self.import_result.new_file_indices.iter().cloned());
+        persisted_file_indices.extend(
+            self.data_compaction_result
+                .new_file_indices_to_import
+                .iter()
+                .cloned(),
+        );
+        persisted_file_indices
+    }
+}
+
 #[derive(Default)]
 pub struct SnapshotTask {
     /// ---- States not recorded by mooncake snapshot ----

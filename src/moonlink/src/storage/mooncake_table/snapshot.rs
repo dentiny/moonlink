@@ -379,37 +379,8 @@ impl SnapshotTableState {
 
         // Get persisted data files and file indices.
         // TODO(hjiang): Revisit whether we need separate fields in snapshot task.
-        let mut persisted_data_files = vec![];
-        persisted_data_files.extend(
-            task.iceberg_persisted_records
-                .import_result
-                .new_data_files
-                .iter()
-                .cloned(),
-        );
-        persisted_data_files.extend(
-            task.iceberg_persisted_records
-                .data_compaction_result
-                .new_data_files_to_import
-                .iter()
-                .cloned(),
-        );
-
-        let mut persisted_file_indices = vec![];
-        persisted_file_indices.extend(
-            task.iceberg_persisted_records
-                .import_result
-                .new_file_indices
-                .iter()
-                .cloned(),
-        );
-        persisted_file_indices.extend(
-            task.iceberg_persisted_records
-                .data_compaction_result
-                .new_file_indices_to_import
-                .iter()
-                .cloned(),
-        );
+        let persisted_data_files = task.iceberg_persisted_records.get_persisted_data_files();
+        let persisted_file_indices = task.iceberg_persisted_records.get_persisted_file_indices();
 
         // Step-1: Handle persisted data files.
         let (updated_file_ids, cur_evicted_files) = self
