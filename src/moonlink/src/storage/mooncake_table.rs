@@ -1155,9 +1155,6 @@ mod tests;
 pub(crate) mod test_utils;
 
 #[cfg(test)]
-pub(crate) mod state_test_utils;
-
-#[cfg(test)]
 mod data_file_state_tests;
 
 #[cfg(test)]
@@ -1180,3 +1177,6 @@ pub(crate) mod table_operation_test_utils;
 
 #[cfg(test)]
 pub(crate) mod test_utils_commons;
+
+#[cfg(test)]
+pub(crate) mod cache_test_utils;

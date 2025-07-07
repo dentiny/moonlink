@@ -70,7 +70,7 @@ use tokio::sync::mpsc::Receiver;
 /// so we combine the test state-machine for file indices and data files.
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::cache::object_storage::test_utils::*;
-use crate::storage::mooncake_table::state_test_utils::*;
+use crate::storage::mooncake_table::cache_test_utils::*;
 use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;

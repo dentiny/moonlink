@@ -24,10 +24,6 @@ pub(crate) async fn import_fake_cache_entry(
     cache.import_cache_entry(FAKE_FILE_ID, cache_entry).await.0
 }
 
-/// ===================================
-/// Cache utils
-/// ===================================
-///
 /// Test util function to create an infinitely large object storage cache.
 pub(crate) fn create_infinite_object_storage_cache(
     temp_dir: &TempDir,
