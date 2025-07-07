@@ -646,7 +646,6 @@ async fn test_snapshot_load_for_multiple_times() {
 async fn test_index_merge_and_create_snapshot() {
     let tmp_dir = tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
 
     // File indices merge is triggered as long as there's not only one file indice.
     let file_index_config = FileIndexMergeConfig {
@@ -679,25 +678,13 @@ async fn test_index_merge_and_create_snapshot() {
         identity: RowIdentity::FullRow,
     });
 
-    let config = IcebergTableConfig {
-        warehouse_uri: tmp_dir.path().to_str().unwrap().to_string(),
-        ..Default::default()
-    };
-
-    let iceberg_table_manager = IcebergTableManager::new(
+    let iceberg_table_config = get_iceberg_table_config(&tmp_dir);
+    let (mut mooncake_table, _, mut notify_rx) = create_table_and_iceberg_manager_with_config(
+        &tmp_dir,
         mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
-        config.clone(),
+        iceberg_table_config.clone(),
     )
-    .unwrap();
-    let mut mooncake_table = MooncakeTable::new_with_table_manager(
-        mooncake_table_metadata.clone(),
-        Box::new(iceberg_table_manager),
-        ObjectStorageCache::default_for_test(&tmp_dir),
-    )
-    .await
-    .unwrap();
-    mooncake_table.register_table_notify(notify_tx).await;
+    .await;
 
     // Append one row and commit/flush, so we have one file indice persisted.
     let row_1 = test_row_1();
@@ -719,13 +706,13 @@ async fn test_index_merge_and_create_snapshot() {
     .await;
 
     // Create a new iceberg table manager and check states.
-    let mut iceberg_table_manager = IcebergTableManager::new(
+    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        config.clone(),
+        iceberg_table_config.clone(),
     )
     .unwrap();
-    let (next_file_id, snapshot) = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
         .load_snapshot_from_table()
         .await
         .unwrap();
