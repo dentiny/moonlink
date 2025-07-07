@@ -46,7 +46,7 @@ pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
 use more_asserts as ma;
 pub(crate) use snapshot::{PuffinDeletionBlobAtRead, SnapshotTableState};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
@@ -260,7 +260,7 @@ pub(crate) struct IcebergPersistedRecords {
 
 impl IcebergPersistedRecords {
     /// Get persisted data files.
-    pub fn get_persisted_data_files(&self) -> Vec<MooncakeDataFileRef> {
+    pub fn get_data_files_to_reflect_persistence(&self) -> Vec<MooncakeDataFileRef> {
         let mut persisted_data_files = vec![];
         persisted_data_files.extend(self.import_result.new_data_files.iter().cloned());
         persisted_data_files.extend(
@@ -272,17 +272,22 @@ impl IcebergPersistedRecords {
         persisted_data_files
     }
 
-    /// Get persisted file indices.
-    pub fn get_persisted_file_indices(&self) -> Vec<FileIndex> {
+    /// Get persisted file indices, and files id for data files referenced by index blocks to delete.
+    ///
+    /// Notice, we don't need to reflect file indices persistence for index merge and data compaction, since file indices are always cached on-disk, thus mooncake snapshot only access local cache files.
+    ///
+    /// TODO(hjiang): It's actually better not to assume certain cache implementation, and only apply what iceberg table manager returns.
+    pub fn get_file_indices_to_reflect_persistence(&self) -> (HashSet<FileId>, Vec<FileIndex>) {
         let mut persisted_file_indices = vec![];
         persisted_file_indices.extend(self.import_result.new_file_indices.iter().cloned());
-        persisted_file_indices.extend(
-            self.data_compaction_result
-                .new_file_indices_imported
-                .iter()
-                .cloned(),
-        );
-        persisted_file_indices
+
+        let index_blocks_to_delete = self
+            .import_result
+            .new_data_files
+            .iter()
+            .map(|f| f.file_id())
+            .collect::<HashSet<_>>();
+        (index_blocks_to_delete, persisted_file_indices)
     }
 }
 

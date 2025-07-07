@@ -236,21 +236,16 @@ impl SnapshotTableState {
 
     /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from object storage cache.
     /// Provide [`persisted_data_files`] could come from imported new files, or maintainance jobs like compaction.
-    /// Returned updated data file ids, and cache evicted files to delete.
+    /// Return cache evicted files to delete.
     async fn update_data_files_to_persisted(
         &mut self,
         persisted_data_files: Vec<MooncakeDataFileRef>,
-    ) -> (
-        HashSet<FileId>, /*updated data file id*/
-        Vec<String>,     /*evicted files to delete*/
-    ) {
-        // Updated data file ids.
-        let mut updated_file_ids = HashSet::new();
+    ) -> Vec<String> {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
         if persisted_data_files.is_empty() {
-            return (updated_file_ids, evicted_files_to_delete);
+            return evicted_files_to_delete;
         }
 
         // Update disk file from local write through cache to iceberg persisted remote path.
@@ -275,11 +270,9 @@ impl SnapshotTableState {
             self.current_snapshot
                 .disk_files
                 .insert(cur_data_file.clone(), disk_file_entry);
-
-            assert!(updated_file_ids.insert(cur_data_file.file_id()));
         }
 
-        (updated_file_ids, evicted_files_to_delete)
+        evicted_files_to_delete
     }
 
     /// Update file indices in the current snapshot from local data files to remote ones.
@@ -376,18 +369,26 @@ impl SnapshotTableState {
 
         // Get persisted data files and file indices.
         // TODO(hjiang): Revisit whether we need separate fields in snapshot task.
-        let persisted_data_files = task.iceberg_persisted_records.get_persisted_data_files();
-        let persisted_file_indices = task.iceberg_persisted_records.get_persisted_file_indices();
+        let persisted_data_files = task
+            .iceberg_persisted_records
+            .get_data_files_to_reflect_persistence();
+        let (index_blocks_to_remove, persisted_file_indices) = task
+            .iceberg_persisted_records
+            .get_file_indices_to_reflect_persistence();
+
+        // Record data files number and file indices number for persistence reflection, which is not supposed to change.
+        let old_data_files_count = self.current_snapshot.disk_files.len();
+        let old_file_indices_count = self.current_snapshot.indices.file_indices.len();
 
         // Step-1: Handle persisted data files.
-        let (updated_file_ids, cur_evicted_files) = self
+        let cur_evicted_files = self
             .update_data_files_to_persisted(persisted_data_files)
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
         // Step-2: Handle persisted file indices.
         let cur_evicted_files = self
-            .update_file_indices_to_persisted(persisted_file_indices, updated_file_ids)
+            .update_file_indices_to_persisted(persisted_file_indices, index_blocks_to_remove)
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
@@ -401,6 +402,12 @@ impl SnapshotTableState {
             )
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
+
+        // Check data files number and file indices number don't change after persistence reflection.
+        let new_data_files_count = self.current_snapshot.disk_files.len();
+        let new_file_indices_count = self.current_snapshot.indices.file_indices.len();
+        assert_eq!(old_data_files_count, new_data_files_count);
+        assert_eq!(old_file_indices_count, new_file_indices_count);
 
         evicted_files_to_delete
     }
@@ -1148,7 +1155,7 @@ impl SnapshotTableState {
         // Expensive assertion, which is only enabled in unit tests.
         #[cfg(test)]
         {
-            self.assert_current_snapshot_consistent();
+            self.assert_current_snapshot_consistent().await;
         }
 
         MooncakeSnapshotOutput {

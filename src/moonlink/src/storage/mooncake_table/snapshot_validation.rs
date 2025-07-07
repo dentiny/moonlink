@@ -5,7 +5,7 @@ use std::collections::HashSet;
 impl SnapshotTableState {
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
-    pub(super) fn assert_current_snapshot_consistent(&self) {
+    pub(super) async fn assert_current_snapshot_consistent(&self) {
         // Check data files and file indices match each other.
         self.assert_data_files_and_file_indices_match();
         // Check one data file is only pointed by one file index.
@@ -13,7 +13,7 @@ impl SnapshotTableState {
         // Check file ids don't have duplicate.
         self.assert_file_ids_no_duplicate();
         // Check index blocks are all cached.
-        self.assert_index_blocks_cached();
+        self.assert_index_blocks_cached().await;
         // Check persistence buffer.
         self.unpersisted_records.validate_invariants();
     }
@@ -36,7 +36,7 @@ impl SnapshotTableState {
 
     /// Test util function to validate all index block files are cached, and cache handle filepath matches index file path.
     #[cfg(test)]
-    fn assert_index_blocks_cached(&self) {
+    async fn assert_index_blocks_cached(&self) {
         for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
             for cur_index_block in cur_file_index.index_blocks.iter() {
                 assert!(cur_index_block.cache_handle.is_some());
@@ -47,6 +47,11 @@ impl SnapshotTableState {
                         .unwrap()
                         .get_cache_filepath(),
                     cur_index_block.index_file.file_path()
+                );
+                assert!(
+                    tokio::fs::try_exists(cur_index_block.index_file.file_path())
+                        .await
+                        .unwrap()
                 );
             }
         }
