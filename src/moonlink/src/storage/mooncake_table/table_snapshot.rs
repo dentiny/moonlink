@@ -93,21 +93,21 @@ impl IcebergSnapshotImportResult {
 /// Iceberg snapshot index merge result.
 #[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotIndexMergeResult {
-    /// New file indices to import to the iceberg table.
-    pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
-    /// Merged file indices to remove from the iceberg table.
-    pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+    /// New file indices which are imported the iceberg table.
+    pub(crate) new_file_indices_imported: Vec<MooncakeFileIndex>,
+    /// Merged file indices which are removed from the iceberg table.
+    pub(crate) old_file_indices_removed: Vec<MooncakeFileIndex>,
 }
 
 impl IcebergSnapshotIndexMergeResult {
     /// Return whether index merge result is empty.
     pub fn is_empty(&self) -> bool {
-        if self.new_file_indices_to_import.is_empty() {
-            assert!(self.old_file_indices_to_remove.is_empty());
+        if self.new_file_indices_imported.is_empty() {
+            assert!(self.old_file_indices_removed.is_empty());
             return true;
         }
 
-        assert!(!self.old_file_indices_to_remove.is_empty());
+        assert!(!self.old_file_indices_removed.is_empty());
         false
     }
 }
@@ -115,27 +115,27 @@ impl IcebergSnapshotIndexMergeResult {
 /// Iceberg snapshot data file compaction result.
 #[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotDataCompactionResult {
-    /// New data files to import to the iceberg table.
-    pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,
-    /// Old data files to remove from the iceberg table.
-    pub(crate) old_data_files_to_remove: Vec<MooncakeDataFileRef>,
+    /// New data files which are importedthe iceberg table.
+    pub(crate) new_data_files_imported: Vec<MooncakeDataFileRef>,
+    /// Old data files which are removed from the iceberg table.
+    pub(crate) old_data_files_removed: Vec<MooncakeDataFileRef>,
     /// New file indices to import to the iceberg table.
-    pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
+    pub(crate) new_file_indices_imported: Vec<MooncakeFileIndex>,
     /// Old data files to remove from the iceberg table.
-    pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+    pub(crate) old_file_indices_removed: Vec<MooncakeFileIndex>,
 }
 
 impl IcebergSnapshotDataCompactionResult {
     /// Return whether data compaction result is empty.
     pub fn is_empty(&self) -> bool {
-        if self.old_data_files_to_remove.is_empty() {
-            assert!(self.new_data_files_to_import.is_empty());
-            assert!(self.new_file_indices_to_import.is_empty());
-            assert!(self.old_file_indices_to_remove.is_empty());
+        if self.old_data_files_removed.is_empty() {
+            assert!(self.new_data_files_imported.is_empty());
+            assert!(self.new_file_indices_imported.is_empty());
+            assert!(self.old_file_indices_removed.is_empty());
             return true;
         }
 
-        assert!(!self.old_file_indices_to_remove.is_empty());
+        assert!(!self.old_data_files_removed.is_empty());
         false
     }
 }

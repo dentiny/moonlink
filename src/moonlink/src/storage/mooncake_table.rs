@@ -265,7 +265,7 @@ impl IcebergPersistedRecords {
         persisted_data_files.extend(self.import_result.new_data_files.iter().cloned());
         persisted_data_files.extend(
             self.data_compaction_result
-                .new_data_files_to_import
+                .new_data_files_imported
                 .iter()
                 .cloned(),
         );
@@ -278,7 +278,7 @@ impl IcebergPersistedRecords {
         persisted_file_indices.extend(self.import_result.new_file_indices.iter().cloned());
         persisted_file_indices.extend(
             self.data_compaction_result
-                .new_file_indices_to_import
+                .new_file_indices_imported
                 .iter()
                 .cloned(),
         );
@@ -1091,20 +1091,20 @@ impl MooncakeTable {
                     .to_vec(),
             },
             index_merge_result: IcebergSnapshotIndexMergeResult {
-                new_file_indices_to_import: iceberg_persistence_res.remote_file_indices
+                new_file_indices_imported: iceberg_persistence_res.remote_file_indices
                     [new_file_indices_cutoff_index_1..new_file_indices_cutoff_index_2]
                     .to_vec(),
-                old_file_indices_to_remove: old_file_indices_to_remove_by_index_merge,
+                old_file_indices_removed: old_file_indices_to_remove_by_index_merge,
             },
             data_compaction_result: IcebergSnapshotDataCompactionResult {
-                new_data_files_to_import: iceberg_persistence_res.remote_data_files
+                new_data_files_imported: iceberg_persistence_res.remote_data_files
                     [new_data_files_cutoff_index_1..new_data_files_cutoff_index_2]
                     .to_vec(),
-                old_data_files_to_remove: old_data_files_to_remove_by_compaction,
-                new_file_indices_to_import: iceberg_persistence_res.remote_file_indices
+                old_data_files_removed: old_data_files_to_remove_by_compaction,
+                new_file_indices_imported: iceberg_persistence_res.remote_file_indices
                     [new_file_indices_cutoff_index_2..new_file_indices_cutoff_index_3]
                     .to_vec(),
-                old_file_indices_to_remove: old_file_indices_to_remove_by_compaction,
+                old_file_indices_removed: old_file_indices_to_remove_by_compaction,
             },
         };
         table_notify

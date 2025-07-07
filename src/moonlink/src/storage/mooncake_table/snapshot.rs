@@ -370,10 +370,7 @@ impl SnapshotTableState {
     /// Return evicted data files to delete when unreference existing disk file entries.
     ///
     /// TODO(hjiang): Update current snapshot for index merge results.
-    async fn update_current_snapshot_with_iceberg_snapshot(
-        &mut self,
-        task: &SnapshotTask,
-    ) -> Vec<String> {
+    async fn update_snapshot_by_iceberg_snapshot(&mut self, task: &SnapshotTask) -> Vec<String> {
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 
@@ -1031,16 +1028,14 @@ impl SnapshotTableState {
         let mut evicted_data_files_to_delete = vec![];
 
         // Reflect read request result to mooncake snapshot.
-        let completed_read_evicted_data_files = self
+        let completed_read_evicted_files = self
             .update_snapshot_by_read_request_results(&mut task)
             .await;
-        evicted_data_files_to_delete.extend(completed_read_evicted_data_files);
+        evicted_data_files_to_delete.extend(completed_read_evicted_files);
 
         // Reflect iceberg snapshot to mooncake snapshot.
-        let persistence_evicted_data_files = self
-            .update_current_snapshot_with_iceberg_snapshot(&task)
-            .await;
-        evicted_data_files_to_delete.extend(persistence_evicted_data_files);
+        let persistence_evicted_files = self.update_snapshot_by_iceberg_snapshot(&task).await;
+        evicted_data_files_to_delete.extend(persistence_evicted_files);
 
         // Import all new file indices, including newly imported ones, merged ones, and compacted ones into cache.
         // So it should happen before reflecting index merge and data compaction result into mooncake snapshot, and before integrating stream transactions and disk slices.
