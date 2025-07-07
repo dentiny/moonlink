@@ -11,7 +11,7 @@ use iceberg::io::FileIOBuilder;
 use std::collections::HashSet;
 
 /// Test util function to check consistency for snapshot batch deletion vector and deletion puffin blob.
-async fn check_deletion_vector_consistency(disk_file_entry: &DiskFileEntry) {
+pub(crate) async fn check_deletion_vector_consistency(disk_file_entry: &DiskFileEntry) {
     if disk_file_entry.puffin_deletion_blob.is_none() {
         assert!(disk_file_entry
             .batch_deletion_vector

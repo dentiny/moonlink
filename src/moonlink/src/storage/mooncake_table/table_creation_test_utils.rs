@@ -22,8 +22,8 @@ use tokio::sync::mpsc::Receiver;
 pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
     IcebergTableConfig {
         warehouse_uri: temp_dir.path().to_str().unwrap().to_string(),
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
+        table_name: ICEBERG_TEST_TABLE.to_string(),
         ..Default::default()
     }
 }
@@ -60,7 +60,7 @@ pub(crate) fn create_test_table_metadata_with_config(
     mooncake_table_config: MooncakeTableConfig,
 ) -> Arc<MooncakeTableMetadata> {
     Arc::new(MooncakeTableMetadata {
-        name: "test_table".to_string(),
+        name: ICEBERG_TEST_TABLE.to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config,
@@ -113,7 +113,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
 
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
-        "test_table".to_string(),
+        ICEBERG_TEST_TABLE.to_string(),
         /*table_id=*/ 1,
         path,
         identity_property,
@@ -150,8 +150,8 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
 
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri,
-        namespace: vec!["namespace".to_string()],
-        table_name: "test_table".to_string(),
+        namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
+        table_name: ICEBERG_TEST_TABLE.to_string(),
         ..Default::default()
     };
     let schema = create_test_arrow_schema();
@@ -172,7 +172,7 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
 
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
-        "test_table".to_string(),
+        ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
         path,
         identity_property,
@@ -213,7 +213,7 @@ pub(crate) async fn create_mooncake_table_and_notify_for_read(
 
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
-        "test_table".to_string(),
+        ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
         path,
         identity_property,

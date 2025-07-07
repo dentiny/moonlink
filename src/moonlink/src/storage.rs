@@ -23,8 +23,6 @@ pub use mooncake_table::{MooncakeTable, MooncakeTableConfig};
 pub(crate) use mooncake_table::{PuffinDeletionBlobAtRead, SnapshotTableState};
 
 #[cfg(test)]
-pub(crate) use iceberg::deletion_vector::DeletionVector;
-#[cfg(test)]
 pub(crate) use iceberg::puffin_utils::*;
 #[cfg(test)]
 pub(crate) use iceberg::table_manager::MockTableManager;

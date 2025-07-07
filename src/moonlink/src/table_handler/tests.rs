@@ -7,6 +7,8 @@ use super::test_utils::*;
 use super::TableEvent;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::MooncakeTableConfig;
@@ -567,7 +569,7 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
 
     // Arrow batches used in test.
     let arrow_batch_1 = RecordBatch::try_new(
-        Arc::new(default_schema()),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(vec![1])),
             Arc::new(StringArray::from(vec!["John".to_string()])),
@@ -576,7 +578,7 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
     )
     .unwrap();
     let arrow_batch_2 = RecordBatch::try_new(
-        Arc::new(default_schema()),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(vec![2])),
             Arc::new(StringArray::from(vec!["Bob".to_string()])),
@@ -759,7 +761,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
 
     // Arrow batches used in test.
     let arrow_batch_1 = RecordBatch::try_new(
-        Arc::new(default_schema()),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(vec![1])),
             Arc::new(StringArray::from(vec!["John".to_string()])),
@@ -768,7 +770,7 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
     )
     .unwrap();
     let arrow_batch_2 = RecordBatch::try_new(
-        Arc::new(default_schema()),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(vec![2])),
             Arc::new(StringArray::from(vec!["Bob".to_string()])),
@@ -980,7 +982,7 @@ async fn test_multiple_snapshot_requests() {
 
     // Arrow batches used in test.
     let arrow_batch_1 = RecordBatch::try_new(
-        Arc::new(default_schema()),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(vec![1])),
             Arc::new(StringArray::from(vec!["John".to_string()])),
@@ -989,7 +991,7 @@ async fn test_multiple_snapshot_requests() {
     )
     .unwrap();
     let arrow_batch_2 = RecordBatch::try_new(
-        Arc::new(default_schema()),
+        create_test_arrow_schema(),
         vec![
             Arc::new(Int32Array::from(vec![2])),
             Arc::new(StringArray::from(vec!["Bob".to_string()])),
@@ -1297,7 +1299,7 @@ async fn test_iceberg_snapshot_failure_mock_test() {
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
         table_id: 0,
-        schema: Arc::new(default_schema()),
+        schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
         path: temp_dir.path().to_path_buf(),
         identity: crate::row::IdentityProp::Keys(vec![0]),
@@ -1360,7 +1362,7 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
         table_id: 0,
-        schema: Arc::new(default_schema()),
+        schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
         path: temp_dir.path().to_path_buf(),
         identity: crate::row::IdentityProp::Keys(vec![0]),
@@ -1415,7 +1417,7 @@ async fn test_discard_duplicate_writes() {
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
         name: "table_name".to_string(),
         table_id: 0,
-        schema: Arc::new(default_schema()),
+        schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
         path: temp_dir.path().to_path_buf(),
         identity: crate::row::IdentityProp::Keys(vec![0]),

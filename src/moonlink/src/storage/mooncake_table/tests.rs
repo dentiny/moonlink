@@ -254,7 +254,7 @@ async fn test_snapshot_initialization() -> Result<()> {
     let metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
         table_id: 1,
-        schema: schema,
+        schema,
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::new(),
         identity,
