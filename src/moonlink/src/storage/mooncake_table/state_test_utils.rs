@@ -1,16 +1,9 @@
-use std::sync::Arc;
-
 use tempfile::TempDir;
-use tokio::sync::mpsc::Receiver;
 
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::base_cache::{CacheEntry, FileMetadata};
-use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::test_utils_commons::*;
-use crate::table_notify::TableEvent;
-use crate::{
-    MooncakeTable, NonEvictableHandle, ObjectStorageCache, ObjectStorageCacheConfig, ReadState,
-};
+use crate::{NonEvictableHandle, ObjectStorageCache, ObjectStorageCacheConfig};
 
 /// Test util function to import a second object storage cache entry.
 pub(crate) async fn import_fake_cache_entry(
@@ -59,32 +52,4 @@ pub(crate) fn create_object_storage_cache_with_one_file_size(
         optimize_local_filesystem,
     );
     ObjectStorageCache::new(cache_config)
-}
-
-/// ===================================
-/// Request read
-/// ===================================
-///
-/// Test util function to drop read states, and apply the synchronized response to mooncake table.
-pub(crate) async fn drop_read_states(
-    read_states: Vec<Arc<ReadState>>,
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableEvent>,
-) {
-    for cur_read_state in read_states.into_iter() {
-        drop(cur_read_state);
-        sync_read_request_for_test(table, receiver).await;
-    }
-}
-
-/// Test util function to drop read states and create a mooncake snapshot to reflect.
-/// Return evicted files to delete.
-pub(crate) async fn drop_read_states_and_create_mooncake_snapshot(
-    read_states: Vec<Arc<ReadState>>,
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableEvent>,
-) -> Vec<String> {
-    drop_read_states(read_states, table, receiver).await;
-    let (_, _, _, _, files_to_delete) = create_mooncake_snapshot_for_test(table, receiver).await;
-    files_to_delete
 }

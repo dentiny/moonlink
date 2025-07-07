@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tokio::sync::mpsc::Receiver;
 
 #[cfg(test)]
@@ -8,8 +10,8 @@ use crate::storage::mooncake_table::{
     IcebergSnapshotPayload, IcebergSnapshotResult, SnapshotOption,
 };
 use crate::table_notify::TableEvent;
-use crate::Result;
 use crate::{MooncakeTable, SnapshotReadOutput};
+use crate::{ReadState, Result};
 
 /// ===============================
 /// Delete evicted files
@@ -405,4 +407,32 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
     }));
     sync_mooncake_snapshot_and_create_new_by_iceberg_payload(table, receiver).await;
     sync_mooncake_snapshot(table, receiver).await;
+}
+
+/// ===================================
+/// Request read
+/// ===================================
+///
+/// Test util function to drop read states, and apply the synchronized response to mooncake table.
+pub(crate) async fn drop_read_states(
+    read_states: Vec<Arc<ReadState>>,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableEvent>,
+) {
+    for cur_read_state in read_states.into_iter() {
+        drop(cur_read_state);
+        sync_read_request_for_test(table, receiver).await;
+    }
+}
+
+/// Test util function to drop read states and create a mooncake snapshot to reflect.
+/// Return evicted files to delete.
+pub(crate) async fn drop_read_states_and_create_mooncake_snapshot(
+    read_states: Vec<Arc<ReadState>>,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableEvent>,
+) -> Vec<String> {
+    drop_read_states(read_states, table, receiver).await;
+    let (_, _, _, _, files_to_delete) = create_mooncake_snapshot_for_test(table, receiver).await;
+    files_to_delete
 }
