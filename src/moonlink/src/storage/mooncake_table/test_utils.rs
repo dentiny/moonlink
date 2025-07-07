@@ -5,6 +5,7 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::snapshot::PuffinDeletionBlobAtRead;
 use crate::storage::mooncake_table::snapshot_read_output::DataFileForRead;
+use crate::storage::mooncake_table::table_operation_test_utils::*;
 use arrow::array::Int32Array;
 use arrow::datatypes::{DataType, Field};
 use futures::future::join_all;
@@ -152,41 +153,7 @@ pub fn batch_rows(start_id: i32, count: i32) -> Vec<MoonlinkRow> {
         .collect()
 }
 
-/// Test util function to perform a mooncake snapshot, block waits its completion and gets result.
-pub async fn snapshot(
-    table: &mut MooncakeTable,
-    notify_rx: &mut Receiver<TableEvent>,
-) -> (
-    u64,
-    Option<IcebergSnapshotPayload>,
-    Option<DataCompactionPayload>,
-    Option<FileIndiceMergePayload>,
-    Vec<String>,
-) {
-    assert!(table.create_snapshot(SnapshotOption::default()));
-    let table_notify = notify_rx.recv().await.unwrap();
-    table.mark_mooncake_snapshot_completed();
-    match table_notify {
-        TableEvent::MooncakeTableSnapshotResult {
-            lsn,
-            iceberg_snapshot_payload,
-            data_compaction_payload,
-            file_indice_merge_payload,
-            evicted_data_files_to_delete,
-        } => (
-            lsn,
-            iceberg_snapshot_payload,
-            data_compaction_payload,
-            file_indice_merge_payload,
-            evicted_data_files_to_delete,
-        ),
-        _ => {
-            panic!("Expected to receive mooncake snapshot completion notification, but receives others");
-        }
-    }
-}
-
-pub async fn append_commit_flush_snapshot(
+pub async fn append_commit_flush_create_mooncake_snapshot_for_test(
     table: &mut MooncakeTable,
     completion_rx: &mut Receiver<TableEvent>,
     rows: Vec<MoonlinkRow>,
@@ -195,7 +162,7 @@ pub async fn append_commit_flush_snapshot(
     append_rows(table, rows)?;
     table.commit(lsn);
     table.flush(lsn).await?;
-    snapshot(table, completion_rx).await;
+    create_mooncake_snapshot_for_test(table, completion_rx).await;
     Ok(())
 }
 
