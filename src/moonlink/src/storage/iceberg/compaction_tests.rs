@@ -263,6 +263,28 @@ async fn prepare_committed_and_flushed_data_files(table: &mut MooncakeTable) -> 
     vec![row_1, row_2, row_3, row_4]
 }
 
+/// Test util function to check whether mooncake snapshot does match persisted snapshot for data files and file indices after compaction.
+///
+/// # Arguments
+///
+/// * table_data_file: data file in the mooncake snapshot, assume there's only one final data file.
+/// * table_file_indices: file indices in the mooncake snapshot, assume there's only one final file index.
+async fn check_snapshot_reflects_persistence_for_compaction(
+    persisted_snapshot: &Snapshot,
+    table_data_file: &MooncakeDataFileRef,
+    table_file_indices: Vec<FileIndex>,
+) {
+    let persisted_disk_files =
+        get_disk_files_for_snapshot_and_assert(persisted_snapshot, /*expected_file_num=*/ 1).await;
+    assert_eq!(&persisted_disk_files[0], table_data_file.file_path());
+
+    let persisted_file_indices = get_file_indices_for_snapshot(persisted_snapshot);
+    let persisted_index_block =
+        get_only_index_block_file_from_file_indices(&persisted_file_indices);
+    let table_index_block = get_only_index_block_file_from_file_indices(&table_file_indices);
+    assert_eq!(persisted_index_block, table_index_block);
+}
+
 #[tokio::test]
 async fn test_compaction_1_1_1() {
     let temp_dir = tempfile::tempdir().unwrap();
@@ -301,11 +323,17 @@ async fn test_compaction_1_1_1() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
-    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    let (data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
     assert!(disk_file_entry.batch_deletion_vector.is_empty());
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(&snapshot, data_file, actual_file_indices)
+        .await;
+
+    println!("disk file after snapshot is {:?}", data_file);
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -358,7 +386,7 @@ async fn test_compaction_1_1_2() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -435,7 +463,7 @@ async fn test_compaction_1_2_1() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -512,7 +540,7 @@ async fn test_compaction_1_2_2() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -601,7 +629,7 @@ async fn test_compaction_2_2_1() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -679,7 +707,7 @@ async fn test_compaction_2_2_2() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -770,7 +798,7 @@ async fn test_compaction_2_3_1() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (_, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -836,7 +864,7 @@ async fn test_compaction_2_3_2() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -930,7 +958,7 @@ async fn test_compaction_3_2_1() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (compacted_data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
@@ -1010,7 +1038,7 @@ async fn test_compaction_3_3_1() {
     .await;
 
     // Check disk files for the current mooncake snapshot.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert!(disk_files.is_empty());
 
     // Check deletion log for the current mooncake snapshot.

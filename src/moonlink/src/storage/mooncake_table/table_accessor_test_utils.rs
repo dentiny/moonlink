@@ -4,21 +4,28 @@ use std::collections::HashMap;
 use tempfile::TempDir;
 
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
+use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::{DiskFileEntry, Snapshot};
 use crate::storage::storage_utils::{FileId, MooncakeDataFileRef, ProcessedDeletionRecord};
 use crate::storage::{MooncakeTable, PuffinBlobRef};
 
 /// Test util function to get disk files for the given mooncake table.
-pub(crate) async fn get_disk_files_for_snapshot(
+pub(crate) async fn get_disk_files_for_table(
     table: &MooncakeTable,
 ) -> HashMap<MooncakeDataFileRef, DiskFileEntry> {
     let guard = table.snapshot.read().await;
     guard.current_snapshot.disk_files.clone()
 }
 
+/// Test util function to get file indices for the given mooncake table.
+pub(crate) async fn get_file_indices_for_table(table: &MooncakeTable) -> Vec<FileIndex> {
+    let guard = table.snapshot.read().await;
+    guard.current_snapshot.indices.file_indices.clone()
+}
+
 /// Test util function to get sorted data file filepaths for the given mooncake table, and assert on expected disk file number.
-pub(crate) async fn get_disk_files_for_snapshot_and_assert(
+pub(crate) async fn get_disk_files_for_table_and_assert(
     table: &MooncakeTable,
     expected_file_num: usize,
 ) -> Vec<String> {
@@ -32,6 +39,26 @@ pub(crate) async fn get_disk_files_for_snapshot_and_assert(
         .sorted()
         .collect::<Vec<_>>();
     data_files
+}
+
+/// Test util function to get disk files for the given snapshot.
+pub(crate) async fn get_disk_files_for_snapshot_and_assert(
+    snapshot: &Snapshot,
+    expected_file_num: usize,
+) -> Vec<String> {
+    assert_eq!(snapshot.disk_files.len(), expected_file_num);
+    let data_files = snapshot
+        .disk_files
+        .keys()
+        .map(|f| f.file_path().to_string())
+        .sorted()
+        .collect::<Vec<_>>();
+    data_files
+}
+
+/// Test util function to get file indices for the given snapshot
+pub(crate) fn get_file_indices_for_snapshot(snapshot: &Snapshot) -> Vec<FileIndex> {
+    snapshot.indices.file_indices.clone()
 }
 
 /// Test util to get all index block file ids for the table, and assert there's only one file.
@@ -225,7 +252,7 @@ pub(crate) async fn get_new_compacted_local_file_size_and_id(
     table: &MooncakeTable,
     temp_dir: &TempDir,
 ) -> (usize, FileId) {
-    let disk_files = get_disk_files_for_snapshot(table).await;
+    let disk_files = get_disk_files_for_table(table).await;
     assert_eq!(disk_files.len(), 1);
     let (new_compacted_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_some());
@@ -247,4 +274,14 @@ pub(crate) fn get_index_block_files(
         }
     }
     (index_block_files, overall_file_size)
+}
+
+/// Test util function to get index block filepath from file indices, and assert there's only one index block file within it.
+pub(crate) fn get_only_index_block_file_from_file_indices(
+    file_indices: &Vec<GlobalIndex>,
+) -> String {
+    assert_eq!(file_indices.len(), 1);
+    let index_blocks = file_indices[0].index_blocks.clone();
+    assert_eq!(index_blocks.len(), 1);
+    index_blocks[0].index_file.file_path().to_string()
 }

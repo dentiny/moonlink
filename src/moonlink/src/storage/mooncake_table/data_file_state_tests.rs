@@ -1611,7 +1611,7 @@ async fn test_2_read_over_1_with_local_optimization(#[case] use_batch_write: boo
     drop(read_state);
 
     // Check data file has been recorded in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
     let (file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.cache_handle.is_none());
@@ -1688,7 +1688,7 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 2);
     let old_compacted_data_files = disk_files.keys().cloned().collect::<Vec<_>>();
     let old_compacted_index_block_files = get_index_block_filepaths(&table).await;
@@ -1807,7 +1807,7 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     let local_index_blocks = get_index_block_filepaths(&table).await;
 
     // Get old compacted files before compaction.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 2);
     let old_compacted_data_files = disk_files.keys().cloned().collect::<Vec<_>>();
     let old_compacted_index_block_file_ids = get_index_block_file_ids(&table).await;
@@ -1921,7 +1921,7 @@ async fn test_3_compact_1_5_without_local_filesystem_optimization() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut old_compacted_data_files = disk_files
         .keys()
@@ -2013,7 +2013,7 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 2);
     let old_compacted_data_files = disk_files
         .keys()
@@ -2104,7 +2104,7 @@ async fn test_1_compact_1_5_without_local_optimization() {
     assert!(files_to_delete.is_empty());
 
     // Get old compacted files before compaction.
-    let _ = get_disk_files_for_snapshot_and_assert(&table, /*expected_file_num=*/ 2).await;
+    let _ = get_disk_files_for_table_and_assert(&table, /*expected_file_num=*/ 2).await;
 
     // Persist and reflect result to mooncake snapshot.
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;

@@ -466,7 +466,7 @@ async fn test_2_compact_without_local_optimization() {
     assert!(files_to_delete.is_empty());
 
     // Get old snapshot disk files.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut old_compacted_puffin_file_ids = vec![];
     let mut old_compacted_puffin_files = vec![];
@@ -525,7 +525,7 @@ async fn test_2_compact_without_local_optimization() {
     assert!(evicted_files.contains(&old_compacted_index_block_files[1]));
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert!(disk_files.is_empty());
 
     // Check cache state.
@@ -554,7 +554,7 @@ async fn test_2_compact_with_local_optimization() {
     assert_eq!(files_to_delete, local_data_files_and_index_blocks);
 
     // Get old snapshot disk files.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 2);
     let mut old_compacted_puffin_file_ids = vec![];
     let mut old_compacted_puffin_files = vec![];
@@ -608,7 +608,7 @@ async fn test_2_compact_with_local_optimization() {
     assert!(evicted_files.is_empty());
 
     // Check data file has been pinned in mooncake table.
-    let disk_files = get_disk_files_for_snapshot(&table).await;
+    let disk_files = get_disk_files_for_table(&table).await;
     assert!(disk_files.is_empty());
 
     // Check cache state.
