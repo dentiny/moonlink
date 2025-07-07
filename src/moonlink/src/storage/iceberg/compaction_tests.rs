@@ -274,15 +274,34 @@ async fn check_snapshot_reflects_persistence_for_compaction(
     table_data_file: &MooncakeDataFileRef,
     table_file_indices: Vec<FileIndex>,
 ) {
+    // Validate data files in the mooncake snapshot matches those in the persisted snapshot.
     let persisted_disk_files =
         get_disk_files_for_snapshot_and_assert(persisted_snapshot, /*expected_file_num=*/ 1).await;
     assert_eq!(&persisted_disk_files[0], table_data_file.file_path());
 
+    // Index block is harder to validate, considering the fact that index blocks are always cached locally,
+    // - For recovered snapshot from iceberg snapshot, index block filepath are from read-through cache;
+    // - For mooncake snapshot one, index block filepath are from write-through cache.
+    //
+    // Validate persisted index block matches with cache handle.
     let persisted_file_indices = get_file_indices_for_snapshot(persisted_snapshot);
     let persisted_index_block =
         get_only_index_block_file_from_file_indices(&persisted_file_indices);
+    let cache_handle = persisted_file_indices[0].index_blocks[0]
+        .cache_handle
+        .as_ref()
+        .unwrap();
+    assert_eq!(cache_handle.get_cache_filepath(), persisted_index_block);
+    assert!(tokio::fs::try_exists(persisted_index_block).await.unwrap());
+
+    // Validate index block within mooncake snapshot matches with cache handle.
     let table_index_block = get_only_index_block_file_from_file_indices(&table_file_indices);
-    assert_eq!(persisted_index_block, table_index_block);
+    let cache_handle = table_file_indices[0].index_blocks[0]
+        .cache_handle
+        .as_ref()
+        .unwrap();
+    assert_eq!(cache_handle.get_cache_filepath(), table_index_block);
+    assert!(tokio::fs::try_exists(table_index_block).await.unwrap());
 }
 
 #[tokio::test]
@@ -332,8 +351,6 @@ async fn test_compaction_1_1_1() {
     let actual_file_indices = get_file_indices_for_table(&table).await;
     check_snapshot_reflects_persistence_for_compaction(&snapshot, data_file, actual_file_indices)
         .await;
-
-    println!("disk file after snapshot is {:?}", data_file);
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =

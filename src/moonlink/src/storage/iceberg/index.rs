@@ -27,7 +27,7 @@ pub(crate) struct IndexBlock {
     bucket_start_idx: u32,
     bucket_end_idx: u32,
     bucket_start_offset: u64,
-    filepath: String,
+    pub(crate) filepath: String,
 }
 
 /// Corresponds to [storage::index::FileIndex], used to persist at iceberg table.

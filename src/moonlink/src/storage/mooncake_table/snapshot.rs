@@ -415,13 +415,13 @@ impl SnapshotTableState {
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
-        // Step-2: Handle imported file indices.
+        // Step-2: Handle persisted file indices.
         let cur_evicted_files = self
             .update_file_indices_to_persisted(persisted_file_indices, updated_file_ids)
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
-        // Step-3: Handle imported deletion vector.
+        // Step-3: Handle persisted deletion vector.
         let cur_evicted_files = self
             .update_deletion_vector_to_persisted(
                 task.iceberg_persisted_records
