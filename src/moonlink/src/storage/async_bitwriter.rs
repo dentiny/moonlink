@@ -96,6 +96,39 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
         true
     }
 
+    /// Append bytes to active buffer WITHOUT spill to inactive one.
+    #[inline]
+    fn try_buffer_bytes_to_active_buffer<U>(&mut self, acc: &mut BitQueue<E, U>)
+    where
+        U: Numeric,
+    {
+        let active_buffer_left_len = (BUFFER_SIZE - self.active_buffer_pos) as u32;
+        let num_bytes = std::cmp::min(active_buffer_left_len, acc.len() / u8::BITS);
+        for _ in 0..num_bytes {
+            let byte = acc.pop(u8::BITS).to_u8();
+            self.buffers[self.active_buffer_index][self.active_buffer_pos] = byte;
+            self.active_buffer_pos += 1;
+        }
+    }
+
+    /// Append buffer to inactive buffer.
+    #[inline]
+    fn try_buffer_bytes_to_inactive_buffer<U>(&mut self, acc: &mut BitQueue<E, U>)
+    where
+        U: Numeric,
+    {
+        if acc.is_empty() {
+            return;
+        }
+        let inactive_buffer_left_len = (BUFFER_SIZE - self.inactive_buffer_pos) as u32;
+        let num_bytes = std::cmp::min(inactive_buffer_left_len, acc.len() / u8::BITS);
+        for _ in 0..num_bytes {
+            let byte = acc.pop(u8::BITS).to_u8();
+            self.buffers[1 - self.active_buffer_index][self.inactive_buffer_pos] = byte;
+            self.inactive_buffer_pos += 1;
+        }
+    }
+
     /// Append one single bit, and return whether caller needs to flush.
     /// It's of the same effect as [`write`] with one single bit.
     #[must_use]
@@ -157,10 +190,8 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
         to_flush |= self.buffer_byte(byte);
 
         // Now try to move bits in "bytes granularity" directly to buffer, without going through bitqueue.
-        while acc.len() >= Self::BITQUEUE_SIZE {
-            let byte = acc.pop(Self::BITQUEUE_SIZE).to_u8();
-            to_flush |= self.buffer_byte(byte);
-        }
+        self.try_buffer_bytes_to_active_buffer(&mut acc);
+        self.try_buffer_bytes_to_inactive_buffer(&mut acc);
 
         // Enqueue left bits to bitqueue.
         if !acc.is_empty() {
