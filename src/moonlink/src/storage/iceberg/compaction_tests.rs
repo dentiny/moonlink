@@ -413,6 +413,14 @@ async fn test_compaction_1_1_2() {
         "Deleted rows are {:?}",
         deleted_rows
     );
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -490,6 +498,14 @@ async fn test_compaction_1_2_1() {
         "Deleted rows are {:?}",
         deleted_rows
     );
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -567,6 +583,14 @@ async fn test_compaction_1_2_2() {
         "Deleted rows are {:?}",
         deleted_rows
     );
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -656,6 +680,14 @@ async fn test_compaction_2_2_1() {
         "Deleted rows are {:?}",
         deleted_rows
     );
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -735,6 +767,14 @@ async fn test_compaction_2_2_2() {
         "Deleted rows are {:?}",
         deleted_rows
     );
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -817,9 +857,13 @@ async fn test_compaction_2_3_1() {
     // Check disk files for the current mooncake snapshot.
     let disk_files = get_disk_files_for_table(&table).await;
     assert_eq!(disk_files.len(), 1);
-    let (_, disk_file_entry) = disk_files.iter().next().unwrap();
+    let (data_file, disk_file_entry) = disk_files.iter().next().unwrap();
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
     assert!(disk_file_entry.batch_deletion_vector.is_empty());
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(&snapshot, data_file, actual_file_indices)
+        .await;
 
     // Check deletion log for current snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
@@ -893,6 +937,14 @@ async fn test_compaction_2_3_2() {
         .map(|idx| *idx as usize)
         .collect();
     assert_eq!(committed_compacted_row_indice.len(), 1);
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
     // Check referenced deleted arrow batches.
     let committed_deleted_arrow_batches = get_arrow_batches_with_row_idx(
         compacted_data_file.file_path(),
@@ -981,6 +1033,15 @@ async fn test_compaction_3_2_1() {
     assert!(disk_file_entry.puffin_deletion_blob.is_none());
     let deleted_rows = disk_file_entry.batch_deletion_vector.collect_deleted_rows();
     assert_eq!(deleted_rows, vec![0, 1, 2, 3]);
+
+    // Check data files and file indices in mooncake table snapshot is the same as iceberg persisted ones.
+    let actual_file_indices = get_file_indices_for_table(&table).await;
+    check_snapshot_reflects_persistence_for_compaction(
+        &snapshot,
+        compacted_data_file,
+        actual_file_indices,
+    )
+    .await;
 
     // Check deletion log for the current mooncake snapshot.
     let (committed_deletion_log, uncommitted_deletion_log) =
