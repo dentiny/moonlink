@@ -260,6 +260,7 @@ async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
         skip_file_indices_merge: true,
         skip_data_file_compaction: true,
     }));
+    sync_mooncake_snapshot(table, receiver).await;
 }
 
 /// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.
@@ -406,7 +407,6 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
         skip_data_file_compaction: false,
     }));
     sync_mooncake_snapshot_and_create_new_by_iceberg_payload(table, receiver).await;
-    sync_mooncake_snapshot(table, receiver).await;
 }
 
 /// ===================================
