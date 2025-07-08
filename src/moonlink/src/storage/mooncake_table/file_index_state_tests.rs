@@ -104,7 +104,7 @@ async fn test_1_recover_3() {
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         object_storage_cache_for_recovery.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config,
     )
     .unwrap();
@@ -210,7 +210,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache,
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();

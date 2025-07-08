@@ -75,7 +75,7 @@ pub async fn test_table(
         iceberg_table_config.clone(),
         table_config,
         ObjectStorageCache::default_for_test(&context.temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap()

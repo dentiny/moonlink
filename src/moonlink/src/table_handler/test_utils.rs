@@ -127,7 +127,7 @@ impl TestEnvironment {
             iceberg_table_config.clone(),
             mooncake_table_config,
             ObjectStorageCache::default_for_test(&temp_dir),
-            create_local_filesystem_accessor(&iceberg_table_config),
+            create_test_filesystem_accessor(&iceberg_table_config),
         )
         .await
         .unwrap();
@@ -156,7 +156,7 @@ impl TestEnvironment {
         IcebergTableManager::new(
             mooncake_table_metadata,
             self.object_storage_cache.clone(),
-            create_local_filesystem_accessor(&iceberg_table_config),
+            create_test_filesystem_accessor(&iceberg_table_config),
             iceberg_table_config.clone(),
         )
         .unwrap()

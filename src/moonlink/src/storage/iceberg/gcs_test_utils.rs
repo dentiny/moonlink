@@ -3,6 +3,6 @@ use crate::storage::iceberg::file_catalog::FileCatalog;
 
 #[allow(dead_code)]
 pub(crate) fn create_gcs_catalog(warehouse_uri: &str) -> FileCatalog {
-    let catalog_config = create_gcs_filesystem_config(warehouse_uri);
-    FileCatalog::new(catalog_config).unwrap()
+    let filesystem_config = create_gcs_filesystem_config(warehouse_uri);
+    FileCatalog::new(filesystem_config).unwrap()
 }

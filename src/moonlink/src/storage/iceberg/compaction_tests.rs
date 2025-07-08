@@ -36,6 +36,7 @@ use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
 use crate::storage::MooncakeTable;
+use crate::FileSystemAccessor;
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::io::FileIOBuilder;
 use std::sync::Arc;
@@ -307,6 +308,7 @@ async fn check_snapshot_reflects_persistence_for_compaction(
 #[tokio::test]
 async fn test_compaction_1_1_1() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -338,6 +340,7 @@ async fn test_compaction_1_1_1() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -362,6 +365,7 @@ async fn test_compaction_1_1_1() {
 #[tokio::test]
 async fn test_compaction_1_1_2() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -399,6 +403,7 @@ async fn test_compaction_1_1_2() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -451,6 +456,7 @@ async fn test_compaction_1_1_2() {
 #[tokio::test]
 async fn test_compaction_1_2_1() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -484,6 +490,7 @@ async fn test_compaction_1_2_1() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -528,6 +535,7 @@ async fn test_compaction_1_2_1() {
 #[tokio::test]
 async fn test_compaction_1_2_2() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -569,6 +577,7 @@ async fn test_compaction_1_2_2() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -627,6 +636,7 @@ async fn test_compaction_1_2_2() {
 #[tokio::test]
 async fn test_compaction_2_2_1() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -666,6 +676,7 @@ async fn test_compaction_2_2_1() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -707,6 +718,7 @@ async fn test_compaction_2_2_1() {
 #[tokio::test]
 async fn test_compaction_2_2_2() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -752,6 +764,7 @@ async fn test_compaction_2_2_2() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -811,6 +824,7 @@ async fn test_compaction_2_2_2() {
 #[tokio::test]
 async fn test_compaction_2_3_1() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -851,6 +865,7 @@ async fn test_compaction_2_3_1() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -875,6 +890,7 @@ async fn test_compaction_2_3_1() {
 #[tokio::test]
 async fn test_compaction_2_3_2() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -921,6 +937,7 @@ async fn test_compaction_2_3_2() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -981,6 +998,7 @@ async fn test_compaction_2_3_2() {
 #[tokio::test]
 async fn test_compaction_3_2_1() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -1023,6 +1041,7 @@ async fn test_compaction_3_2_1() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 
@@ -1070,6 +1089,7 @@ async fn test_compaction_3_2_1() {
 #[tokio::test]
 async fn test_compaction_3_3_1() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
         create_table_and_iceberg_manager_with_data_compaction_config(
             &temp_dir,
@@ -1112,6 +1132,7 @@ async fn test_compaction_3_3_1() {
     validate_recovered_snapshot(
         &snapshot,
         &iceberg_table_manager_to_load.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
     )
     .await;
 

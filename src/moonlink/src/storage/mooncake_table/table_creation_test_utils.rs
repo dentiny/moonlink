@@ -2,7 +2,6 @@
 use crate::row::IdentityProp as RowIdentity;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::mooncake_table::test_utils_commons::*;
@@ -50,12 +49,12 @@ pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {
 }
 
 /// Test util function to create local filesystem accessor from iceberg table config.
-pub(crate) fn create_local_filesystem_accessor(
+pub(crate) fn create_test_filesystem_accessor(
     iceberg_table_config: &IcebergTableConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
-    Arc::new(FileSystemAccessor::new(FileSystemConfig::FileSystem {
-        root_directory: iceberg_table_config.warehouse_uri.clone(),
-    }))
+    Arc::new(FileSystemAccessor::new(
+        iceberg_table_config.filesystem_config.clone(),
+    ))
 }
 
 /// Test util function to create mooncake table metadata.
@@ -113,7 +112,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_config(
         iceberg_table_config.clone(),
         mooncake_table_metadata.as_ref().config.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -121,7 +120,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_config(
     let iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -169,7 +168,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -177,7 +176,7 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
     let iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -230,7 +229,7 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache,
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -272,7 +271,7 @@ pub(crate) async fn create_mooncake_table_and_notify_for_read(
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache,
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();

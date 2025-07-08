@@ -1,6 +1,8 @@
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::filesystem::test_utils::object_storage_test_utils::*;
 use crate::storage::iceberg::tokio_retry_utils;
+use crate::FileSystemAccessor;
 
 use std::sync::Arc;
 
@@ -70,7 +72,27 @@ async fn create_gcs_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
     Ok(())
 }
 
+/// Util function to delete all objects in a GCS bucket.
+async fn delete_gcs_bucket_objects(bucket: &str) -> IcebergResult<()> {
+    let filesystem_config = create_gcs_filesystem_config(&format!("gs://{}", bucket));
+    let filesystem_accessor = FileSystemAccessor::new(filesystem_config);
+    filesystem_accessor
+        .remove_directory("/")
+        .await
+        .map_err(|e| {
+            IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!("Failed to remove directory in bucket {}: {}", bucket, e),
+            )
+        })?;
+    Ok(())
+}
+
 async fn delete_gcs_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
+    // Fake GCS server doesn't support bucket deletion if it contains objects, so need to delete all objects first.
+    delete_gcs_bucket_objects(&bucket).await?;
+
+    // Now delete the bucket.
     let client = reqwest::Client::new();
     let url = format!("{}/storage/v1/b/{}", GCS_TEST_ENDPOINT, bucket);
     let res = client.delete(&url).send().await.map_err(|e| {

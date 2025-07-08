@@ -2,6 +2,7 @@ use crate::row::IdentityProp as RowIdentity;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
@@ -35,6 +36,7 @@ use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RawDeletionRecord;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::MooncakeTable;
+use crate::FileSystemAccessor;
 use crate::ObjectStorageCache;
 
 use std::collections::HashMap;
@@ -114,7 +116,7 @@ fn test_row_3() -> MoonlinkRow {
 
 /// Test util function to create iceberg table config.
 fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
-    let catalog_config = if warehouse_uri.starts_with("s3://") {
+    let filesystem_config = if warehouse_uri.starts_with("s3://") {
         #[cfg(feature = "storage-s3")]
         {
             s3_test_utils::create_s3_filesystem_config(&warehouse_uri)
@@ -140,7 +142,7 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
 
     IcebergTableConfig {
         warehouse_uri,
-        catalog_config,
+        filesystem_config,
         ..Default::default()
     }
 }
@@ -195,6 +197,7 @@ async fn test_store_and_load_snapshot_impl(
 ) {
     let tmp_dir = tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
 
     // ==============
     // Step 1
@@ -204,7 +207,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -387,7 +390,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -398,7 +401,12 @@ async fn test_store_and_load_snapshot_impl(
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert_eq!(snapshot.indices.file_indices.len(), 1);
-    validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     // Prepare a compacted data file for data file 1 and 2.
     let compacted_data_filename = "compacted-data.parquet";
@@ -459,7 +467,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -484,7 +492,12 @@ async fn test_store_and_load_snapshot_impl(
     // Check file indices.
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert_eq!(snapshot.indices.file_indices.len(), 1);
-    validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     // ==============
     // Step 5
@@ -521,7 +534,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -533,7 +546,12 @@ async fn test_store_and_load_snapshot_impl(
     assert!(snapshot.disk_files.is_empty());
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
-    validate_recovered_snapshot(&snapshot, &iceberg_table_config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 }
 
 /// Basic iceberg snapshot sync and load test via iceberg table manager.
@@ -568,7 +586,7 @@ async fn test_drop_table() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&config),
+        create_test_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -594,6 +612,7 @@ async fn test_drop_table() {
 #[tokio::test]
 async fn test_empty_snapshot_load() {
     let tmp_dir = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&tmp_dir);
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
     let mooncake_table_metadata =
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
@@ -603,7 +622,7 @@ async fn test_empty_snapshot_load() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&config),
+        create_test_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -616,7 +635,12 @@ async fn test_empty_snapshot_load() {
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
-    validate_recovered_snapshot(&snapshot, &config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 }
 
 /// Testing scenario: iceberg snapshot should be loaded only once at recovery, otherwise it panics.
@@ -630,7 +654,7 @@ async fn test_snapshot_load_for_multiple_times() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&config),
+        create_test_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -654,6 +678,7 @@ async fn test_snapshot_load_for_multiple_times() {
 #[tokio::test]
 async fn test_index_merge_and_create_snapshot() {
     let tmp_dir = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&tmp_dir);
     let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
 
     // File indices merge is triggered as long as there's not only one file indice.
@@ -718,7 +743,7 @@ async fn test_index_merge_and_create_snapshot() {
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -730,7 +755,12 @@ async fn test_index_merge_and_create_snapshot() {
     assert_eq!(snapshot.disk_files.len(), 2);
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
-    validate_recovered_snapshot(&snapshot, tmp_dir.path().to_str().unwrap()).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        tmp_dir.path().to_str().unwrap(),
+        filesystem_accessor.as_ref(),
+    )
+    .await;
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
 
     // Delete rows after merge, to make sure file indices are serving correctly.
@@ -752,7 +782,7 @@ async fn test_empty_content_snapshot_creation() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&config),
+        create_test_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -787,7 +817,7 @@ async fn test_empty_content_snapshot_creation() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&config),
+        create_test_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -824,7 +854,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         ObjectStorageCache::default_for_test(&temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -867,7 +897,7 @@ async fn test_skip_iceberg_snapshot() {
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         ObjectStorageCache::default_for_test(&temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -899,6 +929,7 @@ async fn test_skip_iceberg_snapshot() {
 #[tokio::test]
 async fn test_small_batch_size_and_large_parquet_size() {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
@@ -927,7 +958,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -956,7 +987,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -972,7 +1003,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
         vec![1]
     );
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
+    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
 }
 
 /// Testing scenario: mooncake snapshot and iceberg snapshot doesn't correspond to each other 1-1.
@@ -1009,6 +1040,7 @@ async fn test_async_iceberg_snapshot() {
     let file_io = FileIOBuilder::new_fs_io().build().unwrap();
 
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager_for_recovery, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1053,7 +1085,12 @@ async fn test_async_iceberg_snapshot() {
         .collect_deleted_rows()
         .is_empty());
     assert!(deletion_vector_1.puffin_deletion_blob.is_none());
-    validate_recovered_snapshot(&snapshot, temp_dir.path().to_str().unwrap()).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        temp_dir.path().to_str().unwrap(),
+        filesystem_accessor.as_ref(),
+    )
+    .await;
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
 
     // Operation group 3: Append new rows and create mooncake snapshot.
@@ -1080,7 +1117,12 @@ async fn test_async_iceberg_snapshot() {
     assert_eq!(snapshot.indices.file_indices.len(), 3);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 40);
 
-    validate_recovered_snapshot(&snapshot, temp_dir.path().to_str().unwrap()).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        temp_dir.path().to_str().unwrap(),
+        filesystem_accessor.as_ref(),
+    )
+    .await;
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
 
     // Find the key-value pair, which correspond to old snapshot's only key.
@@ -1142,7 +1184,11 @@ async fn check_row_index_nonexistent(snapshot: &Snapshot, row: &MoonlinkRow) {
 }
 
 /// Test util function to check the given row exists in snapshot, and it's on-disk.
-async fn check_row_index_on_disk(snapshot: &Snapshot, row: &MoonlinkRow) {
+async fn check_row_index_on_disk(
+    snapshot: &Snapshot,
+    row: &MoonlinkRow,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
+) {
     let key = snapshot.metadata.identity.get_lookup_key(row);
     let locs = snapshot
         .indices
@@ -1169,7 +1215,7 @@ async fn check_row_index_on_disk(snapshot: &Snapshot, row: &MoonlinkRow) {
                 .unwrap()
                 .0
                 .file_path();
-            let exists = tokio::fs::try_exists(filepath).await.unwrap();
+            let exists = filesystem_accessor.object_exists(filepath).await.unwrap();
             assert!(exists, "Data file {:?} doesn't exist", filepath);
         }
         _ => {
@@ -1188,6 +1234,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let identity_property = mooncake_table_metadata.identity.clone();
 
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri.clone());
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
     let schema = create_test_arrow_schema();
     // Create iceberg snapshot whenever `create_snapshot` is called.
     let mooncake_table_config = MooncakeTableConfig {
@@ -1207,7 +1254,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         iceberg_table_config.clone(),
         mooncake_table_config,
         ObjectStorageCache::default_for_test(&temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        filesystem_accessor.clone(),
     )
     .await
     .unwrap();
@@ -1246,7 +1293,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
-        create_local_filesystem_accessor(&iceberg_table_config),
+        filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1255,12 +1302,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         .await
         .unwrap();
     assert_eq!(next_file_id, 2); // one data file, one index block file
-    assert_eq!(
-        snapshot.disk_files.len(),
-        1,
-        "Persisted items for table manager is {:?}",
-        snapshot.disk_files
-    );
+    assert_eq!(snapshot.disk_files.len(), 1);
     assert_eq!(
         snapshot.indices.file_indices.len(),
         1,
@@ -1268,11 +1310,11 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         get_file_indices_filepath_and_data_filepaths(&snapshot.indices)
     );
     check_row_index_nonexistent(&snapshot, &row1).await;
-    check_row_index_on_disk(&snapshot, &row2).await;
-    check_row_index_on_disk(&snapshot, &row3).await;
+    check_row_index_on_disk(&snapshot, &row2, filesystem_accessor.as_ref()).await;
+    check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
+    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
 
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
@@ -1317,7 +1359,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
-        create_local_filesystem_accessor(&iceberg_table_config),
+        filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1326,12 +1368,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         .await
         .unwrap();
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
-    assert_eq!(
-        snapshot.disk_files.len(),
-        1,
-        "Persisted items for table manager is {:?}",
-        snapshot.disk_files
-    );
+    assert_eq!(snapshot.disk_files.len(), 1);
     assert_eq!(
         snapshot.indices.file_indices.len(),
         1,
@@ -1341,11 +1378,11 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     // row1 is deleted in-memory, so file index doesn't track it
     check_row_index_nonexistent(&snapshot, &row1).await;
     // row2 is deleted, but still exist in data file
-    check_row_index_on_disk(&snapshot, &row2).await;
-    check_row_index_on_disk(&snapshot, &row3).await;
+    check_row_index_on_disk(&snapshot, &row2, filesystem_accessor.as_ref()).await;
+    check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
+    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
 
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
@@ -1365,11 +1402,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
 
     let deleted_rows = deletion_vector.batch_deletion_vector.collect_deleted_rows();
     let expected_deleted_rows = vec![0_u64];
-    assert_eq!(
-        deleted_rows, expected_deleted_rows,
-        "Expected deletion vector {:?}, actual deletion vector {:?}",
-        expected_deleted_rows, deleted_rows
-    );
+    assert_eq!(deleted_rows, expected_deleted_rows);
 
     // --------------------------------------
     // Operation series 3: no more additional rows appended, only to delete the last row in the table.
@@ -1383,7 +1416,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
-        create_local_filesystem_accessor(&iceberg_table_config),
+        filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1392,12 +1425,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         .await
         .unwrap();
     assert_eq!(next_file_id, 3); // one data file, one index block file, one deletion vector puffin
-    assert_eq!(
-        snapshot.disk_files.len(),
-        1,
-        "Persisted items for table manager is {:?}",
-        snapshot.disk_files
-    );
+    assert_eq!(snapshot.disk_files.len(), 1);
     assert_eq!(
         snapshot.indices.file_indices.len(),
         1,
@@ -1406,11 +1434,11 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     );
     check_row_index_nonexistent(&snapshot, &row1).await;
     // row2 and row3 are deleted, but still exist in data file
-    check_row_index_on_disk(&snapshot, &row2).await;
-    check_row_index_on_disk(&snapshot, &row3).await;
+    check_row_index_on_disk(&snapshot, &row2, filesystem_accessor.as_ref()).await;
+    check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri).await;
+    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
 
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
@@ -1430,11 +1458,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
 
     let deleted_rows = deletion_vector.batch_deletion_vector.collect_deleted_rows();
     let expected_deleted_rows = vec![0_u64, 1_u64];
-    assert_eq!(
-        deleted_rows, expected_deleted_rows,
-        "Expected deletion vector {:?}, actual deletion vector {:?}",
-        expected_deleted_rows, deleted_rows
-    );
+    assert_eq!(deleted_rows, expected_deleted_rows);
 
     // --------------------------------------
     // Operation series 4: append a new row, and don't delete any rows.
@@ -1453,7 +1477,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
-        create_local_filesystem_accessor(&iceberg_table_config),
+        filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1462,12 +1486,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         .await
         .unwrap();
     assert_eq!(next_file_id, 5); // two data file, two index block file, one deletion vector puffin
-    assert_eq!(
-        snapshot.disk_files.len(),
-        2,
-        "Persisted items for table manager is {:?}",
-        snapshot.disk_files
-    );
+    assert_eq!(snapshot.disk_files.len(), 2);
     assert_eq!(
         snapshot.indices.file_indices.len(),
         2,
@@ -1475,9 +1494,9 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         get_file_indices_filepath_and_data_filepaths(&snapshot.indices)
     );
     check_row_index_nonexistent(&snapshot, &row1).await;
-    check_row_index_on_disk(&snapshot, &row2).await;
-    check_row_index_on_disk(&snapshot, &row3).await;
-    check_row_index_on_disk(&snapshot, &row4).await;
+    check_row_index_on_disk(&snapshot, &row2, filesystem_accessor.as_ref()).await;
+    check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
+    check_row_index_on_disk(&snapshot, &row4, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
 
     let (file_in_new_snapshot, _) = snapshot
@@ -1503,11 +1522,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         ],
     )
     .unwrap();
-    assert_eq!(
-        loaded_arrow_batch, expected_arrow_batch,
-        "Expected arrow data is {:?}, actual data is {:?}",
-        expected_arrow_batch, loaded_arrow_batch
-    );
+    assert_eq!(loaded_arrow_batch, expected_arrow_batch);
 
     let deleted_rows = deletion_vector.batch_deletion_vector.collect_deleted_rows();
     assert!(
@@ -1522,6 +1537,32 @@ async fn test_filesystem_sync_snapshots() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_str().unwrap().to_string();
     mooncake_table_snapshot_persist_impl(path).await
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_object_storage_sync_snapshots_with_s3() {
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_object_storage_sync_snapshots_with_gcs() {
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -1551,7 +1592,7 @@ async fn test_drop_table_at_creation() {
         iceberg_table_config.clone(),
         mooncake_table_config,
         ObjectStorageCache::default_for_test(&temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -1564,7 +1605,7 @@ async fn test_drop_table_at_creation() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1609,7 +1650,7 @@ async fn test_multiple_table_ids_for_deletion_vector() {
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         ObjectStorageCache::default_for_test(&temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();

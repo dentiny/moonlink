@@ -40,8 +40,8 @@ pub struct IcebergTableConfig {
     pub namespace: Vec<String>,
     /// Iceberg table name.
     pub table_name: String,
-    // Catalog config.
-    pub catalog_config: FileSystemConfig,
+    // Filesystem config.
+    pub filesystem_config: FileSystemConfig,
 }
 
 impl IcebergTableConfig {
@@ -56,7 +56,7 @@ impl Default for IcebergTableConfig {
             warehouse_uri: Self::DEFAULT_WAREHOUSE_URI.to_string(),
             namespace: vec![Self::DEFAULT_NAMESPACE.to_string()],
             table_name: Self::DEFAULT_TABLE.to_string(),
-            catalog_config: FileSystemConfig::FileSystem {
+            filesystem_config: FileSystemConfig::FileSystem {
                 root_directory: Self::DEFAULT_WAREHOUSE_URI.to_string(),
             },
         }

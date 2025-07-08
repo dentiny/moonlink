@@ -499,7 +499,7 @@ async fn test_table_recovery() {
         iceberg_table_config.clone(),
         test_mooncake_table_config(&context),
         ObjectStorageCache::default_for_test(&context.temp_dir),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
