@@ -1,4 +1,10 @@
-<!-- .github/ISSUE_TEMPLATE/bug_report.md -->
+---
+name: Bug Report
+about: Create a bug report for Moonlink
+title: "[BUG] <short description>"
+labels: "bug"
+assignees: ""
+---
 
 ## Description
 
