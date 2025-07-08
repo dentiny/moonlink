@@ -54,6 +54,7 @@ impl IcebergTableManager {
                 .as_mooncake_file_index(
                     &self.remote_data_file_to_file_id,
                     self.object_storage_cache.clone(),
+                    self.filesystem_accessor.as_ref(),
                     table_id,
                     next_file_id,
                 )
@@ -130,7 +131,11 @@ impl IcebergTableManager {
         };
         let (cache_handle, evicted_files_to_delete) = self
             .object_storage_cache
-            .get_cache_entry(unique_file_id, data_file.file_path())
+            .get_cache_entry(
+                unique_file_id,
+                data_file.file_path(),
+                self.filesystem_accessor.as_ref(),
+            )
             .await
             .map_err(utils::to_iceberg_error)?;
         io_utils::delete_local_files(evicted_files_to_delete)

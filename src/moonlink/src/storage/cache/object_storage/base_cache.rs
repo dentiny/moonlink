@@ -6,6 +6,7 @@
 use async_trait::async_trait;
 
 use crate::storage::cache::object_storage::cache_handle::NonEvictableHandle;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::Result;
 
@@ -51,6 +52,7 @@ pub trait CacheTrait {
         &mut self,
         file_id: TableUniqueFileId,
         remote_filepath: &str,
+        filesystem_accessor: &dyn BaseFileSystemAccess,
     ) -> Result<(
         Option<NonEvictableHandle>,
         Vec<String>, /*files_to_delete*/

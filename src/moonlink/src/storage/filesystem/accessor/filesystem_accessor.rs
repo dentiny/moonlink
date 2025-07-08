@@ -10,6 +10,7 @@ use tokio::sync::OnceCell;
 
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::configs::*;
+use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::filesystem::utils::path_utils::get_root_path;
 use crate::Result;
@@ -214,19 +215,21 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         Ok(())
     }
 
-    async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<()> {
+    async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
         let sanitized_dst = self.sanitize_path(dst);
         let content = tokio::fs::read(src).await?;
+        let size = content.len();
         self.write_object(sanitized_dst, content).await?;
-        Ok(())
+        Ok(ObjectMetadata { size: size as u64 })
     }
 
-    async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<()> {
+    async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
         let content = self.read_object(src).await?;
+        let size = content.len();
         let mut dst_file = tokio::fs::File::create(dst).await?;
         dst_file.write_all(&content).await?;
         dst_file.flush().await?;
-        Ok(())
+        Ok(ObjectMetadata { size: size as u64 })
     }
 }
 

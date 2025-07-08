@@ -12,6 +12,7 @@ use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCa
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation, SingleFileToCompact,
 };
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
@@ -74,6 +75,9 @@ pub(crate) struct SnapshotTableState {
     /// Object storage cache.
     pub(super) object_storage_cache: ObjectStorageCache,
 
+    /// Filesystem accessor.
+    pub(super) filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+
     /// Table notifier.
     table_notify: Option<Sender<TableEvent>>,
 
@@ -111,6 +115,7 @@ impl SnapshotTableState {
     pub(super) async fn new(
         metadata: Arc<MooncakeTableMetadata>,
         object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         current_snapshot: Snapshot,
     ) -> Result<Self> {
         let mut batches = BTreeMap::new();
@@ -124,6 +129,7 @@ impl SnapshotTableState {
             rows: None,
             last_commit: RecordLocation::MemoryBatch(0, 0),
             object_storage_cache,
+            filesystem_accessor,
             table_notify: None,
             committed_deletion_log: Vec::new(),
             uncommitted_deletion_log: Vec::new(),
@@ -499,6 +505,7 @@ impl SnapshotTableState {
 
         Some(DataCompactionPayload {
             object_storage_cache: self.object_storage_cache.clone(),
+            filesystem_accessor: self.filesystem_accessor.clone(),
             disk_files: tentative_data_files_to_compact,
             file_indices: file_indices_to_compact,
         })
@@ -1553,6 +1560,7 @@ impl SnapshotTableState {
                 .get_cache_entry(
                     puffin_deletion_blob.puffin_file_cache_handle.file_id,
                     /*remote_filepath=*/ "",
+                    /*filesystem_accessor*/ self.filesystem_accessor.as_ref(),
                 )
                 .await
                 .unwrap();
@@ -1619,6 +1627,7 @@ impl SnapshotTableState {
                 position_deletes,
                 associated_files,
                 object_storage_cache: Some(self.object_storage_cache.clone()),
+                filesystem_accessor: Some(self.filesystem_accessor.clone()),
                 table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
             });
         }
@@ -1683,6 +1692,7 @@ impl SnapshotTableState {
             position_deletes,
             associated_files,
             object_storage_cache: Some(self.object_storage_cache.clone()),
+            filesystem_accessor: Some(self.filesystem_accessor.clone()),
             table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
         })
     }

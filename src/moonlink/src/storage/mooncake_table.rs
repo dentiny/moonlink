@@ -523,16 +523,23 @@ impl MooncakeTable {
         let iceberg_table_manager = Box::new(IcebergTableManager::new(
             metadata.clone(),
             object_storage_cache.clone(),
-            filesystem_accessor,
+            filesystem_accessor.clone(),
             iceberg_table_config,
         )?);
-        Self::new_with_table_manager(metadata, iceberg_table_manager, object_storage_cache).await
+        Self::new_with_table_manager(
+            metadata,
+            iceberg_table_manager,
+            object_storage_cache,
+            filesystem_accessor,
+        )
+        .await
     }
 
     pub(crate) async fn new_with_table_manager(
         table_metadata: Arc<TableMetadata>,
         mut table_manager: Box<dyn TableManager>,
         object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     ) -> Result<Self> {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
@@ -552,6 +559,7 @@ impl MooncakeTable {
                 SnapshotTableState::new(
                     table_metadata.clone(),
                     object_storage_cache,
+                    filesystem_accessor,
                     current_snapshot,
                 )
                 .await?,

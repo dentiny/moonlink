@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::utils::to_iceberg_error;
 use crate::storage::index::persisted_bucket_hash_map::IndexBlock as MooncakeIndexBlock;
@@ -103,6 +104,7 @@ impl FileIndex {
         &mut self,
         data_file_to_id: &HashMap<String, FileId>,
         mut object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: &dyn BaseFileSystemAccess,
         table_id: TableId,
         next_file_id: &mut u64,
     ) -> IcebergResult<MooncakeFileIndex> {
@@ -119,7 +121,11 @@ impl FileIndex {
                 file_id: FileId(cur_file_id),
             };
             let (cache_handle, cur_evicted_files) = object_storage_cache
-                .get_cache_entry(table_unique_file_id, &cur_index_block.filepath)
+                .get_cache_entry(
+                    table_unique_file_id,
+                    &cur_index_block.filepath,
+                    filesystem_accessor,
+                )
                 .await
                 .map_err(|e| {
                     IcebergError::new(

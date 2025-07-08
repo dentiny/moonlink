@@ -177,7 +177,11 @@ impl CompactionBuilder {
         let (cache_handle, evicted_files) = self
             .compaction_payload
             .object_storage_cache
-            .get_cache_entry(data_file_to_compact.file_id, &data_file_to_compact.filepath)
+            .get_cache_entry(
+                data_file_to_compact.file_id,
+                &data_file_to_compact.filepath,
+                self.compaction_payload.filesystem_accessor.as_ref(),
+            )
             .await?;
         evicted_files_to_delete.extend(evicted_files);
 

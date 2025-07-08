@@ -122,7 +122,11 @@ impl IcebergTableManager {
             self.get_unique_table_id_for_deletion_vector_puffin(file_params, puffin_index);
         let (cache_handle, evicted_files_to_delete) = self
             .object_storage_cache
-            .get_cache_entry(unique_file_id, &puffin_filepath)
+            .get_cache_entry(
+                unique_file_id,
+                &puffin_filepath,
+                self.filesystem_accessor.as_ref(),
+            )
             .await
             .map_err(utils::to_iceberg_error)?;
         io_utils::delete_local_files(evicted_files_to_delete)

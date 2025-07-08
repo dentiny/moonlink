@@ -1,5 +1,6 @@
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::storage::PuffinDeletionBlobAtRead;
 use crate::table_notify::TableEvent;
@@ -49,6 +50,8 @@ pub struct ReadOutput {
     pub table_notifier: Option<Sender<TableEvent>>,
     /// Object storage cache, to pin local file cache, could be none for empty read output.
     pub object_storage_cache: Option<ObjectStorageCache>,
+    /// Filesystem accessor, to access remote storage, could be none for empty read output.
+    pub filesystem_accessor: Option<Arc<dyn BaseFileSystemAccess>>,
 }
 
 impl ReadOutput {
@@ -68,7 +71,11 @@ impl ReadOutput {
                         .object_storage_cache
                         .as_mut()
                         .unwrap()
-                        .get_cache_entry(file_id, &remote_filepath)
+                        .get_cache_entry(
+                            file_id,
+                            &remote_filepath,
+                            self.filesystem_accessor.as_ref().unwrap().as_ref(),
+                        )
                         .await
                         .unwrap();
                     if let Some(cache_handle) = cache_handle {

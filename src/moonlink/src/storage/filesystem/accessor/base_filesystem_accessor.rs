@@ -1,4 +1,5 @@
 /// This module defines the interface for filesystem accessor.
+use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::Result;
 
 use async_trait::async_trait;
@@ -42,8 +43,8 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     async fn delete_object(&self, object_filepath: &str) -> Result<()>;
 
     /// Copy from local file [`src`] to remote file [`dst`].
-    async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<()>;
+    async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<ObjectMetadata>;
 
     /// Copy from remote file [`src`] to local file [`dst`].
-    async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<()>;
+    async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata>;
 }

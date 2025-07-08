@@ -1,3 +1,4 @@
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
 use crate::storage::storage_utils::MooncakeDataFileRef;
@@ -7,6 +8,7 @@ use crate::ObjectStorageCache;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 /// Single disk file and its deletion vector to apply.
 #[derive(Clone, Debug)]
@@ -25,6 +27,8 @@ pub struct SingleFileToCompact {
 pub struct DataCompactionPayload {
     /// Object storage cache.
     pub(crate) object_storage_cache: ObjectStorageCache,
+    /// Filesystem accessor.
+    pub(crate) filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     /// Disk files to compact, including their deletion vector to apply.
     pub(crate) disk_files: Vec<SingleFileToCompact>,
     /// File indices to compact and rewrite.
