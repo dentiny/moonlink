@@ -134,7 +134,7 @@ impl FileCatalog {
         );
         let version_str = self
             .filesystem_accessor
-            .read_object(&version_hint_filepath)
+            .read_object_as_string(&version_hint_filepath)
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -154,7 +154,7 @@ impl FileCatalog {
             table_ident.name(),
             version,
         );
-        let metadata_str = self
+        let metadata_bytes = self
             .filesystem_accessor
             .read_object(&metadata_filepath)
             .await
@@ -164,7 +164,7 @@ impl FileCatalog {
                     format!("Failed to read table metadata file on load table: {}", e),
                 )
             })?;
-        let metadata = serde_json::from_slice::<TableMetadata>(metadata_str.as_bytes())
+        let metadata = serde_json::from_slice::<TableMetadata>(&metadata_bytes)
             .map_err(|e| IcebergError::new(iceberg::ErrorKind::DataInvalid, e.to_string()))?;
 
         Ok((metadata_filepath, metadata))

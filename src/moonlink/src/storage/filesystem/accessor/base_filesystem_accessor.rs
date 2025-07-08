@@ -31,7 +31,9 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
 
     /// Read the whole content for the given object.
     /// Notice, it's not suitable to read large files; as of now it's made for metadata files.
-    async fn read_object(&self, object: &str) -> Result<String>;
+    async fn read_object(&self, object: &str) -> Result<Vec<u8>>;
+    /// Similar to [`read_object`], but return content in string format.
+    async fn read_object_as_string(&self, object: &str) -> Result<String>;
 
     /// Write the whole content to the given object.
     async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()>;
@@ -41,4 +43,7 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
 
     /// Copy from local file [`src`] to remote file [`dst`].
     async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<()>;
+
+    /// Copy from remote file [`src`] to local file [`dst`].
+    async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<()>;
 }

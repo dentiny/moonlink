@@ -25,7 +25,7 @@ async fn test_copy_from_local_to_remote() {
 
     // Validate destination file content.
     let actual_content = filesystem_accessor
-        .read_object(&dst_filepath)
+        .read_object_as_string(&dst_filepath)
         .await
         .unwrap();
     assert_eq!(actual_content, TEST_CONTEST);

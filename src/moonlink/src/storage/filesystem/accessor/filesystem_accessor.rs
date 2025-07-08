@@ -187,10 +187,14 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         }
     }
 
-    async fn read_object(&self, object: &str) -> Result<String> {
+    async fn read_object(&self, object: &str) -> Result<Vec<u8>> {
         let sanitized_object = self.sanitize_path(object);
         let content = self.get_operator().await?.read(sanitized_object).await?;
-        Ok(String::from_utf8(content.to_vec())?)
+        Ok(content.to_vec())
+    }
+    async fn read_object_as_string(&self, object: &str) -> Result<String> {
+        let bytes = self.read_object(object).await?;
+        Ok(String::from_utf8(bytes)?)
     }
 
     async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
@@ -213,6 +217,10 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         let sanitized_dst = self.sanitize_path(dst);
         let content = tokio::fs::read(src).await?;
         self.write_object(sanitized_dst, content).await?;
+        Ok(())
+    }
+
+    async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<()> {
         Ok(())
     }
 }
@@ -244,7 +252,7 @@ mod tests {
 
         // Validate destination file content.
         let actual_content = filesystem_accessor
-            .read_object(&dst_filepath)
+            .read_object_as_string(&dst_filepath)
             .await
             .unwrap();
         assert_eq!(actual_content, CONTENT);
