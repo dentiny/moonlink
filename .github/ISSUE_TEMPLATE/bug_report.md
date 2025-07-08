@@ -10,6 +10,11 @@ Please describe the issue clearly.
 2. 
 3. 
 
+## Version
+
+- moonlink version (if applicable):
+- pg_mooncake version (if applicable):
+
 ## Expected Behavior
 
 What did you expect to happen?
