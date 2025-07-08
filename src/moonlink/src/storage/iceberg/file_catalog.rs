@@ -1,6 +1,6 @@
 use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
-use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemOperator;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
@@ -37,6 +37,7 @@ use std::collections::{HashMap, HashSet};
 /// 1. Before release we should support not only S3, but also R2, GCS, etc; necessary change should be minimal, only need to setup configuration like secret id and secret key.
 /// 2. Add integration test to actual object storage before pg_mooncake release.
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::vec;
 
 use async_trait::async_trait;
@@ -56,7 +57,7 @@ pub(super) const NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
 #[derive(Debug)]
 pub struct FileCatalog {
     /// Filesystem operator.
-    filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
+    filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     /// Similar to opendal operator, which also provides an abstraction above different storage backends.
     file_io: FileIO,
     /// Table location.
@@ -76,7 +77,7 @@ impl FileCatalog {
     pub fn new(warehouse_location: String, config: FileSystemConfig) -> IcebergResult<Self> {
         let file_io = utils::create_file_io(&config)?;
         Ok(Self {
-            filesystem_accessor: Box::new(FileSystemOperator::new(
+            filesystem_accessor: Arc::new(FileSystemAccessor::new(
                 config,
                 warehouse_location.clone(),
             )),
@@ -91,7 +92,7 @@ impl FileCatalog {
     /// Create a file catalog with the provided filesystem accessor.
     #[cfg(test)]
     pub fn new_with_filesystem_accessor(
-        filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     ) -> IcebergResult<Self> {
         use iceberg::io::FileIOBuilder;
         let file_io = FileIOBuilder::new_fs_io().build()?;

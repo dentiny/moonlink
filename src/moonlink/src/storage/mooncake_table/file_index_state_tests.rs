@@ -100,10 +100,12 @@ async fn test_1_recover_3() {
 
     // Now the disk file and deletion vector has been persist into iceberg.
     let object_storage_cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let iceberg_table_config = get_iceberg_table_config(&temp_dir);
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         object_storage_cache_for_recovery.clone(),
-        get_iceberg_table_config(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
+        iceberg_table_config,
     )
     .unwrap();
     let (next_file_id, mooncake_snapshot) = iceberg_table_manager_to_recover
@@ -208,6 +210,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache,
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();

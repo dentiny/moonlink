@@ -202,6 +202,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -384,6 +385,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -455,6 +457,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -516,6 +519,7 @@ async fn test_store_and_load_snapshot_impl(
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -562,6 +566,7 @@ async fn test_drop_table() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -596,6 +601,7 @@ async fn test_empty_snapshot_load() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -622,6 +628,7 @@ async fn test_snapshot_load_for_multiple_times() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -709,6 +716,7 @@ async fn test_index_merge_and_create_snapshot() {
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -742,6 +750,7 @@ async fn test_empty_content_snapshot_creation() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -776,6 +785,7 @@ async fn test_empty_content_snapshot_creation() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&config),
         config.clone(),
     )
     .unwrap();
@@ -812,6 +822,7 @@ async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         ObjectStorageCache::default_for_test(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -854,6 +865,7 @@ async fn test_skip_iceberg_snapshot() {
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         ObjectStorageCache::default_for_test(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -913,6 +925,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
         iceberg_table_config.clone(),
         mooncake_table_config,
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -941,6 +954,7 @@ async fn test_small_batch_size_and_large_parquet_size() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1191,6 +1205,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         iceberg_table_config.clone(),
         mooncake_table_config,
         ObjectStorageCache::default_for_test(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -1229,6 +1244,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1299,6 +1315,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1364,6 +1381,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1433,6 +1451,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1530,6 +1549,7 @@ async fn test_drop_table_at_creation() {
         iceberg_table_config.clone(),
         mooncake_table_config,
         ObjectStorageCache::default_for_test(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();
@@ -1542,6 +1562,7 @@ async fn test_drop_table_at_creation() {
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
+        create_local_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -1586,6 +1607,7 @@ async fn test_multiple_table_ids_for_deletion_vector() {
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         ObjectStorageCache::default_for_test(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();

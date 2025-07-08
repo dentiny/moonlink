@@ -488,15 +488,17 @@ async fn test_table_recovery() {
     create_mooncake_and_persist_for_test(&mut table, &mut event_completion_rx).await;
 
     // Recovery from iceberg snapshot and check mooncake table recovery.
+    let iceberg_table_config = test_iceberg_table_config(&context, table_name);
     let recovered_table = MooncakeTable::new(
         (*create_test_arrow_schema()).clone(),
         table_name.to_string(),
         /*table_id=*/ 1,
         context.path(),
         row_identity.clone(),
-        test_iceberg_table_config(&context, table_name),
+        iceberg_table_config.clone(),
         test_mooncake_table_config(&context),
         ObjectStorageCache::default_for_test(&context.temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
     )
     .await
     .unwrap();

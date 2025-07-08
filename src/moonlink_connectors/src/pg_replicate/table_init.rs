@@ -3,9 +3,9 @@ use crate::pg_replicate::table::TableSchema;
 use crate::pg_replicate::util::postgres_schema_to_moonlink_schema;
 use crate::{Error, Result};
 use moonlink::{
-    EventSyncReceiver, EventSyncSender, IcebergTableConfig, MooncakeTable, MooncakeTableConfig,
-    MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEvent, TableEventManager,
-    TableHandler,
+    EventSyncReceiver, EventSyncSender, FileSystemAccessor, FileSystemConfig, IcebergTableConfig,
+    MooncakeTable, MooncakeTableConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager,
+    TableEvent, TableEventManager, TableHandler,
 };
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -54,8 +54,10 @@ pub async fn build_table_components(
     let table_path = PathBuf::from(base_path).join(&mooncake_table_id);
     tokio::fs::create_dir_all(&table_path).await?;
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
+
+    let remote_root_directory = base_path.to_str().unwrap().to_string();
     let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: base_path.to_str().unwrap().to_string(),
+        warehouse_uri: remote_root_directory.clone(),
         namespace: vec![table_schema.table_name.schema.clone()],
         table_name: mooncake_table_id,
         ..Default::default()
@@ -70,6 +72,10 @@ pub async fn build_table_components(
         iceberg_table_config.clone(),
         mooncake_table_config.clone(),
         object_storage_cache,
+        Arc::new(FileSystemAccessor::new(
+            FileSystemConfig::FileSystem,
+            remote_root_directory,
+        )),
     )
     .await?;
 

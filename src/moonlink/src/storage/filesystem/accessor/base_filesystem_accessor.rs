@@ -1,4 +1,4 @@
-/// This module defines the interface for object storage accessor.
+/// This module defines the interface for filesystem accessor.
 use crate::Result;
 
 use async_trait::async_trait;
@@ -8,7 +8,7 @@ use mockall::*;
 
 #[async_trait]
 #[cfg_attr(test, automock)]
-pub trait BaseObjectStorageAccess: std::fmt::Debug + Send + Sync {
+pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     /// ===============================
     /// Directory operations
     /// ===============================

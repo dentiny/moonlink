@@ -23,6 +23,7 @@ use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFilePar
 pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
@@ -513,6 +514,7 @@ impl MooncakeTable {
         iceberg_table_config: IcebergTableConfig,
         table_config: MooncakeTableConfig,
         object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {
             name,
@@ -525,6 +527,7 @@ impl MooncakeTable {
         let iceberg_table_manager = Box::new(IcebergTableManager::new(
             metadata.clone(),
             object_storage_cache.clone(),
+            filesystem_accessor,
             iceberg_table_config,
         )?);
         Self::new_with_table_manager(metadata, iceberg_table_manager, object_storage_cache).await

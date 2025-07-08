@@ -202,10 +202,12 @@ async fn test_1_recover_2_without_local_optimization(#[case] use_batch_write: bo
 
     // Now the disk file and deletion vector has been persist into iceberg.
     let mut cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let iceberg_table_config = get_iceberg_table_config(&temp_dir);
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         cache_for_recovery.clone(),
-        get_iceberg_table_config(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
+        iceberg_table_config,
     )
     .unwrap();
     let (next_file_id, mooncake_snapshot) = iceberg_table_manager_to_recover
@@ -259,10 +261,12 @@ async fn test_1_recover_2_with_local_optimization(#[case] use_batch_write: bool)
 
     // Now the disk file and deletion vector has been persist into iceberg.
     let mut cache_for_recovery = ObjectStorageCache::default_for_test(&temp_dir);
+    let iceberg_table_config = get_iceberg_table_config(&temp_dir);
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         cache_for_recovery.clone(),
-        get_iceberg_table_config(&temp_dir),
+        create_local_filesystem_accessor(&iceberg_table_config),
+        iceberg_table_config,
     )
     .unwrap();
     let (next_file_id, mooncake_snapshot) = iceberg_table_manager_to_recover

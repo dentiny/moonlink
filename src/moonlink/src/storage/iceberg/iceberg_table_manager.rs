@@ -1,5 +1,4 @@
-#[cfg(test)]
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -93,6 +92,9 @@ pub struct IcebergTableManager {
     /// Object storage cache.
     pub(crate) object_storage_cache: ObjectStorageCache,
 
+    /// Filesystem accessor.
+    pub(crate) _filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+
     /// Maps from already persisted data file filepath to its deletion vector, and iceberg `DataFile`.
     pub(crate) persisted_data_files: HashMap<FileId, DataFileEntry>,
 
@@ -107,6 +109,7 @@ impl IcebergTableManager {
     pub fn new(
         mooncake_table_metadata: Arc<MooncakeTableMetadata>,
         object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
         let catalog = utils::create_catalog(&config.warehouse_uri)?;
@@ -117,6 +120,7 @@ impl IcebergTableManager {
             catalog,
             iceberg_table: None,
             object_storage_cache,
+            _filesystem_accessor: filesystem_accessor,
             persisted_data_files: HashMap::new(),
             persisted_file_indices: HashMap::new(),
             remote_data_file_to_file_id: HashMap::new(),
@@ -127,10 +131,10 @@ impl IcebergTableManager {
     pub(crate) fn new_with_filesystem_accessor(
         mooncake_table_metadata: Arc<MooncakeTableMetadata>,
         object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         config: IcebergTableConfig,
-        filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
     ) -> IcebergResult<IcebergTableManager> {
-        let catalog = utils::create_catalog_with_filesystem_accessor(filesystem_accessor)?;
+        let catalog = utils::create_catalog_with_filesystem_accessor(filesystem_accessor.clone())?;
         Ok(Self {
             snapshot_loaded: false,
             config,
@@ -138,6 +142,7 @@ impl IcebergTableManager {
             catalog,
             iceberg_table: None,
             object_storage_cache,
+            _filesystem_accessor: filesystem_accessor,
             persisted_data_files: HashMap::new(),
             persisted_file_indices: HashMap::new(),
             remote_data_file_to_file_id: HashMap::new(),

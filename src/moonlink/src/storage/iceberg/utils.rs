@@ -1,5 +1,5 @@
 #[cfg(test)]
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 #[cfg(test)]
@@ -127,7 +127,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
 /// Test util function to create catalog with provided filesystem accessor.
 #[cfg(test)]
 pub fn create_catalog_with_filesystem_accessor(
-    filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
+    filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
 ) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
     Ok(Box::new(FileCatalog::new_with_filesystem_accessor(
         filesystem_accessor,

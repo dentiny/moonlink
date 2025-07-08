@@ -1,5 +1,6 @@
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::table_creation_test_utils::create_test_arrow_schema;
+use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::IcebergTableConfig;
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
@@ -123,9 +124,10 @@ impl TestEnvironment {
             1,
             path,
             IdentityProp::Keys(vec![0]),
-            iceberg_table_config,
+            iceberg_table_config.clone(),
             mooncake_table_config,
             ObjectStorageCache::default_for_test(&temp_dir),
+            create_local_filesystem_accessor(&iceberg_table_config),
         )
         .await
         .unwrap();
@@ -154,7 +156,8 @@ impl TestEnvironment {
         IcebergTableManager::new(
             mooncake_table_metadata,
             self.object_storage_cache.clone(),
-            iceberg_table_config,
+            create_local_filesystem_accessor(&iceberg_table_config),
+            iceberg_table_config.clone(),
         )
         .unwrap()
     }

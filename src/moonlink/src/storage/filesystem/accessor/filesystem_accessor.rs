@@ -4,16 +4,16 @@ use futures::TryStreamExt;
 use opendal::layers::RetryLayer;
 use opendal::services;
 use opendal::Operator;
-/// FileSystemOperator built upon opendal.
+/// FileSystemAccessor built upon opendal.
 use tokio::sync::OnceCell;
 
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::configs::*;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::Result;
 
 #[derive(Debug)]
-pub(crate) struct FileSystemOperator {
+pub struct FileSystemAccessor {
     /// Root directory for the operator.
     root_directory: String,
     /// Operator to manager all IO operations.
@@ -22,8 +22,8 @@ pub(crate) struct FileSystemOperator {
     config: FileSystemConfig,
 }
 
-impl FileSystemOperator {
-    pub(crate) fn new(config: FileSystemConfig, root_location: String) -> Self {
+impl FileSystemAccessor {
+    pub fn new(config: FileSystemConfig, root_location: String) -> Self {
         Self {
             root_directory: root_location,
             operator: OnceCell::new(),
@@ -32,7 +32,7 @@ impl FileSystemOperator {
     }
 
     /// Get IO operator from the catalog.
-    pub(crate) async fn get_operator(&self) -> Result<&Operator> {
+    async fn get_operator(&self) -> Result<&Operator> {
         let retry_layer = RetryLayer::new()
             .with_max_times(MAX_RETRY_COUNT)
             .with_jitter()
@@ -94,7 +94,7 @@ impl FileSystemOperator {
 }
 
 #[async_trait]
-impl BaseObjectStorageAccess for FileSystemOperator {
+impl BaseFileSystemAccess for FileSystemAccessor {
     /// ===============================
     /// Directory operations
     /// ===============================
