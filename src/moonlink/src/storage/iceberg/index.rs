@@ -119,12 +119,17 @@ impl FileIndex {
                 file_id: FileId(cur_file_id),
             };
             let (cache_handle, cur_evicted_files) = object_storage_cache
-                .get_cache_entry(
-                    table_unique_file_id,
-                    /*remote_filepath=*/ &cur_index_block.filepath,
-                )
+                .get_cache_entry(table_unique_file_id, &cur_index_block.filepath)
                 .await
-                .map_err(to_iceberg_error)?;
+                .map_err(|e| {
+                    IcebergError::new(
+                        iceberg::ErrorKind::Unexpected,
+                        format!(
+                            "Failed to get file from {}: {:?}",
+                            cur_index_block.filepath, e
+                        ),
+                    )
+                })?;
             evicted_files_to_delete.extend(cur_evicted_files);
 
             // File indices should always reside in on-disk cache.

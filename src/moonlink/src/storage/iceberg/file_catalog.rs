@@ -351,7 +351,7 @@ impl Catalog for FileCatalog {
         self.filesystem_accessor
             .write_object(
                 &FileCatalog::get_namespace_indicator_name(namespace_ident),
-                /*content=*/ "",
+                /*content=*/ vec![],
             )
             .await
             .map_err(|e| {
@@ -474,7 +474,10 @@ impl Catalog for FileCatalog {
         let version_hint_filepath =
             format!("{}/{}/metadata/version-hint.text", directory, creation.name);
         self.filesystem_accessor
-            .write_object(&version_hint_filepath, /*content=*/ "0")
+            .write_object(
+                &version_hint_filepath,
+                /*content=*/ "0".as_bytes().to_vec(),
+            )
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -491,9 +494,9 @@ impl Catalog for FileCatalog {
         );
 
         let table_metadata = TableMetadataBuilder::from_table_creation(creation)?.build()?;
-        let metadata_json = serde_json::to_string(&table_metadata.metadata)?;
+        let metadata_json = serde_json::to_vec(&table_metadata.metadata)?;
         self.filesystem_accessor
-            .write_object(&metadata_filepath, /*content=*/ &metadata_json)
+            .write_object(&metadata_filepath, /*content=*/ metadata_json)
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -592,9 +595,9 @@ impl Catalog for FileCatalog {
             commit.identifier().name()
         );
         let new_metadata_filepath = format!("{}/v{}.metadata.json", metadata_directory, version,);
-        let metadata_json = serde_json::to_string(&metadata)?;
+        let metadata_json = serde_json::to_vec(&metadata)?;
         self.filesystem_accessor
-            .write_object(&new_metadata_filepath, &metadata_json)
+            .write_object(&new_metadata_filepath, metadata_json)
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -618,7 +621,7 @@ impl Catalog for FileCatalog {
         // Write version hint file.
         let version_hint_path = format!("{}/version-hint.text", metadata_directory);
         self.filesystem_accessor
-            .write_object(&version_hint_path, &format!("{version}"))
+            .write_object(&version_hint_path, format!("{version}").as_bytes().to_vec())
             .await
             .map_err(|e| {
                 IcebergError::new(

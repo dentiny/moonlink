@@ -155,7 +155,7 @@ impl IcebergTableManager {
                 self.iceberg_table.as_ref().unwrap(),
                 local_data_file.file_path(),
                 self.iceberg_table.as_ref().unwrap().metadata(),
-                &self.config.catalog_config,
+                self.filesystem_accessor.as_ref(),
             )
             .await?;
 
@@ -339,7 +339,7 @@ impl IcebergTableManager {
                 let remote_index_block = utils::upload_index_file(
                     self.iceberg_table.as_ref().unwrap(),
                     cur_index_block.index_file.file_path(),
-                    &self.config.catalog_config,
+                    self.filesystem_accessor.as_ref(),
                 )
                 .await?;
                 local_index_file_to_remote.insert(

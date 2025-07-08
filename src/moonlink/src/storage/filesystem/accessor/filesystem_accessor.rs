@@ -181,11 +181,9 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         Ok(String::from_utf8(content.to_vec())?)
     }
 
-    // TODO(hjiang): Could avoid copy.
-    async fn write_object(&self, object_filepath: &str, content: &str) -> Result<()> {
-        let data = content.as_bytes().to_vec();
+    async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()> {
         let operator = self.get_operator().await?;
-        operator.write(object_filepath, data).await?;
+        operator.write(object_filepath, content).await?;
         Ok(())
     }
 
@@ -196,8 +194,8 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<()> {
-        let content = tokio::fs::read_to_string(src).await?;
-        self.write_object(dst, &content).await?;
+        let content = tokio::fs::read(src).await?;
+        self.write_object(dst, content).await?;
         Ok(())
     }
 }
