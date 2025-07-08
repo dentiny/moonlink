@@ -46,10 +46,7 @@ impl FileSystemOperator {
                     #[cfg(feature = "storage-fs")]
                     &FileSystemConfig::FileSystem => {
                         let builder = services::Fs::default().root(&self.root_directory);
-                        let op = Operator::new(builder)
-                            .expect("failed to create fs operator")
-                            .layer(retry_layer)
-                            .finish();
+                        let op = Operator::new(builder)?.layer(retry_layer).finish();
                         Ok(op)
                     }
                     #[cfg(feature = "storage-gcs")]
@@ -69,10 +66,7 @@ impl FileSystemOperator {
                                 .disable_vm_metadata()
                                 .allow_anonymous();
                         }
-                        let op = Operator::new(builder)
-                            .expect("failed to create gcs operator")
-                            .layer(retry_layer)
-                            .finish();
+                        let op = Operator::new(builder)?.layer(retry_layer).finish();
                         Ok(op)
                     }
                     #[cfg(feature = "storage-s3")]
@@ -90,10 +84,7 @@ impl FileSystemOperator {
                             .endpoint(endpoint)
                             .access_key_id(access_key_id)
                             .secret_access_key(secret_access_key);
-                        let op = Operator::new(builder)
-                            .expect("failed to create s3 operator")
-                            .layer(retry_layer)
-                            .finish();
+                        let op = Operator::new(builder)?.layer(retry_layer).finish();
                         Ok(op)
                     }
                 }
@@ -171,7 +162,7 @@ impl BaseObjectStorageAccess for FileSystemOperator {
 
     #[cfg(not(feature = "storage-gcs"))]
     async fn remove_directory(&self, directory: &str) -> Result<()> {
-        let op = self.get_operator().await.unwrap().clone();
+        let op = self.get_operator().await?.clone();
         op.remove_all(directory).await?;
         Ok(())
     }
