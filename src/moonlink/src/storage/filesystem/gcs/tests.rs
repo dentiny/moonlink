@@ -17,7 +17,7 @@ async fn test_copy_from_local_to_remote() {
 
     // Copy from src to dst.
     let filesystem_accessor = FileSystemAccessor::new(gcs_filesystem_config);
-    let dst_filepath = format!("{}/dst", root_directory);
+    let dst_filepath = format!("{}/dst", warehouse_uri);
     filesystem_accessor
         .copy_from_local_to_remote(&src_filepath, &dst_filepath)
         .await
@@ -34,4 +34,30 @@ async fn test_copy_from_local_to_remote() {
     filesystem_accessor.remove_directory("/").await.unwrap();
     // Clean up test bucket.
     delete_test_gcs_bucket(bucket.clone()).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_copy_from_remote_to_local() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let root_directory = temp_dir.path().to_str().unwrap().to_string();
+    let dst_filepath = format!("{}/dst", &root_directory);
+
+    let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
+    create_test_gcs_bucket(bucket.clone()).await.unwrap();
+    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+
+    // Prepare src file.
+    let src_filepath = format!("{}/src", warehouse_uri);
+    create_remote_file(&src_filepath, gcs_filesystem_config.clone()).await;
+
+    // Copy from src to dst.
+    let filesystem_accessor = FileSystemAccessor::new(gcs_filesystem_config);
+    filesystem_accessor
+        .copy_from_remote_to_local(&src_filepath, &dst_filepath)
+        .await
+        .unwrap();
+
+    // Validate destination file content.
+    let actual_content = tokio::fs::read_to_string(dst_filepath).await.unwrap();
+    assert_eq!(actual_content, TEST_CONTEST);
 }
