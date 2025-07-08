@@ -10,10 +10,13 @@ use tokio::sync::OnceCell;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::configs::*;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::filesystem::utils::path_utils::get_root_path;
 use crate::Result;
 
 #[derive(Debug)]
 pub struct FileSystemAccessor {
+    /// Root path.
+    root_path: String,
     /// Operator to manager all IO operations.
     operator: OnceCell<Operator>,
     /// Filesystem configuration.
@@ -23,9 +26,16 @@ pub struct FileSystemAccessor {
 impl FileSystemAccessor {
     pub fn new(config: FileSystemConfig) -> Self {
         Self {
+            root_path: get_root_path(&config),
             operator: OnceCell::new(),
             config,
         }
+    }
+
+    /// Sanitize given path.
+    /// Opendal works on relative path, so attempt to sanitize absolute path to relative one if applicable.
+    fn sanitize_path<'a>(&self, path: &'a str) -> &'a str {
+        path.strip_prefix(&self.root_path).unwrap_or(path)
     }
 
     /// Get IO operator from the catalog.
@@ -97,7 +107,8 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     /// ===============================
     ///
     async fn list_direct_subdirectories(&self, folder: &str) -> Result<Vec<String>> {
-        let prefix = format!("{}/", folder);
+        let sanitized_folder = self.sanitize_path(folder);
+        let prefix = format!("{}/", sanitized_folder);
         let mut dirs = Vec::new();
         let lister = self.get_operator().await?.list(&prefix).await?;
 
@@ -128,21 +139,19 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         } else {
             format!("{}/", directory)
         };
+        let sanitized_path = self.sanitize_path(&path);
 
         let operator = self.get_operator().await?;
-        let mut lister = operator.lister(&path).await?;
+        let mut lister = operator.lister(sanitized_path).await?;
         let mut entries = Vec::new();
 
         while let Some(entry) = lister.try_next().await? {
             // List operation returns target path.
-            if entry.path() != path {
+            if entry.path() != sanitized_path {
                 entries.push(entry.path().to_string());
             }
         }
         for entry_path in entries {
-            if entry_path == path {
-                continue;
-            }
             if entry_path.ends_with('/') {
                 Box::pin(self.remove_directory(&entry_path)).await?;
             } else {
@@ -150,8 +159,8 @@ impl BaseFileSystemAccess for FileSystemAccessor {
             }
         }
 
-        if !path.is_empty() && path != "/" {
-            operator.remove_all(&path).await?;
+        if !sanitized_path.is_empty() && sanitized_path != "/" {
+            operator.remove_all(sanitized_path).await?;
         }
 
         Ok(())
@@ -159,8 +168,9 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 
     #[cfg(not(feature = "storage-gcs"))]
     async fn remove_directory(&self, directory: &str) -> Result<()> {
+        let sanitized_directory = self.sanitize_path(&directory);
         let op = self.get_operator().await?.clone();
-        op.remove_all(directory).await?;
+        op.remove_all(sanitized_directory).await?;
         Ok(())
     }
 
@@ -169,7 +179,8 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     /// ===============================
     ///
     async fn object_exists(&self, object: &str) -> Result<bool> {
-        match self.get_operator().await?.stat(object).await {
+        let sanitized_object = self.sanitize_path(object);
+        match self.get_operator().await?.stat(sanitized_object).await {
             Ok(_) => Ok(true),
             Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(false),
             Err(e) => Err(e.into()),
@@ -177,27 +188,31 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn read_object(&self, object: &str) -> Result<String> {
-        let content = self.get_operator().await?.read(object).await?;
+        let sanitized_object = self.sanitize_path(object);
+        let content = self.get_operator().await?.read(sanitized_object).await?;
         Ok(String::from_utf8(content.to_vec())?)
     }
 
-    async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()> {
+    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
+        let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
         let expected_len = content.len();
-        let metadata = operator.write(object_filepath, content).await?;
+        let metadata = operator.write(sanitized_object, content).await?;
         assert_eq!(metadata.content_length(), expected_len as u64);
         Ok(())
     }
 
-    async fn delete_object(&self, object_filepath: &str) -> Result<()> {
+    async fn delete_object(&self, object: &str) -> Result<()> {
+        let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
-        operator.delete(object_filepath).await?;
+        operator.delete(sanitized_object).await?;
         Ok(())
     }
 
     async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<()> {
+        let sanitized_dst = self.sanitize_path(dst);
         let content = tokio::fs::read(src).await?;
-        self.write_object(dst, content).await?;
+        self.write_object(sanitized_dst, content).await?;
         Ok(())
     }
 }

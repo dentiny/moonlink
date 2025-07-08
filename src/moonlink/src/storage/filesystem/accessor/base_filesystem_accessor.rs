@@ -6,6 +6,7 @@ use async_trait::async_trait;
 #[cfg(test)]
 use mockall::*;
 
+/// All interfaces accept both relative path (relative to root directory on local filesystem, or bucket for object storage) and absolute path.
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
