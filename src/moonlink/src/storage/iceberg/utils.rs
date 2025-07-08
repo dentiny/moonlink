@@ -127,7 +127,7 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
 /// Test util function to create catalog with provided filesystem accessor.
 #[cfg(test)]
 pub fn create_catalog_with_filesystem_accessor(
-    filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+    filesystem_accessor: std::sync::Arc<dyn BaseFileSystemAccess>,
 ) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
     Ok(Box::new(FileCatalog::new_with_filesystem_accessor(
         filesystem_accessor,

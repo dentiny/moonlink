@@ -37,4 +37,7 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
 
     /// Delete the given object.
     async fn delete_object(&self, object_filepath: &str) -> Result<()>;
+
+    /// Copy from local file [`src`] to remote file [`dst`].
+    async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<()>;
 }
