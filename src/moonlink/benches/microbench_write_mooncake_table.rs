@@ -1,10 +1,12 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
+use moonlink::{FileSystemAccessor, FileSystemConfig};
 use moonlink::{IcebergTableConfig, ObjectStorageCache};
 use moonlink::{MooncakeTable, MooncakeTableConfig};
 use pprof::criterion::{Output, PProfProfiler};
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
@@ -47,9 +49,10 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
     ]);
 
     let base_path = temp_dir.path().to_path_buf();
+    let warehouse_location = base_path.to_str().unwrap().to_string();
     let table_name = "test_table";
     let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: base_path.to_str().unwrap().to_string(),
+        warehouse_uri: warehouse_location.clone(),
         namespace: vec!["default".to_string()],
         table_name: table_name.to_string(),
         catalog_config: moonlink::FileSystemConfig::FileSystem,
@@ -66,6 +69,10 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
             iceberg_table_config,
             table_config,
             ObjectStorageCache::default_for_bench(),
+            Arc::new(FileSystemAccessor::new(
+                FileSystemConfig::FileSystem,
+                warehouse_location.clone(),
+            )),
         ))
         .unwrap();
 

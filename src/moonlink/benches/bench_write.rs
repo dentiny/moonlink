@@ -1,9 +1,13 @@
 use arrow::datatypes::{DataType, Field, Schema};
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
-use moonlink::{IcebergTableConfig, MooncakeTable, MooncakeTableConfig, ObjectStorageCache};
+use moonlink::{
+    FileSystemAccessor, FileSystemConfig, IcebergTableConfig, MooncakeTable, MooncakeTableConfig,
+    ObjectStorageCache,
+};
 use pprof::criterion::{Output, PProfProfiler};
 use std::collections::HashMap;
+use std::sync::Arc;
 use tempfile::tempdir;
 use tokio::runtime::Runtime;
 
@@ -51,7 +55,7 @@ fn bench_write(c: &mut Criterion) {
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
                 let iceberg_table_config = IcebergTableConfig {
-                    warehouse_uri: temp_warehouse_uri,
+                    warehouse_uri: temp_warehouse_uri.clone(),
                     ..Default::default()
                 };
                 let table_config =
@@ -65,6 +69,10 @@ fn bench_write(c: &mut Criterion) {
                     iceberg_table_config,
                     table_config,
                     ObjectStorageCache::default_for_bench(),
+                    Arc::new(FileSystemAccessor::new(
+                        FileSystemConfig::FileSystem,
+                        temp_warehouse_uri.clone(),
+                    )),
                 )
                 .await
                 .unwrap();
@@ -86,7 +94,7 @@ fn bench_write(c: &mut Criterion) {
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
                 let iceberg_table_config = IcebergTableConfig {
-                    warehouse_uri: temp_warehouse_uri,
+                    warehouse_uri: temp_warehouse_uri.clone(),
                     ..Default::default()
                 };
                 let table_config =
@@ -100,6 +108,10 @@ fn bench_write(c: &mut Criterion) {
                     iceberg_table_config,
                     table_config,
                     ObjectStorageCache::default_for_bench(),
+                    Arc::new(FileSystemAccessor::new(
+                        FileSystemConfig::FileSystem,
+                        temp_warehouse_uri.clone(),
+                    )),
                 )
                 .await
                 .unwrap();
@@ -124,7 +136,7 @@ fn bench_write(c: &mut Criterion) {
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
                 let iceberg_table_config = IcebergTableConfig {
-                    warehouse_uri: temp_warehouse_uri,
+                    warehouse_uri: temp_warehouse_uri.clone(),
                     ..Default::default()
                 };
                 let table_config =
@@ -139,6 +151,10 @@ fn bench_write(c: &mut Criterion) {
                         iceberg_table_config,
                         table_config,
                         ObjectStorageCache::default_for_bench(),
+                        Arc::new(FileSystemAccessor::new(
+                            FileSystemConfig::FileSystem,
+                            temp_warehouse_uri.clone(),
+                        )),
                     ))
                     .unwrap();
                 rt.block_on(async {

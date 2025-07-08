@@ -17,7 +17,7 @@ async fn test_copy_from_local_to_remote() {
 
     // Copy from src to dst.
     let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config, root_directory.clone());
-    let dst_filepath = format!("dst");
+    let dst_filepath = "dst".to_string();
     filesystem_accessor
         .copy_from_local_to_remote(&src_filepath, &dst_filepath)
         .await
