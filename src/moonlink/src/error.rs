@@ -35,6 +35,12 @@ pub enum Error {
 
     #[error("Iceberg error: {0}")]
     IcebergMessage(String),
+
+    #[error("OpenDAL error: {0}")]
+    OpenDal(#[from] opendal::Error),
+
+    #[error("UTF-8 conversion error: {0}")]
+    Utf8(#[from] std::string::FromUtf8Error),
 }
 
 pub type Result<T> = result::Result<T, Error>;

@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 #[cfg(test)]
@@ -120,6 +122,16 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
 
     // TODO(hjiang): Fallback to object storage for all warehouse uris.
     todo!("Need to take secrets from client side and create object storage catalog.")
+}
+
+/// Test util function to create catalog with provided filesystem accessor.
+#[cfg(test)]
+pub fn create_catalog_with_filesystem_accessor(
+    filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
+) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
+    Ok(Box::new(FileCatalog::new_with_filesystem_accessor(
+        filesystem_accessor,
+    )?))
 }
 
 /// Create an iceberg table in the given catalog from the given namespace and table name.

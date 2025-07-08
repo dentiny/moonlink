@@ -43,3 +43,6 @@ mod file_catalog_test_utils;
 
 #[cfg(test)]
 mod file_catalog_test;
+
+#[cfg(test)]
+mod mock_filesystem_test;

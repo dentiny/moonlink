@@ -1,3 +1,4 @@
+pub(crate) mod accessor;
 pub mod filesystem_config;
 #[cfg(feature = "storage-gcs")]
 pub(crate) mod gcs;
