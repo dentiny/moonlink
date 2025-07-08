@@ -1,4 +1,3 @@
-#[cfg(test)]
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
@@ -24,7 +23,7 @@ use url::Url;
 
 use arrow_schema::Schema as ArrowSchema;
 use iceberg::arrow as IcebergArrow;
-use iceberg::io::{FileIO, FileIOBuilder, OutputFile};
+use iceberg::io::{FileIO, FileIOBuilder};
 use iceberg::spec::DataFile;
 use iceberg::spec::TableMetadata as IcebergTableMetadata;
 use iceberg::spec::{DataContentType, DataFileFormat, ManifestEntry};
@@ -219,30 +218,12 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
     Ok(Some(table))
 }
 
-/// Copy source filepath to destination filepath.
-///
-/// TODO(hjiang): Extract into filesystem utils.
-async fn copy_from_local_to_remote(
-    src: &str,
-    dst: &str,
-    catalog_config: &FileSystemConfig,
-) -> IcebergResult<()> {
-    let src = FileIOBuilder::new_fs_io().build()?.new_input(src)?;
-    let dst = create_output_file(catalog_config, dst)?;
-
-    // TODO(hjiang): Switch to parallel chunk-based reading if source file large.
-    let bytes = src.read().await?;
-    dst.write(bytes).await?;
-
-    Ok(())
-}
-
 /// Write the given record batch in the given local file to the iceberg table (parquet file keeps unchanged).
 pub(crate) async fn write_record_batch_to_iceberg(
     table: &IcebergTable,
     local_filepath: &String,
     table_metadata: &IcebergTableMetadata,
-    catalog_config: &FileSystemConfig,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
 ) -> IcebergResult<DataFile> {
     let filename = Path::new(local_filepath)
         .file_name()
@@ -254,7 +235,18 @@ pub(crate) async fn write_record_batch_to_iceberg(
     let remote_filepath = location_generator.generate_location(&filename);
 
     // Import local parquet file to remote.
-    copy_from_local_to_remote(local_filepath, &remote_filepath, catalog_config).await?;
+    filesystem_accessor
+        .copy_from_local_to_remote(local_filepath, &remote_filepath)
+        .await
+        .map_err(|e| {
+            IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!(
+                    "Failed to copy from {} to {}: {:?}",
+                    local_filepath, remote_filepath, e
+                ),
+            )
+        })?;
 
     // Get data file from local parquet file.
     let data_file = parquet_utils::get_data_file_from_local_parquet_file(
@@ -270,7 +262,7 @@ pub(crate) async fn write_record_batch_to_iceberg(
 pub(crate) async fn upload_index_file(
     table: &IcebergTable,
     local_index_filepath: &str,
-    catalog_config: &FileSystemConfig,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
 ) -> IcebergResult<String> {
     let filename = Path::new(local_index_filepath)
         .file_name()
@@ -280,7 +272,18 @@ pub(crate) async fn upload_index_file(
         .to_string();
     let location_generator = DefaultLocationGenerator::new(table.metadata().clone()).unwrap();
     let remote_filepath = location_generator.generate_location(&filename);
-    copy_from_local_to_remote(local_index_filepath, &remote_filepath, catalog_config).await?;
+    filesystem_accessor
+        .copy_from_local_to_remote(local_index_filepath, &remote_filepath)
+        .await
+        .map_err(|e| {
+            IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!(
+                    "Failed to copy from {} to {}: {:?}",
+                    local_index_filepath, remote_filepath, e
+                ),
+            )
+        })?;
     Ok(remote_filepath)
 }
 
@@ -321,16 +324,6 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
             .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key)
             .build(),
     }
-}
-
-/// Create output file.
-pub(crate) fn create_output_file(
-    config: &FileSystemConfig,
-    dst: &str,
-) -> IcebergResult<OutputFile> {
-    let file_io = create_file_io(config)?;
-    // [`new_output`] requires input to start with schema.
-    file_io.new_output(dst)
 }
 
 /// Util function to convert the given error to iceberg "unexpected" error.
