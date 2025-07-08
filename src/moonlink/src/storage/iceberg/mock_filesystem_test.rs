@@ -43,3 +43,22 @@ async fn test_failed_iceberg_table_manager_drop_table() {
     let res = iceberg_table_manager.drop_table().await;
     assert!(res.is_err());
 }
+
+#[tokio::test]
+async fn test_failed_recover_from_iceberg_table() {
+    let mut filesystem_accessor = MockBaseObjectStorageAccess::new();
+    filesystem_accessor
+        .expect_object_exists()
+        .times(1)
+        .returning(|_| {
+            Box::pin(async move {
+                Err(Error::IcebergMessage(String::from(
+                    "Failed to check object existence",
+                )))
+            })
+        });
+    let mut iceberg_table_manager =
+        create_iceberg_table_manager_with_fs_accessor(Box::new(filesystem_accessor));
+    let res = iceberg_table_manager.load_snapshot_from_table().await;
+    assert!(res.is_err());
+}
