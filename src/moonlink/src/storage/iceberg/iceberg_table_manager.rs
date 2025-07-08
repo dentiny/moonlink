@@ -94,7 +94,7 @@ pub struct IcebergTableManager {
     pub(crate) object_storage_cache: ObjectStorageCache,
 
     /// Filesystem accessor.
-    pub(crate) _filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+    pub(crate) filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
 
     /// Maps from already persisted data file filepath to its deletion vector, and iceberg `DataFile`.
     pub(crate) persisted_data_files: HashMap<FileId, DataFileEntry>,
@@ -121,7 +121,7 @@ impl IcebergTableManager {
             catalog,
             iceberg_table: None,
             object_storage_cache,
-            _filesystem_accessor: filesystem_accessor,
+            filesystem_accessor,
             persisted_data_files: HashMap::new(),
             persisted_file_indices: HashMap::new(),
             remote_data_file_to_file_id: HashMap::new(),
@@ -143,7 +143,7 @@ impl IcebergTableManager {
             catalog,
             iceberg_table: None,
             object_storage_cache,
-            _filesystem_accessor: filesystem_accessor,
+            filesystem_accessor,
             persisted_data_files: HashMap::new(),
             persisted_file_indices: HashMap::new(),
             remote_data_file_to_file_id: HashMap::new(),
