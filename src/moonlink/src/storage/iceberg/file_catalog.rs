@@ -1,5 +1,7 @@
 use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::filesystem::operator::base_filesystem_operator::BaseObjectStorageAccess;
+use crate::storage::filesystem::operator::filesystem_operator::FileSystemOperator;
 use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
@@ -50,28 +52,16 @@ use iceberg::{
     Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent, TableUpdate,
 };
 use iceberg::{Error as IcebergError, TableRequirement};
-use opendal::layers::RetryLayer;
-use opendal::services;
-use opendal::Operator;
-use tokio::sync::OnceCell;
 
 // Object storage usually doesn't have "folder" concept, when creating a new namespace, we create an indicator file under certain folder.
 pub(super) const NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
 
-// Retry related constants.
-static MIN_RETRY_DELAY: std::time::Duration = std::time::Duration::from_millis(500);
-static MAX_RETRY_DELAY: std::time::Duration = std::time::Duration::from_secs(10);
-static RETRY_DELAY_FACTOR: f32 = 1.5;
-static MAX_RETRY_COUNT: usize = 5;
-
 #[derive(Debug)]
 pub struct FileCatalog {
-    /// Catalog configurations.
-    config: FileSystemConfig,
+    /// Filesystem operator.
+    filesystem_operator: Box<dyn BaseObjectStorageAccess>,
     /// Similar to opendal operator, which also provides an abstraction above different storage backends.
     file_io: FileIO,
-    /// Operator to manager all IO operations.n
-    operator: OnceCell<Operator>,
     /// Table location.
     warehouse_location: String,
     /// Used to record puffin blob metadata in one transaction, and cleaned up after transaction commits.
@@ -89,9 +79,11 @@ impl FileCatalog {
     pub fn new(warehouse_location: String, config: FileSystemConfig) -> IcebergResult<Self> {
         let file_io = utils::create_file_io(&config)?;
         Ok(Self {
-            config,
+            filesystem_operator: Box::new(FileSystemOperator::new(
+                config,
+                warehouse_location.clone(),
+            )),
             file_io,
-            operator: OnceCell::new(),
             warehouse_location,
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
@@ -105,76 +97,6 @@ impl FileCatalog {
         &self.warehouse_location
     }
 
-    /// Get IO operator from the catalog.
-    pub(crate) async fn get_operator(&self) -> IcebergResult<&Operator> {
-        let retry_layer = RetryLayer::new()
-            .with_max_times(MAX_RETRY_COUNT)
-            .with_jitter()
-            .with_factor(RETRY_DELAY_FACTOR)
-            .with_min_delay(MIN_RETRY_DELAY)
-            .with_max_delay(MAX_RETRY_DELAY);
-
-        self.operator
-            .get_or_try_init(|| async {
-                match &self.config {
-                    #[cfg(feature = "storage-fs")]
-                    &FileSystemConfig::FileSystem => {
-                        let builder = services::Fs::default().root(&self.warehouse_location);
-                        let op = Operator::new(builder)
-                            .expect("failed to create fs operator")
-                            .layer(retry_layer)
-                            .finish();
-                        Ok(op)
-                    }
-                    #[cfg(feature = "storage-gcs")]
-                    FileSystemConfig::Gcs {
-                        bucket,
-                        endpoint,
-                        disable_auth,
-                        ..
-                    } => {
-                        let mut builder = services::Gcs::default()
-                            .root("/")
-                            .bucket(bucket)
-                            .endpoint(endpoint);
-                        if *disable_auth {
-                            builder = builder
-                                .disable_config_load()
-                                .disable_vm_metadata()
-                                .allow_anonymous();
-                        }
-                        let op = Operator::new(builder)
-                            .expect("failed to create gcs operator")
-                            .layer(retry_layer)
-                            .finish();
-                        Ok(op)
-                    }
-                    #[cfg(feature = "storage-s3")]
-                    FileSystemConfig::S3 {
-                        access_key_id,
-                        secret_access_key,
-                        region,
-                        bucket,
-                        endpoint,
-                        ..
-                    } => {
-                        let builder = services::S3::default()
-                            .bucket(bucket)
-                            .region(region)
-                            .endpoint(endpoint)
-                            .access_key_id(access_key_id)
-                            .secret_access_key(secret_access_key);
-                        let op = Operator::new(builder)
-                            .expect("failed to create s3 operator")
-                            .layer(retry_layer)
-                            .finish();
-                        Ok(op)
-                    }
-                }
-            })
-            .await
-    }
-
     /// Get object name of the indicator object for the given namespace.
     fn get_namespace_indicator_name(namespace: &iceberg::NamespaceIdent) -> String {
         let mut path = PathBuf::new();
@@ -183,117 +105,6 @@ impl FileCatalog {
         }
         path.push(NAMESPACE_INDICATOR_OBJECT_NAME);
         path.to_str().unwrap().to_string()
-    }
-
-    async fn object_exists(&self, object: &str) -> Result<bool, Box<dyn Error>> {
-        match self.get_operator().await?.stat(object).await {
-            Ok(_) => Ok(true),
-            Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(false),
-            Err(e) => Err(e.into()),
-        }
-    }
-
-    /// List all direct sub-directory under the given directory.
-    ///
-    /// For example, we have directory "a", "a/b", "a/b/c", listing direct subdirectories for "a" will return "a/b".
-    #[tracing::instrument(name = "list_subdirs", skip_all)]
-    async fn list_direct_subdirectories(
-        &self,
-        folder: &str,
-    ) -> Result<Vec<String>, Box<dyn Error>> {
-        let prefix = format!("{}/", folder);
-        let mut dirs = Vec::new();
-        let lister = self.get_operator().await?.list(&prefix).await?;
-
-        let entries = lister;
-        for cur_entry in entries.iter() {
-            // Both directories and objects will be returned, here we only care about sub-directories.
-            if !cur_entry.path().ends_with('/') {
-                continue;
-            }
-            let dir_name = cur_entry
-                .path()
-                .trim_start_matches(&prefix)
-                .trim_end_matches('/')
-                .to_string();
-            if !dir_name.is_empty() {
-                dirs.push(dir_name);
-            }
-        }
-
-        Ok(dirs)
-    }
-
-    /// Read the whole content for the given object.
-    /// Notice, it's not suitable to read large files; as of now it's made for metadata files.
-    async fn read_object(&self, object: &str) -> Result<String, Box<dyn Error>> {
-        let content = self.get_operator().await?.read(object).await?;
-        Ok(String::from_utf8(content.to_vec())?)
-    }
-
-    /// Write the whole content to the given file.
-    async fn write_object(
-        &self,
-        object_filepath: &str,
-        content: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        let data = content.as_bytes().to_vec();
-        let operator = self.get_operator().await?;
-        operator.write(object_filepath, data).await.map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to write content: {}", e),
-            )
-        })?;
-        Ok(())
-    }
-
-    /// Remove the whole directory.
-    ///
-    /// TODO(hjiang): Check whether we could unify the implementation with [`remove_directory`].
-    #[tracing::instrument(name = "remove_directory", skip_all)]
-    #[cfg(feature = "storage-gcs")]
-    async fn remove_directory(&self, directory: &str) -> Result<(), Box<dyn Error>> {
-        let path = if directory.ends_with('/') {
-            directory.to_string()
-        } else {
-            format!("{}/", directory)
-        };
-
-        let operator = self.get_operator().await?;
-        let mut lister = operator.lister(&path).await?;
-        let mut entries = Vec::new();
-
-        while let Some(entry) = lister.try_next().await? {
-            // List operation returns target path.
-            if entry.path() != path {
-                entries.push(entry.path().to_string());
-            }
-        }
-        for entry_path in entries {
-            if entry_path == path {
-                continue;
-            }
-            if entry_path.ends_with('/') {
-                Box::pin(self.remove_directory(&entry_path)).await?;
-            } else {
-                operator.delete(&entry_path).await?;
-            }
-        }
-
-        if !path.is_empty() && path != "/" {
-            operator.remove_all(&path).await?;
-        }
-
-        Ok(())
-    }
-
-    #[tracing::instrument(name = "remove_directory", skip_all)]
-    #[cfg(not(feature = "storage-gcs"))]
-    async fn remove_directory(&self, directory: &str) -> Result<(), Box<dyn Error>> {
-        let op = self.get_operator().await.unwrap().clone();
-        op.remove_all(directory).await?;
-        Ok(())
     }
 
     /// Load metadata and its location foe the given table.
@@ -308,6 +119,7 @@ impl FileCatalog {
             table_ident.name(),
         );
         let version_str = self
+            .filesystem_operator
             .read_object(&version_hint_filepath)
             .await
             .map_err(|e| {
@@ -328,12 +140,16 @@ impl FileCatalog {
             table_ident.name(),
             version,
         );
-        let metadata_str = self.read_object(&metadata_filepath).await.map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to read table metadata file on load table: {}", e),
-            )
-        })?;
+        let metadata_str = self
+            .filesystem_operator
+            .read_object(&metadata_filepath)
+            .await
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!("Failed to read table metadata file on load table: {}", e),
+                )
+            })?;
         let metadata = serde_json::from_slice::<TableMetadata>(metadata_str.as_bytes())
             .map_err(|e| IcebergError::new(iceberg::ErrorKind::DataInvalid, e.to_string()))?;
 
@@ -438,6 +254,7 @@ impl Catalog for FileCatalog {
             "/".to_string()
         };
         let subdirectories = self
+            .filesystem_operator
             .list_direct_subdirectories(&parent_directory)
             .await
             .map_err(|e| {
@@ -504,17 +321,18 @@ impl Catalog for FileCatalog {
                 ));
             }
         }
-        self.write_object(
-            &FileCatalog::get_namespace_indicator_name(namespace_ident),
-            /*content=*/ "",
-        )
-        .await
-        .map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to write metadata file at namespace creation: {}", e),
+        self.filesystem_operator
+            .write_object(
+                &FileCatalog::get_namespace_indicator_name(namespace_ident),
+                /*content=*/ "",
             )
-        })?;
+            .await
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!("Failed to write metadata file at namespace creation: {}", e),
+                )
+            })?;
 
         Ok(Namespace::new(namespace_ident.clone()))
     }
@@ -533,28 +351,38 @@ impl Catalog for FileCatalog {
 
     /// Check if namespace exists in catalog.
     async fn namespace_exists(&self, namespace_ident: &NamespaceIdent) -> IcebergResult<bool> {
-        match self
-            .get_operator()
-            .await?
-            .stat(&FileCatalog::get_namespace_indicator_name(namespace_ident))
+        let key = FileCatalog::get_namespace_indicator_name(namespace_ident);
+        let exists = self
+            .filesystem_operator
+            .object_exists(&key)
             .await
-        {
-            Ok(_) => Ok(true),
-            Err(_) => return Ok(false),
-        }
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to check namespace {:?} existence: {:?}",
+                        namespace_ident, e
+                    ),
+                )
+            })?;
+        Ok(exists)
     }
 
     /// Drop a namespace from the catalog.
     async fn drop_namespace(&self, namespace_ident: &NamespaceIdent) -> IcebergResult<()> {
         let key = FileCatalog::get_namespace_indicator_name(namespace_ident);
-
-        self.get_operator().await?.delete(&key).await.map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to drop namespace: {}", e),
-            )
-        })?;
-
+        self.filesystem_operator
+            .delete_object(&key)
+            .await
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to drop namespace {:?} existence: {:?}",
+                        namespace_ident, e
+                    ),
+                )
+            })?;
         Ok(())
     }
 
@@ -577,6 +405,7 @@ impl Catalog for FileCatalog {
 
         let parent_directory = namespace_ident.to_url_string();
         let subdirectories = self
+            .filesystem_operator
             .list_direct_subdirectories(&parent_directory)
             .await
             .map_err(|e| {
@@ -617,7 +446,8 @@ impl Catalog for FileCatalog {
         // Create version hint file.
         let version_hint_filepath =
             format!("{}/{}/metadata/version-hint.text", directory, creation.name);
-        self.write_object(&version_hint_filepath, /*content=*/ "0")
+        self.filesystem_operator
+            .write_object(&version_hint_filepath, /*content=*/ "0")
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -635,7 +465,8 @@ impl Catalog for FileCatalog {
 
         let table_metadata = TableMetadataBuilder::from_table_creation(creation)?.build()?;
         let metadata_json = serde_json::to_string(&table_metadata.metadata)?;
-        self.write_object(&metadata_filepath, /*content=*/ &metadata_json)
+        self.filesystem_operator
+            .write_object(&metadata_filepath, /*content=*/ &metadata_json)
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -670,12 +501,15 @@ impl Catalog for FileCatalog {
     /// Drop a table from the catalog.
     async fn drop_table(&self, table: &TableIdent) -> IcebergResult<()> {
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
-        self.remove_directory(&directory).await.map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Failed to delete directory {}: {:?}", directory, e),
-            )
-        })?;
+        self.filesystem_operator
+            .remove_directory(&directory)
+            .await
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!("Failed to delete directory {}: {:?}", directory, e),
+                )
+            })?;
         Ok(())
     }
 
@@ -687,6 +521,7 @@ impl Catalog for FileCatalog {
         version_hint_filepath.push("version-hint.text");
 
         let exists = self
+            .filesystem_operator
             .object_exists(version_hint_filepath.to_str().unwrap())
             .await
             .map_err(|e| {
@@ -731,7 +566,8 @@ impl Catalog for FileCatalog {
         );
         let new_metadata_filepath = format!("{}/v{}.metadata.json", metadata_directory, version,);
         let metadata_json = serde_json::to_string(&metadata)?;
-        self.write_object(&new_metadata_filepath, &metadata_json)
+        self.filesystem_operator
+            .write_object(&new_metadata_filepath, &metadata_json)
             .await
             .map_err(|e| {
                 IcebergError::new(
@@ -754,7 +590,8 @@ impl Catalog for FileCatalog {
 
         // Write version hint file.
         let version_hint_path = format!("{}/version-hint.text", metadata_directory);
-        self.write_object(&version_hint_path, &format!("{version}"))
+        self.filesystem_operator
+            .write_object(&version_hint_path, &format!("{version}"))
             .await
             .map_err(|e| {
                 IcebergError::new(

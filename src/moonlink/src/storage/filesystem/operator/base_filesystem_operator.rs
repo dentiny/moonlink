@@ -8,7 +8,7 @@ use mockall::*;
 
 #[async_trait]
 #[cfg_attr(test, automock)]
-pub trait BaseObjectStorageAccess: Send + Sync {
+pub trait BaseObjectStorageAccess: std::fmt::Debug + Send + Sync {
     /// ===============================
     /// Directory operations
     /// ===============================
@@ -26,13 +26,15 @@ pub trait BaseObjectStorageAccess: Send + Sync {
     /// ===============================
     ///
     /// Return whether the given object exists.
-    #[allow(async_fn_in_trait)]
     async fn object_exists(&self, object: &str) -> Result<bool>;
 
     /// Read the whole content for the given object.
     /// Notice, it's not suitable to read large files; as of now it's made for metadata files.
     async fn read_object(&self, object: &str) -> Result<String>;
 
-    /// Write the whole content to the given file.
+    /// Write the whole content to the given object.
     async fn write_object(&self, object_filepath: &str, content: &str) -> Result<()>;
+
+    /// Delete the given object.
+    async fn delete_object(&self, object_filepath: &str) -> Result<()>;
 }

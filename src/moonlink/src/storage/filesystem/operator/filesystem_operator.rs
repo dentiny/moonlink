@@ -9,9 +9,10 @@ use tokio::sync::OnceCell;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::filesystem::operator::base_filesystem_operator::BaseObjectStorageAccess;
 use crate::storage::filesystem::operator::configs::*;
-use crate::{Error, Result};
+use crate::Result;
 
-struct FileSystemOperator {
+#[derive(Debug)]
+pub(crate) struct FileSystemOperator {
     /// Root directory for the operator.
     root_directory: String,
     /// Operator to manager all IO operations.
@@ -106,9 +107,6 @@ impl BaseObjectStorageAccess for FileSystemOperator {
     /// Directory operations
     /// ===============================
     ///
-    /// List all direct sub-directory under the given directory.
-    ///
-    /// For example, we have directory "a", "a/b", "a/b/c", listing direct subdirectories for "a" will return "a/b".
     async fn list_direct_subdirectories(&self, folder: &str) -> Result<Vec<String>> {
         let prefix = format!("{}/", folder);
         let mut dirs = Vec::new();
@@ -133,8 +131,6 @@ impl BaseObjectStorageAccess for FileSystemOperator {
         Ok(dirs)
     }
 
-    /// Remove the whole directory.
-    ///
     /// TODO(hjiang): Check whether we could unify the implementation with [`remove_directory`].
     #[cfg(feature = "storage-gcs")]
     async fn remove_directory(&self, directory: &str) -> Result<()> {
@@ -191,18 +187,22 @@ impl BaseObjectStorageAccess for FileSystemOperator {
         }
     }
 
-    /// Read the whole content for the given object.
-    /// Notice, it's not suitable to read large files; as of now it's made for metadata files.
     async fn read_object(&self, object: &str) -> Result<String> {
         let content = self.get_operator().await?.read(object).await?;
         Ok(String::from_utf8(content.to_vec())?)
     }
 
-    /// Write the whole content to the given file.
     async fn write_object(&self, object_filepath: &str, content: &str) -> Result<()> {
         let data = content.as_bytes().to_vec();
         let operator = self.get_operator().await?;
         operator.write(object_filepath, data).await?;
+        Ok(())
+    }
+
+    /// Delete the given object.
+    async fn delete_object(&self, object_filepath: &str) -> Result<()> {
+        let operator = self.get_operator().await?;
+        operator.delete(object_filepath).await?;
         Ok(())
     }
 }
