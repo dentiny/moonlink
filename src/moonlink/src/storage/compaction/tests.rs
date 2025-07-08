@@ -9,7 +9,7 @@ use crate::storage::storage_utils::{
 };
 use crate::storage::storage_utils::{FileId, RecordLocation};
 use crate::storage::PuffinBlobRef;
-use crate::{create_data_file, ObjectStorageCache};
+use crate::{create_data_file, FileSystemAccessor, ObjectStorageCache};
 
 use std::collections::HashMap;
 
@@ -67,6 +67,7 @@ async fn test_data_file_compaction_1() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: FileSystemAccessor::default_for_test(&temp_dir),
         disk_files: vec![get_single_file_to_compact(
             &data_file, /*deletion_vector=*/ None,
         )],
@@ -119,6 +120,7 @@ async fn test_data_file_compaction_2() {
     // Create data file and file indices.
     let temp_dir = tempfile::tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let data_file = temp_dir.path().join("test-1.parquet");
 
     let data_file = create_data_file(/*file_id=*/ 0, data_file.to_str().unwrap().to_string());
@@ -140,6 +142,7 @@ async fn test_data_file_compaction_2() {
         puffin_filepath.to_str().unwrap().to_string(),
         batch_deletion_vector,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 1),
     )
     .await;
@@ -147,6 +150,7 @@ async fn test_data_file_compaction_2() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: filesystem_accessor.clone(),
         disk_files: vec![get_single_file_to_compact(
             &data_file,
             Some(puffin_blob_ref),
@@ -200,6 +204,7 @@ async fn test_data_file_compaction_3() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let data_file = temp_dir.path().join("test-1.parquet");
 
     // Create data file and file indices.
@@ -224,6 +229,7 @@ async fn test_data_file_compaction_3() {
         puffin_filepath.to_str().unwrap().to_string(),
         batch_deletion_vector,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 1),
     )
     .await;
@@ -231,6 +237,7 @@ async fn test_data_file_compaction_3() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: filesystem_accessor.clone(),
         disk_files: vec![get_single_file_to_compact(
             &data_file,
             Some(puffin_blob_ref),
@@ -306,6 +313,7 @@ async fn test_data_file_compaction_4() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: FileSystemAccessor::default_for_test(&temp_dir),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, /*deletion_vector=*/ None),
             get_single_file_to_compact(&data_file_2, /*deletion_vector=*/ None),
@@ -359,6 +367,7 @@ async fn test_data_file_compaction_5() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -397,6 +406,7 @@ async fn test_data_file_compaction_5() {
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
@@ -410,6 +420,7 @@ async fn test_data_file_compaction_5() {
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
@@ -417,6 +428,7 @@ async fn test_data_file_compaction_5() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: filesystem_accessor.clone(),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -474,6 +486,7 @@ async fn test_data_file_compaction_6() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -514,6 +527,7 @@ async fn test_data_file_compaction_6() {
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
@@ -528,6 +542,7 @@ async fn test_data_file_compaction_6() {
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
@@ -535,6 +550,7 @@ async fn test_data_file_compaction_6() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: filesystem_accessor.clone(),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -583,6 +599,7 @@ async fn test_multiple_compacted_data_files_1() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -621,6 +638,7 @@ async fn test_multiple_compacted_data_files_1() {
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
@@ -634,6 +652,7 @@ async fn test_multiple_compacted_data_files_1() {
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
@@ -641,6 +660,7 @@ async fn test_multiple_compacted_data_files_1() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: filesystem_accessor.clone(),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -711,6 +731,7 @@ async fn test_multiple_compacted_data_files_2() {
     // Create data file.
     let temp_dir = tempfile::tempdir().unwrap();
     let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let data_file_1 = temp_dir.path().join("test-1.parquet");
     let data_file_2 = temp_dir.path().join("test-2.parquet");
 
@@ -751,6 +772,7 @@ async fn test_multiple_compacted_data_files_2() {
         puffin_filepath_1.to_str().unwrap().to_string(),
         batch_deletion_vector_1,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 2),
     )
     .await;
@@ -765,6 +787,7 @@ async fn test_multiple_compacted_data_files_2() {
         puffin_filepath_2.to_str().unwrap().to_string(),
         batch_deletion_vector_2,
         object_storage_cache.clone(),
+        filesystem_accessor.as_ref(),
         get_table_unique_table_id(/*file_id=*/ 3),
     )
     .await;
@@ -772,6 +795,7 @@ async fn test_multiple_compacted_data_files_2() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: filesystem_accessor.clone(),
         disk_files: vec![
             get_single_file_to_compact(&data_file_1, Some(puffin_blob_ref_1)),
             get_single_file_to_compact(&data_file_2, Some(puffin_blob_ref_2)),
@@ -833,6 +857,7 @@ async fn test_large_number_of_data_files() {
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
         object_storage_cache: ObjectStorageCache::default_for_test(&temp_dir),
+        filesystem_accessor: FileSystemAccessor::default_for_test(&temp_dir),
         disk_files: old_data_files_to_compact,
         file_indices: old_file_indices_to_compact,
     };

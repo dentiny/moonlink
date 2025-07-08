@@ -4,6 +4,7 @@ use crate::storage::iceberg::table_manager::MockTableManager;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
+use crate::FileSystemAccessor;
 use iceberg::{Error as IcebergError, ErrorKind};
 use rstest::*;
 use rstest_reuse::{self, *};
@@ -534,6 +535,7 @@ async fn test_snapshot_load_failure() {
         table_metadata,
         Box::new(mock_table_manager),
         ObjectStorageCache::default_for_test(&temp_dir),
+        FileSystemAccessor::default_for_test(&temp_dir),
     )
     .await;
     assert!(table.is_err());
@@ -581,6 +583,7 @@ async fn test_snapshot_store_failure() {
         table_metadata,
         Box::new(mock_table_manager),
         ObjectStorageCache::default_for_test(&temp_dir),
+        FileSystemAccessor::default_for_test(&temp_dir),
     )
     .await
     .unwrap();

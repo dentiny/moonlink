@@ -4,6 +4,8 @@ use futures::TryStreamExt;
 use opendal::layers::RetryLayer;
 use opendal::services;
 use opendal::Operator;
+#[cfg(test)]
+use tempfile::TempDir;
 use tokio::io::AsyncWriteExt;
 /// FileSystemAccessor built upon opendal.
 use tokio::sync::OnceCell;
@@ -32,6 +34,14 @@ impl FileSystemAccessor {
             operator: OnceCell::new(),
             config,
         }
+    }
+
+    #[cfg(test)]
+    pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<Self> {
+        let config = FileSystemConfig::FileSystem {
+            root_directory: temp_dir.path().to_str().unwrap().to_string(),
+        };
+        std::sync::Arc::new(FileSystemAccessor::new(config))
     }
 
     /// Sanitize given path.

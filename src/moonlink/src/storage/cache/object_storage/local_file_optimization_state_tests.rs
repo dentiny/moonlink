@@ -5,6 +5,7 @@ use crate::storage::cache::object_storage::base_cache::CacheEntry;
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::cache::object_storage::base_cache::FileMetadata;
 use crate::storage::cache::object_storage::test_utils::*;
+use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::{ObjectStorageCache, ObjectStorageCacheConfig};
 
 /// This module check state machine when local filesystem optimization enabled.
@@ -90,6 +91,7 @@ async fn test_cache_state_3_persist_and_unreferenced_2() {
 #[tokio::test]
 async fn test_cache_state_3_persist_and_referenced_3() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_cache_file =
         create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let test_remote_file =
@@ -115,7 +117,11 @@ async fn test_cache_state_3_persist_and_referenced_3() {
 
     // Get the second reference.
     let (cache_handle_2, evicted_files_to_delete) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -140,12 +146,17 @@ async fn test_cache_state_3_persist_and_referenced_3() {
 #[tokio::test]
 async fn test_cache_state_1_request_read_with_sufficient_space_3() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_remote_file =
         create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
     let mut cache = create_object_storage_cache_with_local_optimization(&cache_file_directory);
     let file_id = get_table_unique_file_id(0);
     let (cache_handle, evicted_files_to_delete) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     assert!(evicted_files_to_delete.is_empty());
@@ -164,6 +175,7 @@ async fn test_cache_state_1_request_read_with_sufficient_space_3() {
 #[tokio::test]
 async fn test_cache_state_1_request_read_with_insufficient_space_3() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_remote_file =
         create_test_file(cache_file_directory.path(), TEST_REMOTE_FILENAME_1).await;
     let mut cache = ObjectStorageCache::new(ObjectStorageCacheConfig {
@@ -173,7 +185,11 @@ async fn test_cache_state_1_request_read_with_insufficient_space_3() {
     });
     let file_id = get_table_unique_file_id(0);
     let (cache_handle, evicted_files_to_delete) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     assert!(evicted_files_to_delete.is_empty());
@@ -189,6 +205,7 @@ async fn test_cache_state_1_request_read_with_insufficient_space_3() {
 #[tokio::test]
 async fn test_cache_state_2_request_to_delete_4() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_cache_file =
         create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let test_remote_file =
@@ -223,7 +240,11 @@ async fn test_cache_state_2_request_to_delete_4() {
 
     // Get the cache handle.
     let (mut cache_handle, evicted_files_to_delete) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     assert!(evicted_files_to_delete.is_empty());
@@ -250,6 +271,7 @@ async fn test_cache_state_2_request_to_delete_4() {
 #[tokio::test]
 async fn test_cache_state_3_request_to_delete_5() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_cache_file =
         create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let test_remote_file =
@@ -274,7 +296,11 @@ async fn test_cache_state_3_request_to_delete_5() {
 
     // Hold the second reference count.
     let (cache_handle_2, evicted_files_to_delete) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     assert_eq!(
@@ -298,6 +324,7 @@ async fn test_cache_state_3_request_to_delete_5() {
 #[tokio::test]
 async fn test_cache_state_5_unreference_4() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_cache_file =
         create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let test_remote_file =
@@ -319,11 +346,19 @@ async fn test_cache_state_5_unreference_4() {
 
     // Hold two reference counts.
     let (mut cache_handle_1, _) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     let (mut cache_handle_2, _) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     // Till now, the state is (3).
@@ -469,6 +504,7 @@ async fn test_cache_state_2_new_entry_with_insufficient_space_1() {
 #[tokio::test]
 async fn test_cache_state_2_request_to_read_sufficient_space_4() {
     let cache_file_directory = tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
     let test_cache_file =
         create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let test_remote_file =
@@ -503,7 +539,11 @@ async fn test_cache_state_2_request_to_read_sufficient_space_4() {
 
     // Get the cache handle.
     let (cache_handle, evicted_files_to_delete) = cache
-        .get_cache_entry(file_id, test_remote_file.to_str().unwrap())
+        .get_cache_entry(
+            file_id,
+            test_remote_file.to_str().unwrap(),
+            filesystem_accessor.as_ref(),
+        )
         .await
         .unwrap();
     assert!(evicted_files_to_delete.is_empty());

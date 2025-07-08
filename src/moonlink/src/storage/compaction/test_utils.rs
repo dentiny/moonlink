@@ -5,6 +5,7 @@ use parquet::arrow::AsyncArrowWriter;
 
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
@@ -152,6 +153,7 @@ pub(crate) async fn dump_deletion_vector_puffin(
     puffin_filepath: String,
     batch_deletion_vector: BatchDeletionVector,
     mut object_storage_cache: ObjectStorageCache,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
     table_unique_file_id: TableUniqueFileId,
 ) -> PuffinBlobRef {
     let deleted_rows = batch_deletion_vector.collect_deleted_rows();
@@ -188,7 +190,7 @@ pub(crate) async fn dump_deletion_vector_puffin(
 
     // Download and pin the puffin blob in the object storage cache.
     let (cache_handle, _) = object_storage_cache
-        .get_cache_entry(table_unique_file_id, &puffin_filepath)
+        .get_cache_entry(table_unique_file_id, &puffin_filepath, filesystem_accessor)
         .await
         .unwrap();
 

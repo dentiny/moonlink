@@ -274,6 +274,7 @@ impl FileIndexBlob {
 mod tests {
     use super::*;
 
+    use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
     use crate::storage::index::persisted_bucket_hash_map::IndexBlock as MooncakeIndexBlock;
     use crate::storage::index::FileIndex as MooncakeFileIndex;
     use crate::storage::storage_utils::create_data_file;
@@ -285,6 +286,7 @@ mod tests {
         // Test object storage cache.
         let temp_dir = tempfile::tempdir().unwrap();
         let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
+        let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
 
         // Fill in meaningless random bytes, mainly to verify the correctness of serde.
         let temp_local_index_file = temp_dir.path().join("local-index.bin");
@@ -353,6 +355,7 @@ mod tests {
             .as_mooncake_file_index(
                 &data_file_to_id,
                 object_storage_cache.clone(),
+                filesystem_accessor.as_ref(),
                 table_id,
                 &mut next_file_id,
             )

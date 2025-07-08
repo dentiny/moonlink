@@ -500,9 +500,9 @@ impl CacheTrait for ObjectStorageCache {
 
 #[cfg(test)]
 mod tests {
-    use crate::create_data_file;
     use crate::storage::cache::object_storage::test_utils::*;
     use crate::storage::storage_utils::TableId;
+    use crate::{create_data_file, FileSystemAccessor};
 
     use super::*;
 
@@ -513,6 +513,7 @@ mod tests {
         file_index: i32,
         remote_file_directory: std::path::PathBuf,
         mut object_storage_cache: ObjectStorageCache,
+        filesystem_accessor: &dyn BaseFileSystemAccess,
     ) -> NonEvictableHandle {
         let filename = format!("{}.parquet", file_index);
         let test_file = create_test_file(remote_file_directory.as_path(), &filename).await;
@@ -525,7 +526,7 @@ mod tests {
             file_id: data_file.file_id(),
         };
         let (cache_handle, cache_to_delete) = object_storage_cache
-            .get_cache_entry(unique_file_id, data_file.file_path())
+            .get_cache_entry(unique_file_id, data_file.file_path(), filesystem_accessor)
             .await
             .unwrap();
         assert!(cache_to_delete.is_empty());
@@ -547,12 +548,20 @@ mod tests {
             optimize_local_filesystem: false,
         };
         let cache = ObjectStorageCache::new(config);
+        let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
         for idx in 0..PARALLEL_TASK_NUM {
             let temp_cache = cache.clone();
+            let temp_filesystem_accessor = filesystem_accessor.clone();
             let remote_file_dir_pathbuf = remote_file_directory.path().to_path_buf();
             let handle = tokio::task::spawn_blocking(async move || -> NonEvictableHandle {
-                get_cache_handle_impl(idx as i32, remote_file_dir_pathbuf, temp_cache).await
+                get_cache_handle_impl(
+                    idx as i32,
+                    remote_file_dir_pathbuf,
+                    temp_cache,
+                    temp_filesystem_accessor.as_ref(),
+                )
+                .await
             });
             handle_futures.push(handle);
         }
@@ -590,12 +599,20 @@ mod tests {
             optimize_local_filesystem: true,
         };
         let cache = ObjectStorageCache::new(config);
+        let filesystem_accessor = FileSystemAccessor::default_for_test(&cache_file_directory);
 
         for idx in 0..PARALLEL_TASK_NUM {
             let temp_cache = cache.clone();
+            let temp_filesystem_accessor = filesystem_accessor.clone();
             let remote_file_dir_pathbuf = remote_file_directory.path().to_path_buf();
             let handle = tokio::task::spawn_blocking(async move || -> NonEvictableHandle {
-                get_cache_handle_impl(idx as i32, remote_file_dir_pathbuf, temp_cache).await
+                get_cache_handle_impl(
+                    idx as i32,
+                    remote_file_dir_pathbuf,
+                    temp_cache,
+                    temp_filesystem_accessor.as_ref(),
+                )
+                .await
             });
             handle_futures.push(handle);
         }

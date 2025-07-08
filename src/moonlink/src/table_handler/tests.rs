@@ -6,6 +6,7 @@ use tokio::sync::mpsc;
 use super::test_utils::*;
 use super::TableEvent;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
+use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
@@ -1335,6 +1336,7 @@ async fn test_iceberg_snapshot_failure_mock_test() {
         mooncake_table_metadata,
         Box::new(mock_table_manager),
         ObjectStorageCache::default_for_test(&temp_dir),
+        FileSystemAccessor::default_for_test(&temp_dir),
     )
     .await
     .unwrap();
@@ -1398,6 +1400,7 @@ async fn test_iceberg_drop_table_failure_mock_test() {
         mooncake_table_metadata,
         Box::new(mock_table_manager),
         ObjectStorageCache::default_for_test(&temp_dir),
+        FileSystemAccessor::default_for_test(&temp_dir),
     )
     .await
     .unwrap();
@@ -1453,6 +1456,7 @@ async fn test_discard_duplicate_writes() {
         mooncake_table_metadata,
         Box::new(mock_table_manager),
         ObjectStorageCache::default_for_test(&temp_dir),
+        FileSystemAccessor::default_for_test(&temp_dir),
     )
     .await
     .unwrap();

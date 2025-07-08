@@ -34,6 +34,7 @@ use crate::storage::cache::object_storage::base_cache::{CacheEntry, CacheTrait, 
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::cache::object_storage::test_utils::*;
+use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 
 use tempfile::tempdir;
 
@@ -76,12 +77,14 @@ async fn test_cache_1_requested_to_read() {
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let mut cache = get_test_object_storage_cache(&cache_file_directory);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Check cache handle status.
     let (_, files_to_evict) = cache
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -111,6 +114,7 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
         optimize_local_filesystem: false,
     });
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Import into cache first.
     let cache_entry = CacheEntry {
@@ -136,6 +140,7 @@ async fn test_cache_2_requested_to_read_with_sufficient_space() {
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(1),
             test_file_2.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -156,6 +161,7 @@ async fn test_cache_3_requested_to_read() {
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let mut cache = get_test_object_storage_cache(&cache_file_directory);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Import into cache first.
     let cache_entry = CacheEntry {
@@ -180,6 +186,7 @@ async fn test_cache_3_requested_to_read() {
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -330,12 +337,14 @@ async fn test_cache_3_unpin_still_referenced() {
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let mut cache = get_test_object_storage_cache(&cache_file_directory);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Check cache handle status.
     let (_, files_to_evict) = cache
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -352,6 +361,7 @@ async fn test_cache_3_unpin_still_referenced() {
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -381,12 +391,14 @@ async fn test_cache_3_unpin_not_referenced() {
     let cache_file_directory = tempdir().unwrap();
     let test_file = create_test_file(remote_file_directory.path(), TEST_CACHE_FILENAME_1).await;
     let mut cache = get_test_object_storage_cache(&cache_file_directory);
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Check cache handle status.
     let (cache_handle_1, files_to_evict) = cache
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -403,6 +415,7 @@ async fn test_cache_3_unpin_not_referenced() {
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             test_file.as_path().to_str().unwrap(),
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -522,6 +535,7 @@ async fn test_cache_5_usage_finish_and_still_referenced_5() {
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
         optimize_local_filesystem: false,
     });
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Import into cache first.
     let cache_entry = CacheEntry {
@@ -552,6 +566,7 @@ async fn test_cache_5_usage_finish_and_still_referenced_5() {
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             /*remote_filepath=*/ "",
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
@@ -578,6 +593,7 @@ async fn test_cache_5_usage_finish_and_not_referenced_4() {
         cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
         optimize_local_filesystem: false,
     });
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&remote_file_directory);
 
     // Import into cache first.
     let cache_entry = CacheEntry {
@@ -608,6 +624,7 @@ async fn test_cache_5_usage_finish_and_not_referenced_4() {
         .get_cache_entry(
             /*file_id=*/ get_table_unique_file_id(0),
             /*remote_filepath=*/ "",
+            filesystem_accessor.as_ref(),
         )
         .await
         .unwrap();
