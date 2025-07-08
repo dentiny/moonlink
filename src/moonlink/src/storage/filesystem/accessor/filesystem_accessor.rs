@@ -1,4 +1,6 @@
 use async_trait::async_trait;
+#[cfg(feature = "storage-gcs")]
+use futures::TryStreamExt;
 use opendal::layers::RetryLayer;
 use opendal::services;
 use opendal::Operator;

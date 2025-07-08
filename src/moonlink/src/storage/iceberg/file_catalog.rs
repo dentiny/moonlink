@@ -7,8 +7,6 @@ use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
 };
 use crate::storage::iceberg::utils;
-#[cfg(feature = "storage-gcs")]
-use futures::TryStreamExt;
 
 use futures::future::join_all;
 use std::collections::{HashMap, HashSet};
