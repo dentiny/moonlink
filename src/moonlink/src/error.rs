@@ -1,6 +1,5 @@
 use arrow::error::ArrowError;
 use iceberg::Error as IcebergError;
-use opendal::Error as OpendalError;
 use parquet::errors::ParquetError;
 use std::io;
 use std::result;

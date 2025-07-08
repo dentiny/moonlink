@@ -1,14 +1,13 @@
 use async_trait::async_trait;
-use futures::TryStreamExt;
 use opendal::layers::RetryLayer;
 use opendal::services;
 use opendal::Operator;
 /// FileSystemOperator built upon opendal.
 use tokio::sync::OnceCell;
 
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
+use crate::storage::filesystem::accessor::configs::*;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
-use crate::storage::filesystem::operator::base_filesystem_operator::BaseObjectStorageAccess;
-use crate::storage::filesystem::operator::configs::*;
 use crate::Result;
 
 #[derive(Debug)]

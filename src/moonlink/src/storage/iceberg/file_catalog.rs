@@ -1,7 +1,7 @@
 use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
+use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemOperator;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
-use crate::storage::filesystem::operator::base_filesystem_operator::BaseObjectStorageAccess;
-use crate::storage::filesystem::operator::filesystem_operator::FileSystemOperator;
 use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
@@ -38,7 +38,6 @@ use std::collections::{HashMap, HashSet};
 /// TODO(hjiang):
 /// 1. Before release we should support not only S3, but also R2, GCS, etc; necessary change should be minimal, only need to setup configuration like secret id and secret key.
 /// 2. Add integration test to actual object storage before pg_mooncake release.
-use std::error::Error;
 use std::path::PathBuf;
 use std::vec;
 
@@ -59,7 +58,7 @@ pub(super) const NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
 #[derive(Debug)]
 pub struct FileCatalog {
     /// Filesystem operator.
-    filesystem_operator: Box<dyn BaseObjectStorageAccess>,
+    filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
     /// Similar to opendal operator, which also provides an abstraction above different storage backends.
     file_io: FileIO,
     /// Table location.
@@ -79,12 +78,29 @@ impl FileCatalog {
     pub fn new(warehouse_location: String, config: FileSystemConfig) -> IcebergResult<Self> {
         let file_io = utils::create_file_io(&config)?;
         Ok(Self {
-            filesystem_operator: Box::new(FileSystemOperator::new(
+            filesystem_accessor: Box::new(FileSystemOperator::new(
                 config,
                 warehouse_location.clone(),
             )),
             file_io,
             warehouse_location,
+            puffin_blobs_to_add: HashMap::new(),
+            puffin_blobs_to_remove: HashSet::new(),
+            data_files_to_remove: HashSet::new(),
+        })
+    }
+
+    /// Create a file catalog with the provided filesystem accessor.
+    #[cfg(test)]
+    pub fn new_with_filesystem_accessor(
+        filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
+    ) -> IcebergResult<Self> {
+        use iceberg::io::FileIOBuilder;
+        let file_io = FileIOBuilder::new_fs_io().build()?;
+        Ok(Self {
+            filesystem_accessor,
+            file_io,
+            warehouse_location: String::new(),
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
             data_files_to_remove: HashSet::new(),
@@ -119,7 +135,7 @@ impl FileCatalog {
             table_ident.name(),
         );
         let version_str = self
-            .filesystem_operator
+            .filesystem_accessor
             .read_object(&version_hint_filepath)
             .await
             .map_err(|e| {
@@ -141,7 +157,7 @@ impl FileCatalog {
             version,
         );
         let metadata_str = self
-            .filesystem_operator
+            .filesystem_accessor
             .read_object(&metadata_filepath)
             .await
             .map_err(|e| {
@@ -254,7 +270,7 @@ impl Catalog for FileCatalog {
             "/".to_string()
         };
         let subdirectories = self
-            .filesystem_operator
+            .filesystem_accessor
             .list_direct_subdirectories(&parent_directory)
             .await
             .map_err(|e| {
@@ -321,7 +337,7 @@ impl Catalog for FileCatalog {
                 ));
             }
         }
-        self.filesystem_operator
+        self.filesystem_accessor
             .write_object(
                 &FileCatalog::get_namespace_indicator_name(namespace_ident),
                 /*content=*/ "",
@@ -353,7 +369,7 @@ impl Catalog for FileCatalog {
     async fn namespace_exists(&self, namespace_ident: &NamespaceIdent) -> IcebergResult<bool> {
         let key = FileCatalog::get_namespace_indicator_name(namespace_ident);
         let exists = self
-            .filesystem_operator
+            .filesystem_accessor
             .object_exists(&key)
             .await
             .map_err(|e| {
@@ -371,7 +387,7 @@ impl Catalog for FileCatalog {
     /// Drop a namespace from the catalog.
     async fn drop_namespace(&self, namespace_ident: &NamespaceIdent) -> IcebergResult<()> {
         let key = FileCatalog::get_namespace_indicator_name(namespace_ident);
-        self.filesystem_operator
+        self.filesystem_accessor
             .delete_object(&key)
             .await
             .map_err(|e| {
@@ -405,7 +421,7 @@ impl Catalog for FileCatalog {
 
         let parent_directory = namespace_ident.to_url_string();
         let subdirectories = self
-            .filesystem_operator
+            .filesystem_accessor
             .list_direct_subdirectories(&parent_directory)
             .await
             .map_err(|e| {
@@ -446,7 +462,7 @@ impl Catalog for FileCatalog {
         // Create version hint file.
         let version_hint_filepath =
             format!("{}/{}/metadata/version-hint.text", directory, creation.name);
-        self.filesystem_operator
+        self.filesystem_accessor
             .write_object(&version_hint_filepath, /*content=*/ "0")
             .await
             .map_err(|e| {
@@ -465,7 +481,7 @@ impl Catalog for FileCatalog {
 
         let table_metadata = TableMetadataBuilder::from_table_creation(creation)?.build()?;
         let metadata_json = serde_json::to_string(&table_metadata.metadata)?;
-        self.filesystem_operator
+        self.filesystem_accessor
             .write_object(&metadata_filepath, /*content=*/ &metadata_json)
             .await
             .map_err(|e| {
@@ -501,7 +517,7 @@ impl Catalog for FileCatalog {
     /// Drop a table from the catalog.
     async fn drop_table(&self, table: &TableIdent) -> IcebergResult<()> {
         let directory = format!("{}/{}", table.namespace().to_url_string(), table.name());
-        self.filesystem_operator
+        self.filesystem_accessor
             .remove_directory(&directory)
             .await
             .map_err(|e| {
@@ -521,7 +537,7 @@ impl Catalog for FileCatalog {
         version_hint_filepath.push("version-hint.text");
 
         let exists = self
-            .filesystem_operator
+            .filesystem_accessor
             .object_exists(version_hint_filepath.to_str().unwrap())
             .await
             .map_err(|e| {
@@ -566,7 +582,7 @@ impl Catalog for FileCatalog {
         );
         let new_metadata_filepath = format!("{}/v{}.metadata.json", metadata_directory, version,);
         let metadata_json = serde_json::to_string(&metadata)?;
-        self.filesystem_operator
+        self.filesystem_accessor
             .write_object(&new_metadata_filepath, &metadata_json)
             .await
             .map_err(|e| {
@@ -590,7 +606,7 @@ impl Catalog for FileCatalog {
 
         // Write version hint file.
         let version_hint_path = format!("{}/version-hint.text", metadata_directory);
-        self.filesystem_operator
+        self.filesystem_accessor
             .write_object(&version_hint_path, &format!("{version}"))
             .await
             .map_err(|e| {

@@ -1,4 +1,6 @@
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
+#[cfg(test)]
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseObjectStorageAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
@@ -147,6 +149,27 @@ impl IcebergTableManager {
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
         let catalog = utils::create_catalog(&config.warehouse_uri)?;
+        Ok(Self {
+            snapshot_loaded: false,
+            config,
+            mooncake_table_metadata,
+            catalog,
+            iceberg_table: None,
+            object_storage_cache,
+            persisted_data_files: HashMap::new(),
+            persisted_file_indices: HashMap::new(),
+            remote_data_file_to_file_id: HashMap::new(),
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_with_filesystem_accessor(
+        mooncake_table_metadata: Arc<MooncakeTableMetadata>,
+        object_storage_cache: ObjectStorageCache,
+        config: IcebergTableConfig,
+        filesystem_accessor: Box<dyn BaseObjectStorageAccess>,
+    ) -> IcebergResult<IcebergTableManager> {
+        let catalog = utils::create_catalog_with_filesystem_accessor(filesystem_accessor)?;
         Ok(Self {
             snapshot_loaded: false,
             config,
