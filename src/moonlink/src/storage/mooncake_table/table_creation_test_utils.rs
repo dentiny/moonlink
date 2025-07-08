@@ -2,6 +2,7 @@
 use crate::row::IdentityProp as RowIdentity;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::mooncake_table::test_utils_commons::*;
@@ -52,10 +53,9 @@ pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {
 pub(crate) fn create_local_filesystem_accessor(
     iceberg_table_config: &IcebergTableConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
-    Arc::new(FileSystemAccessor::new(
-        crate::FileSystemConfig::FileSystem,
-        iceberg_table_config.warehouse_uri.clone(),
-    ))
+    Arc::new(FileSystemAccessor::new(FileSystemConfig::FileSystem {
+        root_directory: iceberg_table_config.warehouse_uri.clone(),
+    }))
 }
 
 /// Test util function to create mooncake table metadata.

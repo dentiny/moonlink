@@ -133,7 +133,9 @@ fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
             panic!("GCS support not enabled. Enable `storage-gcs` feature.");
         }
     } else {
-        FileSystemConfig::FileSystem
+        FileSystemConfig::FileSystem {
+            root_directory: warehouse_uri.clone(),
+        }
     };
 
     IcebergTableConfig {

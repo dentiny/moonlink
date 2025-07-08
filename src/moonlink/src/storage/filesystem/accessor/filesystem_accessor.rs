@@ -14,8 +14,6 @@ use crate::Result;
 
 #[derive(Debug)]
 pub struct FileSystemAccessor {
-    /// Root directory for the operator.
-    root_directory: String,
     /// Operator to manager all IO operations.
     operator: OnceCell<Operator>,
     /// Filesystem configuration.
@@ -23,10 +21,8 @@ pub struct FileSystemAccessor {
 }
 
 impl FileSystemAccessor {
-    // TODO(hjiang): No need for [`root_location`], should bake in filesystem config.
-    pub fn new(config: FileSystemConfig, root_location: String) -> Self {
+    pub fn new(config: FileSystemConfig) -> Self {
         Self {
-            root_directory: root_location,
             operator: OnceCell::new(),
             config,
         }
@@ -45,8 +41,8 @@ impl FileSystemAccessor {
             .get_or_try_init(|| async {
                 match &self.config {
                     #[cfg(feature = "storage-fs")]
-                    &FileSystemConfig::FileSystem => {
-                        let builder = services::Fs::default().root(&self.root_directory);
+                    FileSystemConfig::FileSystem { root_directory } => {
+                        let builder = services::Fs::default().root(root_directory);
                         let op = Operator::new(builder)?.layer(retry_layer).finish();
                         Ok(op)
                     }
@@ -215,8 +211,9 @@ mod tests {
     async fn test_copy_from_local_to_remote() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_accessor =
-            FileSystemAccessor::new(FileSystemConfig::FileSystem, root_directory.clone());
+        let filesystem_accessor = FileSystemAccessor::new(FileSystemConfig::FileSystem {
+            root_directory: root_directory.clone(),
+        });
         const CONTENT: &str = "helloworld";
 
         // Prepare src file.

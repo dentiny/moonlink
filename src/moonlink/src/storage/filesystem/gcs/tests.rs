@@ -16,8 +16,7 @@ async fn test_copy_from_local_to_remote() {
     let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
 
     // Copy from src to dst.
-    let filesystem_accessor =
-        FileSystemAccessor::new(gcs_filesystem_config, root_directory.clone());
+    let filesystem_accessor = FileSystemAccessor::new(gcs_filesystem_config);
     let dst_filepath = "dst".to_string();
     filesystem_accessor
         .copy_from_local_to_remote(&src_filepath, &dst_filepath)

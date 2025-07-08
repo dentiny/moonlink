@@ -69,10 +69,9 @@ fn bench_write(c: &mut Criterion) {
                     iceberg_table_config,
                     table_config,
                     ObjectStorageCache::default_for_bench(),
-                    Arc::new(FileSystemAccessor::new(
-                        FileSystemConfig::FileSystem,
-                        temp_warehouse_uri.clone(),
-                    )),
+                    Arc::new(FileSystemAccessor::new(FileSystemConfig::FileSystem {
+                        root_directory: temp_warehouse_uri.clone(),
+                    })),
                 )
                 .await
                 .unwrap();
@@ -108,10 +107,9 @@ fn bench_write(c: &mut Criterion) {
                     iceberg_table_config,
                     table_config,
                     ObjectStorageCache::default_for_bench(),
-                    Arc::new(FileSystemAccessor::new(
-                        FileSystemConfig::FileSystem,
-                        temp_warehouse_uri.clone(),
-                    )),
+                    Arc::new(FileSystemAccessor::new(FileSystemConfig::FileSystem {
+                        root_directory: temp_warehouse_uri.clone(),
+                    })),
                 )
                 .await
                 .unwrap();
@@ -151,10 +149,9 @@ fn bench_write(c: &mut Criterion) {
                         iceberg_table_config,
                         table_config,
                         ObjectStorageCache::default_for_bench(),
-                        Arc::new(FileSystemAccessor::new(
-                            FileSystemConfig::FileSystem,
-                            temp_warehouse_uri.clone(),
-                        )),
+                        Arc::new(FileSystemAccessor::new(FileSystemConfig::FileSystem {
+                            root_directory: temp_warehouse_uri.clone(),
+                        })),
                     ))
                     .unwrap();
                 rt.block_on(async {

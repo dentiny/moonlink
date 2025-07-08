@@ -74,13 +74,12 @@ pub struct FileCatalog {
 
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
+    ///
+    /// TODO(hjiang): File catalog doesn't seem to require warehouse uri even.
     pub fn new(warehouse_location: String, config: FileSystemConfig) -> IcebergResult<Self> {
         let file_io = utils::create_file_io(&config)?;
         Ok(Self {
-            filesystem_accessor: Arc::new(FileSystemAccessor::new(
-                config,
-                warehouse_location.clone(),
-            )),
+            filesystem_accessor: Arc::new(FileSystemAccessor::new(config)),
             file_io,
             warehouse_location,
             puffin_blobs_to_add: HashMap::new(),

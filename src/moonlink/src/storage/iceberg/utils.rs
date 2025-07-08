@@ -116,7 +116,9 @@ pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCata
         let absolute_path = url.path();
         return Ok(Box::new(FileCatalog::new(
             absolute_path.to_string(),
-            FileSystemConfig::FileSystem {},
+            FileSystemConfig::FileSystem {
+                root_directory: absolute_path.to_string(),
+            },
         )?));
     }
 
@@ -289,7 +291,7 @@ pub(crate) async fn upload_index_file(
 pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO> {
     match config {
         #[cfg(feature = "storage-fs")]
-        FileSystemConfig::FileSystem => FileIOBuilder::new_fs_io().build(),
+        FileSystemConfig::FileSystem { .. } => FileIOBuilder::new_fs_io().build(),
         #[cfg(feature = "storage-gcs")]
         FileSystemConfig::Gcs {
             project,

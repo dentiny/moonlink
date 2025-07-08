@@ -2,7 +2,7 @@
 #[derive(Clone, Debug, PartialEq)]
 pub enum FileSystemConfig {
     #[cfg(feature = "storage-fs")]
-    FileSystem,
+    FileSystem { root_directory: String },
     #[cfg(feature = "storage-s3")]
     S3 {
         access_key_id: String,

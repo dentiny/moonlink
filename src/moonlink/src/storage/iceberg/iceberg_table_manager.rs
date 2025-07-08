@@ -48,7 +48,6 @@ impl IcebergTableConfig {
     const DEFAULT_WAREHOUSE_URI: &str = "/tmp/moonlink_iceberg";
     const DEFAULT_NAMESPACE: &str = "namespace";
     const DEFAULT_TABLE: &str = "table";
-    const DEFAULT_CATALOG_CONFIG: FileSystemConfig = FileSystemConfig::FileSystem;
 }
 
 impl Default for IcebergTableConfig {
@@ -57,7 +56,9 @@ impl Default for IcebergTableConfig {
             warehouse_uri: Self::DEFAULT_WAREHOUSE_URI.to_string(),
             namespace: vec![Self::DEFAULT_NAMESPACE.to_string()],
             table_name: Self::DEFAULT_TABLE.to_string(),
-            catalog_config: Self::DEFAULT_CATALOG_CONFIG,
+            catalog_config: FileSystemConfig::FileSystem {
+                root_directory: Self::DEFAULT_WAREHOUSE_URI.to_string(),
+            },
         }
     }
 }
