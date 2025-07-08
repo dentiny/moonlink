@@ -23,6 +23,7 @@ pub struct FileSystemAccessor {
 }
 
 impl FileSystemAccessor {
+    // TODO(hjiang): No need for [`root_location`], should bake in filesystem config.
     pub fn new(config: FileSystemConfig, root_location: String) -> Self {
         Self {
             root_directory: root_location,

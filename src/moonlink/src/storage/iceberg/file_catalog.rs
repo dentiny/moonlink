@@ -543,7 +543,7 @@ impl Catalog for FileCatalog {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
                     format!(
-                        "Failed to check version hint file existencee {:?}: {:?}",
+                        "Failed to check version hint file existence {:?}: {:?}",
                         version_hint_filepath, e
                     ),
                 )
