@@ -6,5 +6,5 @@ use crate::storage::iceberg::file_catalog::FileCatalog;
 #[allow(dead_code)]
 pub(crate) fn create_test_s3_catalog(warehouse_uri: &str) -> FileCatalog {
     let catalog_config = create_s3_filesystem_config(warehouse_uri);
-    FileCatalog::new(warehouse_uri.to_string(), catalog_config).unwrap()
+    FileCatalog::new(catalog_config).unwrap()
 }

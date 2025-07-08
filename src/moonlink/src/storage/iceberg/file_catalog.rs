@@ -74,10 +74,9 @@ pub struct FileCatalog {
 
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
-    ///
-    /// TODO(hjiang): File catalog doesn't seem to require warehouse uri even.
-    pub fn new(warehouse_location: String, config: FileSystemConfig) -> IcebergResult<Self> {
+    pub fn new(config: FileSystemConfig) -> IcebergResult<Self> {
         let file_io = utils::create_file_io(&config)?;
+        let warehouse_location = Self::get_warehouse_location_from_filesystem_config(&config);
         Ok(Self {
             filesystem_accessor: Arc::new(FileSystemAccessor::new(config)),
             file_io,
@@ -103,6 +102,20 @@ impl FileCatalog {
             puffin_blobs_to_remove: HashSet::new(),
             data_files_to_remove: HashSet::new(),
         })
+    }
+
+    /// Get warehouse uri from filesystem config.
+    fn get_warehouse_location_from_filesystem_config(
+        filesystem_config: &FileSystemConfig,
+    ) -> String {
+        match &filesystem_config {
+            #[cfg(feature = "storage-fs")]
+            FileSystemConfig::FileSystem { root_directory } => root_directory.to_string(),
+            #[cfg(feature = "storage-gcs")]
+            FileSystemConfig::Gcs { bucket, .. } => format!("gs://{}", bucket),
+            #[cfg(feature = "storage-s3")]
+            FileSystemConfig::S3 { bucket, .. } => format!("s3://{}", bucket),
+        }
     }
 
     /// Get warehouse uri.

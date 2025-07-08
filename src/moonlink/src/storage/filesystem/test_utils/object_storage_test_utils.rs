@@ -33,7 +33,7 @@ pub(crate) fn get_bucket_and_warehouse(
     warehouse_uri_prefix: &str,
 ) -> (String /*bucket*/, String /*warehouse_uri*/) {
     const TEST_BUCKET_NAME_LEN: usize = 12;
-    const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789-";
+    const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::rng();
     let random_string: String = (0..TEST_BUCKET_NAME_LEN)
         .map(|_| {
