@@ -4,6 +4,8 @@ use crate::storage::filesystem::accessor::test_utils::*;
 use crate::storage::filesystem::s3::s3_test_utils::*;
 use crate::storage::filesystem::s3::test_guard::TestGuard;
 
+use rstest::rstest;
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_copy_from_local_to_remote() {
     // Prepare src file.
@@ -33,7 +35,10 @@ async fn test_copy_from_local_to_remote() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_copy_from_remote_to_local() {
+#[rstest]
+#[case(10)]
+#[case(18 * 1024 * 1024)]
+async fn test_copy_from_remote_to_local(#[case] file_size: usize) {
     let temp_dir = tempfile::tempdir().unwrap();
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
     let dst_filepath = format!("{}/dst", &root_directory);
@@ -44,7 +49,8 @@ async fn test_copy_from_remote_to_local() {
 
     // Prepare src file.
     let src_filepath = format!("{}/src", warehouse_uri);
-    create_remote_file(&src_filepath, s3_filesystem_config.clone()).await;
+    let expected_content =
+        create_remote_file(&src_filepath, s3_filesystem_config.clone(), file_size).await;
 
     // Copy from src to dst.
     let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config);
@@ -55,5 +61,5 @@ async fn test_copy_from_remote_to_local() {
 
     // Validate destination file content.
     let actual_content = tokio::fs::read_to_string(dst_filepath).await.unwrap();
-    assert_eq!(actual_content, TEST_CONTEST);
+    assert_eq!(actual_content, expected_content);
 }

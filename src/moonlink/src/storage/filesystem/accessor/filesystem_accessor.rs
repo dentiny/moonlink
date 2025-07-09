@@ -283,6 +283,7 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 mod tests {
     use super::*;
     use crate::storage::filesystem::accessor::test_utils::*;
+    use rstest::rstest;
 
     #[tokio::test]
     async fn test_copy_from_local_to_remote() {
@@ -312,7 +313,10 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_copy_from_remote_to_local() {
+    #[rstest]
+    #[case(10)]
+    #[case(18 * 1024 * 1024)]
+    async fn test_copy_from_remote_to_local(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let filesystem_config = FileSystemConfig::FileSystem {
@@ -322,7 +326,8 @@ mod tests {
 
         // Prepare src file.
         let src_filepath = format!("{}/src", &root_directory);
-        create_remote_file(&src_filepath, filesystem_config.clone()).await;
+        let expected_content =
+            create_remote_file(&src_filepath, filesystem_config.clone(), file_size).await;
 
         // Copy from src to dst.
         let dst_filepath = format!("{}/dst", &root_directory);
@@ -336,6 +341,6 @@ mod tests {
             .read_object_as_string(&dst_filepath)
             .await
             .unwrap();
-        assert_eq!(actual_content, TEST_CONTEST);
+        assert_eq!(actual_content, expected_content);
     }
 }
