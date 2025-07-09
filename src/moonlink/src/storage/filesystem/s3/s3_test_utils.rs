@@ -21,19 +21,13 @@ type HmacSha1 = Hmac<Sha1>;
 /// Minio related constants.
 ///
 /// Local minio warehouse needs special handling, so we simply prefix with special token.
-#[allow(dead_code)]
 pub(crate) static S3_TEST_BUCKET_PREFIX: &str = "test-minio-warehouse-";
-#[allow(dead_code)]
 pub(crate) static S3_TEST_WAREHOUSE_URI_PREFIX: &str = "s3://test-minio-warehouse-";
-#[allow(dead_code)]
 pub(crate) static S3_TEST_ACCESS_KEY_ID: &str = "minioadmin";
-#[allow(dead_code)]
 pub(crate) static S3_TEST_SECRET_ACCESS_KEY: &str = "minioadmin";
-#[allow(dead_code)]
 pub(crate) static S3_TEST_ENDPOINT: &str = "http://minio:9000";
 
 /// Create a S3 catalog config.
-#[allow(dead_code)]
 pub(crate) fn create_s3_filesystem_config(warehouse_uri: &str) -> FileSystemConfig {
     let bucket = get_bucket_from_warehouse_uri(warehouse_uri);
     FileSystemConfig::S3 {
@@ -45,14 +39,12 @@ pub(crate) fn create_s3_filesystem_config(warehouse_uri: &str) -> FileSystemConf
     }
 }
 
-#[allow(dead_code)]
 pub(crate) fn get_test_s3_bucket_and_warehouse(
 ) -> (String /*bucket_name*/, String /*warehouse_url*/) {
     get_bucket_and_warehouse(S3_TEST_BUCKET_PREFIX, S3_TEST_WAREHOUSE_URI_PREFIX)
 }
 
 /// Create test bucket in minio server.
-#[allow(dead_code)]
 async fn create_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
     let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
     let string_to_sign = format!("PUT\n\n\n{}\n/{}", date, bucket);
@@ -80,7 +72,6 @@ async fn create_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
 }
 
 /// Creates the provided bucket with exponential backoff retry; this function assumes the bucket doesn't exist, otherwise it will return error.
-#[allow(dead_code)]
 pub(crate) async fn create_test_s3_bucket(bucket: String) -> IcebergResult<()> {
     let retry_strategy = ExponentialBackoff::from_millis(TEST_RETRY_INIT_MILLISEC)
         .map(jitter)
@@ -150,8 +141,7 @@ pub async fn delete_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()
 }
 
 /// Delete the provided bucket with exponential backoff retry; this function assume bucket already exists and return error if not.
-#[allow(dead_code)]
-pub(crate) async fn delete_test_s3_bucket(bucket: String) -> IcebergResult<()> {
+pub(crate) async fn delete_test_s3_bucket(bucket: String) {
     let retry_strategy = ExponentialBackoff::from_millis(TEST_RETRY_INIT_MILLISEC)
         .map(jitter)
         .take(TEST_RETRY_COUNT);
@@ -167,6 +157,6 @@ pub(crate) async fn delete_test_s3_bucket(bucket: String) -> IcebergResult<()> {
             }
         }
     })
-    .await?;
-    Ok(())
+    .await
+    .unwrap();
 }

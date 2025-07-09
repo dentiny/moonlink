@@ -140,7 +140,7 @@ pub(crate) async fn create_test_gcs_bucket(bucket: String) -> IcebergResult<()> 
 }
 
 #[allow(dead_code)]
-pub(crate) async fn delete_test_gcs_bucket(bucket: String) -> IcebergResult<()> {
+pub(crate) async fn delete_test_gcs_bucket(bucket: String) {
     let retry_strategy = ExponentialBackoff::from_millis(TEST_RETRY_INIT_MILLISEC)
         .map(jitter)
         .take(TEST_RETRY_COUNT);
@@ -156,6 +156,6 @@ pub(crate) async fn delete_test_gcs_bucket(bucket: String) -> IcebergResult<()> 
             }
         }
     })
-    .await?;
-    Ok(())
+    .await
+    .unwrap();
 }

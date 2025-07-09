@@ -2,8 +2,9 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::filesystem::accessor::test_utils::*;
 use crate::storage::filesystem::gcs::gcs_test_utils::*;
+use crate::storage::filesystem::gcs::test_guard::TestGuard;
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_copy_from_local_to_remote() {
     // Prepare src file.
     let temp_dir = tempfile::tempdir().unwrap();
@@ -12,7 +13,7 @@ async fn test_copy_from_local_to_remote() {
     create_local_file(&src_filepath).await;
 
     let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
-    create_test_gcs_bucket(bucket.clone()).await.unwrap();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
     let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
 
     // Copy from src to dst.
@@ -29,19 +30,16 @@ async fn test_copy_from_local_to_remote() {
         .await
         .unwrap();
     assert_eq!(actual_content, TEST_CONTEST);
-
-    // Clean up test bucket.
-    delete_test_gcs_bucket(bucket.clone()).await.unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_copy_from_remote_to_local() {
     let temp_dir = tempfile::tempdir().unwrap();
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
     let dst_filepath = format!("{}/dst", &root_directory);
 
     let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
-    create_test_gcs_bucket(bucket.clone()).await.unwrap();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
     let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
 
     // Prepare src file.
@@ -58,7 +56,4 @@ async fn test_copy_from_remote_to_local() {
     // Validate destination file content.
     let actual_content = tokio::fs::read_to_string(dst_filepath).await.unwrap();
     assert_eq!(actual_content, TEST_CONTEST);
-
-    // Clean up test bucket.
-    delete_test_gcs_bucket(bucket.clone()).await.unwrap();
 }

@@ -3,8 +3,12 @@ use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::s3_test_utils;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::iceberg::file_catalog::METADATA_DIRECTORY;
 use crate::storage::iceberg::file_catalog::VERSION_HINT_FILENAME;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
@@ -621,42 +625,28 @@ async fn test_sync_snapshots() {
     test_store_and_load_snapshot_impl(iceberg_table_config).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_sync_snapshot_with_s3() {
     // Remote object storage for iceberg.
-    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
-    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    let (bucket, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    let _test_guard = S3TestGuard::new(bucket.clone()).await;
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
 
     // Common testing logic.
     test_store_and_load_snapshot_impl(iceberg_table_config.clone()).await;
-
-    // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_sync_snapshot_with_gcs() {
     // Remote object storage for iceberg.
-    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    let (bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
 
     // Common testing logic.
     test_store_and_load_snapshot_impl(iceberg_table_config.clone()).await;
-
-    // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
 }
 
 /// ================================
@@ -718,7 +708,7 @@ async fn test_drop_table() {
     test_drop_table_impl(iceberg_table_config).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_drop_table_with_s3() {
     // Remote object storage for iceberg.
@@ -732,12 +722,10 @@ async fn test_drop_table_with_s3() {
     test_drop_table_impl(iceberg_table_config).await;
 
     // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_drop_table_with_gcs() {
     // Remote object storage for iceberg.
@@ -751,9 +739,7 @@ async fn test_drop_table_with_gcs() {
     test_drop_table_impl(iceberg_table_config).await;
 
     // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
 }
 
 /// ================================
@@ -806,7 +792,7 @@ async fn test_empty_snapshot_load() {
     test_empty_snapshot_load_impl(iceberg_table_config).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_empty_snapshot_load_with_s3() {
     // Remote object storage for iceberg.
@@ -820,12 +806,10 @@ async fn test_empty_snapshot_load_with_s3() {
     test_empty_snapshot_load_impl(iceberg_table_config).await;
 
     // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_empty_snapshot_load_with_gcs() {
     // Remote object storage for iceberg.
@@ -839,9 +823,7 @@ async fn test_empty_snapshot_load_with_gcs() {
     test_empty_snapshot_load_impl(iceberg_table_config).await;
 
     // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
 }
 
 /// ================================
@@ -930,7 +912,7 @@ async fn test_index_merge_and_create_snapshot() {
     test_index_merge_and_create_snapshot_impl(iceberg_table_config).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_index_merge_and_create_snapshot_with_s3() {
     // Remote object storage for iceberg.
@@ -944,12 +926,10 @@ async fn test_index_merge_and_create_snapshot_with_s3() {
     test_index_merge_and_create_snapshot_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_index_merge_and_create_snapshot_with_gcs() {
     // Remote object storage for iceberg.
@@ -963,9 +943,7 @@ async fn test_index_merge_and_create_snapshot_with_gcs() {
     test_index_merge_and_create_snapshot_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
 }
 
 /// ================================
@@ -1034,7 +1012,7 @@ async fn test_empty_content_snapshot_creation() {
     test_empty_content_snapshot_creation_impl(iceberg_table_config).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_empty_content_snapshot_creation_with_s3() {
     // Remote object storage for iceberg.
@@ -1048,12 +1026,10 @@ async fn test_empty_content_snapshot_creation_with_s3() {
     test_empty_content_snapshot_creation_impl(iceberg_table_config).await;
 
     // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_empty_content_snapshot_creation_with_gcs() {
     // Remote object storage for iceberg.
@@ -1067,9 +1043,7 @@ async fn test_empty_content_snapshot_creation_with_gcs() {
     test_empty_content_snapshot_creation_impl(iceberg_table_config).await;
 
     // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
 }
 
 /// Test scenario: small batch size and large parquet file, which means:
@@ -1450,7 +1424,7 @@ async fn test_async_iceberg_snapshot() {
     test_async_iceberg_snapshot_impl(iceberg_table_config).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_async_iceberg_snapshot_with_s3() {
     // Remote object storage for iceberg.
@@ -1464,12 +1438,10 @@ async fn test_async_iceberg_snapshot_with_s3() {
     test_async_iceberg_snapshot_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_async_iceberg_snapshot_with_gcs() {
     // Remote object storage for iceberg.
@@ -1483,9 +1455,7 @@ async fn test_async_iceberg_snapshot_with_gcs() {
     test_async_iceberg_snapshot_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
 }
 
 /// ================================
@@ -1822,12 +1792,10 @@ async fn test_object_storage_sync_snapshots_with_s3() {
     mooncake_table_snapshot_persist_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
-    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_object_storage_sync_snapshots_with_gcs() {
     // Remote object storage for iceberg.
@@ -1841,7 +1809,5 @@ async fn test_object_storage_sync_snapshots_with_gcs() {
     mooncake_table_snapshot_persist_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
-    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
 }
