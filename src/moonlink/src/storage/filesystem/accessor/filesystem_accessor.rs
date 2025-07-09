@@ -310,7 +310,7 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         while let Some(cur_chunk) = rx.recv().await {
             let cur_chunk_len = cur_chunk.len();
             for cur_bytes in cur_chunk.into_iter() {
-                file.write_all(&*cur_bytes).await?;
+                file.write_all(&cur_bytes).await?;
             }
             total_size += cur_chunk_len as u64;
         }
@@ -330,7 +330,10 @@ mod tests {
     use rstest::rstest;
 
     #[tokio::test]
-    async fn test_copy_from_local_to_remote() {
+    #[rstest]
+    #[case(10)]
+    #[case(18 * 1024 * 1024)]
+    async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let filesystem_accessor = FileSystemAccessor::new(FileSystemConfig::FileSystem {
@@ -339,7 +342,7 @@ mod tests {
 
         // Prepare src file.
         let src_filepath = format!("{}/src", &root_directory);
-        create_local_file(&src_filepath).await;
+        let expected_content = create_local_file(&src_filepath, file_size).await;
 
         // Copy from src to dst.
         let dst_filepath = format!("{}/dst", &root_directory);
@@ -353,7 +356,7 @@ mod tests {
             .read_object_as_string(&dst_filepath)
             .await
             .unwrap();
-        assert_eq!(actual_content, TEST_CONTEST);
+        assert_eq!(actual_content, expected_content);
     }
 
     #[tokio::test]
