@@ -147,43 +147,6 @@ pub(crate) async fn create_table_and_iceberg_manager(
     .await
 }
 
-/// Util function to create mooncake table and iceberg table manager.
-pub(crate) async fn create_table_and_iceberg_manager_with_config(
-    temp_dir: &TempDir,
-    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
-    iceberg_table_config: IcebergTableConfig,
-) -> (MooncakeTable, IcebergTableManager, Receiver<TableEvent>) {
-    let path = temp_dir.path().to_path_buf();
-    let object_storage_cache = ObjectStorageCache::default_for_test(temp_dir);
-
-    let mut table = MooncakeTable::new(
-        mooncake_table_metadata.schema.as_ref().clone(),
-        ICEBERG_TEST_TABLE.to_string(),
-        /*table_id=*/ 1,
-        path,
-        mooncake_table_metadata.identity.clone(),
-        iceberg_table_config.clone(),
-        mooncake_table_metadata.as_ref().config.clone(),
-        object_storage_cache.clone(),
-        create_test_filesystem_accessor(&iceberg_table_config),
-    )
-    .await
-    .unwrap();
-
-    let iceberg_table_manager = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
-        create_test_filesystem_accessor(&iceberg_table_config),
-        iceberg_table_config.clone(),
-    )
-    .unwrap();
-
-    let (notify_tx, notify_rx) = mpsc::channel(100);
-    table.register_table_notify(notify_tx).await;
-
-    (table, iceberg_table_manager, notify_rx)
-}
-
 /// Similar to [`create_table_and_iceberg_manager`], but it takes data compaction config.
 pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config(
     temp_dir: &TempDir,

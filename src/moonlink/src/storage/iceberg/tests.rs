@@ -1,7 +1,5 @@
-use crate::row::IdentityProp as RowIdentity;
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
-use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
@@ -14,7 +12,6 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
-use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -886,6 +883,44 @@ async fn test_index_merge_and_create_snapshot() {
 
     // Common testing logic.
     test_index_merge_and_create_snapshot_impl(iceberg_table_config).await;
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_index_merge_and_create_snapshot_with_s3() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_index_merge_and_create_snapshot_impl(iceberg_table_config.clone()).await;
+
+    // Clean up testing environment.
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_index_merge_and_create_snapshot_with_gcs() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_index_merge_and_create_snapshot_impl(iceberg_table_config.clone()).await;
+
+    // Clean up testing environment.
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 /// Testing scenario: attempt an iceberg snapshot when no data file, deletion vector or index files generated.
