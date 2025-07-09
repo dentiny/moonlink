@@ -49,6 +49,10 @@ use parquet::arrow::AsyncArrowWriter;
 use tempfile::tempdir;
 use tokio::sync::mpsc;
 
+/// ================================
+/// Test utils
+/// ================================
+///
 /// Create test batch deletion vector.
 fn test_committed_deletion_log_1(
     data_filepath: MooncakeDataFileRef,
@@ -156,13 +160,20 @@ fn get_file_indices_filepath_and_data_filepaths(
     (data_files, index_files)
 }
 
+/// ================================
+/// Test iceberg snapshot store/load
+/// ================================
+///
 /// Test snapshot store and load for different types of catalogs based on the given warehouse.
-async fn test_store_and_load_snapshot_impl(
-    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
-    iceberg_table_config: IcebergTableConfig,
-) {
-    let tmp_dir = tempdir().unwrap();
-    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
+    let mooncake_table_metadata =
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
 
     // ==============
@@ -193,7 +204,7 @@ async fn test_store_and_load_snapshot_impl(
         ],
     )
     .unwrap();
-    let parquet_path = tmp_dir.path().join(data_filename_1);
+    let parquet_path = table_temp_dir.path().join(data_filename_1);
     let data_file_1 = create_data_file(
         /*file_id=*/ 0,
         parquet_path.to_str().unwrap().to_string(),
@@ -243,7 +254,7 @@ async fn test_store_and_load_snapshot_impl(
         ],
     )
     .unwrap();
-    let parquet_path = tmp_dir.path().join(data_filename_2);
+    let parquet_path = table_temp_dir.path().join(data_filename_2);
     let data_file_2 = create_data_file(
         /*file_id=*/ 2,
         parquet_path.to_str().unwrap().to_string(),
@@ -385,7 +396,7 @@ async fn test_store_and_load_snapshot_impl(
         ],
     )
     .unwrap();
-    let parquet_path = tmp_dir.path().join(compacted_data_filename);
+    let parquet_path = table_temp_dir.path().join(compacted_data_filename);
     let compacted_data_file = create_data_file(
         /*file_id=*/ 5,
         parquet_path.to_str().unwrap().to_string(),
@@ -523,26 +534,14 @@ async fn test_store_and_load_snapshot_impl(
 /// Basic iceberg snapshot sync and load test via iceberg table manager.
 #[tokio::test]
 async fn test_sync_snapshots() {
-    // Create arrow schema and table.
-    let tmp_dir = tempdir().unwrap();
-    let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-    let iceberg_table_config = get_iceberg_table_config(&tmp_dir);
-    test_store_and_load_snapshot_impl(
-        mooncake_table_metadata.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await;
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+    test_store_and_load_snapshot_impl(iceberg_table_config).await;
 }
 
 #[tokio::test]
 #[cfg(feature = "storage-s3")]
 async fn test_sync_snapshot_with_s3() {
-    // Local filesystem to store write-through cache.
-    let tmp_dir = tempdir().unwrap();
-    let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-
     // Remote object storage for iceberg.
     let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
     s3_test_utils::create_test_s3_bucket(bucket_name.clone())
@@ -551,11 +550,7 @@ async fn test_sync_snapshot_with_s3() {
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
 
     // Common testing logic.
-    test_store_and_load_snapshot_impl(
-        mooncake_table_metadata.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await;
+    test_store_and_load_snapshot_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
     s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
@@ -566,11 +561,6 @@ async fn test_sync_snapshot_with_s3() {
 #[tokio::test]
 #[cfg(feature = "storage-gcs")]
 async fn test_sync_snapshot_with_gcs() {
-    // Local filesystem to store write-through cache.
-    let tmp_dir = tempdir().unwrap();
-    let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-
     // Remote object storage for iceberg.
     let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
     gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
@@ -579,11 +569,7 @@ async fn test_sync_snapshot_with_gcs() {
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
 
     // Common testing logic.
-    test_store_and_load_snapshot_impl(
-        mooncake_table_metadata.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await;
+    test_store_and_load_snapshot_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
     gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
@@ -591,6 +577,10 @@ async fn test_sync_snapshot_with_gcs() {
         .unwrap();
 }
 
+/// ================================
+/// Test drop table
+/// ================================
+///
 /// Test iceberg table manager drop table.
 #[tokio::test]
 async fn test_drop_table() {
