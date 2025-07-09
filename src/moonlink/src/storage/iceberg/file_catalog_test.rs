@@ -56,7 +56,6 @@ async fn test_local_iceberg_table_creation() {
     let catalog = FileCatalog::new(FileSystemConfig::FileSystem {
         root_directory: warehouse_path.to_string(),
     })
-    .await
     .unwrap();
     let namespace_ident = NamespaceIdent::from_strs([NAMESPACE]).unwrap();
     let _ = catalog

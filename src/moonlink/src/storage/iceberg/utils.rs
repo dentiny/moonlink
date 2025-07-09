@@ -2,26 +2,12 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::cred_utils as gcs_cred_utils;
-#[cfg(feature = "storage-gcs")]
-#[cfg(test)]
-use crate::storage::filesystem::gcs::gcs_test_utils;
-#[cfg(feature = "storage-s3")]
-#[cfg(test)]
-use crate::storage::filesystem::s3::s3_test_utils;
-use crate::storage::iceberg::file_catalog::FileCatalog;
-#[cfg(feature = "storage-gcs")]
-#[cfg(test)]
-use crate::storage::iceberg::gcs_test_utils as iceberg_gcs_test_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::parquet_utils;
-#[cfg(feature = "storage-s3")]
-#[cfg(test)]
-use crate::storage::iceberg::s3_test_utils as iceberg_s3_test_utils;
 use crate::storage::iceberg::table_property;
 
 use std::collections::HashMap;
 use std::path::Path;
-use url::Url;
 
 use arrow_schema::Schema as ArrowSchema;
 use iceberg::arrow as IcebergArrow;

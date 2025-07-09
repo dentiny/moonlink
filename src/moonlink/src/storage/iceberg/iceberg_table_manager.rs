@@ -136,7 +136,8 @@ impl IcebergTableManager {
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
-        let catalog = utils::create_catalog_with_filesystem_accessor(filesystem_accessor.clone())?;
+        let catalog =
+            catalog_utils::create_catalog_with_filesystem_accessor(filesystem_accessor.clone())?;
         Ok(Self {
             snapshot_loaded: false,
             config,

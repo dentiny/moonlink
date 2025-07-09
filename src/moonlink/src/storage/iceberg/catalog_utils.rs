@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::FileSystemConfig;

@@ -1,14 +1,11 @@
 /// This module contains GCS credential related util functions.
 use base64::engine::general_purpose::STANDARD as base64;
 use base64::Engine;
-use serde_json::Value;
-use std::path::Path;
 
-use crate::{Error, Result};
+use crate::Result;
 
 /// Default well-known location for credential.
-// const WELL_KNOWN_LOCATION: &str = ".config/gcloud/application_default_credentials.json";
-const WELL_KNOWN_LOCATION: &str = "/home/vscode/opendal-test-sa-2-key.json";
+const WELL_KNOWN_LOCATION: &str = ".config/gcloud/application_default_credentials.json";
 
 /// Get GCS credential path (priority goes from high to low):
 /// 1. The provided path
@@ -18,11 +15,9 @@ pub(crate) fn get_credential_path(cred_path: &Option<String>) -> String {
         return path.clone();
     }
 
-    // let home = std::env::var("HOME").unwrap();
-    // let default_path = std::path::Path::new(&home).join(WELL_KNOWN_LOCATION);
-    // default_path.as_path().to_str().unwrap().to_string()
-
-    WELL_KNOWN_LOCATION.to_string()
+    let home = std::env::var("HOME").unwrap();
+    let default_path = std::path::Path::new(&home).join(WELL_KNOWN_LOCATION);
+    default_path.as_path().to_str().unwrap().to_string()
 }
 
 /// Load GCS credential JSON object from (priority goes from high to low):
@@ -41,9 +36,8 @@ pub(crate) fn load_gcs_credentials(cred_path: &Option<String>) -> Result<String>
     }
 
     // 2. Fallback to well-known location.
-    // let home = std::env::var("HOME").unwrap();
-    // let default_path = std::path::Path::new(&home).join(WELL_KNOWN_LOCATION);
-    let default_path = std::path::Path::new(WELL_KNOWN_LOCATION);
+    let home = std::env::var("HOME").unwrap();
+    let default_path = std::path::Path::new(&home).join(WELL_KNOWN_LOCATION);
     let content = std::fs::read_to_string(&default_path)?;
     Ok(base64.encode(content.as_bytes()))
 }
