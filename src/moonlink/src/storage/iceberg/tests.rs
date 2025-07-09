@@ -3,7 +3,6 @@ use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
@@ -112,39 +111,6 @@ fn test_row_3() -> MoonlinkRow {
         RowValue::ByteArray("Cat".as_bytes().to_vec()),
         RowValue::Int32(30),
     ])
-}
-
-/// Test util function to create iceberg table config.
-fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
-    let filesystem_config = if warehouse_uri.starts_with("s3://") {
-        #[cfg(feature = "storage-s3")]
-        {
-            s3_test_utils::create_s3_filesystem_config(&warehouse_uri)
-        }
-        #[cfg(not(feature = "storage-s3"))]
-        {
-            panic!("S3 support not enabled. Enable `storage-s3` feature.");
-        }
-    } else if warehouse_uri.starts_with("gs://") {
-        #[cfg(feature = "storage-gcs")]
-        {
-            gcs_test_utils::create_gcs_filesystem_config(&warehouse_uri)
-        }
-        #[cfg(not(feature = "storage-gcs"))]
-        {
-            panic!("GCS support not enabled. Enable `storage-gcs` feature.");
-        }
-    } else {
-        FileSystemConfig::FileSystem {
-            root_directory: warehouse_uri.clone(),
-        }
-    };
-
-    IcebergTableConfig {
-        warehouse_uri,
-        filesystem_config,
-        ..Default::default()
-    }
 }
 
 /// Test util function to write arrow record batch into local file.
@@ -567,6 +533,62 @@ async fn test_sync_snapshots() {
         iceberg_table_config.clone(),
     )
     .await;
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_sync_snapshot_with_s3() {
+    // Local filesystem to store write-through cache.
+    let tmp_dir = tempdir().unwrap();
+    let mooncake_table_metadata =
+        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
+
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_store_and_load_snapshot_impl(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+    )
+    .await;
+
+    // Clean up testing environment.
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_sync_snapshot_with_gcs() {
+    // Local filesystem to store write-through cache.
+    let tmp_dir = tempdir().unwrap();
+    let mooncake_table_metadata =
+        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
+
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_store_and_load_snapshot_impl(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+    )
+    .await;
+
+    // Clean up testing environment.
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 /// Test iceberg table manager drop table.

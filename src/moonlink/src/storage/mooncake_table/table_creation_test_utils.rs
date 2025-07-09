@@ -2,6 +2,10 @@
 use crate::row::IdentityProp as RowIdentity;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::gcs_test_utils;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::mooncake_table::test_utils_commons::*;
@@ -21,7 +25,7 @@ use tempfile::TempDir;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
-/// Test util function to get iceberg table config.
+/// Test util function to get iceberg table config for local filesystem.
 pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
     IcebergTableConfig {
@@ -29,6 +33,39 @@ pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
         filesystem_config: FileSystemConfig::FileSystem { root_directory },
+    }
+}
+
+/// Test util function to create iceberg table config.
+pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
+    let filesystem_config = if warehouse_uri.starts_with("s3://") {
+        #[cfg(feature = "storage-s3")]
+        {
+            s3_test_utils::create_s3_filesystem_config(&warehouse_uri)
+        }
+        #[cfg(not(feature = "storage-s3"))]
+        {
+            panic!("S3 support not enabled. Enable `storage-s3` feature.");
+        }
+    } else if warehouse_uri.starts_with("gs://") {
+        #[cfg(feature = "storage-gcs")]
+        {
+            gcs_test_utils::create_gcs_filesystem_config(&warehouse_uri)
+        }
+        #[cfg(not(feature = "storage-gcs"))]
+        {
+            panic!("GCS support not enabled. Enable `storage-gcs` feature.");
+        }
+    } else {
+        FileSystemConfig::FileSystem {
+            root_directory: warehouse_uri.clone(),
+        }
+    };
+
+    IcebergTableConfig {
+        warehouse_uri,
+        filesystem_config,
+        ..Default::default()
     }
 }
 
