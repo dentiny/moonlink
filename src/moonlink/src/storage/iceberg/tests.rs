@@ -163,6 +163,41 @@ fn get_file_indices_filepath_and_data_filepaths(
 }
 
 /// ================================
+/// Test multiple recoveries
+/// ================================
+///
+/// Testing scenario: iceberg snapshot should be loaded only once at recovery, otherwise it panics.
+#[tokio::test]
+async fn test_snapshot_load_for_multiple_times() {
+    let tmp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+    let mooncake_table_metadata =
+        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
+    let config = create_iceberg_table_config(tmp_dir.path().to_str().unwrap().to_string());
+    let mut iceberg_table_manager = IcebergTableManager::new(
+        mooncake_table_metadata.clone(),
+        object_storage_cache.clone(),
+        create_test_filesystem_accessor(&config),
+        config.clone(),
+    )
+    .unwrap();
+
+    iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tokio::runtime::Handle::current().block_on(async {
+            iceberg_table_manager
+                .load_snapshot_from_table()
+                .await
+                .unwrap();
+        });
+    }));
+    assert!(result.is_err());
+}
+
+/// ================================
 /// Test iceberg snapshot store/load
 /// ================================
 ///
@@ -650,8 +685,14 @@ async fn test_drop_table_with_s3() {
         .await
         .unwrap();
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
     // Common testing logic.
     test_drop_table_impl(iceberg_table_config).await;
+
+    // Clean up testing environment.
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 #[tokio::test]
@@ -663,26 +704,38 @@ async fn test_drop_table_with_gcs() {
         .await
         .unwrap();
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
     // Common testing logic.
     test_drop_table_impl(iceberg_table_config).await;
+
+    // Clean up testing environment.
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
+/// ================================
+/// Test empty table load
+/// ================================
+///
 /// Testing scenario: attempt an iceberg snapshot load with no preceding store.
-#[tokio::test]
-async fn test_empty_snapshot_load() {
-    let tmp_dir = tempdir().unwrap();
-    let filesystem_accessor = FileSystemAccessor::default_for_test(&tmp_dir);
-    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+async fn test_empty_snapshot_load_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
     let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-    let config = create_iceberg_table_config(tmp_dir.path().to_str().unwrap().to_string());
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
 
     // Recover from iceberg snapshot, and check mooncake table snapshot version.
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_test_filesystem_accessor(&config),
-        config.clone(),
+        create_test_filesystem_accessor(&iceberg_table_config),
+        iceberg_table_config.clone(),
     )
     .unwrap();
     let (next_table_id, snapshot) = iceberg_table_manager
@@ -696,41 +749,57 @@ async fn test_empty_snapshot_load() {
     assert!(snapshot.data_file_flush_lsn.is_none());
     validate_recovered_snapshot(
         &snapshot,
-        &config.warehouse_uri,
+        &iceberg_table_config.warehouse_uri,
         filesystem_accessor.as_ref(),
     )
     .await;
 }
 
-/// Testing scenario: iceberg snapshot should be loaded only once at recovery, otherwise it panics.
 #[tokio::test]
-async fn test_snapshot_load_for_multiple_times() {
-    let tmp_dir = tempdir().unwrap();
-    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
-    let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-    let config = create_iceberg_table_config(tmp_dir.path().to_str().unwrap().to_string());
-    let mut iceberg_table_manager = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
-        create_test_filesystem_accessor(&config),
-        config.clone(),
-    )
-    .unwrap();
+async fn test_empty_snapshot_load() {
+    // Local filesystem for iceberg table.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+    // Common testing logic.
+    test_empty_snapshot_load_impl(iceberg_table_config).await;
+}
 
-    iceberg_table_manager
-        .load_snapshot_from_table()
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_empty_snapshot_load_with_s3() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
         .await
         .unwrap();
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        tokio::runtime::Handle::current().block_on(async {
-            iceberg_table_manager
-                .load_snapshot_from_table()
-                .await
-                .unwrap();
-        });
-    }));
-    assert!(result.is_err());
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_empty_snapshot_load_impl(iceberg_table_config).await;
+
+    // Clean up testing environment.
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_empty_snapshot_load_with_gcs() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_empty_snapshot_load_impl(iceberg_table_config).await;
+
+    // Clean up testing environment.
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 /// Testing scenario: create iceberg snapshot for index merge.
