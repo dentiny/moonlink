@@ -561,10 +561,7 @@ async fn test_sync_snapshots() {
     let tmp_dir = tempdir().unwrap();
     let mooncake_table_metadata =
         create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-    let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: tmp_dir.path().to_str().unwrap().to_string(),
-        ..Default::default()
-    };
+    let iceberg_table_config = get_iceberg_table_config(&tmp_dir);
     test_store_and_load_snapshot_impl(
         mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
@@ -1625,7 +1622,6 @@ async fn test_drop_table_at_creation() {
 async fn test_multiple_table_ids_for_deletion_vector() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
-    let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_config = MooncakeTableConfig {
         // Flush as long as there's new rows appended at commit.
         mem_slice_size: 1,
@@ -1639,7 +1635,7 @@ async fn test_multiple_table_ids_for_deletion_vector() {
     );
     let identity_property = mooncake_table_metadata.identity.clone();
 
-    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    let iceberg_table_config = get_iceberg_table_config(&temp_dir);
     let schema = create_test_arrow_schema();
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),

@@ -101,7 +101,7 @@ pub(crate) async fn create_test_s3_bucket(bucket: String) -> IcebergResult<()> {
     Ok(())
 }
 
-/// Util function to delete all objects in a GCS bucket.
+/// Util function to delete all objects in a S3 bucket.
 async fn delete_s3_bucket_objects(bucket: &str) -> IcebergResult<()> {
     let filesystem_config = create_s3_filesystem_config(&format!("s3://{}", bucket));
     let filesystem_accessor = FileSystemAccessor::new(filesystem_config);
