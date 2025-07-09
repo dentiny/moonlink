@@ -52,8 +52,12 @@ use iceberg::{
 };
 use iceberg::{Error as IcebergError, TableRequirement};
 
-// Object storage usually doesn't have "folder" concept, when creating a new namespace, we create an indicator file under certain folder.
+/// Object storage usually doesn't have "folder" concept, when creating a new namespace, we create an indicator file under certain folder.
 pub(super) const NAMESPACE_INDICATOR_OBJECT_NAME: &str = "indicator.text";
+/// Metadata directory, which stores all metadata files, including manifest files, metadata files, version hint files, etc.
+pub(super) const METADATA_DIRECTORY: &str = "metadata";
+/// Version hint file which indicates the latest version for the table, the file exists for all valid iceberg tables.
+pub(super) const VERSION_HINT_FILENAME: &str = "version-hint.text";
 
 #[derive(Debug)]
 pub struct FileCatalog {
@@ -128,9 +132,11 @@ impl FileCatalog {
     ) -> IcebergResult<(String /*metadata_filepath*/, TableMetadata)> {
         // Read version hint for the table to get latest version.
         let version_hint_filepath = format!(
-            "{}/{}/metadata/version-hint.text",
+            "{}/{}/{}/{}",
             table_ident.namespace().to_url_string(),
             table_ident.name(),
+            METADATA_DIRECTORY,
+            VERSION_HINT_FILENAME,
         );
         let version_str = self
             .filesystem_accessor
@@ -149,9 +155,10 @@ impl FileCatalog {
 
         // Read and parse table metadata.
         let metadata_filepath = format!(
-            "{}/{}/metadata/v{}.metadata.json",
+            "{}/{}/{}/v{}.metadata.json",
             table_ident.namespace().to_url_string(),
             table_ident.name(),
+            METADATA_DIRECTORY,
             version,
         );
         let metadata_bytes = self
@@ -458,8 +465,10 @@ impl Catalog for FileCatalog {
         let table_ident = TableIdent::new(namespace_ident.clone(), creation.name.clone());
 
         // Create version hint file.
-        let version_hint_filepath =
-            format!("{}/{}/metadata/version-hint.text", directory, creation.name);
+        let version_hint_filepath = format!(
+            "{}/{}/{}/version-hint.text",
+            directory, creation.name, METADATA_DIRECTORY,
+        );
         self.filesystem_accessor
             .write_object(
                 &version_hint_filepath,

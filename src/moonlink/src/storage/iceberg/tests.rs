@@ -7,6 +7,8 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::s3_test_utils;
+use crate::storage::iceberg::file_catalog::METADATA_DIRECTORY;
+use crate::storage::iceberg::file_catalog::VERSION_HINT_FILENAME;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
@@ -534,8 +536,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
 /// Basic iceberg snapshot sync and load test via iceberg table manager.
 #[tokio::test]
 async fn test_sync_snapshots() {
+    // Local filesystem for iceberg.
     let iceberg_temp_dir = tempdir().unwrap();
     let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+
+    // Common testing logic.
     test_store_and_load_snapshot_impl(iceberg_table_config).await;
 }
 
@@ -582,21 +587,22 @@ async fn test_sync_snapshot_with_gcs() {
 /// ================================
 ///
 /// Test iceberg table manager drop table.
-#[tokio::test]
-async fn test_drop_table() {
-    let tmp_dir = tempdir().unwrap();
-    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+async fn test_drop_table_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
     let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-    let config = IcebergTableConfig {
-        warehouse_uri: tmp_dir.path().to_str().unwrap().to_string(),
-        ..Default::default()
-    };
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_test_filesystem_accessor(&config),
-        config.clone(),
+        filesystem_accessor.clone(),
+        iceberg_table_config.clone(),
     )
     .unwrap();
     iceberg_table_manager
@@ -604,17 +610,61 @@ async fn test_drop_table() {
         .await
         .unwrap();
 
-    // Perform whitebox testing, which assume the table directory `<warehouse>/<namespace>/<table>` on local filesystem , to check whether table are correctly created or dropped.
-    let mut table_directory = PathBuf::from(tmp_dir.path());
-    table_directory.push(config.namespace.first().unwrap());
-    table_directory.push(config.table_name);
-    let directory_exists = tokio::fs::try_exists(&table_directory).await.unwrap();
-    assert!(directory_exists);
+    // Perform whitebox testing, which assume there's an indicator file at `<warehouse>/<namespace>/<table>/metadata/version-hint.text` stored at object storage.
+    let mut indicator_filepath = PathBuf::new();
+    assert_eq!(iceberg_table_config.namespace.len(), 1);
+    indicator_filepath.push(iceberg_table_config.namespace.first().unwrap());
+    indicator_filepath.push(iceberg_table_config.table_name);
+    indicator_filepath.push(METADATA_DIRECTORY);
+    indicator_filepath.push(VERSION_HINT_FILENAME);
+    let object_exists = filesystem_accessor
+        .object_exists(indicator_filepath.to_str().unwrap())
+        .await
+        .unwrap();
+    assert!(object_exists);
 
     // Drop table and check directory existence.
     iceberg_table_manager.drop_table().await.unwrap();
-    let directory_exists = tokio::fs::try_exists(&table_directory).await.unwrap();
-    assert!(!directory_exists);
+    let object_exists = filesystem_accessor
+        .object_exists(indicator_filepath.to_str().unwrap())
+        .await
+        .unwrap();
+    assert!(!object_exists);
+}
+
+#[tokio::test]
+async fn test_drop_table() {
+    // Local filesystem for iceberg table.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+    // Common testing logic.
+    test_drop_table_impl(iceberg_table_config).await;
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_drop_table_with_s3() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    // Common testing logic.
+    test_drop_table_impl(iceberg_table_config).await;
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_drop_table_with_gcs() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    // Common testing logic.
+    test_drop_table_impl(iceberg_table_config).await;
 }
 
 /// Testing scenario: attempt an iceberg snapshot load with no preceding store.
