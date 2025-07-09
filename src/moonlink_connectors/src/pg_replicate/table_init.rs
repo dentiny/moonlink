@@ -63,13 +63,6 @@ pub async fn build_table_components(
         ..Default::default()
     };
     let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
-    let filesystem_config = FileSystemConfig::Gcs { 
-        project: "coral-ring-465417-r0",
-        bucket: "objectstore-test",
-        endpoint: None,
-        disable_auth: false,
-    };
-
     let table = MooncakeTable::new(
         arrow_schema,
         table_schema.table_name.to_string(),

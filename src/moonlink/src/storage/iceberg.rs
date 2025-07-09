@@ -1,3 +1,4 @@
+pub(super) mod catalog_utils;
 pub(super) mod deletion_vector;
 pub(super) mod file_catalog;
 mod iceberg_table_loader;

@@ -47,6 +47,7 @@ pub(crate) fn deserialze_moonlink_table_config(
 ) -> Result<MoonlinkTableConfig> {
     let parsed: MoonlinkTableConfigForPersistence = serde_json::from_value(config)?;
 
+    // TODO(hjiang): Need to recover iceberg table config from metadata.
     let moonlink_table_config = MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
             warehouse_uri: parsed.iceberg_table_config.warehouse_uri,

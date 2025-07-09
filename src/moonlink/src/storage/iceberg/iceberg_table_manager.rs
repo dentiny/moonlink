@@ -1,5 +1,6 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::iceberg::catalog_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::{
@@ -113,7 +114,7 @@ impl IcebergTableManager {
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
-        let catalog = utils::create_catalog(&config.warehouse_uri)?;
+        let catalog = catalog_utils::create_catalog(config.filesystem_config.clone())?;
         Ok(Self {
             snapshot_loaded: false,
             config,

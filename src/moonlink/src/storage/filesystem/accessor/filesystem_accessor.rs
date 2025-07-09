@@ -1,3 +1,5 @@
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::cred_utils as gcs_cred_utils;
 use async_trait::async_trait;
 #[cfg(feature = "storage-gcs")]
 use futures::TryStreamExt;
@@ -80,8 +82,14 @@ impl FileSystemAccessor {
                         bucket,
                         endpoint,
                         disable_auth,
+                        cred_path,
                         ..
                     } => {
+                        // Check invariants: when authentication disabled, no need to provide credential path.
+                        if *disable_auth {
+                            assert!(cred_path.is_none());
+                        }
+
                         let mut builder = services::Gcs::default().root("/").bucket(bucket);
                         if let Some(endpoint) = endpoint {
                             builder = builder.endpoint(endpoint);
@@ -91,6 +99,13 @@ impl FileSystemAccessor {
                                 .disable_config_load()
                                 .disable_vm_metadata()
                                 .allow_anonymous();
+                        } else {
+                            let resolved_cred_path = gcs_cred_utils::get_credential_path(cred_path);
+                            // Failed credential resolution by default falls back to VM metadata server.
+                            builder = builder
+                                .credential_path(&resolved_cred_path)
+                                .disable_config_load()
+                                .disable_vm_metadata();
                         }
                         let op = Operator::new(builder)?.layer(retry_layer).finish();
                         Ok(op)

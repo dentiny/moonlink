@@ -1,6 +1,8 @@
 use arrow::error::ArrowError;
+use base64::DecodeError as Base64DecodeError;
 use iceberg::Error as IcebergError;
 use parquet::errors::ParquetError;
+use serde_json::Error as JsonError;
 use std::io;
 use std::result;
 use thiserror::Error;
@@ -44,6 +46,12 @@ pub enum Error {
 
     #[error("Join error: {0}")]
     JoinError(#[from] tokio::task::JoinError),
+
+    #[error("Json error: {0}")]
+    JsonError(#[from] JsonError),
+
+    #[error("Base64 decode error: {0}")]
+    Base64DecodeError(#[from] Base64DecodeError),
 }
 
 pub type Result<T> = result::Result<T, Error>;

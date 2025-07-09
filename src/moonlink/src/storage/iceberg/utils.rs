@@ -1,6 +1,8 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::cred_utils as gcs_cred_utils;
+#[cfg(feature = "storage-gcs")]
 #[cfg(test)]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
@@ -75,61 +77,6 @@ pub fn is_file_index(entry: &ManifestEntry) -> bool {
     assert!(f.content_offset().is_none());
     assert!(f.content_size_in_bytes().is_none());
     true
-}
-
-/// Create a catelog based on the provided type.
-///
-/// It's worth noting catalog and warehouse uri are not 1-1 mapping; for example, rest catalog could handle warehouse.
-/// Here we simply deduce catalog type from warehouse because both filesystem and object storage catalog are only able to handle certain scheme.
-pub fn create_catalog(warehouse_uri: &str) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
-    // Special handle testing situation.
-    #[cfg(feature = "storage-s3")]
-    #[cfg(test)]
-    {
-        if warehouse_uri.starts_with(s3_test_utils::S3_TEST_WAREHOUSE_URI_PREFIX) {
-            return Ok(Box::new(iceberg_s3_test_utils::create_test_s3_catalog(
-                warehouse_uri,
-            )));
-        }
-    }
-    #[cfg(feature = "storage-gcs")]
-    #[cfg(test)]
-    {
-        if warehouse_uri.starts_with(gcs_test_utils::GCS_TEST_WAREHOUSE_URI_PREFIX) {
-            return Ok(Box::new(iceberg_gcs_test_utils::create_gcs_catalog(
-                warehouse_uri,
-            )));
-        }
-    }
-
-    let url = Url::parse(warehouse_uri)
-        .or_else(|_| Url::from_file_path(warehouse_uri))
-        .map_err(|e| {
-            IcebergError::new(
-                iceberg::ErrorKind::Unexpected,
-                format!("Invalid warehouse URI {}: {:?}", warehouse_uri, e),
-            )
-        })?;
-
-    if url.scheme() == "file" {
-        let absolute_path = url.path();
-        return Ok(Box::new(FileCatalog::new(FileSystemConfig::FileSystem {
-            root_directory: absolute_path.to_string(),
-        })?));
-    }
-
-    // TODO(hjiang): Fallback to object storage for all warehouse uris.
-    todo!("Need to take secrets from client side and create object storage catalog.")
-}
-
-/// Test util function to create catalog with provided filesystem accessor.
-#[cfg(test)]
-pub fn create_catalog_with_filesystem_accessor(
-    filesystem_accessor: std::sync::Arc<dyn BaseFileSystemAccess>,
-) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
-    Ok(Box::new(FileCatalog::new_with_filesystem_accessor(
-        filesystem_accessor,
-    )?))
 }
 
 /// Create an iceberg table in the given catalog from the given namespace and table name.
@@ -294,11 +241,15 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
         FileSystemConfig::FileSystem { .. } => FileIOBuilder::new_fs_io().build(),
         #[cfg(feature = "storage-gcs")]
         FileSystemConfig::Gcs {
-            project,
             endpoint,
             disable_auth,
+            cred_path,
             ..
         } => {
+            if *disable_auth {
+                assert!(cred_path.is_none());
+            }
+
             let mut file_io_builder = FileIOBuilder::new("GCS")
                 .with_prop(iceberg::io::GCS_PROJECT_ID, "coral-ring-465417-r0");
             if let Some(endpoint) = endpoint {
@@ -310,6 +261,15 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
                     .with_prop(iceberg::io::GCS_NO_AUTH, "true")
                     .with_prop(iceberg::io::GCS_ALLOW_ANONYMOUS, "true")
                     .with_prop(iceberg::io::GCS_DISABLE_CONFIG_LOAD, "true");
+            } else {
+                let cred_json = gcs_cred_utils::load_gcs_credentials(cred_path).map_err(|e| {
+                    IcebergError::new(
+                        iceberg::ErrorKind::Unexpected,
+                        format!("Failed to load GCS credential {:?}: {:?}", cred_path, e),
+                    )
+                })?;
+                file_io_builder =
+                    file_io_builder.with_prop(iceberg::io::GCS_CREDENTIALS_JSON, cred_json);
             }
             file_io_builder.build()
         }

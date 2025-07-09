@@ -15,7 +15,8 @@ pub enum FileSystemConfig {
     Gcs {
         project: String,
         bucket: String,
-        endpoint: String,
+        endpoint: Option<String>,
         disable_auth: bool,
+        cred_path: Option<String>,
     },
 }

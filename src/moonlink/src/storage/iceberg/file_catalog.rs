@@ -326,6 +326,8 @@ impl Catalog for FileCatalog {
         namespace_ident: &iceberg::NamespaceIdent,
         _properties: HashMap<String, String>,
     ) -> IcebergResult<iceberg::Namespace> {
+        println!("create namespace {:?}", namespace_ident);
+
         let segments = namespace_ident.clone().inner();
         let mut segment_vec = vec![];
         for cur_segment in &segments[..segments.len().saturating_sub(1)] {
