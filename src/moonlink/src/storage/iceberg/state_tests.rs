@@ -87,9 +87,6 @@ async fn check_prev_data_files(
         .as_ref()
         .unwrap()
         .file_io();
-
-    println!("Loading arrow batch from file: {}", data_file.file_path());
-
     let loaded_arrow_batch = load_arrow_batch(file_io, data_file.file_path().as_str())
         .await
         .unwrap();

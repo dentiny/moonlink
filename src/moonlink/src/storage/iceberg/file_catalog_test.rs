@@ -405,8 +405,6 @@ async fn test_catalog_namespace_operations_s3() -> IcebergResult<()> {
 #[tokio::test]
 #[cfg(feature = "storage-gcs")]
 async fn test_catalog_namespace_operations_gcs() -> IcebergResult<()> {
-    println!("test_catalog_namespace_operations_gcs");
-
     let catalog = create_gcs_catalog().await;
     test_catalog_namespace_operations_impl(catalog).await
 }
