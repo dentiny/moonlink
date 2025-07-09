@@ -25,7 +25,7 @@ pub(crate) static S3_TEST_BUCKET_PREFIX: &str = "test-minio-warehouse-";
 pub(crate) static S3_TEST_WAREHOUSE_URI_PREFIX: &str = "s3://test-minio-warehouse-";
 pub(crate) static S3_TEST_ACCESS_KEY_ID: &str = "minioadmin";
 pub(crate) static S3_TEST_SECRET_ACCESS_KEY: &str = "minioadmin";
-pub(crate) static S3_TEST_ENDPOINT: &str = "http://minio:9000";
+pub(crate) static S3_TEST_ENDPOINT: &str = "http://s3.local:9000";
 
 /// Create a S3 catalog config.
 pub(crate) fn create_s3_filesystem_config(warehouse_uri: &str) -> FileSystemConfig {
@@ -65,7 +65,10 @@ async fn create_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
         .map_err(|e| {
             IcebergError::new(
                 iceberg::ErrorKind::Unexpected,
-                format!("Failed to create bucket {} in minio {}", bucket, e),
+                format!(
+                    "Failed to create bucket {} in minio with url {}: {}",
+                    bucket, url, e
+                ),
             )
         })?;
     Ok(())

@@ -81,9 +81,10 @@ jobs:
             minio/minio:latest server /data
 
       # ─────────────── Add hostnames to /etc/hosts ──────────────────────────
-      - name: Add gcs.local and to /etc/hosts
+      - name: Add gcs.local and s3.local to /etc/hosts
         run: |
           echo "127.0.0.1 gcs.local" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 s3.local" | sudo tee -a /etc/hosts
 
       # ───────────────────── Wait for Fake GCS to be ready ───────────────────
       - name: Wait for Fake GCS
