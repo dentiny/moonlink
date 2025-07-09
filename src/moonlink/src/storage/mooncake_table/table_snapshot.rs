@@ -14,7 +14,7 @@ use std::collections::{HashMap, HashSet};
 ////////////////////////////
 ///
 /// Iceberg snapshot payload by write operations.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct IcebergSnapshotImportPayload {
     /// New data files to introduce to the iceberg table.
     pub(crate) data_files: Vec<MooncakeDataFileRef>,
@@ -25,7 +25,7 @@ pub struct IcebergSnapshotImportPayload {
 }
 
 /// Iceberg snapshot payload by index merge operations.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct IcebergSnapshotIndexMergePayload {
     /// New file indices to import to the iceberg table.
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
@@ -34,7 +34,7 @@ pub struct IcebergSnapshotIndexMergePayload {
 }
 
 /// Iceberg snapshot payload by data file compaction operations.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotDataCompactionPayload {
     /// New data files to import to the iceberg table.
     pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,

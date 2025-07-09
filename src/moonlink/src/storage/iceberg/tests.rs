@@ -20,13 +20,13 @@ use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotDataCompactionPayload, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload,
 };
-use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
 use crate::storage::storage_utils::FileId;
@@ -923,57 +923,53 @@ async fn test_index_merge_and_create_snapshot_with_gcs() {
         .unwrap();
 }
 
+/// ================================
+/// Test empty snapshot creation
+/// ================================
+///
 /// Testing scenario: attempt an iceberg snapshot when no data file, deletion vector or index files generated.
-#[tokio::test]
-async fn test_empty_content_snapshot_creation() {
-    let tmp_dir = tempdir().unwrap();
-    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
     let mooncake_table_metadata =
-        create_test_table_metadata(tmp_dir.path().to_str().unwrap().to_string());
-    let config = create_iceberg_table_config(tmp_dir.path().to_str().unwrap().to_string());
-    let mut iceberg_table_manager = IcebergTableManager::new(
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
+    let mut iceberg_table_manager_for_persistence = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_test_filesystem_accessor(&config),
-        config.clone(),
+        filesystem_accessor.clone(),
+        iceberg_table_config.clone(),
     )
     .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
-        import_payload: IcebergSnapshotImportPayload {
-            data_files: vec![],
-            new_deletion_vector: HashMap::new(),
-            file_indices: vec![],
-        },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
-            new_file_indices_to_import: vec![],
-            old_file_indices_to_remove: vec![],
-        },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
-            new_data_files_to_import: vec![],
-            old_data_files_to_remove: vec![],
-            new_file_indices_to_import: vec![],
-            old_file_indices_to_remove: vec![],
-        },
+        import_payload: IcebergSnapshotImportPayload::default(),
+        index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
+        data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),
     };
 
     let persistence_file_params = PersistenceFileParams {
         table_auto_incr_ids: 0..1,
     };
-    iceberg_table_manager
+    iceberg_table_manager_for_persistence
         .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
     // Recover from iceberg snapshot, and check mooncake table snapshot version.
-    let mut iceberg_table_manager = IcebergTableManager::new(
+    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_test_filesystem_accessor(&config),
-        config.clone(),
+        filesystem_accessor.clone(),
+        iceberg_table_config.clone(),
     )
     .unwrap();
-    let (next_file_id, snapshot) = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
         .load_snapshot_from_table()
         .await
         .unwrap();
@@ -982,6 +978,53 @@ async fn test_empty_content_snapshot_creation() {
     assert!(snapshot.indices.in_memory_index.is_empty());
     assert!(snapshot.indices.file_indices.is_empty());
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn test_empty_content_snapshot_creation() {
+    // Local filesystem for iceberg table.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+    // Common testing logic.
+    test_empty_content_snapshot_creation_impl(iceberg_table_config).await;
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_empty_content_snapshot_creation_with_s3() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_empty_content_snapshot_creation_impl(iceberg_table_config).await;
+
+    // Clean up testing environment.
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-gcs")]
+async fn test_empty_content_snapshot_creation_with_gcs() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_empty_content_snapshot_creation_impl(iceberg_table_config).await;
+
+    // Clean up testing environment.
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
 }
 
 /// Testing scenario: when mooncake snapshot is created periodically, there're no committed deletion logs later than flush LSN.
