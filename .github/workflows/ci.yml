@@ -112,6 +112,11 @@ jobs:
             sleep 2
           done
 
+      - name: Run gcs tests
+        timeout-minutes: 5
+        run: |
+          cargo test -p moonlink --features=storage-gcs
+
       - name: Run tests via llvm-cov/nextest
         timeout-minutes: 5
         run: |
