@@ -8,6 +8,7 @@ use crate::storage::filesystem::gcs::gcs_test_utils;
 use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
+use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
@@ -117,6 +118,19 @@ pub(crate) fn create_test_table_metadata_with_config(
         path: std::path::PathBuf::from(local_table_directory),
         identity: RowIdentity::FullRow,
     })
+}
+
+/// Test util function to create mooncake table metadata with index merge enable whenever there're two index blocks.
+pub(crate) fn create_test_table_metadata_with_index_merge(
+    local_table_directory: String,
+) -> Arc<MooncakeTableMetadata> {
+    let file_index_config = FileIndexMergeConfig {
+        file_indices_to_merge: 2,
+        index_block_final_size: u64::MAX,
+    };
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.file_index_config = file_index_config;
+    create_test_table_metadata_with_config(local_table_directory, config)
 }
 
 /// Util function to create mooncake table and iceberg table manager; object storage cache will be created internally.
@@ -255,6 +269,32 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
+        object_storage_cache,
+        create_test_filesystem_accessor(&iceberg_table_config),
+    )
+    .await
+    .unwrap();
+
+    let (notify_tx, notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    (table, notify_rx)
+}
+
+/// Test util function to create mooncake table and table notify.
+pub(crate) async fn create_mooncake_table_and_notify(
+    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
+    object_storage_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableEvent>) {
+    let mut table = MooncakeTable::new(
+        create_test_arrow_schema().as_ref().clone(),
+        ICEBERG_TEST_TABLE.to_string(),
+        /*version=*/ TEST_TABLE_ID.0,
+        mooncake_table_metadata.path.clone(),
+        mooncake_table_metadata.identity.clone(),
+        iceberg_table_config.clone(),
+        mooncake_table_metadata.config.clone(),
         object_storage_cache,
         create_test_filesystem_accessor(&iceberg_table_config),
     )

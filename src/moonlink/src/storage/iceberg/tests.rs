@@ -802,51 +802,30 @@ async fn test_empty_snapshot_load_with_gcs() {
         .unwrap();
 }
 
+/// ================================
+/// Test index merge
+/// ================================
+///
 /// Testing scenario: create iceberg snapshot for index merge.
-#[tokio::test]
-async fn test_index_merge_and_create_snapshot() {
-    let tmp_dir = tempdir().unwrap();
-    let filesystem_accessor = FileSystemAccessor::default_for_test(&tmp_dir);
-    let object_storage_cache = ObjectStorageCache::default_for_test(&tmp_dir);
+async fn test_index_merge_and_create_snapshot_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
+    let mooncake_table_metadata = create_test_table_metadata_with_index_merge(
+        table_temp_dir.path().to_str().unwrap().to_string(),
+    );
 
-    // File indices merge is triggered as long as there's not only one file indice.
-    let file_index_config = FileIndexMergeConfig {
-        file_indices_to_merge: 2,
-        index_block_final_size: 1000,
-    };
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
 
-    // Set mooncake and iceberg flush and snapshot threshold to huge value, to verify force flush and force snapshot works as expected.
-    let mooncake_table_config = MooncakeTableConfig {
-        batch_size: MooncakeTableConfig::DEFAULT_BATCH_SIZE,
-        disk_slice_parquet_file_size: MooncakeTableConfig::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
-        // Flush on every commit.
-        mem_slice_size: 1,
-        snapshot_deletion_record_count: 1000,
-        temp_files_directory: tmp_dir.path().to_str().unwrap().to_string(),
-        data_compaction_config: DataCompactionConfig::default(),
-        file_index_config,
-        persistence_config: IcebergPersistenceConfig {
-            new_data_file_count: 1000,
-            new_committed_deletion_log: 1000,
-        },
-    };
-
-    let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "test_table".to_string(),
-        table_id: 0,
-        schema: create_test_arrow_schema(),
-        config: mooncake_table_config.clone(),
-        path: std::path::PathBuf::from(tmp_dir.path().to_str().unwrap().to_string()),
-        identity: RowIdentity::FullRow,
-    });
-
-    let iceberg_table_config = get_iceberg_table_config(&tmp_dir);
-    let (mut mooncake_table, _, mut notify_rx) = create_table_and_iceberg_manager_with_config(
-        &tmp_dir,
+    // Create mooncake table and table event notification receiver.
+    let (mut mooncake_table, mut notify_rx) = create_mooncake_table_and_notify(
         mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
+        object_storage_cache.clone(),
     )
     .await;
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
 
     // Append one row and commit/flush, so we have one file indice persisted.
     let row_1 = test_row_1();
@@ -871,7 +850,7 @@ async fn test_index_merge_and_create_snapshot() {
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
-        create_test_filesystem_accessor(&iceberg_table_config),
+        filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
     .unwrap();
@@ -885,7 +864,7 @@ async fn test_index_merge_and_create_snapshot() {
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
     validate_recovered_snapshot(
         &snapshot,
-        tmp_dir.path().to_str().unwrap(),
+        &iceberg_table_config.warehouse_uri,
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -897,6 +876,16 @@ async fn test_index_merge_and_create_snapshot() {
     mooncake_table.commit(/*lsn=*/ 5);
     mooncake_table.flush(/*lsn=*/ 5).await.unwrap();
     create_mooncake_and_persist_for_test(&mut mooncake_table, &mut notify_rx).await;
+}
+
+#[tokio::test]
+async fn test_index_merge_and_create_snapshot() {
+    // Local filesystem for iceberg.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+
+    // Common testing logic.
+    test_index_merge_and_create_snapshot_impl(iceberg_table_config).await;
 }
 
 /// Testing scenario: attempt an iceberg snapshot when no data file, deletion vector or index files generated.
