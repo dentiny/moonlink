@@ -22,7 +22,14 @@ fn create_random_string(size: usize) -> String {
 pub(crate) async fn create_local_file(filepath: &str, file_size: usize) -> String {
     let content = create_random_string(file_size);
     let mut file = tokio::fs::File::create(filepath).await.unwrap();
-    let _ = file.write(content.as_bytes()).await.unwrap();
+
+    let mut written = 0;
+    let bytes = content.as_bytes();
+    while written < bytes.len() {
+        let n = file.write(&bytes[written..]).await.unwrap();
+        written += n;
+    }
+
     file.flush().await.unwrap();
     content
 }

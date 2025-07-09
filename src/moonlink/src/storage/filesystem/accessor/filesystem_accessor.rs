@@ -270,7 +270,7 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
-        let (tx, mut rx) = mpsc::channel(IO_BLOCK_SIZE);
+        let (tx, mut rx) = mpsc::channel(MAX_SUB_IO_OPERATION);
 
         let remote_path = self.sanitize_path(src).to_string();
         let operator = self.get_operator().await?.clone();
@@ -356,6 +356,7 @@ mod tests {
             .read_object_as_string(&dst_filepath)
             .await
             .unwrap();
+        assert_eq!(actual_content.len(), expected_content.len());
         assert_eq!(actual_content, expected_content);
     }
 

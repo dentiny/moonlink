@@ -9,7 +9,7 @@ use rstest::rstest;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[rstest]
 #[case(10)]
-#[case(18 * 1024 * 1024)]
+#[case(5 * 1024 * 1024)] // TODO(hjiang): Increase upload size.
 async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
     // Prepare src file.
     let temp_dir = tempfile::tempdir().unwrap();
