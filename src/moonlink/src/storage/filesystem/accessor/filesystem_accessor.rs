@@ -270,12 +270,56 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
-        let content = self.read_object(src).await?;
-        let size = content.len();
-        let mut dst_file = tokio::fs::File::create(dst).await?;
-        dst_file.write_all(&content).await?;
-        dst_file.flush().await?;
-        Ok(ObjectMetadata { size: size as u64 })
+        let (tx, mut rx) = mpsc::channel(IO_BLOCK_SIZE);
+
+        let remote_path = self.sanitize_path(src).to_string();
+        let operator = self.get_operator().await?.clone();
+
+        // Spawn the reader task.
+        let reader_handle = tokio::task::spawn(async move {
+            let reader = operator
+                .reader(&remote_path)
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+
+            let meta = operator
+                .stat(&remote_path)
+                .await
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+            let total_size = meta.content_length();
+
+            let mut start_offset = 0;
+            while start_offset < total_size {
+                let end = (start_offset + IO_BLOCK_SIZE as u64).min(total_size);
+                let range = start_offset..end;
+                let buf = reader
+                    .read(range)
+                    .await
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+                tx.send(buf).await.unwrap();
+                start_offset = end;
+            }
+
+            Ok::<(), std::io::Error>(())
+        });
+
+        // Create and write to the destination file
+        let mut file = tokio::fs::File::create(dst).await?;
+        let mut total_size = 0u64;
+
+        while let Some(cur_chunk) = rx.recv().await {
+            let cur_chunk_len = cur_chunk.len();
+            for cur_bytes in cur_chunk.into_iter() {
+                file.write_all(&*cur_bytes).await?;
+            }
+            total_size += cur_chunk_len as u64;
+        }
+        file.flush().await?;
+
+        // Wait for the reader to finish.
+        reader_handle.await??;
+
+        Ok(ObjectMetadata { size: total_size })
     }
 }
 
