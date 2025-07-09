@@ -40,6 +40,7 @@ use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::MooncakeTable;
+use crate::FileSystemAccessor;
 
 // Test util function to prepare for committed and persisted data file,
 // here we write two rows and assume they'll be included in one arrow record batch and one data file.
@@ -69,7 +70,7 @@ async fn prepare_committed_and_flushed_data_files(
     (row_2, row_1)
 }
 
-// Test util function to check whether the data file in iceberg snapshot is the same as initially-prepared one from `prepare_committed_and_flushed_data_files`.
+// Test util function to check whether the data file in iceberg snapshot is the same as initially-prepared one from [`prepare_committed_and_flushed_data_files`].
 //
 // # Arguments
 //
@@ -86,6 +87,9 @@ async fn check_prev_data_files(
         .as_ref()
         .unwrap()
         .file_io();
+
+    println!("Loading arrow batch from file: {}", data_file.file_path());
+
     let loaded_arrow_batch = load_arrow_batch(file_io, data_file.file_path().as_str())
         .await
         .unwrap();
@@ -234,6 +238,7 @@ async fn check_prev_and_new_data_files(
 #[tokio::test]
 async fn test_state_1_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, _) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -255,7 +260,12 @@ async fn test_state_1_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -264,6 +274,7 @@ async fn test_state_1_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_1_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, _) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -287,7 +298,12 @@ async fn test_state_1_2() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -296,6 +312,7 @@ async fn test_state_1_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_1_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -322,7 +339,12 @@ async fn test_state_1_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -331,6 +353,7 @@ async fn test_state_1_3() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_1_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -359,7 +382,12 @@ async fn test_state_1_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -368,6 +396,7 @@ async fn test_state_1_4() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_1_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -395,7 +424,12 @@ async fn test_state_1_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -404,6 +438,7 @@ async fn test_state_1_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_1_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -433,7 +468,12 @@ async fn test_state_1_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -442,6 +482,7 @@ async fn test_state_1_6() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_2_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -464,7 +505,12 @@ async fn test_state_2_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -473,6 +519,7 @@ async fn test_state_2_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_2_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -497,7 +544,12 @@ async fn test_state_2_2() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -506,6 +558,7 @@ async fn test_state_2_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_2_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -533,7 +586,12 @@ async fn test_state_2_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -542,6 +600,7 @@ async fn test_state_2_3() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_2_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -571,7 +630,12 @@ async fn test_state_2_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -580,6 +644,7 @@ async fn test_state_2_4() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_2_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -608,7 +673,12 @@ async fn test_state_2_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -617,6 +687,7 @@ async fn test_state_2_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_2_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -647,7 +718,12 @@ async fn test_state_2_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -656,6 +732,7 @@ async fn test_state_2_6() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -679,7 +756,12 @@ async fn test_state_3_1() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -688,6 +770,7 @@ async fn test_state_3_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -713,7 +796,12 @@ async fn test_state_3_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -722,6 +810,7 @@ async fn test_state_3_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -755,7 +844,12 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -764,6 +858,7 @@ async fn test_state_3_3_deletion_before_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -797,7 +892,12 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -806,6 +906,7 @@ async fn test_state_3_3_deletion_after_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -841,7 +942,12 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -850,6 +956,7 @@ async fn test_state_3_4_committed_deletion_before_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -885,7 +992,12 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -894,6 +1006,7 @@ async fn test_state_3_4_committed_deletion_after_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -928,7 +1041,12 @@ async fn test_state_3_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -937,6 +1055,7 @@ async fn test_state_3_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_3_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -973,7 +1092,12 @@ async fn test_state_3_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -982,6 +1106,7 @@ async fn test_state_3_6() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_4_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1011,7 +1136,12 @@ async fn test_state_4_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1020,6 +1150,7 @@ async fn test_state_4_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_4_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1051,7 +1182,12 @@ async fn test_state_4_2() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1060,6 +1196,7 @@ async fn test_state_4_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_4_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1094,7 +1231,12 @@ async fn test_state_4_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1103,6 +1245,7 @@ async fn test_state_4_3() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_4_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1139,7 +1282,12 @@ async fn test_state_4_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1148,6 +1296,7 @@ async fn test_state_4_4() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_4_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1183,7 +1332,12 @@ async fn test_state_4_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1192,6 +1346,7 @@ async fn test_state_4_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_4_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1229,7 +1384,12 @@ async fn test_state_4_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1238,6 +1398,7 @@ async fn test_state_4_6() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1269,7 +1430,12 @@ async fn test_state_5_1() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1278,6 +1444,7 @@ async fn test_state_5_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1311,7 +1478,12 @@ async fn test_state_5_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1320,6 +1492,7 @@ async fn test_state_5_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1361,7 +1534,12 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1370,6 +1548,7 @@ async fn test_state_5_3_deletion_before_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1411,7 +1590,12 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1420,6 +1604,7 @@ async fn test_state_5_3_deletion_after_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1463,7 +1648,12 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1472,6 +1662,7 @@ async fn test_state_5_4_committed_deletion_before_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1515,7 +1706,12 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1524,6 +1720,7 @@ async fn test_state_5_4_committed_deletion_after_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1566,7 +1763,12 @@ async fn test_state_5_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1575,6 +1777,7 @@ async fn test_state_5_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_5_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1619,7 +1822,12 @@ async fn test_state_5_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1628,6 +1836,7 @@ async fn test_state_5_6() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1666,7 +1875,12 @@ async fn test_state_6_1() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1675,6 +1889,7 @@ async fn test_state_6_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1715,7 +1930,12 @@ async fn test_state_6_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1724,6 +1944,7 @@ async fn test_state_6_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1772,7 +1993,12 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1781,6 +2007,7 @@ async fn test_state_6_3_deletion_before_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1829,7 +2056,12 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1838,6 +2070,7 @@ async fn test_state_6_3_deletion_after_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
     // Prepare environment setup.
@@ -1887,7 +2120,12 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 500);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1896,6 +2134,7 @@ async fn test_state_6_4_committed_deletion_before_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -1946,7 +2185,12 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -1955,6 +2199,7 @@ async fn test_state_6_4_committed_deletion_after_flush() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2004,7 +2249,12 @@ async fn test_state_6_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2013,6 +2263,7 @@ async fn test_state_6_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_6_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2064,7 +2315,12 @@ async fn test_state_6_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2073,6 +2329,7 @@ async fn test_state_6_6() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_7_1() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2086,7 +2343,12 @@ async fn test_state_7_1() -> IcebergResult<()> {
     assert!(snapshot.indices.file_indices.is_empty());
     assert!(snapshot.data_file_flush_lsn.is_none());
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2095,6 +2357,7 @@ async fn test_state_7_1() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_7_2() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2113,7 +2376,12 @@ async fn test_state_7_2() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2122,6 +2390,7 @@ async fn test_state_7_2() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_7_3() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2141,7 +2410,12 @@ async fn test_state_7_3() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2150,6 +2424,7 @@ async fn test_state_7_3() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_7_4() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2172,7 +2447,12 @@ async fn test_state_7_4() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2181,6 +2461,7 @@ async fn test_state_7_4() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_7_5() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
 
@@ -2201,7 +2482,12 @@ async fn test_state_7_5() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }
@@ -2210,6 +2496,7 @@ async fn test_state_7_5() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_state_7_6() -> IcebergResult<()> {
     let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
         create_table_and_iceberg_manager(&temp_dir).await;
     // Prepare environment setup.
@@ -2232,7 +2519,12 @@ async fn test_state_7_6() -> IcebergResult<()> {
     assert_eq!(snapshot.indices.file_indices.len(), 1);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &iceberg_table_manager.config.warehouse_uri).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     Ok(())
 }

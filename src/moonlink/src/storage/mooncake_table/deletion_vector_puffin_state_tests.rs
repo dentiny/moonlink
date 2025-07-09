@@ -204,7 +204,7 @@ async fn test_1_recover_2_without_local_optimization(#[case] use_batch_write: bo
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         cache_for_recovery.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config,
     )
     .unwrap();
@@ -263,7 +263,7 @@ async fn test_1_recover_2_with_local_optimization(#[case] use_batch_write: bool)
     let mut iceberg_table_manager_to_recover = IcebergTableManager::new(
         table.metadata.clone(),
         cache_for_recovery.clone(),
-        create_local_filesystem_accessor(&iceberg_table_config),
+        create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config,
     )
     .unwrap();

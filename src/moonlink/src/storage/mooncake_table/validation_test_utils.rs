@@ -1,3 +1,4 @@
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 /// This module contains testing utils for validation.
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::puffin_utils;
@@ -45,7 +46,11 @@ pub(crate) async fn check_deletion_vector_consistency_for_snapshot(snapshot: &Sn
 }
 
 /// Test util functions to check recovered snapshot only contains remote filepaths and they do exist.
-pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_uri: &str) {
+pub(crate) async fn validate_recovered_snapshot(
+    snapshot: &Snapshot,
+    warehouse_uri: &str,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
+) {
     let warehouse_directory = std::path::PathBuf::from(warehouse_uri);
     let mut data_filepaths: HashSet<String> = HashSet::new();
 
@@ -53,7 +58,10 @@ pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_u
     for (cur_disk_file, cur_deletion_vector) in snapshot.disk_files.iter() {
         let cur_disk_pathbuf = std::path::PathBuf::from(cur_disk_file.file_path());
         assert!(cur_disk_pathbuf.starts_with(&warehouse_directory));
-        assert!(tokio::fs::try_exists(cur_disk_pathbuf).await.unwrap());
+        assert!(filesystem_accessor
+            .object_exists(cur_disk_file.file_path())
+            .await
+            .unwrap());
         assert!(data_filepaths.insert(cur_disk_file.file_path().clone()));
 
         if cur_deletion_vector.puffin_deletion_blob.is_none() {
@@ -75,14 +83,17 @@ pub(crate) async fn validate_recovered_snapshot(snapshot: &Snapshot, warehouse_u
         // But index blocks are always cached on-disk, so not under warehouse uri.
         for cur_index_block in cur_file_index.index_blocks.iter() {
             let index_pathbuf = std::path::PathBuf::from(&cur_index_block.index_file.file_path());
-            assert!(tokio::fs::try_exists(&index_pathbuf).await.unwrap());
+            assert!(tokio::fs::try_exists(&index_pathbuf).await.unwrap()); // TODO(hjiang): Double check why it's not remote path.
         }
 
         // Check data files referenced by index blocks are imported into iceberg table.
         for cur_data_filepath in cur_file_index.files.iter() {
             let data_file_pathbuf = std::path::PathBuf::from(cur_data_filepath.file_path());
             assert!(data_file_pathbuf.starts_with(&warehouse_directory));
-            assert!(tokio::fs::try_exists(&data_file_pathbuf).await.unwrap());
+            assert!(filesystem_accessor
+                .object_exists(cur_data_filepath.file_path())
+                .await
+                .unwrap());
             index_referenced_data_filepaths.insert(cur_data_filepath.file_path().clone());
         }
     }

@@ -1,3 +1,5 @@
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::filesystem::test_utils::object_storage_test_utils::*;
 use crate::storage::iceberg::tokio_retry_utils;
@@ -47,15 +49,6 @@ pub(crate) fn create_s3_filesystem_config(warehouse_uri: &str) -> FileSystemConf
 pub(crate) fn get_test_s3_bucket_and_warehouse(
 ) -> (String /*bucket_name*/, String /*warehouse_url*/) {
     get_bucket_and_warehouse(S3_TEST_BUCKET_PREFIX, S3_TEST_WAREHOUSE_URI_PREFIX)
-}
-
-#[allow(dead_code)]
-pub(crate) fn get_test_minio_bucket(warehouse_uri: &str) -> String {
-    let random_string = warehouse_uri
-        .strip_prefix(S3_TEST_WAREHOUSE_URI_PREFIX)
-        .unwrap()
-        .to_string();
-    format!("{}{}", S3_TEST_BUCKET_PREFIX, random_string)
 }
 
 /// Create test bucket in minio server.
@@ -108,8 +101,28 @@ pub(crate) async fn create_test_s3_bucket(bucket: String) -> IcebergResult<()> {
     Ok(())
 }
 
+/// Util function to delete all objects in a GCS bucket.
+async fn delete_s3_bucket_objects(bucket: &str) -> IcebergResult<()> {
+    let filesystem_config = create_s3_filesystem_config(&format!("s3://{}", bucket));
+    let filesystem_accessor = FileSystemAccessor::new(filesystem_config);
+    filesystem_accessor
+        .remove_directory("/")
+        .await
+        .map_err(|e| {
+            IcebergError::new(
+                iceberg::ErrorKind::Unexpected,
+                format!("Failed to remove directory in bucket {}: {}", bucket, e),
+            )
+        })?;
+    Ok(())
+}
+
 /// Delete test bucket in minio server.
 pub async fn delete_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
+    // Delete all objects in the bucket first.
+    delete_s3_bucket_objects(&bucket).await?;
+
+    // Now delete the bucket.
     let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
     let string_to_sign = format!("DELETE\n\n\n{}\n/{}", date, bucket);
 

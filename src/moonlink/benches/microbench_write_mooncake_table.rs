@@ -55,7 +55,7 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
         warehouse_uri: warehouse_location.clone(),
         namespace: vec!["default".to_string()],
         table_name: table_name.to_string(),
-        catalog_config: moonlink::FileSystemConfig::FileSystem {
+        filesystem_config: moonlink::FileSystemConfig::FileSystem {
             root_directory: warehouse_location.clone(),
         },
     };
