@@ -617,6 +617,7 @@ impl TableHandler {
         }
     }
 
+    // Whether to discard current table event.
     fn to_discard(lsn: u64, initial_persistence_lsn: Option<u64>) -> bool {
         if initial_persistence_lsn.is_none() {
             return false;
@@ -625,6 +626,7 @@ impl TableHandler {
         lsn <= initial_persistence_lsn
     }
 
+    // Invoked before mooncake snapshot creation, this function checks and resets iceberg snapshot state.
     fn reset_iceberg_state_at_mooncake_snapshot(
         iceberg_consumed: &mut bool,
         iceberg_ongoing: &mut bool,
