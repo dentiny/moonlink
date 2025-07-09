@@ -82,10 +82,10 @@ impl FileSystemAccessor {
                         disable_auth,
                         ..
                     } => {
-                        let mut builder = services::Gcs::default()
-                            .root("/")
-                            .bucket(bucket)
-                            .endpoint(endpoint);
+                        let mut builder = services::Gcs::default().root("/").bucket(bucket);
+                        if let Some(endpoint) = endpoint {
+                            builder = builder.endpoint(endpoint);
+                        }
                         if *disable_auth {
                             builder = builder
                                 .disable_config_load()

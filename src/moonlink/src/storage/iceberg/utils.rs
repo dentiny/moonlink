@@ -300,8 +300,11 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
             ..
         } => {
             let mut file_io_builder = FileIOBuilder::new("GCS")
-                .with_prop(iceberg::io::GCS_PROJECT_ID, project)
-                .with_prop(iceberg::io::GCS_SERVICE_PATH, endpoint);
+                .with_prop(iceberg::io::GCS_PROJECT_ID, "coral-ring-465417-r0");
+            if let Some(endpoint) = endpoint {
+                file_io_builder =
+                    file_io_builder.with_prop(iceberg::io::GCS_SERVICE_PATH, endpoint);
+            }
             if *disable_auth {
                 file_io_builder = file_io_builder
                     .with_prop(iceberg::io::GCS_NO_AUTH, "true")
