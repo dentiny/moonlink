@@ -57,22 +57,31 @@ jobs:
     name: Unit Tests + Coverage (llvm-cov + nextest)
     runs-on: ubuntu-latest
 
-    services:
-      fake-gcs:
-        image: fsouza/fake-gcs-server:latest
-        ports:
-          - 4443:4443
-        env:
-          STORAGE_DIR: /data
-        options: >-
-          --hostname gcs
-          --health-cmd "curl -f http://localhost:4443/storage/v1/b || exit 1"
-          --health-interval 3s
-          --health-timeout 3s
-          --health-retries 10
-
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start Fake GCS Server (HTTP mode)
+        run: |
+          docker run -d \
+            --name fake-gcs \
+            -p 4443:4443 \
+            -e STORAGE_DIR=/data \
+            fsouza/fake-gcs-server:latest \
+            -scheme http -port 4443
+
+      - name: Add gcs.local to /etc/hosts
+        run: echo "127.0.0.1 gcs.local" | sudo tee -a /etc/hosts
+
+      - name: Wait for Fake GCS to be ready
+        run: |
+          for i in {1..10}; do
+            if curl -sf http://gcs.local:4443/storage/v1/b; then
+              echo "Fake GCS is up!"
+              break
+            fi
+            echo "Waiting for Fake GCS..."
+            sleep 2
+          done
 
       - uses: dtolnay/rust-toolchain@stable
         id: toolchain
