@@ -82,8 +82,9 @@ pub(crate) async fn validate_recovered_snapshot(
         // Check index blocks are imported into the iceberg table.
         // But index blocks are always cached on-disk, so not under warehouse uri.
         for cur_index_block in cur_file_index.index_blocks.iter() {
+            // Index blocks are always placed in object storage cache, so mooncake snapshot references to local files.
             let index_pathbuf = std::path::PathBuf::from(&cur_index_block.index_file.file_path());
-            assert!(tokio::fs::try_exists(&index_pathbuf).await.unwrap()); // TODO(hjiang): Double check why it's not remote path.
+            assert!(tokio::fs::try_exists(&index_pathbuf).await.unwrap());
         }
 
         // Check data files referenced by index blocks are imported into iceberg table.
