@@ -7,12 +7,15 @@ use crate::storage::filesystem::gcs::test_guard::TestGuard;
 use rstest::rstest;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_copy_from_local_to_remote() {
+#[rstest]
+#[case(10)]
+#[case(18 * 1024 * 1024)]
+async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
     // Prepare src file.
     let temp_dir = tempfile::tempdir().unwrap();
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
     let src_filepath = format!("{}/src", &root_directory);
-    create_local_file(&src_filepath).await;
+    let expected_content = create_local_file(&src_filepath, file_size).await;
 
     let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
     let _test_guard = TestGuard::new(bucket.clone()).await;
@@ -31,7 +34,7 @@ async fn test_copy_from_local_to_remote() {
         .read_object_as_string(&dst_filepath)
         .await
         .unwrap();
-    assert_eq!(actual_content, TEST_CONTEST);
+    assert_eq!(actual_content, expected_content);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
