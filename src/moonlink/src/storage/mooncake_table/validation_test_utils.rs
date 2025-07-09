@@ -1,3 +1,4 @@
+use crate::row::MoonlinkRow;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 /// This module contains testing utils for validation.
 use crate::storage::iceberg::deletion_vector::DeletionVector;
@@ -6,6 +7,8 @@ use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::DiskFileEntry;
 use crate::storage::mooncake_table::Snapshot;
 use crate::storage::storage_utils::FileId;
+use crate::storage::storage_utils::RawDeletionRecord;
+use crate::storage::storage_utils::RecordLocation;
 use crate::ObjectStorageCache;
 
 use iceberg::io::FileIOBuilder;
@@ -117,4 +120,65 @@ pub(crate) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache,
     let non_evicted_file_ids = object_storage_cache.get_non_evictable_filenames().await;
     let table_unique_file_id = get_unique_table_file_id(file_id);
     assert!(non_evicted_file_ids.contains(&table_unique_file_id));
+}
+
+/// Test util function to check the given row doesn't exist in the snapshot indices.
+pub(crate) async fn check_row_index_nonexistent(snapshot: &Snapshot, row: &MoonlinkRow) {
+    let key = snapshot.metadata.identity.get_lookup_key(row);
+    let locs = snapshot
+        .indices
+        .find_record(&RawDeletionRecord {
+            lookup_key: key,
+            row_identity: snapshot.metadata.identity.extract_identity_for_key(row),
+            pos: None,
+            lsn: 0, // LSN has nothing to do with deletion record search
+        })
+        .await;
+    assert!(
+        locs.is_empty(),
+        "Deletion record {:?} exists for row {:?}",
+        locs,
+        row
+    );
+}
+
+/// Test util function to check the given row exists in snapshot, and it's on-disk.
+pub(crate) async fn check_row_index_on_disk(
+    snapshot: &Snapshot,
+    row: &MoonlinkRow,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
+) {
+    let key = snapshot.metadata.identity.get_lookup_key(row);
+    let locs = snapshot
+        .indices
+        .find_record(&RawDeletionRecord {
+            lookup_key: key,
+            row_identity: snapshot.metadata.identity.extract_identity_for_key(row),
+            pos: None,
+            lsn: 0, // LSN has nothing to do with deletion record search
+        })
+        .await;
+    assert_eq!(
+        locs.len(),
+        1,
+        "Actual location for row {:?} is {:?}",
+        row,
+        locs
+    );
+    match &locs[0] {
+        RecordLocation::DiskFile(file_id, _) => {
+            let filepath = snapshot
+                .disk_files
+                .get_key_value(&FileId(file_id.0))
+                .as_ref()
+                .unwrap()
+                .0
+                .file_path();
+            let exists = filesystem_accessor.object_exists(filepath).await.unwrap();
+            assert!(exists, "Data file {:?} doesn't exist", filepath);
+        }
+        _ => {
+            panic!("Unexpected location {:?}", locs[0]);
+        }
+    }
 }

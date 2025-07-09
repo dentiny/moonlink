@@ -1,6 +1,5 @@
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
@@ -21,7 +20,6 @@ use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::MooncakeTableConfig;
-use crate::storage::mooncake_table::Snapshot;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotDataCompactionPayload, IcebergSnapshotImportPayload,
@@ -29,10 +27,7 @@ use crate::storage::mooncake_table::{
 };
 use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
-use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
-use crate::storage::storage_utils::RawDeletionRecord;
-use crate::storage::storage_utils::RecordLocation;
 use crate::storage::MooncakeTable;
 use crate::FileSystemAccessor;
 use crate::ObjectStorageCache;
@@ -192,6 +187,56 @@ async fn test_snapshot_load_for_multiple_times() {
         });
     }));
     assert!(result.is_err());
+}
+
+/// ================================
+/// Test skip iceberg snapshot
+/// ================================
+///
+/// Test scenario: iceberg snapshot is requested to skip when creating mooncake snapshot.
+#[tokio::test]
+async fn test_skip_iceberg_snapshot() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().to_path_buf();
+    let warehouse_uri = path.clone().to_str().unwrap().to_string();
+    let mooncake_table_metadata =
+        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    let schema = create_test_arrow_schema();
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*table_id=*/ 1,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(&temp_dir),
+        create_test_filesystem_accessor(&iceberg_table_config),
+    )
+    .await
+    .unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    // Persist data file to local filesystem, so iceberg snapshot should be created, if skip iceberg not specified.
+    let row = test_row_1();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 10);
+    table.flush(/*lsn=*/ 10).await.unwrap();
+
+    // Create mooncake snapshot.
+    assert!(table.create_snapshot(SnapshotOption {
+        force_create: false,
+        skip_iceberg_snapshot: true,
+        skip_file_indices_merge: false,
+        skip_data_file_compaction: false,
+    }));
+    let (_, iceberg_snapshot_payload, _, _, _) =
+        sync_mooncake_snapshot(&mut table, &mut notify_rx).await;
+    assert!(iceberg_snapshot_payload.is_none());
 }
 
 /// ================================
@@ -1027,96 +1072,6 @@ async fn test_empty_content_snapshot_creation_with_gcs() {
         .unwrap();
 }
 
-/// Testing scenario: when mooncake snapshot is created periodically, there're no committed deletion logs later than flush LSN.
-/// In the test case we shouldn't create iceberg snapshot.
-#[tokio::test]
-async fn test_create_snapshot_when_no_committed_deletion_log_to_flush() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().to_path_buf();
-    let warehouse_uri = path.clone().to_str().unwrap().to_string();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
-
-    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
-    let schema = create_test_arrow_schema();
-    let mut table = MooncakeTable::new(
-        schema.as_ref().clone(),
-        "test_table".to_string(),
-        /*table_id=*/ 1,
-        path,
-        identity_property,
-        iceberg_table_config.clone(),
-        MooncakeTableConfig::default(),
-        ObjectStorageCache::default_for_test(&temp_dir),
-        create_test_filesystem_accessor(&iceberg_table_config),
-    )
-    .await
-    .unwrap();
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    table.register_table_notify(notify_tx).await;
-
-    let row = test_row_1();
-    table.append(row.clone()).unwrap();
-    table.commit(/*lsn=*/ 10);
-    table.flush(/*lsn=*/ 10).await.unwrap();
-    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
-
-    // Second time snapshot check, committed deletion logs haven't reached flush LSN.
-    table.delete(row.clone(), /*lsn=*/ 20).await;
-    table.commit(/*lsn=*/ 30);
-
-    let (_, iceberg_snapshot_payload, _, _, _) =
-        create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
-    assert!(iceberg_snapshot_payload.is_none());
-}
-
-/// Test scenario: iceberg snapshot is requested to skip when creating mooncake snapshot.
-#[tokio::test]
-async fn test_skip_iceberg_snapshot() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().to_path_buf();
-    let warehouse_uri = path.clone().to_str().unwrap().to_string();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
-
-    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
-    let schema = create_test_arrow_schema();
-    let mut table = MooncakeTable::new(
-        schema.as_ref().clone(),
-        "test_table".to_string(),
-        /*table_id=*/ 1,
-        path,
-        identity_property,
-        iceberg_table_config.clone(),
-        MooncakeTableConfig::default(),
-        ObjectStorageCache::default_for_test(&temp_dir),
-        create_test_filesystem_accessor(&iceberg_table_config),
-    )
-    .await
-    .unwrap();
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    table.register_table_notify(notify_tx).await;
-
-    // Persist data file to local filesystem, so iceberg snapshot should be created, if skip iceberg not specified.
-    let row = test_row_1();
-    table.append(row.clone()).unwrap();
-    table.commit(/*lsn=*/ 10);
-    table.flush(/*lsn=*/ 10).await.unwrap();
-
-    // Create mooncake snapshot.
-    assert!(table.create_snapshot(SnapshotOption {
-        force_create: false,
-        skip_iceberg_snapshot: true,
-        skip_file_indices_merge: false,
-        skip_data_file_compaction: false,
-    }));
-    let (_, iceberg_snapshot_payload, _, _, _) =
-        sync_mooncake_snapshot(&mut table, &mut notify_rx).await;
-    assert!(iceberg_snapshot_payload.is_none());
-}
-
 /// Test scenario: small batch size and large parquet file, which means:
 /// 1. all rows live within their own record batch, and potentially their own batch deletion vector.
 /// 2. when flushed to on-disk parquet files, they're grouped into one file but different arrow batch records.
@@ -1199,6 +1154,90 @@ async fn test_small_batch_size_and_large_parquet_size() {
     );
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
+}
+
+/// Testing scenario: a large number of deletion records are requested to persist to iceberg, thus multiple table auto increment ids are needed.
+/// For more details, please refer to https://github.com/Mooncake-Labs/moonlink/issues/640
+#[tokio::test]
+async fn test_multiple_table_ids_for_deletion_vector() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().to_path_buf();
+    let mooncake_table_config = MooncakeTableConfig {
+        // Flush as long as there's new rows appended at commit.
+        mem_slice_size: 1,
+        // At flush, place each row in a separate parquet file.
+        disk_slice_parquet_file_size: 1,
+        ..Default::default()
+    };
+    let mooncake_table_metadata = create_test_table_metadata_with_config(
+        temp_dir.path().to_str().unwrap().to_string(),
+        mooncake_table_config,
+    );
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = get_iceberg_table_config(&temp_dir);
+    let schema = create_test_arrow_schema();
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*table_id=*/ 1,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(&temp_dir),
+        create_test_filesystem_accessor(&iceberg_table_config),
+    )
+    .await
+    .unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    // Create a large number of data files, which is larger than [`NUM_FILES_PER_FLUSH`].
+    let target_data_files_num = storage_utils::NUM_FILES_PER_FLUSH + 1;
+    let mut all_rows = Vec::with_capacity(target_data_files_num as usize);
+    for idx in 0..target_data_files_num {
+        let cur_row = MoonlinkRow::new(vec![
+            RowValue::Int32(idx as i32),
+            RowValue::ByteArray(idx.to_be_bytes().to_vec()),
+            RowValue::Int32(idx as i32),
+        ]);
+        all_rows.push(cur_row.clone());
+        table.append(cur_row).unwrap();
+        table.commit(/*lsn=*/ idx);
+        table.flush(/*lsn=*/ idx).await.unwrap();
+    }
+
+    // Create the first mooncake and iceberg snapshot, which include [`target_data_files_num`] number of files.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Delete all rows, which corresponds to large number of deletion vector puffin files.
+    for cur_row in all_rows.into_iter() {
+        table.delete(cur_row, /*lsn=*/ target_data_files_num).await;
+    }
+    table.commit(/*lsn=*/ target_data_files_num + 1);
+    table
+        .flush(/*lsn=*/ target_data_files_num + 1)
+        .await
+        .unwrap();
+
+    // Create the second mooncake and iceberg snapshot, which include [`target_data_files_num`] number of deletion vector puffin files.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Load snaphot from iceberg table to validate.
+    let (_, mut iceberg_table_manager_for_recovery, _) =
+        create_table_and_iceberg_manager(&temp_dir).await;
+    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id as u64, target_data_files_num * 3); // one for data file, one for deletion vector puffin, one for file indices.
+
+    // Check deletion vector puffin files' file id.
+    assert_eq!(snapshot.disk_files.len() as u64, target_data_files_num);
+    for (_, cur_disk_file_entry) in snapshot.disk_files.iter() {
+        assert!(cur_disk_file_entry.puffin_deletion_blob.is_some());
+    }
 }
 
 /// Testing scenario: mooncake snapshot and iceberg snapshot doesn't correspond to each other 1-1.
@@ -1358,102 +1397,28 @@ async fn test_async_iceberg_snapshot() {
     assert!(arrow_batch_3_persisted, "Arrow batch 3 is not persisted!");
 }
 
-/// Test util function to check the given row doesn't exist in the snapshot indices.
-async fn check_row_index_nonexistent(snapshot: &Snapshot, row: &MoonlinkRow) {
-    let key = snapshot.metadata.identity.get_lookup_key(row);
-    let locs = snapshot
-        .indices
-        .find_record(&RawDeletionRecord {
-            lookup_key: key,
-            row_identity: snapshot.metadata.identity.extract_identity_for_key(row),
-            pos: None,
-            lsn: 0, // LSN has nothing to do with deletion record search
-        })
-        .await;
-    assert!(
-        locs.is_empty(),
-        "Deletion record {:?} exists for row {:?}",
-        locs,
-        row
-    );
-}
-
-/// Test util function to check the given row exists in snapshot, and it's on-disk.
-async fn check_row_index_on_disk(
-    snapshot: &Snapshot,
-    row: &MoonlinkRow,
-    filesystem_accessor: &dyn BaseFileSystemAccess,
-) {
-    let key = snapshot.metadata.identity.get_lookup_key(row);
-    let locs = snapshot
-        .indices
-        .find_record(&RawDeletionRecord {
-            lookup_key: key,
-            row_identity: snapshot.metadata.identity.extract_identity_for_key(row),
-            pos: None,
-            lsn: 0, // LSN has nothing to do with deletion record search
-        })
-        .await;
-    assert_eq!(
-        locs.len(),
-        1,
-        "Actual location for row {:?} is {:?}",
-        row,
-        locs
-    );
-    match &locs[0] {
-        RecordLocation::DiskFile(file_id, _) => {
-            let filepath = snapshot
-                .disk_files
-                .get_key_value(&FileId(file_id.0))
-                .as_ref()
-                .unwrap()
-                .0
-                .file_path();
-            let exists = filesystem_accessor.object_exists(filepath).await.unwrap();
-            assert!(exists, "Data file {:?} doesn't exist", filepath);
-        }
-        _ => {
-            panic!("Unexpected location {:?}", locs[0]);
-        }
-    }
-}
-
-async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
-    // For the ease of testing, we use different directories for mooncake table and iceberg warehouse uri.
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().to_path_buf();
-
+/// ================================
+/// Test mooncake snapshot
+/// ================================
+///
+async fn mooncake_table_snapshot_persist_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
     let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
 
-    let iceberg_table_config = create_iceberg_table_config(warehouse_uri.clone());
-    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
-    let schema = create_test_arrow_schema();
-    // Create iceberg snapshot whenever `create_snapshot` is called.
-    let mooncake_table_config = MooncakeTableConfig {
-        persistence_config: IcebergPersistenceConfig {
-            new_data_file_count: 0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    let mut table = MooncakeTable::new(
-        schema.as_ref().clone(),
-        "test_table".to_string(),
-        /*table_id=*/ 1,
-        path,
-        identity_property.clone(),
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+
+    // Create mooncake table and table event notification receiver.
+    let (mut table, mut notify_rx) = create_mooncake_table_and_notify(
+        mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
-        mooncake_table_config,
-        ObjectStorageCache::default_for_test(&temp_dir),
-        filesystem_accessor.clone(),
+        object_storage_cache.clone(),
     )
-    .await
-    .unwrap();
-    table.register_table_notify(notify_tx).await;
+    .await;
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
 
     // Perform a few table write operations.
     //
@@ -1487,7 +1452,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate and fresh new cache for each recovery.
         filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
@@ -1509,7 +1474,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 200);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
@@ -1522,7 +1492,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         .await
         .unwrap();
     let expected_arrow_batch = RecordBatch::try_new(
-        schema.clone(),
+        create_test_arrow_schema(),
         // row2 and row3
         vec![
             Arc::new(Int32Array::from(vec![2, 3])),
@@ -1553,7 +1523,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate and fresh new cache for each recovery.
         filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
@@ -1577,7 +1547,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 300);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
@@ -1610,7 +1585,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate and fresh new cache for each recovery.
         filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
@@ -1633,7 +1608,12 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     check_row_index_on_disk(&snapshot, &row3, filesystem_accessor.as_ref()).await;
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 400);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(&snapshot, &warehouse_uri, filesystem_accessor.as_ref()).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_config.warehouse_uri,
+        filesystem_accessor.as_ref(),
+    )
+    .await;
 
     // Check the loaded data file is of the expected format and content.
     let file_io = iceberg_table_manager
@@ -1671,7 +1651,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        ObjectStorageCache::default_for_test(&temp_dir), // Use separate and fresh new cache for each recovery.
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate and fresh new cache for each recovery.
         filesystem_accessor.clone(),
         iceberg_table_config.clone(),
     )
@@ -1708,7 +1688,7 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
         .unwrap();
 
     let expected_arrow_batch = RecordBatch::try_new(
-        schema.clone(),
+        create_test_arrow_schema(),
         // row4
         vec![
             Arc::new(Int32Array::from(vec![4])),
@@ -1729,19 +1709,28 @@ async fn mooncake_table_snapshot_persist_impl(warehouse_uri: String) {
 
 #[tokio::test]
 async fn test_filesystem_sync_snapshots() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().to_str().unwrap().to_string();
-    mooncake_table_snapshot_persist_impl(path).await
+    // Local filesystem for iceberg.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+
+    // Common testing logic.
+    mooncake_table_snapshot_persist_impl(iceberg_table_config).await;
 }
 
 #[tokio::test]
 #[cfg(feature = "storage-s3")]
 async fn test_object_storage_sync_snapshots_with_s3() {
+    // Remote object storage for iceberg.
     let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
     s3_test_utils::create_test_s3_bucket(bucket_name.clone())
         .await
         .unwrap();
-    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    mooncake_table_snapshot_persist_impl(iceberg_table_config.clone()).await;
+
+    // Clean up testing environment.
     s3_test_utils::delete_test_s3_bucket(bucket_name.clone())
         .await
         .unwrap();
@@ -1750,150 +1739,18 @@ async fn test_object_storage_sync_snapshots_with_s3() {
 #[tokio::test]
 #[cfg(feature = "storage-gcs")]
 async fn test_object_storage_sync_snapshots_with_gcs() {
+    // Remote object storage for iceberg.
     let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
     gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
         .await
         .unwrap();
-    mooncake_table_snapshot_persist_impl(warehouse_uri).await;
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    mooncake_table_snapshot_persist_impl(iceberg_table_config.clone()).await;
+
+    // Clean up testing environment.
     gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone())
         .await
         .unwrap();
-}
-
-#[tokio::test]
-async fn test_drop_table_at_creation() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().to_str().unwrap().to_string();
-    let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
-
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let iceberg_table_config = create_iceberg_table_config(path.clone());
-
-    // Create iceberg snapshot whenever `create_snapshot` is called.
-    let mooncake_table_config = MooncakeTableConfig {
-        persistence_config: IcebergPersistenceConfig {
-            new_data_file_count: 0,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    let mut table = MooncakeTable::new(
-        create_test_arrow_schema().as_ref().clone(),
-        "test_table".to_string(),
-        /*table_id=*/ 1,
-        PathBuf::from(&path),
-        mooncake_table_metadata.identity.clone(),
-        iceberg_table_config.clone(),
-        mooncake_table_config,
-        ObjectStorageCache::default_for_test(&temp_dir),
-        create_test_filesystem_accessor(&iceberg_table_config),
-    )
-    .await
-    .unwrap();
-    let row = test_row_1();
-    table.append(row.clone()).unwrap();
-    table.commit(/*lsn=*/ 100);
-    table.flush(/*lsn=*/ 200).await.unwrap();
-
-    // Create a new iceberg table manager, recovery gets a fresh state.
-    let mut iceberg_table_manager = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
-        create_test_filesystem_accessor(&iceberg_table_config),
-        iceberg_table_config.clone(),
-    )
-    .unwrap();
-    let (next_file_id, snapshot) = iceberg_table_manager
-        .load_snapshot_from_table()
-        .await
-        .unwrap();
-    assert_eq!(next_file_id, 0);
-    assert!(snapshot.disk_files.is_empty());
-    assert!(snapshot.indices.file_indices.is_empty());
-    assert!(snapshot.data_file_flush_lsn.is_none());
-}
-
-/// Testing scenario: a large number of deletion records are requested to persist to iceberg, thus multiple table auto increment ids are needed.
-/// For more details, please refer to https://github.com/Mooncake-Labs/moonlink/issues/640
-#[tokio::test]
-async fn test_multiple_table_ids_for_deletion_vector() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let path = temp_dir.path().to_path_buf();
-    let mooncake_table_config = MooncakeTableConfig {
-        // Flush as long as there's new rows appended at commit.
-        mem_slice_size: 1,
-        // At flush, place each row in a separate parquet file.
-        disk_slice_parquet_file_size: 1,
-        ..Default::default()
-    };
-    let mooncake_table_metadata = create_test_table_metadata_with_config(
-        temp_dir.path().to_str().unwrap().to_string(),
-        mooncake_table_config,
-    );
-    let identity_property = mooncake_table_metadata.identity.clone();
-
-    let iceberg_table_config = get_iceberg_table_config(&temp_dir);
-    let schema = create_test_arrow_schema();
-    let mut table = MooncakeTable::new(
-        schema.as_ref().clone(),
-        "test_table".to_string(),
-        /*table_id=*/ 1,
-        path,
-        identity_property,
-        iceberg_table_config.clone(),
-        MooncakeTableConfig::default(),
-        ObjectStorageCache::default_for_test(&temp_dir),
-        create_test_filesystem_accessor(&iceberg_table_config),
-    )
-    .await
-    .unwrap();
-    let (notify_tx, mut notify_rx) = mpsc::channel(100);
-    table.register_table_notify(notify_tx).await;
-
-    // Create a large number of data files, which is larger than [`NUM_FILES_PER_FLUSH`].
-    let target_data_files_num = storage_utils::NUM_FILES_PER_FLUSH + 1;
-    let mut all_rows = Vec::with_capacity(target_data_files_num as usize);
-    for idx in 0..target_data_files_num {
-        let cur_row = MoonlinkRow::new(vec![
-            RowValue::Int32(idx as i32),
-            RowValue::ByteArray(idx.to_be_bytes().to_vec()),
-            RowValue::Int32(idx as i32),
-        ]);
-        all_rows.push(cur_row.clone());
-        table.append(cur_row).unwrap();
-        table.commit(/*lsn=*/ idx);
-        table.flush(/*lsn=*/ idx).await.unwrap();
-    }
-
-    // Create the first mooncake and iceberg snapshot, which include [`target_data_files_num`] number of files.
-    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
-
-    // Delete all rows, which corresponds to large number of deletion vector puffin files.
-    for cur_row in all_rows.into_iter() {
-        table.delete(cur_row, /*lsn=*/ target_data_files_num).await;
-    }
-    table.commit(/*lsn=*/ target_data_files_num + 1);
-    table
-        .flush(/*lsn=*/ target_data_files_num + 1)
-        .await
-        .unwrap();
-
-    // Create the second mooncake and iceberg snapshot, which include [`target_data_files_num`] number of deletion vector puffin files.
-    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
-
-    // Load snaphot from iceberg table to validate.
-    let (_, mut iceberg_table_manager_for_recovery, _) =
-        create_table_and_iceberg_manager(&temp_dir).await;
-    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
-        .load_snapshot_from_table()
-        .await
-        .unwrap();
-    assert_eq!(next_file_id as u64, target_data_files_num * 3); // one for data file, one for deletion vector puffin, one for file indices.
-
-    // Check deletion vector puffin files' file id.
-    assert_eq!(snapshot.disk_files.len() as u64, target_data_files_num);
-    for (_, cur_disk_file_entry) in snapshot.disk_files.iter() {
-        assert!(cur_disk_file_entry.puffin_deletion_blob.is_some());
-    }
 }
