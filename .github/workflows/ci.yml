@@ -60,7 +60,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Start Fake GCS Server (HTTP mode)
+      # ─────────────────────── Start Fake GCS Server ──────────────────────────
+      - name: Start Fake GCS Server
         run: |
           docker run -d \
             --name fake-gcs \
@@ -69,20 +70,47 @@ jobs:
             fsouza/fake-gcs-server:latest \
             -scheme http -port 4443
 
-      - name: Add gcs.local to /etc/hosts
-        run: echo "127.0.0.1 gcs.local" | sudo tee -a /etc/hosts
+      # ─────────────────────── Start Fake S3 Server ──────────────────────────
+      - name: Start MinIO Server
+        run: |
+          docker run -d \
+            --name minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=minioadmin \
+            -e MINIO_ROOT_PASSWORD=minioadmin \
+            minio/minio:latest server /data
 
-      - name: Wait for Fake GCS to be ready
+      # ─────────────── Add hostnames to /etc/hosts ──────────────────────────
+      - name: Add gcs.local and s3.local to /etc/hosts
+        run: |
+          echo "127.0.0.1 gcs.local" | sudo tee -a /etc/hosts
+          echo "127.0.0.1 s3.local"  | sudo tee -a /etc/hosts
+
+      # ───────────────────── Wait for Fake GCS to be ready ───────────────────
+      - name: Wait for Fake GCS
         run: |
           for i in {1..10}; do
             if curl -sf http://gcs.local:4443/storage/v1/b; then
-              echo "Fake GCS is up!"
+              echo "Fake GCS is ready!"
               break
             fi
             echo "Waiting for Fake GCS..."
             sleep 2
           done
 
+      # ───────────────────── Wait for Fake S3 to be ready ───────────────────
+      - name: Wait for Fake S3
+        run: |
+          for i in {1..10}; do
+            if curl -sf http://s3.local:9000/minio/health/ready; then
+              echo "Fake S3 is ready!"
+              break
+            fi
+            echo "Waiting for Fake GCS..."
+            sleep 2
+          done
+
+      # ────────────────────── Toolchain + Test Tools ─────────────────────────
       - uses: dtolnay/rust-toolchain@stable
         id: toolchain
         with:
@@ -97,25 +125,15 @@ jobs:
       - uses: taiki-e/install-action@v2
         with: { tool: nextest }
 
-      - name: Add gcs.local to /etc/hosts
-        run: |
-          echo "127.0.0.1 gcs.local" | sudo tee -a /etc/hosts
-
-      - name: Wait for Fake GCS to be ready
-        run: |
-          for i in {1..10}; do
-            if curl -sf http://gcs.local:4443/storage/v1/b; then
-              echo "Fake GCS is up!"
-              break
-            fi
-            echo "Waiting for Fake GCS..."
-            sleep 2
-          done
-
-      - name: Run gcs tests
+      - name: Run GCS feature tests
         timeout-minutes: 5
         run: |
           cargo test -p moonlink --features=storage-gcs
+
+      - name: Run S3 feature tests
+        timeout-minutes: 5
+        run: |
+          cargo test -p moonlink --features=storage-s3
 
       - name: Run tests via llvm-cov/nextest
         timeout-minutes: 5
