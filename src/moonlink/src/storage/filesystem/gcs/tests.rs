@@ -30,8 +30,6 @@ async fn test_copy_from_local_to_remote() {
         .unwrap();
     assert_eq!(actual_content, TEST_CONTEST);
 
-    // Delete all objects within the bucket, otherwise fake GCS server doesn't allow deletion.
-    filesystem_accessor.remove_directory("/").await.unwrap();
     // Clean up test bucket.
     delete_test_gcs_bucket(bucket.clone()).await.unwrap();
 }
@@ -60,4 +58,7 @@ async fn test_copy_from_remote_to_local() {
     // Validate destination file content.
     let actual_content = tokio::fs::read_to_string(dst_filepath).await.unwrap();
     assert_eq!(actual_content, TEST_CONTEST);
+
+    // Clean up test bucket.
+    delete_test_gcs_bucket(bucket.clone()).await.unwrap();
 }
