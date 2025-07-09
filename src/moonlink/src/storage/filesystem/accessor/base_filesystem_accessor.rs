@@ -30,6 +30,9 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     /// Return whether the given object exists.
     async fn object_exists(&self, object: &str) -> Result<bool>;
 
+    /// Return the object size.
+    async fn get_object_size(&self, object: &str) -> Result<u64>;
+
     /// Read the whole content for the given object.
     /// Notice, it's not suitable to read large files; as of now it's made for metadata files.
     async fn read_object(&self, object: &str) -> Result<Vec<u8>>;

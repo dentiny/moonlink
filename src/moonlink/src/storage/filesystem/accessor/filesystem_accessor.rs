@@ -117,6 +117,42 @@ impl FileSystemAccessor {
             })
             .await
     }
+
+    /// Util function to get local file size.
+    async fn get_local_file_size(path: &str) -> Result<u64> {
+        let file = tokio::fs::File::open(path).await?;
+        let metadata = file.metadata().await?;
+        let file_size = metadata.len();
+        Ok(file_size)
+    }
+
+    /// Upload a small file from [`src`] to [`dst`].
+    /// Precondition: both paths have been sanitized.
+    async fn upload_small_file(
+        &self,
+        src: &str,
+        dst: &str,
+        file_size: u64,
+    ) -> Result<ObjectMetadata> {
+        let content = tokio::fs::read(src).await?;
+        self.write_object(dst, content).await?;
+        Ok(ObjectMetadata { size: file_size })
+    }
+
+    /// Download a small file from [`src`] to [`dst`].
+    /// Precondition: both paths have been sanitized.
+    async fn download_small_file(
+        &self,
+        src: &str,
+        dst: &str,
+        file_size: u64,
+    ) -> Result<ObjectMetadata> {
+        let content = self.read_object(src).await?;
+        let mut dst_file = tokio::fs::File::create(dst).await?;
+        dst_file.write_all(&content).await?;
+        dst_file.flush().await?;
+        Ok(ObjectMetadata { size: file_size })
+    }
 }
 
 #[async_trait]
@@ -206,6 +242,17 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         }
     }
 
+    async fn get_object_size(&self, object: &str) -> Result<u64> {
+        let operator = self.get_operator().await?;
+        let sanitized = self.sanitize_path(object);
+        let meta = operator
+            .stat(sanitized)
+            .await
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        let file_size = meta.content_length();
+        Ok(file_size)
+    }
+
     async fn read_object(&self, object: &str) -> Result<Vec<u8>> {
         let sanitized_object = self.sanitize_path(object);
         let content = self.get_operator().await?.read(sanitized_object).await?;
@@ -233,7 +280,17 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn copy_from_local_to_remote(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
+        // For small files, no need to parallelize IO operations.
         let sanitized_dst = self.sanitize_path(dst);
+        let file_size = Self::get_local_file_size(src).await?;
+        if file_size <= IO_BLOCK_SIZE as u64 {
+            let metadata = self
+                .upload_small_file(src, sanitized_dst, file_size)
+                .await?;
+            return Ok(metadata);
+        }
+
+        // Handle large objects.
         let operator = self.get_operator().await?;
         let (tx, mut rx) = mpsc::channel::<Vec<u8>>(MAX_SUB_IO_OPERATION);
 
@@ -270,27 +327,31 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
-        let (tx, mut rx) = mpsc::channel(MAX_SUB_IO_OPERATION);
+        let sanitized_src = self.sanitize_path(src).to_string();
+        let file_size = self.get_object_size(&sanitized_src).await?;
 
-        let remote_path = self.sanitize_path(src).to_string();
+        // For small objects, no need to parallelize IO operation and pre-allocate buffer.
+        if file_size <= IO_BLOCK_SIZE as u64 {
+            let metadata = self
+                .download_small_file(&sanitized_src, dst, file_size)
+                .await?;
+            return Ok(metadata);
+        }
+
+        // Handle large objects.
         let operator = self.get_operator().await?.clone();
+        let (tx, mut rx) = mpsc::channel(MAX_SUB_IO_OPERATION);
 
         // Spawn the reader task.
         let reader_handle = tokio::task::spawn(async move {
             let reader = operator
-                .reader(&remote_path)
+                .reader(&sanitized_src)
                 .await
                 .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-
-            let meta = operator
-                .stat(&remote_path)
-                .await
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-            let total_size = meta.content_length();
 
             let mut start_offset = 0;
-            while start_offset < total_size {
-                let end = (start_offset + IO_BLOCK_SIZE as u64).min(total_size);
+            while start_offset < file_size {
+                let end = (start_offset + IO_BLOCK_SIZE as u64).min(file_size);
                 let range = start_offset..end;
                 let buf = reader
                     .read(range)
