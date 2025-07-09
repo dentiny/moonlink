@@ -10,6 +10,7 @@ use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as Moonc
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableEvent;
 use crate::FileSystemAccessor;
+use crate::FileSystemConfig;
 use crate::ObjectStorageCache;
 
 use arrow::datatypes::Schema as ArrowSchema;
@@ -22,11 +23,12 @@ use tokio::sync::mpsc::Receiver;
 
 /// Test util function to get iceberg table config.
 pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
+    let root_directory = temp_dir.path().to_str().unwrap().to_string();
     IcebergTableConfig {
-        warehouse_uri: temp_dir.path().to_str().unwrap().to_string(),
+        warehouse_uri: root_directory.clone(),
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
-        ..Default::default()
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     }
 }
 
@@ -138,15 +140,10 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
 ) -> (MooncakeTable, IcebergTableManager, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
     let object_storage_cache = ObjectStorageCache::default_for_test(temp_dir);
-    let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
         create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
     let identity_property = mooncake_table_metadata.identity.clone();
-
-    let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri,
-        ..Default::default()
-    };
+    let iceberg_table_config = get_iceberg_table_config(temp_dir);
     let schema = create_test_arrow_schema();
 
     // Create iceberg snapshot whenever `create_snapshot` is called.
@@ -193,17 +190,10 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
     object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
-    let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
         create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
     let identity_property = mooncake_table_metadata.identity.clone();
-
-    let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri,
-        namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
-        table_name: ICEBERG_TEST_TABLE.to_string(),
-        ..Default::default()
-    };
+    let iceberg_table_config = get_iceberg_table_config(temp_dir);
     let schema = create_test_arrow_schema();
 
     // Create iceberg snapshot whenever `create_snapshot` is called.

@@ -6,7 +6,10 @@ use crate::storage::IcebergTableConfig;
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
 use crate::table_handler::{EventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
 use crate::union_read::{decode_read_state_for_testing, ReadStateManager};
-use crate::{EventSyncReceiver, IcebergTableManager, MooncakeTableConfig, TableEventManager};
+use crate::{
+    EventSyncReceiver, FileSystemConfig, IcebergTableManager, MooncakeTableConfig,
+    TableEventManager,
+};
 use crate::{ObjectStorageCache, Result};
 
 use arrow_array::RecordBatch;
@@ -29,10 +32,12 @@ pub fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
 /// Get iceberg table manager config.
 pub fn get_iceberg_manager_config(table_name: String, warehouse_uri: String) -> IcebergTableConfig {
     IcebergTableConfig {
-        warehouse_uri,
+        warehouse_uri: warehouse_uri.clone(),
         namespace: vec!["default".to_string()],
         table_name,
-        ..Default::default()
+        filesystem_config: FileSystemConfig::FileSystem {
+            root_directory: warehouse_uri,
+        },
     }
 }
 

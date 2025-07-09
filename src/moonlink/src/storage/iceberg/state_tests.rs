@@ -70,7 +70,7 @@ async fn prepare_committed_and_flushed_data_files(
     (row_2, row_1)
 }
 
-// Test util function to check whether the data file in iceberg snapshot is the same as initially-prepared one from `prepare_committed_and_flushed_data_files`.
+// Test util function to check whether the data file in iceberg snapshot is the same as initially-prepared one from [`prepare_committed_and_flushed_data_files`].
 //
 // # Arguments
 //
@@ -87,6 +87,9 @@ async fn check_prev_data_files(
         .as_ref()
         .unwrap()
         .file_io();
+
+    println!("Loading arrow batch from file: {}", data_file.file_path());
+
     let loaded_arrow_batch = load_arrow_batch(file_io, data_file.file_path().as_str())
         .await
         .unwrap();
