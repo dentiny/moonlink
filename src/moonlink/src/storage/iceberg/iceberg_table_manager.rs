@@ -28,7 +28,7 @@ use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
 use uuid::Uuid;
 
 /// Key for iceberg table property, to record flush lsn.
-pub(super) const MOONCAKE_TABLE_FLUSH_LSN: &str = "mooncake-table-flush-lsn";
+pub(super) const MOONCAKE_TABLE_FLUSH_LSN: &str = "moonlink.table-flush-lsn";
 /// Used to represent uninitialized deletion vector.
 /// TODO(hjiang): Consider using `Option<>` to represent uninitialized, which is more rust-idiometic.
 pub(super) const UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW: usize = 0;
