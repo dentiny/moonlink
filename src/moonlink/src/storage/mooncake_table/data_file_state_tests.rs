@@ -76,7 +76,6 @@ use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
-use crate::storage::storage_utils::FileId;
 use crate::table_notify::TableEvent;
 use crate::{MooncakeTable, ObjectStorageCache};
 
@@ -159,12 +158,38 @@ async fn prepare_state_5_for_read(
 /// State validation function
 /// ================================
 ///
+/// Validate state 1: remote, no local, not used
+async fn validate_state_1(
+    table: &MooncakeTable,
+    temp_dir: &TempDir,
+    cache: &mut ObjectStorageCache,
+    is_local_file: bool,
+) {
+    let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ is_local_file).await;
+
+    assert_pending_eviction_entries_size(cache, /*expected_count=*/ 0).await;
+    assert_evictable_cache_size(cache, /*expected_count=*/ 1).await; // data file
+    assert_non_evictable_cache_size(cache, /*expected_count=*/ 1).await; // index block file
+    assert_eq!(
+        cache
+            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
+            .await,
+        1,
+    );
+}
+
 /// Validate state 4: no remote storage, local cache pinned, in used
 async fn validate_state_4(
+    table: &MooncakeTable,
+    temp_dir: &TempDir,
     cache: &mut ObjectStorageCache,
-    data_file_id: FileId,
-    index_block_file_id: FileId,
 ) {
+    let data_file_id = get_only_local_data_file_id(&table, &temp_dir).await;
+    let index_block_file_id =
+        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
+
     assert_pending_eviction_entries_size(cache, /*expected_count=*/ 0).await;
     assert_evictable_cache_size(cache, /*expected_count=*/ 0).await;
     assert_non_evictable_cache_size(cache, /*expected_count=*/ 2).await; // data file and index block file
@@ -201,20 +226,15 @@ async fn test_5_read_4(#[case] optimize_local_filesystem: bool, #[case] use_batc
     let (mut table, mut table_notify) =
         prepare_state_5_for_read(&temp_dir, cache.clone(), use_batch_write).await;
 
-    // Use by read.
+    // State input: use by read.
     let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let _read_state = snapshot_read_output.take_as_read_state().await;
 
-    // Check data file has been recorded in mooncake table.
-    let data_file_id = get_only_local_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
-
     // Validate end state.
-    validate_state_4(&mut cache, data_file_id, index_block_file_id).await;
+    validate_state_4(&table, &temp_dir, &mut cache).await;
 }
 
 /// Test scenario: no remote, local, not used + persist => remote, no local, not used
@@ -227,29 +247,19 @@ async fn test_5_1_without_local_optimization(#[case] use_batch_write: bool) {
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
+    // Prepare initial state.
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+        prepare_state_5_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+
+    // State input: persist.
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     // Till now, iceberg snapshot has been persisted, need an extra mooncake snapshot to reflect persistence result.
     let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
 
-    // Check data file has been recorded in mooncake table.
-    let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
-
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // data file
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
+    validate_state_1(&table, &temp_dir, &mut cache, /*is_local_file=*/ true).await;
 }
 
 /// State transfer is the same as [`test_5_1_without_local_optimization`].
@@ -263,32 +273,21 @@ async fn test_5_1_with_local_optimization(#[case] use_batch_write: bool) {
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
+    // Prepare initial state.
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+        prepare_state_5_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+
+    // State input: persist.
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
-
     // Till now, iceberg snapshot has been persisted, need an extra mooncake snapshot to reflect persistence result.
     let (_, _, _, _, mut files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
     assert_eq!(files_to_delete, local_data_files_and_index_blocks);
 
-    // Check data file has been recorded in mooncake table.
-    let _ = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
-
     // Check cache state.
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // data file
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
+    validate_state_1(&table, &temp_dir, &mut cache, /*is_local_file=*/ false).await;
 }
 
 /// Test scenario: no remote, local, in use + persist => remote, local, in use
