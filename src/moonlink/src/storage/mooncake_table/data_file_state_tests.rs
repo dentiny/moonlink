@@ -78,7 +78,7 @@ use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::table_notify::TableEvent;
-use crate::{MooncakeTable, ObjectStorageCache, ReadState};
+use crate::{MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState};
 
 /// ========================
 /// Test util function for read
@@ -183,7 +183,38 @@ async fn prepare_state_1(
 
     (table, table_notify)
 }
-///
+
+/// Prepare state 2 for usage: remote, no local, in use
+async fn prepare_state_2(
+    temp_dir: &TempDir,
+    mut cache: ObjectStorageCache,
+    use_batch_write: bool,
+) -> (
+    MooncakeTable,
+    Receiver<TableEvent>,
+    NonEvictableHandle, /*fake file handle*/
+) {
+    let (mut table, mut table_notify) =
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+    let (_, _, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    assert!(files_to_delete.is_empty());
+
+    // Persist and reflect result to mooncake snapshot.
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
+    let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
+
+    let (_, _, _, _, mut files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    files_to_delete.sort();
+    assert_eq!(files_to_delete, local_data_files_and_index_blocks);
+
+    // Import second data file into cache, so the cached entry will be evicted.
+    let fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut cache).await;
+
+    (table, table_notify, fake_cache_handle)
+}
+
 /// Prepare state 3 for read usage: remote, local, in use
 ///
 /// # Arguments
@@ -993,27 +1024,13 @@ async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
         &temp_dir, /*optimize_local_filesystem=*/ true,
     );
 
-    let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
+    // Prepare initial state.
+    let (mut table, mut table_notify, mut fake_cache_handle) =
+        prepare_state_2(&temp_dir, cache.clone(), use_batch_write).await;
 
-    // Persist and reflect result to mooncake snapshot.
-    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
-    let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
-
-    let (_, _, _, _, mut files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    files_to_delete.sort();
-    assert_eq!(files_to_delete, local_data_files_and_index_blocks);
-
-    // Import second data file into cache, so the cached entry will be evicted.
-    let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut cache).await;
-
-    // Read, but no reference count hold within read state.
+    // State input: read, but no reference count hold within read state.
     let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
-    let read_state_1 = snapshot_read_output_1.take_as_read_state().await;
+    let _read_state_1 = snapshot_read_output_1.take_as_read_state().await;
     // Till now, the state is (remote, no local, in use).
 
     // Unreference the second cache handle, so we could pin requires files again in cache.
@@ -1021,7 +1038,7 @@ async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     assert!(evicted_files_to_delete.is_empty());
 
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
-    let read_state_2 = snapshot_read_output_2.take_as_read_state().await;
+    let _read_state_2 = snapshot_read_output_2.take_as_read_state().await;
 
     // Check fake file has been evicted.
     let fake_filepath = temp_dir.path().join(FAKE_FILE_NAME);
@@ -1031,45 +1048,12 @@ async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     )
     .await;
 
-    // Check data file has been recorded in mooncake table.
-    let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
-
-    // Check cache state.
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(data_file_id))
-            .await,
-        1,
-    );
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
-
-    // Drop all read states and check reference count.
-    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
-        vec![read_state_1, read_state_2],
-        &mut table,
-        &mut table_notify,
+    // Validate end state.
+    validate_state_3(
+        &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
-    assert!(files_to_delete.is_empty());
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // data file
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
 }
 
 /// Test scenario: remote, no local, in use + use & unpinned => remote, no local, in use
