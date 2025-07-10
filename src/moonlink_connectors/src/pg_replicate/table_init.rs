@@ -56,12 +56,8 @@ pub async fn build_table_components(
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
 
     let remote_root_directory = base_path.to_str().unwrap().to_string();
-    let filesystem_config = FileSystemConfig::S3 {
-        bucket: "moonlink-test-s3-hao".to_string(),
-        access_key_id: "aaa".to_string(),
-        secret_access_key: "aaa/aaa".to_string(),
-        region: "us-west-1".to_string(),
-        endpoint: None,
+    let filesystem_config = FileSystemConfig::FileSystem {
+        root_directory: remote_root_directory.clone(),
     };
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri: remote_root_directory.clone(),

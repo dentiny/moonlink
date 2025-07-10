@@ -53,13 +53,7 @@ pub(crate) fn deserialze_moonlink_table_config(
             warehouse_uri: parsed.iceberg_table_config.warehouse_uri,
             namespace: vec![parsed.iceberg_table_config.namespace],
             table_name: parsed.iceberg_table_config.table_name,
-            filesystem_config: moonlink::FileSystemConfig::S3 {
-                bucket: "moonlink-test-s3-hao".to_string(),
-                access_key_id: "aaa".to_string(),
-                secret_access_key: "aaa/aa".to_string(),
-                region: "us-west-1".to_string(),
-                endpoint: None,
-            },
+            ..Default::default()
         },
         mooncake_table_config: MooncakeTableConfig::default(),
     };

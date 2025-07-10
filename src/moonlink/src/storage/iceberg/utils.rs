@@ -268,9 +268,9 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
             ..
         } => {
             let mut file_io_builder = FileIOBuilder::new("s3")
-                .with_prop(iceberg::io::S3_REGION, "us-west-1")
-                .with_prop(iceberg::io::S3_ACCESS_KEY_ID, "aaa")
-                .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, "aaa/aaa");
+                .with_prop(iceberg::io::S3_REGION, region)
+                .with_prop(iceberg::io::S3_ACCESS_KEY_ID, access_key_id)
+                .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key);
             if let Some(endpoint) = endpoint {
                 file_io_builder = file_io_builder.with_prop(iceberg::io::S3_ENDPOINT, endpoint);
             }

@@ -282,8 +282,6 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
-        println!("write object {} to {}", object, self.root_path);
-
         let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
         let expected_len = content.len();
