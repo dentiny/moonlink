@@ -119,14 +119,15 @@ impl FileSystemAccessor {
                         region,
                         bucket,
                         endpoint,
-                        ..
                     } => {
-                        let builder = services::S3::default()
+                        let mut builder = services::S3::default()
                             .bucket(bucket)
                             .region(region)
-                            .endpoint(endpoint)
                             .access_key_id(access_key_id)
                             .secret_access_key(secret_access_key);
+                        if let Some(endpoint) = endpoint {
+                            builder = builder.endpoint(endpoint);
+                        }
                         let op = Operator::new(builder)?.layer(retry_layer).finish();
                         Ok(op)
                     }
@@ -281,6 +282,8 @@ impl BaseFileSystemAccess for FileSystemAccessor {
     }
 
     async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
+        println!("write object {} to {}", object, self.root_path);
+
         let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
         let expected_len = content.len();

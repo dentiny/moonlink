@@ -9,7 +9,8 @@ pub enum FileSystemConfig {
         secret_access_key: String,
         region: String,
         bucket: String,
-        endpoint: String,
+        /// Used for fake S3.
+        endpoint: Option<String>,
     },
     #[cfg(feature = "storage-gcs")]
     Gcs {
