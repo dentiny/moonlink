@@ -3,11 +3,11 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::filesystem::utils::path_utils::get_root_path;
+use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::PuffinWrite;
 use crate::storage::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
 };
-use crate::storage::iceberg::utils;
 
 use futures::future::join_all;
 use std::collections::{HashMap, HashSet};
@@ -80,7 +80,7 @@ pub struct FileCatalog {
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
     pub fn new(config: FileSystemConfig) -> IcebergResult<Self> {
-        let file_io = utils::create_file_io(&config)?;
+        let file_io = iceberg_io_utils::create_file_io(&config)?;
         let warehouse_location = get_root_path(&config);
         Ok(Self {
             filesystem_accessor: Arc::new(FileSystemAccessor::new(config)),

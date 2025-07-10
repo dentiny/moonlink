@@ -6,6 +6,7 @@ use crate::storage::iceberg::deletion_vector::{
 };
 use crate::storage::iceberg::iceberg_table_manager::*;
 use crate::storage::iceberg::index::FileIndexBlob;
+use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::iceberg::table_property::{
@@ -155,7 +156,7 @@ impl IcebergTableManager {
         // Handle imported new data files.
         let mut new_iceberg_data_files = Vec::with_capacity(new_data_files.len());
         for local_data_file in new_data_files.into_iter() {
-            let iceberg_data_file = utils::write_record_batch_to_iceberg(
+            let iceberg_data_file = iceberg_io_utils::write_record_batch_to_iceberg(
                 self.iceberg_table.as_ref().unwrap(),
                 local_data_file.file_path(),
                 self.iceberg_table.as_ref().unwrap().metadata(),
@@ -340,7 +341,7 @@ impl IcebergTableManager {
             new_file_indices.push(cur_file_index);
             // Upload new index file to iceberg table.
             for cur_index_block in cur_file_index.index_blocks.iter() {
-                let remote_index_block = utils::upload_index_file(
+                let remote_index_block = iceberg_io_utils::upload_index_file(
                     self.iceberg_table.as_ref().unwrap(),
                     cur_index_block.index_file.file_path(),
                     self.filesystem_accessor.as_ref(),
