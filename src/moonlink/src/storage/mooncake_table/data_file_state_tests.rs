@@ -146,6 +146,44 @@ async fn test_shutdown_table(#[case] use_batch_write: bool) {
 /// States preparation functions
 /// ================================
 ///
+/// Prepare state 1 for usage: remote, no local, not used
+async fn prepare_state_1(
+    temp_dir: &TempDir,
+    cache: ObjectStorageCache,
+    use_batch_write: bool,
+    delete_index_and_data_file: &[bool],
+) -> (MooncakeTable, Receiver<TableEvent>) {
+    let (mut table, mut table_notify) =
+        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+    let (_, _, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    assert!(files_to_delete.is_empty());
+
+    let local_index_block = get_only_index_block_filepath(&table).await;
+    let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
+
+    let validate_files_to_delete = |files_to_delete: Vec<String>| {
+        // It's impossible for state 3 to have data file deleted but not index file.
+        if delete_index_and_data_file[0] && delete_index_and_data_file[1] {
+            assert_eq!(files_to_delete, local_data_files_and_index_blocks);
+            return;
+        }
+        if delete_index_and_data_file[0] {
+            assert_eq!(files_to_delete, vec![local_index_block]);
+            return;
+        }
+        assert!(files_to_delete.is_empty());
+    };
+
+    // Persist and reflect result to mooncake snapshot.
+    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
+    let (_, _, _, _, files_to_delete) =
+        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
+    validate_files_to_delete(files_to_delete);
+
+    (table, table_notify)
+}
+///
 /// Prepare state 3 for read usage: remote, local, in use
 ///
 /// # Arguments
@@ -763,61 +801,25 @@ async fn test_1_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ false);
 
-    let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
-
-    // Persist and reflect result to mooncake snapshot.
-    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
-
-    // Read and increment reference count.
-    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
-    let read_state = snapshot_read_output.take_as_read_state().await;
-
-    // Check data file has been recorded in mooncake table.
-    let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
-
-    // Check cache state.
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(data_file_id))
-            .await,
-        1,
-    );
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
-
-    // Drop all read states and check reference count.
-    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
-        vec![read_state],
-        &mut table,
-        &mut table_notify,
+    // Prepare initial state.
+    let (mut table, _) = prepare_state_1(
+        &temp_dir,
+        cache.clone(),
+        use_batch_write,
+        /*delete_index_and_data_file=*/ &[false, false],
     )
     .await;
-    assert!(files_to_delete.is_empty());
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
+
+    // State input: read and increment reference count.
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
+    let _read_state = snapshot_read_output.take_as_read_state().await;
+
+    // Validate end state.
+    validate_state_3(
+        &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
+        /*data_file_ref_count=*/ 1,
+    )
+    .await;
 }
 
 /// State transfer is the same as [`test_1_read_and_pinned_3_without_local_optimization`].
@@ -831,63 +833,25 @@ async fn test_1_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     let mut cache =
         create_infinite_object_storage_cache(&temp_dir, /*optimize_local_filesystem=*/ true);
 
-    let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
-
-    // Persist and reflect result to mooncake snapshot.
-    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
-    let data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
-
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert_eq!(files_to_delete, data_files_and_index_blocks);
-
-    // Read and increment reference count.
-    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
-    let read_state = snapshot_read_output.take_as_read_state().await;
-
-    // Check data file has been recorded in mooncake table.
-    let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let index_block_file_id =
-        get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ false).await;
-
-    // Check cache state.
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 2).await; // data file and index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(data_file_id))
-            .await,
-        1,
-    );
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
-
-    // Drop all read states and check reference count.
-    let files_to_delete = drop_read_states_and_create_mooncake_snapshot(
-        vec![read_state],
-        &mut table,
-        &mut table_notify,
+    // Prepare initial state.
+    let (mut table, _) = prepare_state_1(
+        &temp_dir,
+        cache.clone(),
+        use_batch_write,
+        /*delete_index_and_data_file=*/ &[true, true],
     )
     .await;
-    assert!(files_to_delete.is_empty());
-    assert_pending_eviction_entries_size(&mut cache, /*expected_count=*/ 0).await;
-    assert_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await;
-    assert_non_evictable_cache_size(&mut cache, /*expected_count=*/ 1).await; // index block file
-    assert_eq!(
-        cache
-            .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
-            .await,
-        1,
-    );
+
+    // State input: read and increment reference count.
+    let snapshot_read_output = perform_read_request_for_test(&mut table).await;
+    let _read_state = snapshot_read_output.take_as_read_state().await;
+
+    // Validate end state.
+    validate_state_3(
+        &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
+        /*data_file_ref_count=*/ 1,
+    )
+    .await;
 }
 
 /// Test scenario: remote, no local, not used + use & unpinned => remote, no local, not used
