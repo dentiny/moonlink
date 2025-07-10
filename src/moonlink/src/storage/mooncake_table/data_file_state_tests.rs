@@ -81,9 +81,34 @@ use crate::table_notify::TableEvent;
 use crate::{MooncakeTable, NonEvictableHandle, ObjectStorageCache, ReadState};
 
 /// ========================
-/// Test util function for read
+/// Test util function
 /// ========================
 ///
+/// Validate files to delete after iceberg persistence.
+///
+/// # Arguments
+///
+/// * delete_index_and_data_file: a boolean array which indicates whether index file and data file are expected to delete.
+fn validate_files_to_delete_after_persistence(
+    mut files_to_delete: Vec<String>,
+    delete_index_and_data_file: &[bool],
+    local_index_block: String,
+    local_data_files_and_index_blocks: Vec<String>,
+) {
+    files_to_delete.sort();
+
+    // It's impossible to have data file deleted but not index file.
+    if delete_index_and_data_file[0] && delete_index_and_data_file[1] {
+        assert_eq!(files_to_delete, local_data_files_and_index_blocks);
+        return;
+    }
+    if delete_index_and_data_file[0] {
+        assert_eq!(files_to_delete, vec![local_index_block]);
+        return;
+    }
+    assert!(files_to_delete.is_empty());
+}
+
 /// Prepare persisted data files in mooncake table.
 /// Rows are committed and flushed with LSN 1.
 async fn prepare_test_disk_file_for_read(
@@ -162,26 +187,16 @@ async fn prepare_state_1(
     let local_index_block = get_only_index_block_filepath(&table).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
-    let validate_files_to_delete = |mut files_to_delete: Vec<String>| {
-        files_to_delete.sort();
-
-        // It's impossible for state 3 to have data file deleted but not index file.
-        if delete_index_and_data_file[0] && delete_index_and_data_file[1] {
-            assert_eq!(files_to_delete, local_data_files_and_index_blocks);
-            return;
-        }
-        if delete_index_and_data_file[0] {
-            assert_eq!(files_to_delete, vec![local_index_block]);
-            return;
-        }
-        assert!(files_to_delete.is_empty());
-    };
-
     // Persist and reflect result to mooncake snapshot.
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    validate_files_to_delete(files_to_delete);
+    validate_files_to_delete_after_persistence(
+        files_to_delete,
+        delete_index_and_data_file,
+        local_index_block,
+        local_data_files_and_index_blocks,
+    );
 
     (table, table_notify)
 }
@@ -206,27 +221,16 @@ async fn prepare_state_2(
     let local_index_block = get_only_index_block_filepath(&table).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
-    let validate_files_to_delete = |mut files_to_delete: Vec<String>| {
-        files_to_delete.sort();
-
-        // It's impossible for state 3 to have data file deleted but not index file.
-        if delete_index_and_data_file[0] && delete_index_and_data_file[1] {
-            assert_eq!(files_to_delete, local_data_files_and_index_blocks);
-            return;
-        }
-        if delete_index_and_data_file[0] {
-            assert_eq!(files_to_delete, vec![local_index_block]);
-            return;
-        }
-        assert!(files_to_delete.is_empty());
-    };
-
     // Persist and reflect result to mooncake snapshot.
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
-    let (_, _, _, _, mut files_to_delete) =
+    let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    files_to_delete.sort();
-    validate_files_to_delete(files_to_delete);
+    validate_files_to_delete_after_persistence(
+        files_to_delete,
+        delete_index_and_data_file,
+        local_index_block,
+        local_data_files_and_index_blocks,
+    );
 
     // Import second data file into cache, so the cached entry will be evicted.
     let fake_cache_handle = import_fake_cache_entry(temp_dir, &mut cache).await;
@@ -255,21 +259,6 @@ async fn prepare_state_3(
     let local_index_block = get_only_index_block_filepath(&table).await;
     let local_data_files_and_index_blocks = get_data_files_and_index_block_files(&table).await;
 
-    let validate_files_to_delete = |mut files_to_delete: Vec<String>| {
-        files_to_delete.sort();
-
-        // It's impossible for state 3 to have data file deleted but not index file.
-        if delete_index_and_data_file[0] && delete_index_and_data_file[1] {
-            assert_eq!(files_to_delete, local_data_files_and_index_blocks);
-            return;
-        }
-        if delete_index_and_data_file[0] {
-            assert_eq!(files_to_delete, vec![local_index_block]);
-            return;
-        }
-        assert!(files_to_delete.is_empty());
-    };
-
     if read_then_snapshot {
         // Read and increment reference count.
         let snapshot_read_output = perform_read_request_for_test(&mut table).await;
@@ -279,7 +268,12 @@ async fn prepare_state_3(
         create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
         let (_, _, _, _, files_to_delete) =
             create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-        validate_files_to_delete(files_to_delete);
+        validate_files_to_delete_after_persistence(
+            files_to_delete,
+            delete_index_and_data_file,
+            local_index_block,
+            local_data_files_and_index_blocks,
+        );
 
         return (table, table_notify, read_state);
     }
@@ -288,7 +282,12 @@ async fn prepare_state_3(
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    validate_files_to_delete(files_to_delete);
+    validate_files_to_delete_after_persistence(
+        files_to_delete,
+        delete_index_and_data_file,
+        local_index_block,
+        local_data_files_and_index_blocks,
+    );
 
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
