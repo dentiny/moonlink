@@ -154,7 +154,7 @@ async fn prepare_state_1(
     delete_index_and_data_file: &[bool],
 ) -> (MooncakeTable, Receiver<TableEvent>) {
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+        prepare_test_disk_file_for_read(temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -198,7 +198,7 @@ async fn prepare_state_2(
     NonEvictableHandle, /*fake file handle*/
 ) {
     let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
+        prepare_test_disk_file_for_read(temp_dir, cache.clone(), use_batch_write).await;
     let (_, _, _, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
@@ -229,7 +229,7 @@ async fn prepare_state_2(
     validate_files_to_delete(files_to_delete);
 
     // Import second data file into cache, so the cached entry will be evicted.
-    let fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut cache).await;
+    let fake_cache_handle = import_fake_cache_entry(temp_dir, &mut cache).await;
 
     (table, table_notify, fake_cache_handle)
 }
@@ -382,7 +382,7 @@ async fn validate_state_3(
 
     // Testing scenario: cache size is not enough to hold two data files, if we import fake file when table data file unpinned, it would be evicted.
     if fake_data_file_pinned {
-        check_file_pinned(&cache, FAKE_FILE_ID.file_id).await;
+        check_file_pinned(cache, FAKE_FILE_ID.file_id).await;
     }
 }
 
