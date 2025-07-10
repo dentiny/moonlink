@@ -35,7 +35,7 @@ pub(crate) fn create_s3_filesystem_config(warehouse_uri: &str) -> FileSystemConf
         secret_access_key: S3_TEST_SECRET_ACCESS_KEY.to_string(),
         region: "auto".to_string(), // minio doesn't care about region.
         bucket: bucket.to_string(),
-        endpoint: S3_TEST_ENDPOINT.to_string(),
+        endpoint: Some(S3_TEST_ENDPOINT.to_string()),
     }
 }
 
