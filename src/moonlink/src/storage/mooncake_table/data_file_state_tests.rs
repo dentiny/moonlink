@@ -262,7 +262,6 @@ async fn validate_state_3(
     cache: &mut ObjectStorageCache,
     is_local_file: bool,
     data_file_ref_count: u32,
-    index_file_ref_count: u32,
 ) {
     let data_file_id = get_only_remote_data_file_id(table, temp_dir).await;
     let index_block_file_id =
@@ -281,7 +280,7 @@ async fn validate_state_3(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
             .await,
-        index_file_ref_count,
+        1, // index file reference count is always 1, if no maintainance job
     );
 }
 
@@ -291,7 +290,6 @@ async fn validate_state_4(
     temp_dir: &TempDir,
     cache: &mut ObjectStorageCache,
     data_file_ref_count: u32,
-    index_file_ref_count: u32,
 ) {
     let data_file_id = get_only_local_data_file_id(table, temp_dir).await;
     let index_block_file_id =
@@ -310,7 +308,7 @@ async fn validate_state_4(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
             .await,
-        index_file_ref_count,
+        1, // index file reference count is always 1, if no maintainance job
     );
 }
 
@@ -343,7 +341,6 @@ async fn test_5_read_4(#[case] optimize_local_filesystem: bool, #[case] use_batc
     // Validate end state.
     validate_state_4(
         &table, &temp_dir, &mut cache, /*data_file_ref_count=*/ 2,
-        /*index_file_ref_count=*/ 1,
     )
     .await;
 }
@@ -425,7 +422,7 @@ async fn test_4_3_with_local_filesystem_optimization(#[case] use_batch_write: bo
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 1, /*index_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1,
     )
     .await;
 }
@@ -456,7 +453,7 @@ async fn test_4_3_without_local_filesystem_optimization(#[case] use_batch_write:
     // Check data file has been recorded in mooncake table.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 1, /*index_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1,
     )
     .await;
 }
@@ -484,7 +481,6 @@ async fn test_4_read_4(#[case] optimize_local_filesystem: bool, #[case] use_batc
     // Validate end state.
     validate_state_4(
         &table, &temp_dir, &mut cache, /*data_file_ref_count=*/ 3,
-        /*index_file_ref_count=*/ 1,
     )
     .await;
 }
@@ -522,7 +518,6 @@ async fn test_4_read_and_read_over_4(
     // Validate end state.
     validate_state_4(
         &table, &temp_dir, &mut cache, /*data_file_ref_count=*/ 2,
-        /*index_file_ref_count=*/ 1,
     )
     .await;
 }
@@ -560,7 +555,7 @@ async fn test_3_read_3_without_filesystem_optimization(#[case] use_batch_write: 
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 2, /*index_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 2,
     )
     .await;
 }
@@ -594,7 +589,7 @@ async fn test_3_read_3_with_filesystem_optimization(#[case] use_batch_write: boo
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 2, /*index_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 2,
     )
     .await;
 }
@@ -636,7 +631,7 @@ async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimiz
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 1, /*index_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1,
     )
     .await;
 }
@@ -678,7 +673,7 @@ async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimizati
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 1, /*index_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1,
     )
     .await;
 }
