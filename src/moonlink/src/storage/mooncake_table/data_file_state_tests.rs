@@ -306,6 +306,7 @@ async fn validate_state_3(
     cache: &mut ObjectStorageCache,
     is_local_file: bool,
     data_file_ref_count: u32,
+    fake_data_file_pinned: bool,
 ) {
     let data_file_id = get_only_remote_data_file_id(table, temp_dir).await;
     let index_block_file_id =
@@ -326,6 +327,11 @@ async fn validate_state_3(
             .await,
         1, // index file reference count is always 1, if no maintainance job
     );
+
+    // Testing scenario: cache size is not enough to hold two data files, if we import fake file when table data file unpinned, it would be evicted.
+    if fake_data_file_pinned {
+        check_file_pinned(&cache, FAKE_FILE_ID.file_id).await;
+    }
 }
 
 /// Validate state 4: no remote storage, local cache pinned, in used
@@ -466,7 +472,7 @@ async fn test_4_3_with_local_filesystem_optimization(#[case] use_batch_write: bo
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -497,7 +503,7 @@ async fn test_4_3_without_local_filesystem_optimization(#[case] use_batch_write:
     // Check data file has been recorded in mooncake table.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -599,7 +605,7 @@ async fn test_3_read_3_without_filesystem_optimization(#[case] use_batch_write: 
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 2,
+        /*data_file_ref_count=*/ 2, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -633,7 +639,7 @@ async fn test_3_read_3_with_filesystem_optimization(#[case] use_batch_write: boo
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 2,
+        /*data_file_ref_count=*/ 2, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -675,7 +681,7 @@ async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimiz
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -717,7 +723,7 @@ async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimizati
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -817,7 +823,7 @@ async fn test_1_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
-        /*data_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -849,7 +855,7 @@ async fn test_1_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     // Validate end state.
     validate_state_3(
         &mut table, &temp_dir, &mut cache, /*is_local_file=*/ false,
-        /*data_file_ref_count=*/ 1,
+        /*data_file_ref_count=*/ 1, /*fake_data_file_pinned=*/ false,
     )
     .await;
 }
@@ -865,37 +871,27 @@ async fn test_1_read_and_unpinned_3_without_local_optimization(#[case] use_batch
         &temp_dir, /*optimize_local_filesystem=*/ false,
     );
 
-    let (mut table, mut table_notify) =
-        prepare_test_disk_file_for_read(&temp_dir, cache.clone(), use_batch_write).await;
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
-
-    // Persist and reflect result to mooncake snapshot.
-    create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
-    let (_, _, _, _, files_to_delete) =
-        create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
-    assert!(files_to_delete.is_empty());
-
+    // Prepare initial state.
+    let (mut table, _) = prepare_state_1(
+        &temp_dir,
+        cache.clone(),
+        use_batch_write,
+        /*delete_index_and_data_file=*/ &[false, false],
+    )
+    .await;
     // Import second data file into cache, so the cached entry will be evicted.
     import_fake_cache_entry(&temp_dir, &mut cache).await;
 
-    // Read and increment reference count.
+    // State input: read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
-    let read_state = snapshot_read_output.take_as_read_state().await;
+    let _read_state = snapshot_read_output.take_as_read_state().await;
 
-    // Check data file has been recorded in mooncake table.
-    let data_file_id = get_only_remote_data_file_id(&table, &temp_dir).await;
-    let _ = get_only_index_block_file_id(&table, &temp_dir, /*is_local=*/ true).await;
-
-    // Check cache state.
-    check_file_not_pinned(&cache, data_file_id).await;
-    check_file_pinned(&cache, FAKE_FILE_ID.file_id).await;
-
-    // Drop all read states and check reference count.
-    drop_read_states(vec![read_state], &mut table, &mut table_notify).await;
-    check_file_not_pinned(&cache, data_file_id).await;
-    check_file_pinned(&cache, FAKE_FILE_ID.file_id).await;
+    // Validate end state.
+    validate_state_3(
+        &mut table, &temp_dir, &mut cache, /*is_local_file=*/ true,
+        /*data_file_ref_count=*/ 0, /*fake_data_file_pinned=*/ true,
+    )
+    .await;
 }
 
 /// State transfer is the same as [`test_1_read_and_unpinned_3_without_local_optimization`].
