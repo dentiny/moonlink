@@ -267,6 +267,28 @@ async fn validate_no_snapshot(
     .await;
 }
 
+// Validate only old snapshot, but not newly created ones.
+async fn validate_only_initial_snapshot(
+    iceberg_table_manager: &mut IcebergTableManager,
+    filesystem_accessor: &FileSystemAccessor,
+) {
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id, 2); // one data file, one index block file
+    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
+    assert_eq!(snapshot.indices.file_indices.len(), 1);
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+    validate_recovered_snapshot(
+        &snapshot,
+        &iceberg_table_manager.config.warehouse_uri,
+        filesystem_accessor,
+    )
+    .await;
+}
+
 // Testing combination: (1) + (1) => no snapshot
 #[tokio::test]
 async fn test_state_1_1() {
@@ -317,7 +339,7 @@ async fn test_state_1_2() {
 
 // Testing combination: (1) + (3) => no snapshot, depends on snapshot threshold
 #[tokio::test]
-async fn test_state_1_3() -> IcebergResult<()> {
+async fn test_state_1_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -339,21 +361,8 @@ async fn test_state_1_3() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (1) + (4) => no snapshot, depends on snapshot threshold
@@ -537,7 +546,7 @@ async fn test_state_2_2() {
 
 // Testing combination: (2) + (3) => no snapshot, depends on snapshot threshold
 #[tokio::test]
-async fn test_state_2_3() -> IcebergResult<()> {
+async fn test_state_2_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -560,21 +569,8 @@ async fn test_state_2_3() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (2) + (4) => no snapshot, depends on snapshot threshold
@@ -1149,7 +1145,7 @@ async fn test_state_4_2() {
 
 // Testing combination: (4) + (3) => no snapshot, depends on snapshot threshold
 #[tokio::test]
-async fn test_state_4_3() -> IcebergResult<()> {
+async fn test_state_4_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -1179,26 +1175,13 @@ async fn test_state_4_3() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (4) + (4) => no snapshot, depends on snapshot threshold
 #[tokio::test]
-async fn test_state_4_4() -> IcebergResult<()> {
+async fn test_state_4_4() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -1230,21 +1213,8 @@ async fn test_state_4_4() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (4) + (5) => snapshot with deletion vector
@@ -2297,7 +2267,7 @@ async fn test_state_7_1() {
 
 // Testing combination: (7) + (2) => no snapshot
 #[tokio::test]
-async fn test_state_7_2() -> IcebergResult<()> {
+async fn test_state_7_2() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -2311,26 +2281,13 @@ async fn test_state_7_2() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (7) + (3) => no snapshot
 #[tokio::test]
-async fn test_state_7_3() -> IcebergResult<()> {
+async fn test_state_7_3() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -2345,26 +2302,13 @@ async fn test_state_7_3() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (7) + (4) => no snapshot
 #[tokio::test]
-async fn test_state_7_4() -> IcebergResult<()> {
+async fn test_state_7_4() {
     let temp_dir = tempfile::tempdir().unwrap();
     let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
     let (mut table, mut iceberg_table_manager, mut notify_rx) =
@@ -2382,21 +2326,8 @@ async fn test_state_7_4() -> IcebergResult<()> {
     // Request to persist.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Check persistence status.
-    let (next_file_id, snapshot) = iceberg_table_manager.load_snapshot_from_table().await?;
-    assert_eq!(next_file_id, 2); // one data file, one index block file
-    check_prev_data_files(&snapshot, &iceberg_table_manager, /*deleted=*/ false).await;
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 100);
-    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
-    validate_recovered_snapshot(
-        &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
-        filesystem_accessor.as_ref(),
-    )
-    .await;
-
-    Ok(())
+    // Validate end state.
+    validate_only_initial_snapshot(&mut iceberg_table_manager, filesystem_accessor.as_ref()).await;
 }
 
 // Testing combination: (7) + (5) => snapshot with deletion vector
