@@ -56,11 +56,14 @@ pub async fn build_table_components(
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
 
     let remote_root_directory = base_path.to_str().unwrap().to_string();
+    let filesystem_config = FileSystemConfig::FileSystem {
+        root_directory: remote_root_directory.clone(),
+    };
     let iceberg_table_config = IcebergTableConfig {
         warehouse_uri: remote_root_directory.clone(),
         namespace: vec![table_schema.table_name.schema.clone()],
         table_name: mooncake_table_id,
-        ..Default::default()
+        filesystem_config: filesystem_config.clone(),
     };
     let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(
@@ -73,9 +76,7 @@ pub async fn build_table_components(
         mooncake_table_config.clone(),
         object_storage_cache,
         // TODO(hjiang): Should take user-provided configs.
-        Arc::new(FileSystemAccessor::new(FileSystemConfig::FileSystem {
-            root_directory: remote_root_directory,
-        })),
+        Arc::new(FileSystemAccessor::new(filesystem_config)),
     )
     .await?;
 

@@ -45,6 +45,7 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
 use crate::row::{MoonlinkRow, RowValue};
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
@@ -182,7 +183,10 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
     let identity_property = mooncake_table_metadata.identity.clone();
 
     let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri,
+        warehouse_uri: warehouse_uri.clone(),
+        filesystem_config: FileSystemConfig::FileSystem {
+            root_directory: warehouse_uri.clone(),
+        },
         ..Default::default()
     };
     let schema = create_test_arrow_schema();
@@ -270,7 +274,7 @@ async fn test_3_index_merge() {
     let object_storage_cache = ObjectStorageCache::new(cache_config);
 
     let (mut table, mut table_notify) =
-        prepare_test_disk_files_for_index_merge(&temp_dir, object_storage_cache.clone()).await;
+        prepare_test_disk_files_for_index_merge(&temp_dir, object_storage_cache.clone()).await; // <---
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
     let (_, _, index_merge_payload, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;

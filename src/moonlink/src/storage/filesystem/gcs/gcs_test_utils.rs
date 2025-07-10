@@ -29,15 +29,6 @@ pub(crate) fn create_gcs_filesystem_config(warehouse_uri: &str) -> FileSystemCon
     }
 }
 
-/// Get GCS bucket name from the warehouse uri.
-pub(crate) fn get_test_gcs_bucket(warehouse_uri: &str) -> String {
-    let random_string = warehouse_uri
-        .strip_prefix(GCS_TEST_WAREHOUSE_URI_PREFIX)
-        .unwrap()
-        .to_string();
-    format!("{}{}", GCS_TEST_BUCKET_PREFIX, random_string)
-}
-
 pub(crate) fn get_test_gcs_bucket_and_warehouse() -> (String /*bucket*/, String /*warehouse_uri*/) {
     get_bucket_and_warehouse(GCS_TEST_BUCKET_PREFIX, GCS_TEST_WAREHOUSE_URI_PREFIX)
 }
