@@ -233,7 +233,9 @@ async fn test_skip_iceberg_snapshot() {
     let row = test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
-    table.flush(/*lsn=*/ 10).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 10)
+        .await
+        .unwrap();
 
     // Create mooncake snapshot.
     assert!(table.create_snapshot(SnapshotOption {
@@ -827,7 +829,7 @@ async fn test_index_merge_and_create_snapshot_impl(iceberg_table_config: Iceberg
     let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
 
     // Create mooncake table and table event notification receiver.
-    let (mut mooncake_table, mut notify_rx) = create_mooncake_table_and_notify(
+    let (mut table, mut notify_rx) = create_mooncake_table_and_notify(
         mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
         object_storage_cache.clone(),
@@ -837,22 +839,22 @@ async fn test_index_merge_and_create_snapshot_impl(iceberg_table_config: Iceberg
 
     // Append one row and commit/flush, so we have one file indice persisted.
     let row_1 = test_row_1();
-    mooncake_table.append(row_1.clone()).unwrap();
-    mooncake_table.commit(/*lsn=*/ 1);
-    mooncake_table.flush(/*lsn=*/ 1).await.unwrap();
+    table.append(row_1.clone()).unwrap();
+    table.commit(/*lsn=*/ 1);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 1)
+        .await
+        .unwrap();
 
     // Append one row and commit/flush, so we have one file indice persisted.
     let row_2 = test_row_2();
-    mooncake_table.append(row_2.clone()).unwrap();
-    mooncake_table.commit(/*lsn=*/ 2);
-    mooncake_table.flush(/*lsn=*/ 2).await.unwrap();
+    table.append(row_2.clone()).unwrap();
+    table.commit(/*lsn=*/ 2);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 2)
+        .await
+        .unwrap();
 
     // Attempt index merge and flush to iceberg table.
-    create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(
-        &mut mooncake_table,
-        &mut notify_rx,
-    )
-    .await;
+    create_mooncake_and_iceberg_snapshot_for_index_merge_for_test(&mut table, &mut notify_rx).await;
 
     // Create a new iceberg table manager and check states.
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
@@ -879,11 +881,13 @@ async fn test_index_merge_and_create_snapshot_impl(iceberg_table_config: Iceberg
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
 
     // Delete rows after merge, to make sure file indices are serving correctly.
-    mooncake_table.delete(row_1.clone(), /*lsn=*/ 3).await;
-    mooncake_table.delete(row_2.clone(), /*lsn=*/ 4).await;
-    mooncake_table.commit(/*lsn=*/ 5);
-    mooncake_table.flush(/*lsn=*/ 5).await.unwrap();
-    create_mooncake_and_persist_for_test(&mut mooncake_table, &mut notify_rx).await;
+    table.delete(row_1.clone(), /*lsn=*/ 3).await;
+    table.delete(row_2.clone(), /*lsn=*/ 4).await;
+    table.commit(/*lsn=*/ 5);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 5)
+        .await
+        .unwrap();
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 }
 
 #[tokio::test]
@@ -1063,13 +1067,17 @@ async fn test_small_batch_size_and_large_parquet_size() {
 
     // Commit, flush and create snapshots.
     table.commit(/*lsn=*/ 1);
-    table.flush(/*lsn=*/ 1).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 1)
+        .await
+        .unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Delete the second record.
     table.delete(/*row=*/ row_2.clone(), /*lsn=*/ 2).await;
     table.commit(/*lsn=*/ 3);
-    table.flush(/*lsn=*/ 3).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 3)
+        .await
+        .unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     let mut iceberg_table_manager = IcebergTableManager::new(
@@ -1143,7 +1151,9 @@ async fn test_multiple_table_ids_for_deletion_vector() {
         all_rows.push(cur_row.clone());
         table.append(cur_row).unwrap();
         table.commit(/*lsn=*/ idx);
-        table.flush(/*lsn=*/ idx).await.unwrap();
+        flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ idx)
+            .await
+            .unwrap();
     }
 
     // Create the first mooncake and iceberg snapshot, which include [`target_data_files_num`] number of files.
@@ -1235,7 +1245,9 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
     let row_1 = test_row_1();
     table.append(row_1.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
-    table.flush(/*lsn=*/ 10).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 10)
+        .await
+        .unwrap();
     let (_, iceberg_snapshot_payload, _, _, _) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
@@ -1244,7 +1256,9 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
     table.append(row_2.clone()).unwrap();
     table.delete(row_1.clone(), /*lsn=*/ 20).await;
     table.commit(/*lsn=*/ 30);
-    table.flush(/*lsn=*/ 30).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 30)
+        .await
+        .unwrap();
     let (_, _, _, _, _) = create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the first mooncake snapshot.
@@ -1298,7 +1312,9 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
     let row_3 = test_row_3();
     table.append(row_3.clone()).unwrap();
     table.commit(/*lsn=*/ 40);
-    table.flush(/*lsn=*/ 40).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 40)
+        .await
+        .unwrap();
     let (_, iceberg_snapshot_payload, _, _, _) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
@@ -1461,7 +1477,9 @@ async fn mooncake_table_snapshot_persist_impl(iceberg_table_config: IcebergTable
     // First deletion of row1, which happens in MemSlice.
     table.delete(row1.clone(), /*flush_lsn=*/ 100).await;
     table.commit(/*flush_lsn=*/ 200);
-    table.flush(/*flush_lsn=*/ 200).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*flush_lsn=*/ 200)
+        .await
+        .unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
@@ -1532,7 +1550,9 @@ async fn mooncake_table_snapshot_persist_impl(iceberg_table_config: IcebergTable
     // Expects to see a new deletion vector, because its corresponding data file has been persisted.
     table.delete(row2.clone(), /*flush_lsn=*/ 200).await;
     table.commit(/*flush_lsn=*/ 300);
-    table.flush(/*flush_lsn=*/ 300).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*flush_lsn=*/ 300)
+        .await
+        .unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
@@ -1593,7 +1613,9 @@ async fn mooncake_table_snapshot_persist_impl(iceberg_table_config: IcebergTable
     // Operation series 3: no more additional rows appended, only to delete the last row in the table.
     // Expects to see the existing deletion vector updated, because its corresponding data file has been persisted.
     table.delete(row3.clone(), /*flush_lsn=*/ 300).await;
-    table.flush(/*flush_lsn=*/ 400).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*flush_lsn=*/ 400)
+        .await
+        .unwrap();
     table.commit(/*flush_lsn=*/ 400);
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
@@ -1660,7 +1682,9 @@ async fn mooncake_table_snapshot_persist_impl(iceberg_table_config: IcebergTable
     ]);
     table.append(row4.clone()).unwrap();
     table.commit(/*flush_lsn=*/ 500);
-    table.flush(/*flush_lsn=*/ 500).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*flush_lsn=*/ 500)
+        .await
+        .unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Check iceberg snapshot store and load, here we explicitly load snapshot from iceberg table, whose construction is lazy and asynchronous by design.
@@ -1781,7 +1805,9 @@ async fn test_schema_for_table_creation_impl(iceberg_table_config: IcebergTableC
     let row = test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 10);
-    table.flush(/*lsn=*/ 10).await.unwrap();
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 10)
+        .await
+        .unwrap();
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Now the iceberg table has been created, create an iceberg table manager and check table status.
