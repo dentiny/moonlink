@@ -57,7 +57,7 @@ async fn test_local_iceberg_table_creation() {
         FileSystemConfig::FileSystem {
             root_directory: warehouse_path.to_string(),
         },
-        get_test_schema().await.unwrap(),
+        get_test_schema(),
     )
     .unwrap();
     let namespace_ident = NamespaceIdent::from_strs([NAMESPACE]).unwrap();
@@ -112,7 +112,7 @@ async fn create_test_table(catalog: &FileCatalog) -> IcebergResult<()> {
     let namespace = NamespaceIdent::from_strs(["default"])?;
     let table_name = "test_table".to_string();
 
-    let schema = get_test_schema().await?;
+    let schema = get_test_schema();
     let table_creation = TableCreation::builder()
         .name(table_name.clone())
         .location(format!(
@@ -183,7 +183,7 @@ async fn test_catalog_table_operations_impl(catalog: FileCatalog) -> IcebergResu
 
     // Load table and check.
     let table = catalog.load_table(&table_ident).await?;
-    let expected_schema = get_test_schema().await?;
+    let expected_schema = get_test_schema();
     assert_eq!(table.identifier(), &table_ident,);
     assert_eq!(*table.metadata().current_schema().as_ref(), expected_schema,);
 
@@ -298,7 +298,7 @@ async fn test_list_operation_impl(catalog: FileCatalog) -> IcebergResult<()> {
 #[tokio::test]
 async fn test_update_table_with_requirement_check_failed() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     create_test_table(&catalog).await.unwrap();
 
     let namespace = NamespaceIdent::from_strs(["default"]).unwrap();
@@ -379,10 +379,7 @@ async fn test_update_table_impl(mut catalog: FileCatalog) -> IcebergResult<()> {
     catalog.clear_puffin_metadata();
 
     let table_metadata = table.metadata();
-    assert_eq!(
-        **table_metadata.current_schema(),
-        get_test_schema().await.unwrap(),
-    );
+    assert_eq!(**table_metadata.current_schema(), get_test_schema(),);
     assert_eq!(table.identifier(), &table_ident,);
     assert_eq!(table_metadata.current_snapshot_id(), Some(1),);
 
@@ -394,7 +391,7 @@ async fn test_update_table_impl(mut catalog: FileCatalog) -> IcebergResult<()> {
 #[tokio::test]
 async fn test_catalog_namespace_operations_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_catalog_namespace_operations_impl(catalog)
         .await
         .unwrap();
@@ -416,7 +413,7 @@ async fn test_catalog_namespace_operations_gcs() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_catalog_table_operations_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_catalog_table_operations_impl(catalog).await.unwrap();
 }
 #[tokio::test]
@@ -436,7 +433,7 @@ async fn test_catalog_table_operations_gcs() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_list_operation_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_list_operation_impl(catalog).await.unwrap();
 }
 #[tokio::test]
@@ -456,7 +453,7 @@ async fn test_list_operation_gcs() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_update_table_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_update_table_impl(catalog).await.unwrap();
 }
 #[tokio::test]

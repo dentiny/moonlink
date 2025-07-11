@@ -1,6 +1,5 @@
 use iceberg::spec::PrimitiveType;
 use iceberg::spec::Type as IcebergType;
-use iceberg::Result as IcebergResult;
 use iceberg::{
     spec::{NestedField, Schema},
     TableIdent, TableUpdate,
@@ -32,16 +31,16 @@ pub(crate) fn create_test_file_catalog(tmp_dir: &TempDir, iceberg_schema: Schema
 }
 
 // Test util function to get iceberg schema,
-pub(crate) async fn get_test_schema() -> IcebergResult<Schema> {
+pub(crate) fn get_test_schema() -> Schema {
     let field = NestedField::required(
         /*id=*/ 1,
         "field_name".to_string(),
         IcebergType::Primitive(PrimitiveType::Int),
     );
-    let schema = Schema::builder()
+
+    Schema::builder()
         .with_schema_id(0)
         .with_fields(vec![Arc::new(field)])
-        .build()?;
-
-    Ok(schema)
+        .build()
+        .unwrap()
 }

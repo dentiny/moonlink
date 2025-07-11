@@ -4,11 +4,8 @@ use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 
-use arrow_schema::Schema as ArrowSchema;
 use iceberg::spec::Schema as IcebergSchema;
 use iceberg::Result as IcebergResult;
-
-use std::sync::Arc;
 
 /// Create a catelog based on the provided type.
 ///

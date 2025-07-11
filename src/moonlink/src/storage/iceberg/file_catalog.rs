@@ -41,9 +41,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::vec;
 
-use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
-use iceberg::arrow as IcebergArrow;
 use iceberg::io::FileIO;
 use iceberg::puffin::PuffinWriter;
 use iceberg::spec::{
