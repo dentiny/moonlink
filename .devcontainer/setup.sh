@@ -5,4 +5,5 @@ git config devcontainers-theme.show-dirty 1
 echo "alias psql='PGPASSWORD=postgres psql -h postgres -p 5432 -U postgres -d postgres'" >> ~/.bashrc
 
 # precommit hook requirement.
+rm -f .git/hooks/*
 pre-commit install -t pre-push
