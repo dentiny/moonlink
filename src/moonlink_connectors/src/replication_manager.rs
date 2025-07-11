@@ -1,6 +1,7 @@
 use crate::pg_replicate::table::SrcTableId;
 use crate::ReplicationConnection;
 use crate::Result;
+use moonlink::MoonlinkTableSecret;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -48,6 +49,10 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     ///
     /// If replication for this `uri` is not yet running a new replication
     /// source will be created.
+    ///
+    /// # Arguments
+    ///
+    /// * secret_entry: secret necessary to access object storage, use local filesystem if not assigned.
     pub async fn add_table(
         &mut self,
         src_uri: &str,
@@ -55,6 +60,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         table_id: u32,
         table_name: &str,
         override_table_base_path: Option<&str>,
+        secret_entry: Option<MoonlinkTableSecret>,
     ) -> Result<MoonlinkTableConfig> {
         debug!(%src_uri, table_name, "adding table through manager");
         if !self.connections.contains_key(src_uri) {
@@ -81,6 +87,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 &mooncake_table_id,
                 table_id,
                 override_table_base_path,
+                secret_entry,
             )
             .await?;
         self.table_info

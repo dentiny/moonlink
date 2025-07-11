@@ -21,6 +21,7 @@ where
         database_id: D::from(database_id),
         table_id: T::from(metadata_entry.table_id),
     };
+    // TODO(hjiang): Need to populate real secret, which is fetched from secret table, if any.
     replication_manager
         .add_table(
             &metadata_entry.src_table_uri,
@@ -34,6 +35,7 @@ where
                     .iceberg_table_config
                     .warehouse_uri,
             ),
+            /*secret_entry=*/ None,
         )
         .await?;
     Ok(())

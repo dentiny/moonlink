@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 
 use crate::error::Result;
-use moonlink::MoonlinkTableConfig;
+use moonlink::{MoonlinkTableConfig, MoonlinkTableSecret};
 
 /// Constants for moonlink metadata storage.
 ///
@@ -10,6 +10,8 @@ use moonlink::MoonlinkTableConfig;
 pub const MOONLINK_SCHEMA: &str = "mooncake";
 /// Metadata table name for moonlink.
 pub const MOONLINK_METADATA_TABLE: &str = "tables";
+/// Secret table name for moonlink.
+pub const MOONLINK_SECRET_TABLE: &str = "secret";
 
 /// Metadata entry for each table.
 #[derive(Clone, Debug)]
@@ -24,12 +26,30 @@ pub struct TableMetadataEntry {
     pub moonlink_table_config: MoonlinkTableConfig,
 }
 
+/// Secret row for each table.
+/// WARNING: Not expected to log anywhere!
+#[derive(Clone)]
+pub struct TableSecretEntry {
+    /// Table id.
+    pub table_id: u32,
+    /// Moonlink table secret.
+    pub secret_entry: MoonlinkTableSecret,
+}
+
 #[async_trait]
 pub trait MetadataStoreTrait: Send + Sync {
+    /// =========================
+    /// Database access
+    /// =========================
+    ///
     /// Get database id.
     #[allow(async_fn_in_trait)]
     async fn get_database_id(&self) -> Result<u32>;
 
+    /// =========================
+    /// Table properties
+    /// =========================
+    ///
     /// Return whether schema exists.
     #[allow(async_fn_in_trait)]
     async fn schema_exists(&self) -> Result<bool>;

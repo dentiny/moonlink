@@ -14,7 +14,8 @@ pub use storage::{
     MooncakeTableConfig, TableEventManager, TableManager,
 };
 pub use storage::{
-    FileSystemAccessor, MoonlinkTableConfig, ObjectStorageCache, ObjectStorageCacheConfig,
+    FileSystemAccessor, MoonlinkSecretType, MoonlinkTableConfig, MoonlinkTableSecret,
+    ObjectStorageCache, ObjectStorageCacheConfig,
 };
 pub use table_handler::{EventSyncSender, TableHandler};
 pub use table_notify::TableEvent;

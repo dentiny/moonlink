@@ -21,6 +21,8 @@ storage-s3 = [
 storage-gcs = [
     "opendal/services-gcs",
     "iceberg/storage-gcs",
+    "iceberg/storage-s3",
+    # iceberg gcs io doesn't support HMAC key, so have to leverage S3 sdk.
     "base64",
     "hmac",
     "sha1",

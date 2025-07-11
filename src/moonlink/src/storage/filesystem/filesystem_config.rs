@@ -16,10 +16,13 @@ pub enum FileSystemConfig {
     Gcs {
         /// GCS project.
         project: String,
+        /// GCS bucket region.
+        region: String,
         /// GCS bucket.
         bucket: String,
-        /// If authentication required and credential unassigned, fallback to well-known location by default.
-        cred_path: Option<String>,
+        /// HMAC key and secret.
+        access_key_id: String,
+        secret_access_key: String,
         /// Used for fake GCS server.
         endpoint: Option<String>,
         /// Used for fake GCS server.

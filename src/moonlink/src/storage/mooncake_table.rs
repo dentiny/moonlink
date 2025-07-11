@@ -8,6 +8,7 @@ mod snapshot;
 pub mod snapshot_read_output;
 mod snapshot_validation;
 pub mod table_config;
+pub mod table_secret;
 mod table_snapshot;
 mod transaction_stream;
 

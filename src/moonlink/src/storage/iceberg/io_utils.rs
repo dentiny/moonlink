@@ -1,7 +1,5 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
-#[cfg(feature = "storage-gcs")]
-use crate::storage::filesystem::gcs::cred_utils as gcs_cred_utils;
 use crate::storage::iceberg::parquet_utils;
 
 use std::path::Path;
@@ -91,36 +89,31 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
         FileSystemConfig::FileSystem { .. } => FileIOBuilder::new_fs_io().build(),
         #[cfg(feature = "storage-gcs")]
         FileSystemConfig::Gcs {
+            project,
+            region,
             endpoint,
             disable_auth,
-            cred_path,
+            access_key_id,
+            secret_access_key,
             ..
         } => {
+            // Testing environment.
             if *disable_auth {
-                assert!(cred_path.is_none());
-            }
-
-            let mut file_io_builder = FileIOBuilder::new("GCS")
-                .with_prop(iceberg::io::GCS_PROJECT_ID, "coral-ring-465417-r0");
-            if let Some(endpoint) = endpoint {
-                file_io_builder =
-                    file_io_builder.with_prop(iceberg::io::GCS_SERVICE_PATH, endpoint);
-            }
-            if *disable_auth {
-                file_io_builder = file_io_builder
+                let file_io_builder = FileIOBuilder::new("GCS")
+                    .with_prop(iceberg::io::GCS_PROJECT_ID, project)
+                    .with_prop(iceberg::io::GCS_SERVICE_PATH, endpoint.as_ref().unwrap())
                     .with_prop(iceberg::io::GCS_NO_AUTH, "true")
                     .with_prop(iceberg::io::GCS_ALLOW_ANONYMOUS, "true")
                     .with_prop(iceberg::io::GCS_DISABLE_CONFIG_LOAD, "true");
-            } else {
-                let cred_json = gcs_cred_utils::load_gcs_credentials(cred_path).map_err(|e| {
-                    IcebergError::new(
-                        iceberg::ErrorKind::Unexpected,
-                        format!("Failed to load GCS credential {:?}: {:?}", cred_path, e),
-                    )
-                })?;
-                file_io_builder =
-                    file_io_builder.with_prop(iceberg::io::GCS_CREDENTIALS_JSON, cred_json);
+                return file_io_builder.build();
             }
+
+            // Production environment.
+            let file_io_builder = FileIOBuilder::new("S3")
+                .with_prop(iceberg::io::S3_ENDPOINT, "https://storage.googleapis.com")
+                .with_prop(iceberg::io::S3_REGION, region)
+                .with_prop(iceberg::io::S3_ACCESS_KEY_ID, access_key_id)
+                .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key);
             file_io_builder.build()
         }
         #[cfg(feature = "storage-s3")]

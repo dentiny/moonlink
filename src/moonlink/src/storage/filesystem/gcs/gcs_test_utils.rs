@@ -25,7 +25,10 @@ pub(crate) fn create_gcs_filesystem_config(warehouse_uri: &str) -> FileSystemCon
         endpoint: Some(GCS_TEST_ENDPOINT.to_string()),
         disable_auth: true,
         project: GCS_TEST_PROJECT.to_string(),
-        cred_path: None,
+        // Fill other fields as empty.
+        region: "".to_string(),
+        access_key_id: "".to_string(),
+        secret_access_key: "".to_string(),
     }
 }
 

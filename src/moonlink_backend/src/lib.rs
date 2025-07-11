@@ -93,6 +93,7 @@ where
         // Add mooncake table to replication, and create corresponding mooncake table.
         let moonlink_table_config = {
             let mut manager = self.replication_manager.write().await;
+            // TODO(hjiang): Should pass real secrets into the mooncake table.
             let table_config = manager
                 .add_table(
                     &src_uri,
@@ -100,6 +101,7 @@ where
                     table_id,
                     &src_table_name,
                     /*override_table_base_path=*/ None,
+                    /*secret_entry=*/ None,
                 )
                 .await?;
             manager.start_replication(&src_uri).await?;
