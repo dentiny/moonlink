@@ -14,6 +14,21 @@ use crate::{MooncakeTable, SnapshotReadOutput};
 use crate::{ReadState, Result};
 
 /// ===============================
+/// Flush
+/// ===============================
+///
+/// Flush mooncake and block wait its completio.
+#[cfg(test)]
+pub(crate) async fn flush_table_and_sync(
+    table: &mut MooncakeTable,
+    _receiver: &mut Receiver<TableEvent>,
+    lsn: u64,
+) -> Result<()> {
+    // TODO(Nolan): Use receiver to block wait until table flush finishes.
+    table.flush(lsn).await
+}
+
+/// ===============================
 /// Delete evicted files
 /// ===============================
 ///
@@ -33,30 +48,6 @@ pub(crate) async fn sync_delete_evicted_files(
         assert_eq!(evicted_data_files, expected_files_to_delete);
     } else {
         panic!("Receive other notifications other than delete evicted files")
-    }
-}
-
-/// ===============================
-/// Request read
-/// ===============================
-///
-/// Perform a read request for the given table.
-pub(crate) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> SnapshotReadOutput {
-    let mut guard = table.snapshot.write().await;
-    guard.request_read().await.unwrap()
-}
-
-/// Block wait read request to finish, and set the result to the snapshot buffer.
-/// Precondition: there's ongoing read request.
-pub(crate) async fn sync_read_request_for_test(
-    table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableEvent>,
-) {
-    let notification = receiver.recv().await.unwrap();
-    if let TableEvent::ReadRequest { cache_handles } = notification {
-        table.set_read_request_res(cache_handles);
-    } else {
-        panic!("Receive other notifications other than read request")
     }
 }
 
@@ -435,4 +426,24 @@ pub(crate) async fn drop_read_states_and_create_mooncake_snapshot(
     drop_read_states(read_states, table, receiver).await;
     let (_, _, _, _, files_to_delete) = create_mooncake_snapshot_for_test(table, receiver).await;
     files_to_delete
+}
+
+/// Perform a read request for the given table.
+pub(crate) async fn perform_read_request_for_test(table: &mut MooncakeTable) -> SnapshotReadOutput {
+    let mut guard = table.snapshot.write().await;
+    guard.request_read().await.unwrap()
+}
+
+/// Block wait read request to finish, and set the result to the snapshot buffer.
+/// Precondition: there's ongoing read request.
+pub(crate) async fn sync_read_request_for_test(
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableEvent>,
+) {
+    let notification = receiver.recv().await.unwrap();
+    if let TableEvent::ReadRequest { cache_handles } = notification {
+        table.set_read_request_res(cache_handles);
+    } else {
+        panic!("Receive other notifications other than read request")
+    }
 }
