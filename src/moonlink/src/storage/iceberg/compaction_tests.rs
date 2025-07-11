@@ -36,10 +36,12 @@ use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
 use crate::storage::MooncakeTable;
-use crate::FileSystemAccessor;
+use crate::{FileSystemAccessor, TableEvent};
+
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::io::FileIOBuilder;
 use std::sync::Arc;
+use tokio::sync::mpsc::Receiver;
 
 /// Test data.
 const ID_VALUES: [i32; 4] = [1, 2, 3, 4];
@@ -244,14 +246,19 @@ async fn check_loaded_snapshot(
 
 /// Test util function which imports two data files and file indices to mooncake table and iceberg table.
 /// These two data files are committed and flushed at two transaction, separately with LSN 0 and 1.
-async fn prepare_committed_and_flushed_data_files(table: &mut MooncakeTable) -> Vec<MoonlinkRow> {
+async fn prepare_committed_and_flushed_data_files(
+    table: &mut MooncakeTable,
+    notify_rx: &mut Receiver<TableEvent>,
+) -> Vec<MoonlinkRow> {
     // Append first row.
     let row_1 = get_moonlink_row(/*idx=*/ 0);
     let row_2 = get_moonlink_row(/*idx=*/ 1);
     table.append(row_1.clone()).unwrap();
     table.append(row_2.clone()).unwrap();
     table.commit(/*lsn=*/ 0);
-    table.flush(/*lsn=*/ 0).await.unwrap();
+    flush_table_and_sync(table, notify_rx, /*lsn=*/ 0)
+        .await
+        .unwrap();
 
     // Append second row.
     let row_3 = get_moonlink_row(/*idx=*/ 2);
@@ -259,7 +266,9 @@ async fn prepare_committed_and_flushed_data_files(table: &mut MooncakeTable) -> 
     table.append(row_3.clone()).unwrap();
     table.append(row_4.clone()).unwrap();
     table.commit(/*lsn=*/ 2);
-    table.flush(/*lsn=*/ 1).await.unwrap();
+    flush_table_and_sync(table, notify_rx, /*lsn=*/ 1)
+        .await
+        .unwrap();
 
     vec![row_1, row_2, row_3, row_4]
 }
@@ -315,7 +324,7 @@ async fn test_compaction_1_1_1() {
             get_data_compaction_config(),
         )
         .await;
-    let _ = prepare_committed_and_flushed_data_files(&mut table).await;
+    let _ = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     create_mooncake_and_persist_for_data_compaction_for_test(
@@ -372,7 +381,7 @@ async fn test_compaction_1_1_2() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     let injected_committed_deletion_rows = vec![
@@ -463,7 +472,7 @@ async fn test_compaction_1_2_1() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete one row and commit.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await;
@@ -542,7 +551,7 @@ async fn test_compaction_1_2_2() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete one row and commit.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await;
@@ -643,12 +652,14 @@ async fn test_compaction_2_2_1() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete two rows and commit/flush/persist into iceberg.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
     table.commit(/*lsn=*/ 3);
-    table.flush(/*lsn=*/ 3).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 3)
+        .await
+        .unwrap();
 
     table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
     table.commit(/*lsn=*/ 5);
@@ -725,12 +736,14 @@ async fn test_compaction_2_2_2() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete two rows and commit/flush/persist into iceberg.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
     table.commit(/*lsn=*/ 3);
-    table.flush(/*lsn=*/ 3).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 3)
+        .await
+        .unwrap();
 
     table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
     table.commit(/*lsn=*/ 5);
@@ -831,16 +844,20 @@ async fn test_compaction_2_3_1() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete two rows and commit/flush/persist into iceberg.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
     table.commit(/*lsn=*/ 3);
-    table.flush(/*lsn=*/ 3).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 3)
+        .await
+        .unwrap();
 
     table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
     table.commit(/*lsn=*/ 5);
-    table.flush(/*lsn=*/ 5).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 5)
+        .await
+        .unwrap();
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     create_mooncake_and_persist_for_data_compaction_for_test(
@@ -897,16 +914,20 @@ async fn test_compaction_2_3_2() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete two rows and commit/flush/persist into iceberg.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
     table.commit(/*lsn=*/ 3);
-    table.flush(/*lsn=*/ 3).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 3)
+        .await
+        .unwrap();
 
     table.delete(rows[2].clone(), /*lsn=*/ 4).await; // Belong to the second data file.
     table.commit(/*lsn=*/ 5);
-    table.flush(/*lsn=*/ 5).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 5)
+        .await
+        .unwrap();
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     let injected_committed_deletion_rows = vec![
@@ -1005,7 +1026,7 @@ async fn test_compaction_3_2_1() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete two rows and commit/flush/persist into iceberg.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
@@ -1096,18 +1117,22 @@ async fn test_compaction_3_3_1() {
             get_data_compaction_config(),
         )
         .await;
-    let rows = prepare_committed_and_flushed_data_files(&mut table).await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
 
     // Delete two rows and commit/flush/persist into iceberg.
     table.delete(rows[0].clone(), /*lsn=*/ 2).await; // Belong to the first data file.
     table.delete(rows[1].clone(), /*lsn=*/ 3).await; // Belong to the first data file.
     table.commit(/*lsn=*/ 4);
-    table.flush(/*lsn=*/ 4).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 4)
+        .await
+        .unwrap();
 
     table.delete(rows[2].clone(), /*lsn=*/ 5).await; // Belong to the second data file.
     table.delete(rows[3].clone(), /*lsn=*/ 6).await; // Belong to the second data file.
     table.commit(/*lsn=*/ 7);
-    table.flush(/*lsn=*/ 7).await.unwrap();
+    flush_table_and_sync(&mut table, &mut receiver, /*lsn=*/ 7)
+        .await
+        .unwrap();
 
     // Perform mooncake and iceberg snapshot, and data compaction.
     create_mooncake_and_persist_for_data_compaction_for_test(
