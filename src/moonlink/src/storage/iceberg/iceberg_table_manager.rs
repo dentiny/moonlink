@@ -114,7 +114,10 @@ impl IcebergTableManager {
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
-        let catalog = catalog_utils::create_catalog(config.filesystem_config.clone())?;
+        let iceberg_schema =
+            iceberg::arrow::arrow_schema_to_schema(mooncake_table_metadata.schema.as_ref())?;
+        let catalog =
+            catalog_utils::create_catalog(config.filesystem_config.clone(), iceberg_schema)?;
         Ok(Self {
             snapshot_loaded: false,
             config,
@@ -136,8 +139,12 @@ impl IcebergTableManager {
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         config: IcebergTableConfig,
     ) -> IcebergResult<IcebergTableManager> {
-        let catalog =
-            catalog_utils::create_catalog_with_filesystem_accessor(filesystem_accessor.clone())?;
+        let iceberg_schema =
+            iceberg::arrow::arrow_schema_to_schema(mooncake_table_metadata.schema.as_ref())?;
+        let catalog = catalog_utils::create_catalog_with_filesystem_accessor(
+            filesystem_accessor.clone(),
+            iceberg_schema,
+        )?;
         Ok(Self {
             snapshot_loaded: false,
             config,

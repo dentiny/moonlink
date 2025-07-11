@@ -1,10 +1,14 @@
 #[cfg(test)]
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
-use crate::FileSystemConfig;
 
+use arrow_schema::Schema as ArrowSchema;
+use iceberg::spec::Schema as IcebergSchema;
 use iceberg::Result as IcebergResult;
+
+use std::sync::Arc;
 
 /// Create a catelog based on the provided type.
 ///
@@ -12,16 +16,22 @@ use iceberg::Result as IcebergResult;
 /// Here we simply deduce catalog type from warehouse because both filesystem and object storage catalog are only able to handle certain scheme.
 pub fn create_catalog(
     filesystem_config: FileSystemConfig,
+    iceberg_schema: IcebergSchema,
 ) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
-    Ok(Box::new(FileCatalog::new(filesystem_config)?))
+    Ok(Box::new(FileCatalog::new(
+        filesystem_config,
+        iceberg_schema,
+    )?))
 }
 
 /// Test util function to create catalog with provided filesystem accessor.
 #[cfg(test)]
 pub fn create_catalog_with_filesystem_accessor(
     filesystem_accessor: std::sync::Arc<dyn BaseFileSystemAccess>,
+    iceberg_schema: IcebergSchema,
 ) -> IcebergResult<Box<dyn MoonlinkCatalog>> {
     Ok(Box::new(FileCatalog::new_with_filesystem_accessor(
         filesystem_accessor,
+        iceberg_schema,
     )?))
 }

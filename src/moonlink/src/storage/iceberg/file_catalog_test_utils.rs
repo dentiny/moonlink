@@ -20,11 +20,14 @@ pub(crate) struct TableCommitProxy {
 }
 
 /// Test util to create file catalog.
-pub(crate) fn create_test_file_catalog(tmp_dir: &TempDir) -> FileCatalog {
+pub(crate) fn create_test_file_catalog(tmp_dir: &TempDir, iceberg_schema: Schema) -> FileCatalog {
     let warehouse_path = tmp_dir.path().to_str().unwrap();
-    FileCatalog::new(FileSystemConfig::FileSystem {
-        root_directory: warehouse_path.to_string(),
-    })
+    FileCatalog::new(
+        FileSystemConfig::FileSystem {
+            root_directory: warehouse_path.to_string(),
+        },
+        iceberg_schema,
+    )
     .unwrap()
 }
 

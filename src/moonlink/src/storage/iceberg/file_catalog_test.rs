@@ -53,9 +53,12 @@ async fn test_local_iceberg_table_creation() {
 
     let temp_dir = TempDir::new().unwrap();
     let warehouse_path = temp_dir.path().to_str().unwrap();
-    let catalog = FileCatalog::new(FileSystemConfig::FileSystem {
-        root_directory: warehouse_path.to_string(),
-    })
+    let catalog = FileCatalog::new(
+        FileSystemConfig::FileSystem {
+            root_directory: warehouse_path.to_string(),
+        },
+        get_test_schema().await.unwrap(),
+    )
     .unwrap();
     let namespace_ident = NamespaceIdent::from_strs([NAMESPACE]).unwrap();
     let _ = catalog
@@ -295,7 +298,7 @@ async fn test_list_operation_impl(catalog: FileCatalog) -> IcebergResult<()> {
 #[tokio::test]
 async fn test_update_table_with_requirement_check_failed() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir);
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
     create_test_table(&catalog).await.unwrap();
 
     let namespace = NamespaceIdent::from_strs(["default"]).unwrap();
@@ -391,7 +394,7 @@ async fn test_update_table_impl(mut catalog: FileCatalog) -> IcebergResult<()> {
 #[tokio::test]
 async fn test_catalog_namespace_operations_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir);
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
     test_catalog_namespace_operations_impl(catalog)
         .await
         .unwrap();
@@ -413,7 +416,7 @@ async fn test_catalog_namespace_operations_gcs() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_catalog_table_operations_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir);
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
     test_catalog_table_operations_impl(catalog).await.unwrap();
 }
 #[tokio::test]
@@ -433,7 +436,7 @@ async fn test_catalog_table_operations_gcs() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_list_operation_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir);
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
     test_list_operation_impl(catalog).await.unwrap();
 }
 #[tokio::test]
@@ -453,7 +456,7 @@ async fn test_list_operation_gcs() -> IcebergResult<()> {
 #[tokio::test]
 async fn test_update_table_filesystem() {
     let temp_dir = TempDir::new().unwrap();
-    let catalog = create_test_file_catalog(&temp_dir);
+    let catalog = create_test_file_catalog(&temp_dir, get_test_schema().await.unwrap());
     test_update_table_impl(catalog).await.unwrap();
 }
 #[tokio::test]

@@ -13,6 +13,7 @@ use crate::storage::iceberg::file_catalog::METADATA_DIRECTORY;
 use crate::storage::iceberg::file_catalog::VERSION_HINT_FILENAME;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
+use crate::storage::iceberg::schema_utils::*;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
@@ -43,6 +44,9 @@ use std::sync::Arc;
 
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow_array::{Int32Array, RecordBatch, StringArray};
+use iceberg::arrow::arrow_schema_to_schema;
+use iceberg::NamespaceIdent;
+use iceberg::TableIdent;
 use parquet::arrow::AsyncArrowWriter;
 use tempfile::tempdir;
 use tokio::sync::mpsc;
@@ -1807,6 +1811,102 @@ async fn test_object_storage_sync_snapshots_with_gcs() {
 
     // Common testing logic.
     mooncake_table_snapshot_persist_impl(iceberg_table_config.clone()).await;
+
+    // Clean up testing environment.
+    gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;
+}
+
+/// ================================
+/// Test table creation
+/// ================================
+///
+/// Testing scenrio: after table creation, table schema (especially field ids assignment) match arrow schema.
+async fn test_schema_for_table_creation_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
+    let mooncake_table_metadata =
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+
+    // Append, commit, flush and persist.
+    let (mut table, mut notify_rx) = create_mooncake_table_and_notify(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+        object_storage_cache.clone(),
+    )
+    .await;
+    let row = test_row_1();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 10);
+    table.flush(/*lsn=*/ 10).await.unwrap();
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Now the iceberg table has been created, create an iceberg table manager and check table status.
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
+    let iceberg_table_manager = IcebergTableManager::new(
+        mooncake_table_metadata.clone(),
+        object_storage_cache.clone(),
+        filesystem_accessor,
+        iceberg_table_config.clone(),
+    )
+    .unwrap();
+
+    // Load table metadata and verify schema.
+    let namespace_ident =
+        NamespaceIdent::from_strs(iceberg_table_config.namespace.clone()).unwrap();
+    let table_ident = TableIdent::new(namespace_ident, iceberg_table_config.table_name.clone());
+    let table = iceberg_table_manager
+        .catalog
+        .load_table(&table_ident)
+        .await
+        .unwrap();
+    let actual_schema = table.metadata().current_schema();
+    let expected_schema = arrow_schema_to_schema(mooncake_table_metadata.schema.as_ref()).unwrap();
+    assert_is_same_schema(actual_schema.as_ref().clone(), expected_schema);
+}
+
+#[tokio::test]
+async fn test_schema_for_table_creation() {
+    // Local filesystem for iceberg.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+
+    // Common testing logic.
+    test_schema_for_table_creation_impl(iceberg_table_config).await;
+}
+
+#[tokio::test]
+#[cfg(feature = "storage-s3")]
+async fn test_schema_for_table_creation_with_s3() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_schema_for_table_creation_impl(iceberg_table_config.clone()).await;
+
+    // Clean up testing environment.
+    s3_test_utils::delete_test_s3_bucket(bucket_name.clone()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "storage-gcs")]
+async fn test_schema_for_table_creation_with_gcs() {
+    // Remote object storage for iceberg.
+    let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
+        .await
+        .unwrap();
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_schema_for_table_creation_impl(iceberg_table_config.clone()).await;
 
     // Clean up testing environment.
     gcs_test_utils::delete_test_gcs_bucket(bucket_name.clone()).await;

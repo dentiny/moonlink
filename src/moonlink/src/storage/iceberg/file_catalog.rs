@@ -41,10 +41,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::vec;
 
+use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
+use iceberg::arrow as IcebergArrow;
 use iceberg::io::FileIO;
 use iceberg::puffin::PuffinWriter;
-use iceberg::spec::{TableMetadata, TableMetadataBuilder};
+use iceberg::spec::{
+    Schema as IcebergSchema, TableMetadata, TableMetadataBuildResult, TableMetadataBuilder,
+};
 use iceberg::table::Table;
 use iceberg::Result as IcebergResult;
 use iceberg::{
@@ -67,6 +71,8 @@ pub struct FileCatalog {
     file_io: FileIO,
     /// Table location.
     warehouse_location: String,
+    /// Used to overwrite iceberg metadata at table creation.
+    iceberg_schema: IcebergSchema,
     /// Used to record puffin blob metadata in one transaction, and cleaned up after transaction commits.
     ///
     /// Maps from "puffin filepath" to "puffin blob metadata".
@@ -79,13 +85,14 @@ pub struct FileCatalog {
 
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
-    pub fn new(config: FileSystemConfig) -> IcebergResult<Self> {
+    pub fn new(config: FileSystemConfig, iceberg_schema: IcebergSchema) -> IcebergResult<Self> {
         let file_io = iceberg_io_utils::create_file_io(&config)?;
         let warehouse_location = get_root_path(&config);
         Ok(Self {
             filesystem_accessor: Arc::new(FileSystemAccessor::new(config)),
             file_io,
             warehouse_location,
+            iceberg_schema,
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
             data_files_to_remove: HashSet::new(),
@@ -96,12 +103,14 @@ impl FileCatalog {
     #[cfg(test)]
     pub fn new_with_filesystem_accessor(
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+        iceberg_schema: IcebergSchema,
     ) -> IcebergResult<Self> {
         use iceberg::io::FileIOBuilder;
         let file_io = FileIOBuilder::new_fs_io().build()?;
         Ok(Self {
             filesystem_accessor,
             file_io,
+            iceberg_schema,
             warehouse_location: String::new(),
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
@@ -216,6 +225,20 @@ impl FileCatalog {
             }
         }
         Ok(builder)
+    }
+
+    /// This is a hack function to work-around iceberg-rust.
+    /// iceberg-rust somehow reassign field id at table creation, which means it leads to inconsistency between iceberg table metadata and parquet metadata; query engines is possible to suffer schema inconsistency error.
+    /// Here we overwrite iceberg schema with correctly populated field id.
+    fn get_iceberg_table_metadata(
+        &self,
+        table_metadata: TableMetadataBuildResult,
+    ) -> IcebergResult<TableMetadata> {
+        let metadata = table_metadata.metadata;
+        let mut metadata_builder = metadata.into_builder(/*current_file_location=*/ None);
+        metadata_builder = metadata_builder.add_current_schema(self.iceberg_schema.clone())?;
+        let new_table_metadata = metadata_builder.build()?;
+        Ok(new_table_metadata.metadata)
     }
 }
 
@@ -490,7 +513,8 @@ impl Catalog for FileCatalog {
         );
 
         let table_metadata = TableMetadataBuilder::from_table_creation(creation)?.build()?;
-        let metadata_json = serde_json::to_vec(&table_metadata.metadata)?;
+        let metadata = self.get_iceberg_table_metadata(table_metadata)?;
+        let metadata_json = serde_json::to_vec(&metadata)?;
         self.filesystem_accessor
             .write_object(&metadata_filepath, /*content=*/ metadata_json)
             .await
@@ -502,7 +526,7 @@ impl Catalog for FileCatalog {
             })?;
 
         let table = Table::builder()
-            .metadata(table_metadata.metadata)
+            .metadata(metadata)
             .identifier(table_ident)
             .file_io(self.file_io.clone())
             .build()?;
