@@ -17,7 +17,7 @@ use crate::{ReadState, Result};
 /// Flush
 /// ===============================
 ///
-/// Flush mooncake and block wait its completio.
+/// Flush mooncake, block wait its completion and reflect result to mooncake table.
 #[cfg(test)]
 pub(crate) async fn flush_table_and_sync(
     table: &mut MooncakeTable,
