@@ -175,9 +175,11 @@ impl DiskSliceWriter {
                         .await
                         .map_err(Error::Io)?;
                 let properties = parquet_utils::get_default_parquet_properties();
+                let mut arrow_schema_without_field_ids = self.schema.as_ref().clone();
+                arrow_schema_without_field_ids.metadata.clear();
                 writer = Some(AsyncArrowWriter::try_new(
                     file,
-                    self.schema.clone(),
+                    Arc::new(arrow_schema_without_field_ids),
                     Some(properties),
                 )?);
                 out_row_idx = 0;

@@ -8,6 +8,7 @@ pub(super) mod index;
 pub(super) mod io_utils;
 pub(super) mod moonlink_catalog;
 pub(super) mod parquet_metadata_utils;
+pub(super) mod schema_utils;
 pub(super) mod parquet_stats_utils;
 pub(super) mod parquet_utils;
 pub(super) mod puffin_utils;

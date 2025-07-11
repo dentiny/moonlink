@@ -1,11 +1,11 @@
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
-use crate::storage::iceberg::table_property;
+use crate::storage::iceberg::{schema_utils, table_property};
 
 use std::collections::HashMap;
 
 use arrow_schema::Schema as ArrowSchema;
 use iceberg::arrow as IcebergArrow;
-use iceberg::spec::{DataContentType, DataFileFormat, ManifestEntry};
+use iceberg::spec::{DataContentType, DataFileFormat, ManifestEntry, DEFAULT_SCHEMA_NAME_MAPPING, Schema as IcebergSchema};
 use iceberg::table::Table as IcebergTable;
 use iceberg::{
     Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableCreation, TableIdent,
@@ -53,6 +53,16 @@ pub fn is_file_index(entry: &ManifestEntry) -> bool {
     true
 }
 
+/// Util function to get iceberg table property.
+fn get_table_properties(iceberg_schema: &IcebergSchema) -> IcebergResult<HashMap<String, String>> {
+    let mut properties = table_property::create_iceberg_table_properties();
+
+    let name_mapping = schema_utils::build_name_mapping(iceberg_schema);
+    properties.insert(DEFAULT_SCHEMA_NAME_MAPPING.to_string(), serde_json::to_string(&name_mapping).unwrap());
+
+    Ok(properties)
+}
+
 /// Create an iceberg table in the given catalog from the given namespace and table name.
 /// Precondition: table doesn't exist in the given catalog.
 async fn create_iceberg_table<C: MoonlinkCatalog + ?Sized>(
@@ -70,6 +80,8 @@ async fn create_iceberg_table<C: MoonlinkCatalog + ?Sized>(
     }
 
     let iceberg_schema = IcebergArrow::arrow_schema_to_schema(arrow_schema)?;
+    let table_properties = get_table_properties(&iceberg_schema)?;
+
     let tbl_creation = TableCreation::builder()
         .name(table_name.to_string())
         .location(format!(
@@ -79,7 +91,7 @@ async fn create_iceberg_table<C: MoonlinkCatalog + ?Sized>(
             table_name
         ))
         .schema(iceberg_schema)
-        .properties(table_property::create_iceberg_table_properties())
+        .properties(table_properties)
         .build();
     let table = catalog.create_table(&namespace_ident, tbl_creation).await?;
     Ok(table)
