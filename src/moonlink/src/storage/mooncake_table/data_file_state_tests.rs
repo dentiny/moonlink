@@ -116,7 +116,7 @@ async fn prepare_test_disk_file_for_read(
     cache: ObjectStorageCache,
     use_batch_write: bool,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
-    let (mut table, table_notify) =
+    let (mut table, mut table_notify) =
         create_mooncake_table_and_notify_for_read(temp_dir, cache).await;
 
     let row = MoonlinkRow::new(vec![
@@ -128,7 +128,9 @@ async fn prepare_test_disk_file_for_read(
     if use_batch_write {
         table.append(row.clone()).unwrap();
         table.commit(/*lsn=*/ 1);
-        table.flush(/*lsn=*/ 1).await.unwrap();
+        flush_table_and_sync(&mut table, &mut table_notify, /*lsn=*/ 1)
+            .await
+            .unwrap();
     } else {
         table
             .append_in_stream_batch(row.clone(), /*xact_id=*/ 0)
@@ -1276,7 +1278,7 @@ async fn prepare_test_disk_files_for_compaction(
     temp_dir: &TempDir,
     cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
-    let (mut table, table_notify) =
+    let (mut table, mut table_notify) =
         create_mooncake_table_and_notify_for_compaction(temp_dir, cache).await;
 
     // Append, commit and flush the first row.
@@ -1287,7 +1289,9 @@ async fn prepare_test_disk_files_for_compaction(
     ]);
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 1);
-    table.flush(/*lsn=*/ 1).await.unwrap();
+    flush_table_and_sync(&mut table, &mut table_notify, /*lsn=*/ 1)
+        .await
+        .unwrap();
 
     // Append, commit and flush the second row.
     let row = MoonlinkRow::new(vec![
@@ -1297,7 +1301,9 @@ async fn prepare_test_disk_files_for_compaction(
     ]);
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 2);
-    table.flush(/*lsn=*/ 2).await.unwrap();
+    flush_table_and_sync(&mut table, &mut table_notify, /*lsn=*/ 2)
+        .await
+        .unwrap();
 
     (table, table_notify)
 }
