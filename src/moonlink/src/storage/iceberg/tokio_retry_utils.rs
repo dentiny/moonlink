@@ -1,11 +1,15 @@
 /// This module contains tokio retry related util functions.
+///
+/// TODO(hjiang): Switch to [`backon`](https://github.com/Xuanwo/backon).
 use iceberg::Error as IcebergError;
 use tokio_retry2::RetryError as TokioRetryError;
+use tracing::error;
 
 /// Convert iceberg error to tokio retry error. Only `Unexpected` iceberg error translates to transient error.
 pub(crate) fn iceberg_to_tokio_retry_error(err: IcebergError) -> TokioRetryError<IcebergError> {
     match err.kind() {
         iceberg::ErrorKind::Unexpected | iceberg::ErrorKind::CatalogCommitConflicts => {
+            error!("Encounter retriable iceberg error: {err}");
             TokioRetryError::Transient {
                 err,
                 retry_after: None,
