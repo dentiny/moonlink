@@ -4,6 +4,13 @@ version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 
+[features]
+default = ["storage-fs"]
+storage-all = ["storage-fs", "storage-s3", "storage-gcs"]
+storage-fs = []
+storage-s3 = []
+storage-gcs = []
+
 [dependencies]
 arrow = { workspace = true }
 arrow-schema = { workspace = true }
