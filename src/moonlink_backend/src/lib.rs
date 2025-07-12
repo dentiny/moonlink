@@ -37,16 +37,16 @@ where
     pub async fn new(base_path: String, metadata_store_uris: Vec<String>) -> Result<Self> {
         logging::init_logging();
 
-        // Re-create directory for temporary files directory and cache files directory under base directory.
+        // Re-create directory for temporary files directory and read cache files directory under base directory.
         let temp_files_dir = file_utils::get_temp_file_directory_under_base(&base_path);
-        let cache_files_dir = file_utils::get_cache_directory_under_base(&base_path);
+        let read_cache_files_dir = file_utils::get_cache_directory_under_base(&base_path);
         file_utils::recreate_directory(temp_files_dir.to_str().unwrap()).unwrap();
-        file_utils::recreate_directory(cache_files_dir.to_str().unwrap()).unwrap();
+        file_utils::recreate_directory(read_cache_files_dir.to_str().unwrap()).unwrap();
 
         let mut replication_manager = ReplicationManager::new(
             base_path,
             temp_files_dir.to_str().unwrap().to_string(),
-            file_utils::create_default_object_storage_cache(cache_files_dir),
+            file_utils::create_default_object_storage_cache(read_cache_files_dir),
         );
         let metadata_store_accessors =
             recovery_utils::recover_all_tables(metadata_store_uris, &mut replication_manager)
@@ -101,7 +101,7 @@ where
                     table_id,
                     &src_table_name,
                     /*override_table_base_path=*/ None,
-                    /*secret_entry=*/ None,
+                    /*override_iceberg_filesystem_config=*/ None,
                 )
                 .await?;
             manager.start_replication(&src_uri).await?;

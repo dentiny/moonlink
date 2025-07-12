@@ -8,7 +8,7 @@ use crate::pg_replicate::postgres_source::{
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
 use moonlink::{
-    FileSystemConfig, MoonlinkTableConfig, MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, TableEventManager
+    FileSystemConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
 };
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -279,7 +279,7 @@ impl ReplicationConnection {
         mooncake_table_id: &T,
         table_id: u32,
         override_table_base_path: Option<&str>,
-        filesystem_config: FileSystemConfig,
+        iceberg_filesystem_config: Option<FileSystemConfig>,
     ) -> Result<MoonlinkTableConfig> {
         let src_table_id = schema.src_table_id;
         debug!(src_table_id, "adding table to replication");
@@ -291,7 +291,7 @@ impl ReplicationConnection {
             self.table_temp_files_directory.clone(),
             &self.replication_state,
             self.object_storage_cache.clone(),
-            filesystem_config,
+            iceberg_filesystem_config,
         )
         .await?;
 
@@ -408,7 +408,7 @@ impl ReplicationConnection {
         mooncake_table_id: &T,
         table_id: u32,
         override_table_base_path: Option<&str>,
-        filesystem_config: FileSystemConfig,
+        iceberg_filesystem_config: Option<FileSystemConfig>,
     ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
         debug!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
@@ -421,7 +421,7 @@ impl ReplicationConnection {
                 mooncake_table_id,
                 table_id,
                 override_table_base_path,
-                filesystem_config,
+                iceberg_filesystem_config,
             )
             .await?;
 

@@ -36,7 +36,7 @@ where
                     .filesystem_config
                     .get_root_path(),
             ),
-            /*secret_entry=*/ None,
+            /*iceberg_filesystem_config=*/ None,
         )
         .await?;
     Ok(())

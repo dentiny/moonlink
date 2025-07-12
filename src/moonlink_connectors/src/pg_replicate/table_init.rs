@@ -51,29 +51,32 @@ pub async fn build_table_components(
     table_temp_files_directory: String,
     replication_state: &ReplicationState,
     object_storage_cache: ObjectStorageCache,
-    filesystem_config: FileSystemConfig,
+    iceberg_filesystem_config: Option<FileSystemConfig>,
 ) -> Result<(TableResources, MoonlinkTableConfig)> {
-    let table_path = PathBuf::from(base_path).join(&mooncake_table_id);
-    tokio::fs::create_dir_all(&table_path).await?;
+    let write_cache_path = PathBuf::from(base_path).join(&mooncake_table_id);
+    tokio::fs::create_dir_all(&write_cache_path).await?;
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
+    let iceberg_filesystem_config =
+        iceberg_filesystem_config.unwrap_or(FileSystemConfig::FileSystem {
+            root_directory: base_path.to_str().unwrap().to_string(),
+        });
 
     let iceberg_table_config = IcebergTableConfig {
         namespace: vec![table_schema.table_name.schema.clone()],
         table_name: mooncake_table_id,
-        filesystem_config: filesystem_config.clone(),
+        filesystem_config: iceberg_filesystem_config.clone(),
     };
     let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(
         arrow_schema,
         table_schema.table_name.to_string(),
         table_id,
-        table_path,
+        write_cache_path,
         identity,
         iceberg_table_config.clone(),
         mooncake_table_config.clone(),
         object_storage_cache,
-        // TODO(hjiang): Should take user-provided configs.
-        Arc::new(FileSystemAccessor::new(filesystem_config)),
+        Arc::new(FileSystemAccessor::new(iceberg_filesystem_config)),
     )
     .await?;
 
