@@ -1,6 +1,7 @@
 pub(super) mod catalog_utils;
 pub(super) mod deletion_vector;
 pub(super) mod file_catalog;
+pub(super) mod iceberg_table_config;
 mod iceberg_table_loader;
 pub(super) mod iceberg_table_manager;
 mod iceberg_table_syncer;

@@ -6,7 +6,7 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::s3_test_utils;
-use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
+use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::test_utils_commons::*;

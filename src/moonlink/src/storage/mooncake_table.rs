@@ -25,7 +25,8 @@ pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
+use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
+use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;

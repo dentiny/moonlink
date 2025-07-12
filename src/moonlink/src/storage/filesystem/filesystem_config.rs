@@ -1,5 +1,5 @@
 /// FileSystemConfig contains configuration for multiple storage backends.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum FileSystemConfig {
     #[cfg(feature = "storage-fs")]
     FileSystem { root_directory: String },
@@ -28,4 +28,52 @@ pub enum FileSystemConfig {
         /// Used for fake GCS server.
         disable_auth: bool,
     },
+}
+
+impl std::fmt::Debug for FileSystemConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            #[cfg(feature = "storage-fs")]
+            FileSystemConfig::FileSystem { root_directory } => f
+                .debug_struct("FileSystem")
+                .field("root_directory", root_directory)
+                .finish(),
+
+            #[cfg(feature = "storage-s3")]
+            FileSystemConfig::S3 {
+                region,
+                bucket,
+                endpoint,
+                access_key_id,
+                secret_access_key,
+            } => f
+                .debug_struct("S3")
+                .field("region", region)
+                .field("bucket", bucket)
+                .field("endpoint", endpoint)
+                .field("access key id", &"xxxxx")
+                .field("secret access key", &"xxxxx")
+                .finish(),
+
+            #[cfg(feature = "storage-gcs")]
+            FileSystemConfig::Gcs {
+                project,
+                region,
+                bucket,
+                endpoint,
+                disable_auth,
+                access_key_id,
+                secret_access_key,
+            } => f
+                .debug_struct("Gcs")
+                .field("project", project)
+                .field("region", region)
+                .field("bucket", bucket)
+                .field("endpoint", endpoint)
+                .field("disable_auth", disable_auth)
+                .field("access key id", &"xxxxx")
+                .field("secret access key", &"xxxxx")
+                .finish(),
+        }
+    }
 }

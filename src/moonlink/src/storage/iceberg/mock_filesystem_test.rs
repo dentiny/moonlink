@@ -1,7 +1,8 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::{
     BaseFileSystemAccess, MockBaseFileSystemAccess,
 };
-use crate::storage::iceberg::iceberg_table_manager::{IcebergTableConfig, IcebergTableManager};
+use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
+use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::Error;
 use crate::{ObjectStorageCache, TableManager};

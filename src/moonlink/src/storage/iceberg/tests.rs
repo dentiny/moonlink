@@ -11,7 +11,7 @@ use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::iceberg::file_catalog::METADATA_DIRECTORY;
 use crate::storage::iceberg::file_catalog::VERSION_HINT_FILENAME;
-use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
+use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::schema_utils::*;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;

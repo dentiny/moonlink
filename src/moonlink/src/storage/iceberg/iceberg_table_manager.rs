@@ -1,5 +1,4 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::catalog_utils;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -13,11 +12,10 @@ use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::FileId;
-use crate::ObjectStorageCache;
+use crate::{IcebergTableConfig, ObjectStorageCache};
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::vec;
 
 use async_trait::async_trait;
 use iceberg::spec::DataFile;
@@ -32,37 +30,6 @@ pub(super) const MOONCAKE_TABLE_FLUSH_LSN: &str = "moonlink.table-flush-lsn";
 /// Used to represent uninitialized deletion vector.
 /// TODO(hjiang): Consider using `Option<>` to represent uninitialized, which is more rust-idiometic.
 pub(super) const UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW: usize = 0;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct IcebergTableConfig {
-    /// Table warehouse location.
-    pub warehouse_uri: String,
-    /// Namespace for the iceberg table.
-    pub namespace: Vec<String>,
-    /// Iceberg table name.
-    pub table_name: String,
-    // Filesystem config.
-    pub filesystem_config: FileSystemConfig,
-}
-
-impl IcebergTableConfig {
-    const DEFAULT_WAREHOUSE_URI: &str = "/tmp/moonlink_iceberg";
-    const DEFAULT_NAMESPACE: &str = "namespace";
-    const DEFAULT_TABLE: &str = "table";
-}
-
-impl Default for IcebergTableConfig {
-    fn default() -> Self {
-        Self {
-            warehouse_uri: Self::DEFAULT_WAREHOUSE_URI.to_string(),
-            namespace: vec![Self::DEFAULT_NAMESPACE.to_string()],
-            table_name: Self::DEFAULT_TABLE.to_string(),
-            filesystem_config: FileSystemConfig::FileSystem {
-                root_directory: Self::DEFAULT_WAREHOUSE_URI.to_string(),
-            },
-        }
-    }
-}
 
 #[derive(Clone, Debug)]
 pub(crate) struct DataFileEntry {

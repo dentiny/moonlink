@@ -1,7 +1,7 @@
 use super::*;
 use crate::row::{IdentityProp, RowValue};
 use crate::storage::iceberg::deletion_vector::DeletionVector;
-use crate::storage::iceberg::iceberg_table_manager::IcebergTableConfig;
+use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::snapshot::PuffinDeletionBlobAtRead;
 use crate::storage::mooncake_table::snapshot_read_output::DataFileForRead;
