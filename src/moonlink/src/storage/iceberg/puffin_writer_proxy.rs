@@ -294,7 +294,6 @@ async fn create_new_manifest_list_writer(
     cur_snapshot: &Snapshot,
     file_io: &FileIO,
 ) -> IcebergResult<ManifestListWriter> {
-    file_io.delete(cur_snapshot.manifest_list()).await?;
     let manifest_list_outfile = file_io.new_output(cur_snapshot.manifest_list())?;
 
     let latest_seq_no = table_metadata.last_sequence_number();
