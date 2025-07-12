@@ -8,6 +8,7 @@ use moonlink::{
     MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, TableEvent, TableEventManager,
     TableHandler,
 };
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{mpsc, mpsc::Sender, oneshot, watch};
@@ -42,6 +43,22 @@ fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     (event_sync_sender, event_sync_receiver)
 }
 
+/// Util function to delete and re-create the given directory.
+async fn recreate_directory(dir: &PathBuf) -> Result<()> {
+    // Clean up directory to place moonlink temporary files.
+    match tokio::fs::remove_dir_all(dir).await {
+        Ok(()) => {}
+        Err(e) => {
+            if e.kind() != ErrorKind::NotFound {
+                return Err(Error::Io(e));
+            }
+        }
+    }
+    tokio::fs::create_dir_all(dir).await?;
+
+    Ok(())
+}
+
 /// Build all components needed to replicate `table_schema`.
 pub async fn build_table_components(
     mooncake_table_id: String,
@@ -54,7 +71,7 @@ pub async fn build_table_components(
     iceberg_filesystem_config: Option<FileSystemConfig>,
 ) -> Result<(TableResources, MoonlinkTableConfig)> {
     let write_cache_path = PathBuf::from(base_path).join(&mooncake_table_id);
-    tokio::fs::create_dir_all(&write_cache_path).await?;
+    recreate_directory(&write_cache_path).await?;
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
     let iceberg_filesystem_config =
         iceberg_filesystem_config.unwrap_or(FileSystemConfig::FileSystem {
