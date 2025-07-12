@@ -185,7 +185,6 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
     let identity_property = mooncake_table_metadata.identity.clone();
 
     let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: warehouse_uri.clone(),
         filesystem_config: FileSystemConfig::FileSystem {
             root_directory: warehouse_uri.clone(),
         },

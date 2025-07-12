@@ -96,7 +96,6 @@ pub async fn build_table_components(
     let remote_root_directory = base_path.to_str().unwrap().to_string();
     let filesystem_config = create_filesystem_config(secret_entry, &remote_root_directory);
     let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: remote_root_directory.clone(),
         namespace: vec![table_schema.table_name.schema.clone()],
         table_name: mooncake_table_id,
         filesystem_config: filesystem_config.clone(),

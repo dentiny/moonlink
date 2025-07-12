@@ -52,7 +52,6 @@ fn bench_write_mooncake_table(c: &mut Criterion) {
     let warehouse_location = base_path.to_str().unwrap().to_string();
     let table_name = "test_table";
     let iceberg_table_config = IcebergTableConfig {
-        warehouse_uri: warehouse_location.clone(),
         namespace: vec!["default".to_string()],
         table_name: table_name.to_string(),
         filesystem_config: moonlink::FileSystemConfig::FileSystem {

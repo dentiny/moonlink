@@ -55,7 +55,9 @@ fn bench_write(c: &mut Criterion) {
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
                 let iceberg_table_config = IcebergTableConfig {
-                    warehouse_uri: temp_warehouse_uri.clone(),
+                    filesystem_config: FileSystemConfig::FileSystem {
+                        root_directory: temp_warehouse_uri.clone(),
+                    },
                     ..Default::default()
                 };
                 let table_config =
@@ -93,7 +95,9 @@ fn bench_write(c: &mut Criterion) {
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
                 let iceberg_table_config = IcebergTableConfig {
-                    warehouse_uri: temp_warehouse_uri.clone(),
+                    filesystem_config: FileSystemConfig::FileSystem {
+                        root_directory: temp_warehouse_uri.clone(),
+                    },
                     ..Default::default()
                 };
                 let table_config =
@@ -134,7 +138,9 @@ fn bench_write(c: &mut Criterion) {
                 let temp_warehouse_dir = tempdir().unwrap();
                 let temp_warehouse_uri = temp_warehouse_dir.path().to_str().unwrap().to_string();
                 let iceberg_table_config = IcebergTableConfig {
-                    warehouse_uri: temp_warehouse_uri.clone(),
+                    filesystem_config: FileSystemConfig::FileSystem {
+                        root_directory: temp_warehouse_uri.clone(),
+                    },
                     ..Default::default()
                 };
                 let table_config =

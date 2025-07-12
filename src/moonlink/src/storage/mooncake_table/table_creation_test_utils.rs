@@ -30,7 +30,6 @@ use tokio::sync::mpsc::Receiver;
 pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
     IcebergTableConfig {
-        warehouse_uri: root_directory.clone(),
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
         filesystem_config: FileSystemConfig::FileSystem { root_directory },
@@ -64,7 +63,6 @@ pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTable
     };
 
     IcebergTableConfig {
-        warehouse_uri,
         filesystem_config,
         ..Default::default()
     }

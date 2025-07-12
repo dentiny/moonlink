@@ -263,7 +263,10 @@ async fn validate_no_snapshot(
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
+        &iceberg_table_manager
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor,
     )
     .await;
@@ -285,7 +288,10 @@ async fn validate_only_initial_snapshot(
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
+        &iceberg_table_manager
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor,
     )
     .await;
@@ -307,7 +313,10 @@ async fn validate_only_new_data_files_in_snapshot(
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
+        &iceberg_table_manager
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor,
     )
     .await;
@@ -329,7 +338,10 @@ async fn validate_only_new_deletion_vectors_in_snapshot(
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
+        &iceberg_table_manager
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor,
     )
     .await;
@@ -359,7 +371,10 @@ async fn validate_new_data_files_and_deletion_vectors_in_snapshot(
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager.config.warehouse_uri,
+        &iceberg_table_manager
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor,
     )
     .await;

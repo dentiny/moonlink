@@ -16,7 +16,6 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::filesystem::accessor::configs::*;
 use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
-use crate::storage::filesystem::utils::path_utils::get_root_path;
 use crate::Result;
 
 /// IO block size for parallel read and write.
@@ -37,7 +36,7 @@ pub struct FileSystemAccessor {
 impl FileSystemAccessor {
     pub fn new(config: FileSystemConfig) -> Self {
         Self {
-            root_path: get_root_path(&config),
+            root_path: config.get_root_path(),
             operator: OnceCell::new(),
             config,
         }

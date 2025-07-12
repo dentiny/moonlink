@@ -47,7 +47,6 @@ pub fn test_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
 pub fn test_iceberg_table_config(context: &TestContext, table_name: &str) -> IcebergTableConfig {
     let root_directory = context.path().to_str().unwrap().to_string();
     IcebergTableConfig {
-        warehouse_uri: root_directory.clone(),
         namespace: vec!["default".to_string()],
         table_name: table_name.to_string(),
         filesystem_config: FileSystemConfig::FileSystem { root_directory },

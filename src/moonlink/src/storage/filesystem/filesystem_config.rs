@@ -77,3 +77,17 @@ impl std::fmt::Debug for FileSystemConfig {
         }
     }
 }
+
+impl FileSystemConfig {
+    /// Get root path for the given filesystem config.
+    pub fn get_root_path(&self) -> String {
+        match &self {
+            #[cfg(feature = "storage-fs")]
+            FileSystemConfig::FileSystem { root_directory } => root_directory.to_string(),
+            #[cfg(feature = "storage-gcs")]
+            FileSystemConfig::Gcs { bucket, .. } => format!("gs://{bucket}"),
+            #[cfg(feature = "storage-s3")]
+            FileSystemConfig::S3 { bucket, .. } => format!("s3://{bucket}"),
+        }
+    }
+}

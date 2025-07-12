@@ -151,7 +151,7 @@ impl IcebergTableManager {
         if self.iceberg_table.is_none() {
             let table = utils::get_or_create_iceberg_table(
                 &*self.catalog,
-                &self.config.warehouse_uri,
+                &self.config.filesystem_config.get_root_path(),
                 &self.config.namespace,
                 &self.config.table_name,
                 self.mooncake_table_metadata.schema.as_ref(),

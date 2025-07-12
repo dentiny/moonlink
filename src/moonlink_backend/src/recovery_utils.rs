@@ -33,7 +33,8 @@ where
                 &metadata_entry
                     .moonlink_table_config
                     .iceberg_table_config
-                    .warehouse_uri,
+                    .filesystem_config
+                    .get_root_path(),
             ),
             /*secret_entry=*/ None,
         )

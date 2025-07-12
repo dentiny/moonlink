@@ -32,7 +32,6 @@ pub fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
 /// Get iceberg table manager config.
 pub fn get_iceberg_manager_config(table_name: String, warehouse_uri: String) -> IcebergTableConfig {
     IcebergTableConfig {
-        warehouse_uri: warehouse_uri.clone(),
         namespace: vec!["default".to_string()],
         table_name,
         filesystem_config: FileSystemConfig::FileSystem {

@@ -345,7 +345,10 @@ async fn test_compaction_1_1_1() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -408,7 +411,10 @@ async fn test_compaction_1_1_2() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -494,7 +500,10 @@ async fn test_compaction_1_2_1() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -580,7 +589,10 @@ async fn test_compaction_1_2_2() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -680,7 +692,10 @@ async fn test_compaction_2_2_1() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -769,7 +784,10 @@ async fn test_compaction_2_2_2() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -873,7 +891,10 @@ async fn test_compaction_2_3_1() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -949,7 +970,10 @@ async fn test_compaction_2_3_2() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -1053,7 +1077,10 @@ async fn test_compaction_3_2_1() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;
@@ -1148,7 +1175,10 @@ async fn test_compaction_3_3_1() {
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
     validate_recovered_snapshot(
         &snapshot,
-        &iceberg_table_manager_to_load.config.warehouse_uri,
+        &iceberg_table_manager_to_load
+            .config
+            .filesystem_config
+            .get_root_path(),
         filesystem_accessor.as_ref(),
     )
     .await;

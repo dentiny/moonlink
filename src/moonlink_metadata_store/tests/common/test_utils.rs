@@ -1,4 +1,4 @@
-use moonlink::{IcebergTableConfig, MoonlinkTableConfig};
+use moonlink::{FileSystemConfig, IcebergTableConfig, MoonlinkTableConfig};
 
 /// Test utils for postgres metadata storage tests.
 ///
@@ -6,10 +6,11 @@ use moonlink::{IcebergTableConfig, MoonlinkTableConfig};
 pub(crate) fn get_moonlink_table_config() -> MoonlinkTableConfig {
     MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
-            warehouse_uri: "/tmp/test_warehouse_uri".to_string(),
             namespace: vec!["namespace".to_string()],
             table_name: "table".to_string(),
-            ..Default::default()
+            filesystem_config: FileSystemConfig::FileSystem {
+                root_directory: "/tmp/test_warehouse_uri".to_string(),
+            },
         },
         ..Default::default()
     }

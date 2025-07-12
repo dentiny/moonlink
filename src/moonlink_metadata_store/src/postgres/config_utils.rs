@@ -31,7 +31,7 @@ pub(crate) fn serialize_moonlink_table_config(
     let iceberg_config = moonlink_table_config.iceberg_table_config;
     let persisted = MoonlinkTableConfigForPersistence {
         iceberg_table_config: IcebergTableConfigForPersistence {
-            warehouse_uri: iceberg_config.warehouse_uri,
+            warehouse_uri: iceberg_config.filesystem_config.get_root_path(),
             namespace: iceberg_config.namespace[0].to_string(),
             table_name: iceberg_config.table_name,
         },
@@ -50,7 +50,6 @@ pub(crate) fn deserialze_moonlink_table_config(
     // TODO(hjiang): Need to recover iceberg table config from metadata.
     let moonlink_table_config = MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
-            warehouse_uri: parsed.iceberg_table_config.warehouse_uri,
             namespace: vec![parsed.iceberg_table_config.namespace],
             table_name: parsed.iceberg_table_config.table_name,
             ..Default::default()
