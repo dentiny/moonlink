@@ -44,8 +44,8 @@ impl std::fmt::Debug for FileSystemConfig {
                 region,
                 bucket,
                 endpoint,
-                access_key_id,
-                secret_access_key,
+                access_key_id: _,
+                secret_access_key: _,
             } => f
                 .debug_struct("S3")
                 .field("region", region)
@@ -62,8 +62,8 @@ impl std::fmt::Debug for FileSystemConfig {
                 bucket,
                 endpoint,
                 disable_auth,
-                access_key_id,
-                secret_access_key,
+                access_key_id: _,
+                secret_access_key: _,
             } => f
                 .debug_struct("Gcs")
                 .field("project", project)
