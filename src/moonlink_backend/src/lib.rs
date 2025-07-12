@@ -6,6 +6,7 @@ mod recovery_utils;
 
 pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
+use moonlink::FileSystemConfig;
 pub use moonlink::ReadState;
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
@@ -100,7 +101,14 @@ where
                     mooncake_table_id,
                     table_id,
                     &src_table_name,
-                    /*override_iceberg_filesystem_config=*/ None,
+                    /*iceberg_filesystem_config=*/
+                    Some(FileSystemConfig::S3 {
+                        endpoint: None,
+                        region: "us-west-1".to_string(),
+                        bucket: "moonlink-test-s3-hao".to_string(),
+                        access_key_id: "aaa".to_string(),
+                        secret_access_key: "aaa".to_string(),
+                    }),
                     /*is_recovery=*/ false,
                 )
                 .await?;

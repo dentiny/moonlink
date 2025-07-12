@@ -7,6 +7,12 @@ license = { workspace = true }
 [features]
 profiling = []
 
+default = ["storage-fs", "storage-s3"]
+storage-all = ["storage-fs", "storage-s3", "storage-gcs"]
+storage-fs = []
+storage-s3 = []
+storage-gcs = []
+
 [dependencies]
 arrow-array.workspace = true
 console-subscriber = { workspace = true }

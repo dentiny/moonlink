@@ -5,7 +5,7 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [features]
-default = ["storage-fs"]
+default = ["storage-fs", "storage-s3"]
 storage-all = ["storage-fs", "storage-s3", "storage-gcs"]
 storage-fs = []
 storage-s3 = []

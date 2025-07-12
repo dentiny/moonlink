@@ -1,7 +1,7 @@
 /// Secret entry for object object storage access.
 /// WARNING: Not expected to log anywhere!
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SecretType {
     #[cfg(feature = "storage-gcs")]
     Gcs,

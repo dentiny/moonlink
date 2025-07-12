@@ -48,14 +48,20 @@ pub(crate) fn deserialze_moonlink_table_config(
 ) -> Result<MoonlinkTableConfig> {
     let parsed: MoonlinkTableConfigForPersistence = serde_json::from_value(config)?;
 
+    let filesystem_config = moonlink::FileSystemConfig::S3 {
+        endpoint: None,
+        region: "us-west-1".to_string(),
+        bucket: "moonlink-test-s3-hao".to_string(),
+        access_key_id: "aaa".to_string(),
+        secret_access_key: "aaa".to_string(),
+    };
+
     // TODO(hjiang): Need to recover iceberg table config from metadata.
     let moonlink_table_config = MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
             namespace: vec![parsed.iceberg_table_config.namespace],
             table_name: parsed.iceberg_table_config.table_name,
-            filesystem_config: moonlink::FileSystemConfig::FileSystem {
-                root_directory: parsed.iceberg_table_config.warehouse_uri,
-            },
+            filesystem_config,
         },
         mooncake_table_config: MooncakeTableConfig::default(),
     };
