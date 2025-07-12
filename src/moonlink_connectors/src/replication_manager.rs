@@ -59,8 +59,8 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         mooncake_table_id: T,
         table_id: u32,
         table_name: &str,
-        override_table_base_path: Option<&str>,
         iceberg_filesystem_config: Option<FileSystemConfig>,
+        is_recovery: bool,
     ) -> Result<MoonlinkTableConfig> {
         debug!(%src_uri, table_name, "adding table through manager");
         if !self.connections.contains_key(src_uri) {
@@ -86,8 +86,8 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 table_name,
                 &mooncake_table_id,
                 table_id,
-                override_table_base_path,
                 iceberg_filesystem_config,
+                is_recovery,
             )
             .await?;
         self.table_info

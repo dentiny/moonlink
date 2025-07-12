@@ -100,8 +100,8 @@ where
                     mooncake_table_id,
                     table_id,
                     &src_table_name,
-                    /*override_table_base_path=*/ None,
                     /*override_iceberg_filesystem_config=*/ None,
+                    /*is_recovery=*/ false,
                 )
                 .await?;
             manager.start_replication(&src_uri).await?;

@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct IcebergTableConfigForPersistence {
     /// Table warehouse location.
+    /// TODO(hjiang): Store along with security as well.
     warehouse_uri: String,
     /// Namespace for the iceberg table.
     namespace: String,
@@ -52,7 +53,9 @@ pub(crate) fn deserialze_moonlink_table_config(
         iceberg_table_config: IcebergTableConfig {
             namespace: vec![parsed.iceberg_table_config.namespace],
             table_name: parsed.iceberg_table_config.table_name,
-            ..Default::default()
+            filesystem_config: moonlink::FileSystemConfig::FileSystem {
+                root_directory: parsed.iceberg_table_config.warehouse_uri,
+            },
         },
         mooncake_table_config: MooncakeTableConfig::default(),
     };

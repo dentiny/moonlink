@@ -21,22 +21,20 @@ where
         database_id: D::from(database_id),
         table_id: T::from(metadata_entry.table_id),
     };
-    // TODO(hjiang): Need to populate real secret, which is fetched from secret table, if any.
     replication_manager
         .add_table(
             &metadata_entry.src_table_uri,
             mooncake_table_id,
             metadata_entry.table_id,
             &metadata_entry.src_table_name,
-            /*override_table_base_path=*/
+            /*iceberg_filesystem_config=*/
             Some(
-                &metadata_entry
+                metadata_entry
                     .moonlink_table_config
                     .iceberg_table_config
-                    .filesystem_config
-                    .get_root_path(),
+                    .filesystem_config,
             ),
-            /*iceberg_filesystem_config=*/ None,
+            /*is_recovery=*/ true,
         )
         .await?;
     Ok(())

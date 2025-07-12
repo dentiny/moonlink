@@ -47,7 +47,7 @@ pub async fn build_table_components(
     mooncake_table_id: String,
     table_id: u32,
     table_schema: &TableSchema,
-    base_path: &Path,
+    base_path: &String,
     table_temp_files_directory: String,
     replication_state: &ReplicationState,
     object_storage_cache: ObjectStorageCache,
@@ -58,7 +58,7 @@ pub async fn build_table_components(
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
     let iceberg_filesystem_config =
         iceberg_filesystem_config.unwrap_or(FileSystemConfig::FileSystem {
-            root_directory: base_path.to_str().unwrap().to_string(),
+            root_directory: base_path.to_string(),
         });
 
     let iceberg_table_config = IcebergTableConfig {

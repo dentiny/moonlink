@@ -23,7 +23,6 @@ use crate::pg_replicate::table::{SrcTableId, TableSchema};
 use futures::StreamExt;
 use moonlink::TableEvent;
 use std::collections::HashMap;
-use std::path::Path;
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinHandle;
 use tokio_postgres::{connect, Client, Config, NoTls};
@@ -278,8 +277,8 @@ impl ReplicationConnection {
         schema: &TableSchema,
         mooncake_table_id: &T,
         table_id: u32,
-        override_table_base_path: Option<&str>,
         iceberg_filesystem_config: Option<FileSystemConfig>,
+        is_recovery: bool,
     ) -> Result<MoonlinkTableConfig> {
         let src_table_id = schema.src_table_id;
         debug!(src_table_id, "adding table to replication");
@@ -287,7 +286,7 @@ impl ReplicationConnection {
             mooncake_table_id.to_string(),
             table_id,
             schema,
-            Path::new(override_table_base_path.unwrap_or(&self.table_base_path)),
+            &self.table_base_path,
             self.table_temp_files_directory.clone(),
             &self.replication_state,
             self.object_storage_cache.clone(),
@@ -315,9 +314,8 @@ impl ReplicationConnection {
             error!(error = ?e, "failed to enqueue AddTable command");
         }
 
-        // Only perform initial copy for new tables, not during recovery
-        // Recovery is indicated by override_table_base_path being Some(...)
-        if override_table_base_path.is_none() {
+        // Only perform initial copy for new tables, not during recovery.
+        if !is_recovery {
             // Notify the replication task we are starting a table copy and to begin buffering CDC events.
             let cmd_tx = self.cmd_tx.clone();
             if let Err(e) = cmd_tx
@@ -407,8 +405,8 @@ impl ReplicationConnection {
         table_name: &str,
         mooncake_table_id: &T,
         table_id: u32,
-        override_table_base_path: Option<&str>,
         iceberg_filesystem_config: Option<FileSystemConfig>,
+        is_recovery: bool,
     ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
         debug!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
@@ -420,8 +418,8 @@ impl ReplicationConnection {
                 &table_schema,
                 mooncake_table_id,
                 table_id,
-                override_table_base_path,
                 iceberg_filesystem_config,
+                is_recovery,
             )
             .await?;
 
