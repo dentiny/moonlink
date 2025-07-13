@@ -18,7 +18,6 @@ pub(super) mod schema_utils;
 pub(super) mod table_event_manager;
 pub(super) mod table_manager;
 pub(super) mod table_property;
-pub(super) mod tokio_retry_utils;
 pub(super) mod utils;
 pub(super) mod validation;
 
