@@ -50,6 +50,47 @@ use crate::table_notify::TableEvent;
 use crate::FileSystemAccessor;
 
 // ==============================
+// Row preparation functions
+// ==============================
+//
+// Test util functions to get a few moonlink rows for testing.
+fn get_test_row_1() -> MoonlinkRow {
+    MoonlinkRow::new(vec![
+        RowValue::Int32(1),
+        RowValue::ByteArray("John".as_bytes().to_vec()),
+        RowValue::Int32(10),
+    ])
+}
+fn get_test_row_2() -> MoonlinkRow {
+    MoonlinkRow::new(vec![
+        RowValue::Int32(2),
+        RowValue::ByteArray("Bob".as_bytes().to_vec()),
+        RowValue::Int32(20),
+    ])
+}
+fn get_test_row_3() -> MoonlinkRow {
+    MoonlinkRow::new(vec![
+        RowValue::Int32(3),
+        RowValue::ByteArray("Cat".as_bytes().to_vec()),
+        RowValue::Int32(30),
+    ])
+}
+fn get_test_row_4() -> MoonlinkRow {
+    MoonlinkRow::new(vec![
+        RowValue::Int32(4),
+        RowValue::ByteArray("David".as_bytes().to_vec()),
+        RowValue::Int32(40),
+    ])
+}
+fn get_test_row_5() -> MoonlinkRow {
+    MoonlinkRow::new(vec![
+        RowValue::Int32(5),
+        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
+        RowValue::Int32(50),
+    ])
+}
+
+// ==============================
 // Test util functions
 // ==============================
 //
@@ -61,19 +102,11 @@ async fn prepare_committed_and_flushed_data_files(
     lsn: u64,
 ) -> (MoonlinkRow, MoonlinkRow) {
     // Append first row.
-    let row_1 = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row_1 = get_test_row_1();
     table.append(row_1.clone()).unwrap();
 
     // Append second row.
-    let row_2 = MoonlinkRow::new(vec![
-        RowValue::Int32(4),
-        RowValue::ByteArray("David".as_bytes().to_vec()),
-        RowValue::Int32(40),
-    ]);
+    let row_2 = get_test_row_4();
     table.append(row_2.clone()).unwrap();
 
     table.commit(lsn);
@@ -107,7 +140,7 @@ async fn check_prev_data_files(
         vec![
             Arc::new(Int32Array::from(vec![1, 4])),
             Arc::new(StringArray::from(vec!["John", "David"])),
-            Arc::new(Int32Array::from(vec![30, 40])),
+            Arc::new(Int32Array::from(vec![10, 40])),
         ],
     )
     .unwrap();
@@ -153,7 +186,7 @@ async fn check_new_data_files(
         vec![
             Arc::new(Int32Array::from(vec![1])),
             Arc::new(StringArray::from(vec!["John"])),
-            Arc::new(Int32Array::from(vec![30])),
+            Arc::new(Int32Array::from(vec![10])),
         ],
     )
     .unwrap();
@@ -212,7 +245,7 @@ async fn check_prev_and_new_data_files(
         vec![
             Arc::new(Int32Array::from(vec![1, 4])),
             Arc::new(StringArray::from(vec!["John", "David"])),
-            Arc::new(Int32Array::from(vec![30, 40])),
+            Arc::new(Int32Array::from(vec![10, 40])),
         ],
     )
     .unwrap();
@@ -220,7 +253,7 @@ async fn check_prev_and_new_data_files(
         iceberg_table_manager.mooncake_table_metadata.schema.clone(),
         vec![
             Arc::new(Int32Array::from(vec![2])),
-            Arc::new(StringArray::from(vec!["Tim"])),
+            Arc::new(StringArray::from(vec!["Bob"])),
             Arc::new(Int32Array::from(vec![20])),
         ],
     )
@@ -393,11 +426,7 @@ async fn test_state_1_1() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -416,11 +445,7 @@ async fn test_state_1_2() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row.clone()).unwrap();
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 1).await;
@@ -447,11 +472,7 @@ async fn test_state_1_3() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
 
     // Request to persist.
@@ -476,11 +497,7 @@ async fn test_state_1_4() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 400).await;
@@ -510,11 +527,7 @@ async fn test_state_1_5() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
 
     // Request to persist.
@@ -546,11 +559,7 @@ async fn test_state_1_6() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 400).await;
@@ -575,11 +584,7 @@ async fn test_state_2_1() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
 
@@ -599,11 +604,7 @@ async fn test_state_2_2() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 100);
     // Prepate deletion log pre-requisite.
@@ -631,11 +632,7 @@ async fn test_state_2_3() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
 
@@ -661,11 +658,7 @@ async fn test_state_2_4() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare deletion pre-requisite (uncommitted deletion record).
@@ -696,11 +689,7 @@ async fn test_state_2_5() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
 
@@ -733,11 +722,7 @@ async fn test_state_2_6() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare deletion pre-requisite (uncommitted deletion record).
@@ -763,11 +748,7 @@ async fn test_state_3_1() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 200)
@@ -794,11 +775,7 @@ async fn test_state_3_2() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 100);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 200)
@@ -833,11 +810,7 @@ async fn test_state_3_3_deletion_before_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 500)
@@ -871,11 +844,7 @@ async fn test_state_3_3_deletion_after_flush() {
     let (old_row, _) =
         prepare_committed_and_flushed_data_files(&mut table, &mut notify_rx, /*lsn=*/ 100).await;
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 300)
@@ -914,11 +883,7 @@ async fn test_state_3_4_committed_deletion_before_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 500)
@@ -954,11 +919,7 @@ async fn test_state_3_4_committed_deletion_after_flush() {
     let (old_row, _) =
         prepare_committed_and_flushed_data_files(&mut table, &mut notify_rx, /*lsn=*/ 100).await;
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 300)
@@ -1002,11 +963,7 @@ async fn test_state_3_5() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 400)
@@ -1046,11 +1003,7 @@ async fn test_state_3_6() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 400)
@@ -1083,19 +1036,11 @@ async fn test_state_4_1() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite (committed record batch).
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1114,21 +1059,13 @@ async fn test_state_4_2() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite (committed record batch).
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 100);
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 200).await;
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1153,19 +1090,11 @@ async fn test_state_4_3() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1190,21 +1119,13 @@ async fn test_state_4_4() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 500).await;
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1232,19 +1153,11 @@ async fn test_state_4_5() {
         .await
         .unwrap();
     // Prepare committed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("David".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1276,19 +1189,11 @@ async fn test_state_4_6() {
         .await
         .unwrap();
     // Prepare committed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("David".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row.clone()).unwrap();
     // Prepare uncommitted deletion record.
     table.delete(row.clone(), /*lsn=*/ 500).await;
@@ -1313,22 +1218,14 @@ async fn test_state_5_1() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 200)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 300);
 
@@ -1352,11 +1249,7 @@ async fn test_state_5_2() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 100);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 200)
@@ -1365,11 +1258,7 @@ async fn test_state_5_2() {
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 300).await;
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 400);
 
@@ -1399,22 +1288,14 @@ async fn test_state_5_3_deletion_before_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 500)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 600);
 
@@ -1445,11 +1326,7 @@ async fn test_state_5_3_deletion_after_flush() {
     let (old_row, _) =
         prepare_committed_and_flushed_data_files(&mut table, &mut notify_rx, /*lsn=*/ 100).await;
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 300)
@@ -1459,11 +1336,7 @@ async fn test_state_5_3_deletion_after_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 400).await;
     table.commit(/*lsn=*/ 500);
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 600);
 
@@ -1496,11 +1369,7 @@ async fn test_state_5_4_committed_deletion_before_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 500)
@@ -1509,11 +1378,7 @@ async fn test_state_5_4_committed_deletion_before_flush() {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 600).await;
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 700);
 
@@ -1544,11 +1409,7 @@ async fn test_state_5_4_committed_deletion_after_flush() {
     let (old_row, _) =
         prepare_committed_and_flushed_data_files(&mut table, &mut notify_rx, /*lsn=*/ 100).await;
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 300)
@@ -1560,11 +1421,7 @@ async fn test_state_5_4_committed_deletion_after_flush() {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 600).await;
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 700);
 
@@ -1600,22 +1457,14 @@ async fn test_state_5_5() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 400)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 500);
 
@@ -1652,22 +1501,14 @@ async fn test_state_5_6() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 400)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 500);
     // Prepare uncommitted deletion record.
@@ -1697,30 +1538,18 @@ async fn test_state_6_1() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 100);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 200)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 300);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1743,11 +1572,7 @@ async fn test_state_6_2() {
         create_table_and_iceberg_manager(&temp_dir).await;
 
     // Prepare data file pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(1),
-        RowValue::ByteArray("John".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_1();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 100);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 200)
@@ -1756,19 +1581,11 @@ async fn test_state_6_2() {
     // Prepate deletion log pre-requisite.
     table.delete(row.clone(), /*lsn=*/ 300).await;
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 400);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1797,30 +1614,18 @@ async fn test_state_6_3_deletion_before_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 500)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 600);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1850,11 +1655,7 @@ async fn test_state_6_3_deletion_after_flush() {
     let (old_row, _) =
         prepare_committed_and_flushed_data_files(&mut table, &mut notify_rx, /*lsn=*/ 100).await;
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 300)
@@ -1864,19 +1665,11 @@ async fn test_state_6_3_deletion_after_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 400).await;
     table.commit(/*lsn=*/ 500);
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 600);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1907,11 +1700,7 @@ async fn test_state_6_4_committed_deletion_before_flush() {
     table.delete(old_row.clone(), /*lsn=*/ 200).await;
     table.commit(/*lsn=*/ 300);
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 500)
@@ -1920,19 +1709,11 @@ async fn test_state_6_4_committed_deletion_before_flush() {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 600).await;
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 700);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -1962,11 +1743,7 @@ async fn test_state_6_4_committed_deletion_after_flush() {
     let (old_row, _) =
         prepare_committed_and_flushed_data_files(&mut table, &mut notify_rx, /*lsn=*/ 100).await;
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 200);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 300)
@@ -1978,19 +1755,11 @@ async fn test_state_6_4_committed_deletion_after_flush() {
     // Prepare deletion pre-requisite (uncommitted deletion record).
     table.delete(row.clone(), /*lsn=*/ 600).await;
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 700);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -2025,30 +1794,18 @@ async fn test_state_6_5() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 400)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 500);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row).unwrap();
 
     // Request to persist.
@@ -2084,30 +1841,18 @@ async fn test_state_6_6() {
         .await
         .unwrap();
     // Prepate data files pre-requisite.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(2),
-        RowValue::ByteArray("Tim".as_bytes().to_vec()),
-        RowValue::Int32(20),
-    ]);
+    let row = get_test_row_2();
     table.append(row.clone()).unwrap();
     table.commit(/*lsn=*/ 400);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 400)
         .await
         .unwrap();
     // Prepare committed but unflushed record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(3),
-        RowValue::ByteArray("Cat".as_bytes().to_vec()),
-        RowValue::Int32(30),
-    ]);
+    let row = get_test_row_3();
     table.append(row).unwrap();
     table.commit(/*lsn=*/ 500);
     // Prepare uncommitted record batch.
-    let row = MoonlinkRow::new(vec![
-        RowValue::Int32(5),
-        RowValue::ByteArray("Ethan".as_bytes().to_vec()),
-        RowValue::Int32(50),
-    ]);
+    let row = get_test_row_5();
     table.append(row.clone()).unwrap();
     // Prepare uncommitted deletion record.
     table.delete(/*row=*/ row.clone(), /*lsn=*/ 600).await;

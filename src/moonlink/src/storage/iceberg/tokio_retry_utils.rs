@@ -20,15 +20,6 @@ pub(crate) fn iceberg_to_tokio_retry_error(err: IcebergError) -> TokioRetryError
     }
 }
 
-/// Convert tokio retry error to iceberg error.
-#[allow(dead_code)]
-pub(crate) fn tokio_retry_to_iceberg_error(err: TokioRetryError<IcebergError>) -> IcebergError {
-    match err {
-        TokioRetryError::Transient { err, .. } => err,
-        TokioRetryError::Permanent(err) => err,
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
