@@ -53,14 +53,15 @@ impl TableHandler {
 
             loop {
                 tokio::select! {
+                    // Sending to channel fails only happens when eventloop exits, directly exit timer events.
                     _ = periodic_snapshot_interval.tick() => {
-                        if let Err(err) = event_sender_for_periodical_snapshot.send(TableEvent::PeriodicalMooncakeTableSnapshot).await {
-                            error!(error = %err, "failed to send event to notify periodical snapshot");
+                        if event_sender_for_periodical_snapshot.send(TableEvent::PeriodicalMooncakeTableSnapshot).await.is_err() {
+                           return;
                         }
                     }
                     _ = periodic_force_snapshot_interval.tick() => {
-                        if let Err(err) = event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None, tx: None }).await {
-                            error!(error = %err, "failed to send event to notify periodical force snapshot");
+                        if event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None, tx: None }).await.is_err() {
+                            return;
                         }
                     }
                     else => {
@@ -441,6 +442,10 @@ impl TableHandler {
                         TableEvent::EvictedDataFilesToDelete { evicted_data_files } => {
                             start_task_to_delete_evicted(evicted_data_files);
                         }
+                        // ==============================
+                        // Replication events
+                        // ==============================
+                        //
                         _ => {
                             Self::process_cdc_table_event(event, &mut table, initial_persistence_lsn, &mut force_snapshot_lsns, &mut mooncake_snapshot_ongoing, &mut iceberg_snapshot_result_consumed, &mut iceberg_snapshot_ongoing, &mut maintainance_ongoing).await;
                         }
@@ -469,10 +474,6 @@ impl TableHandler {
         iceberg_snapshot_ongoing: &mut bool,
         maintainance_ongoing: &mut bool,
     ) {
-        // ==============================
-        // Replication events
-        // ==============================
-        //
         match event {
             TableEvent::Append {
                 is_copied,
