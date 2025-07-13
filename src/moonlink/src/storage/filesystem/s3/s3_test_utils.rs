@@ -33,7 +33,7 @@ pub(crate) fn create_s3_filesystem_config(warehouse_uri: &str) -> FileSystemConf
     FileSystemConfig::S3 {
         access_key_id: S3_TEST_ACCESS_KEY_ID.to_string(),
         secret_access_key: S3_TEST_SECRET_ACCESS_KEY.to_string(),
-        region: "auto".to_string(),
+        region: "auto".to_string(), // minio doesn't care about region.
         bucket: bucket.to_string(),
         endpoint: Some(S3_TEST_ENDPOINT.to_string()),
     }
@@ -84,8 +84,10 @@ async fn delete_s3_bucket_objects(bucket: &str) -> IcebergResult<()> {
 }
 
 async fn delete_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
+    // Delete all objects in the bucket first.
     delete_s3_bucket_objects(&bucket).await?;
 
+    // Now delete the bucket.
     let date = Utc::now().format("%a, %d %b %Y %T GMT").to_string();
     let string_to_sign = format!("DELETE\n\n\n{date}\n/{bucket}");
 
@@ -113,6 +115,7 @@ async fn delete_test_s3_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
     Ok(())
 }
 
+/// Creates the provided bucket with exponential backoff retry; this function assumes the bucket doesn't exist, otherwise it will return error.
 pub(crate) async fn create_test_s3_bucket(bucket: String) -> IcebergResult<()> {
     let bucket = Arc::new(bucket);
     let backoff = ExponentialBuilder::default()

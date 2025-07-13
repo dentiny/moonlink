@@ -67,8 +67,10 @@ async fn delete_gcs_bucket_objects(bucket: &str) -> IcebergResult<()> {
 }
 
 async fn delete_gcs_bucket_impl(bucket: Arc<String>) -> IcebergResult<()> {
+    // Fake GCS server doesn't support bucket deletion if it contains objects, so need to delete all objects first.
     delete_gcs_bucket_objects(&bucket).await?;
 
+    // Now delete the bucket.
     let client = reqwest::Client::new();
     let url = format!("{GCS_TEST_ENDPOINT}/storage/v1/b/{bucket}");
     let res = client.delete(&url).send().await.map_err(|e| {
