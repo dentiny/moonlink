@@ -120,7 +120,13 @@ where
                 }
             };
             cur_metadata_store_accessor
-                .store_table_metadata(table_id, &src_table_name, &src_uri, moonlink_table_config)
+                .store_table_metadata(
+                    table_id,
+                    &src_table_name,
+                    &src_uri,
+                    moonlink_table_config,
+                    /*moonlink_table_secret=*/ None,
+                )
                 .await?;
         }
 

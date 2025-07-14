@@ -249,7 +249,11 @@ mod tests {
         let metadata_entries = metadata_store
             .get_all_table_metadata_entries()
             .await
-            .unwrap();
+            .unwrap()
+            .into_iter()
+            .map(|(_, (cur_metadata_entry, _))| cur_metadata_entry.clone())
+            .collect::<Vec<_>>();
+
         assert_eq!(metadata_entries.len(), 1);
         assert_eq!(metadata_entries[0].table_id, TABLE_ID as u32);
         assert_eq!(

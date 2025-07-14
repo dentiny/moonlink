@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use crate::base_metadata_store::MetadataStoreTrait;
 use crate::base_metadata_store::TableMetadataEntry;
+use crate::base_metadata_store::MOONLINK_SECRET_TABLE;
 use crate::base_metadata_store::{MOONLINK_METADATA_TABLE, MOONLINK_SCHEMA};
 use crate::error::{Error, Result};
 use crate::postgres::config_utils;
@@ -8,10 +11,13 @@ use crate::postgres::utils;
 use moonlink::MoonlinkTableConfig;
 
 use async_trait::async_trait;
+use moonlink::MoonlinkTableSecret;
 use postgres_types::Json as PgJson;
 
 /// SQL statements for moonlink metadata table schema.
 const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
+/// SQL statements for moonlink secret table schema.
+const CREATE_SECRET_SCHEMA_SQL: &str = include_str!("sql/create_secrets.sql");
 
 pub struct PgMetadataStore {
     /// Database connection string.
@@ -52,32 +58,61 @@ impl MetadataStoreTrait for PgMetadataStore {
         Ok(oid)
     }
 
-    async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>> {
+    async fn get_all_table_metadata_entries(
+        &self,
+    ) -> Result<HashMap<u32, (TableMetadataEntry, Option<MoonlinkTableSecret>)>> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
         let rows = pg_client
             .postgres_client
             .query(
-                "SELECT oid, table_name, uri, config FROM mooncake.tables",
+                "
+                SELECT 
+                    t.oid,
+                    t.table_name,
+                    t.uri,
+                    t.config,
+                    s.secret_type,
+                    s.key_id,
+                    s.secret,
+                    s.endpoint,
+                    s.region
+                FROM mooncake.tables t
+                LEFT JOIN mooncake.secrets s
+                    ON t.oid = s.oid AND s.uid = current_user
+                ",
                 &[],
             )
             .await?;
 
-        let mut metadata_entries = Vec::with_capacity(rows.len());
-        for cur_row in rows.into_iter() {
-            assert_eq!(cur_row.len(), 4);
-            let table_id = cur_row.get("oid");
-            let src_table_name = cur_row.get("table_name");
-            let src_table_uri = cur_row.get("uri");
-            let serialized_config = cur_row.get("config");
+        let mut metadata_entries = HashMap::with_capacity(rows.len());
+        for row in rows {
+            let table_id: u32 = row.get("oid");
+            let src_table_name: String = row.get("table_name");
+            let src_table_uri: String = row.get("uri");
+            let serialized_config: serde_json::Value = row.get("config");
             let moonlink_table_config =
                 config_utils::deserialze_moonlink_table_config(serialized_config)?;
-            metadata_entries.push(TableMetadataEntry {
+
+            // Extract optional secret fields.
+            let secret_type: Option<String> = row.get("secret_type");
+            let metadata_entry = TableMetadataEntry {
                 table_id,
                 src_table_name,
                 src_table_uri,
                 moonlink_table_config,
-            });
+            };
+            let secret_entry: Option<MoonlinkTableSecret> = {
+                secret_type.map(|secret_type| MoonlinkTableSecret {
+                    secret_type: MoonlinkTableSecret::convert_secret_type(&secret_type),
+                    key_id: row.get("key_id"),
+                    secret: row.get("secret"),
+                    endpoint: row.get("endpoint"),
+                    region: row.get("region"),
+                })
+            };
+            metadata_entries.insert(table_id, (metadata_entry, secret_entry));
         }
+
         Ok(metadata_entries)
     }
 
@@ -87,6 +122,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         table_name: &str,
         table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
+        moonlink_table_secret: Option<MoonlinkTableSecret>,
     ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
         let serialized_config =
@@ -97,6 +133,8 @@ impl MetadataStoreTrait for PgMetadataStore {
                 "Schema {MOONLINK_SCHEMA} doesn't exist when store table metadata"
             )));
         }
+
+        // Create metadata table if not exist.
         if !utils::table_exists(
             &pg_client.postgres_client,
             MOONLINK_SCHEMA,
@@ -107,6 +145,21 @@ impl MetadataStoreTrait for PgMetadataStore {
             utils::create_table(&pg_client.postgres_client, CREATE_TABLE_SCHEMA_SQL).await?;
         }
 
+        // Create secret table if not exist.
+        if !utils::table_exists(
+            &pg_client.postgres_client,
+            MOONLINK_SCHEMA,
+            MOONLINK_SECRET_TABLE,
+        )
+        .await?
+        {
+            utils::create_table(&pg_client.postgres_client, CREATE_SECRET_SCHEMA_SQL).await?;
+        }
+
+        // Start a transaction to insert rows into metadata table and secret table.
+        pg_client.postgres_client.execute("BEGIN", &[]).await?;
+
+        // Persist table metadata.
         // TODO(hjiang): Fill in other fields as well.
         let rows_affected = pg_client
             .postgres_client
@@ -121,24 +174,65 @@ impl MetadataStoreTrait for PgMetadataStore {
                 ],
             )
             .await?;
-
         if rows_affected != 1 {
             return Err(Error::PostgresRowCountError(1, rows_affected as u32));
         }
+
+        // Persist table secrets.
+        if let Some(table_secret) = moonlink_table_secret {
+            let rows_affected = pg_client
+                .postgres_client
+                .execute(
+                    "INSERT INTO mooncake.secrets (oid, secret_type, key_id, secret, endpoint, region)
+                    VALUES ($1, $2, $3, $4, $5, $6)",
+                    &[
+                        &table_id,
+                        &table_secret.get_secret_type(),
+                        &table_secret.key_id,
+                        &table_secret.secret,
+                        &table_secret.endpoint.as_deref(),
+                        &table_secret.region.as_deref(),
+                    ],
+                )
+                .await?;
+            if rows_affected != 1 {
+                return Err(Error::PostgresRowCountError(1, rows_affected as u32));
+            }
+        }
+
+        // Commit the transaction.
+        pg_client.postgres_client.execute("COMMIT", &[]).await?;
 
         Ok(())
     }
 
     async fn delete_table_metadata(&self, table_id: u32) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
+
+        // Start a transaction to insert rows into metadata table and secret table.
+        pg_client.postgres_client.execute("BEGIN", &[]).await?;
+
+        // Delete rows for metadata table.
         let rows_affected = pg_client
             .postgres_client
             .execute("DELETE FROM mooncake.tables WHERE oid = $1", &[&table_id])
             .await?;
-
         if rows_affected != 1 {
             return Err(Error::PostgresRowCountError(1, rows_affected as u32));
         }
+
+        // Delete rows for secret table, intentionally no check affected row counts.
+        pg_client
+            .postgres_client
+            .execute(
+                "DELETE FROM mooncake.secrets WHERE oid = $1 AND uid = current_user",
+                &[&table_id],
+            )
+            .await?;
+
+        // Commit the transaction.
+        pg_client.postgres_client.execute("COMMIT", &[]).await?;
+
         Ok(())
     }
 }

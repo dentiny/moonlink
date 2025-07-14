@@ -25,7 +25,10 @@ mod tests {
         let metadata_entries = pg_metadata_store
             .get_all_table_metadata_entries()
             .await
-            .unwrap();
+            .unwrap()
+            .into_iter()
+            .map(|(_, (cur_metadata_entry, _))| cur_metadata_entry.clone())
+            .collect::<Vec<_>>();
         assert_eq!(metadata_entries.len(), 1);
         let table_metadata_entry = &metadata_entries[0];
         assert_eq!(table_metadata_entry.table_id, TABLE_ID);
@@ -58,7 +61,13 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+                /*moonlink_table_secret=*/ None,
+            )
             .await
             .unwrap();
 
@@ -106,7 +115,13 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         let res = metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+                /*moonlink_table_secret=*/ None,
+            )
             .await;
         assert!(res.is_err());
     }
@@ -121,13 +136,25 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+                /*moonlink_table_secret=*/ None,
+            )
             .await
             .unwrap();
 
         // Store moonlink table config to metadata storage.
         let res = metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+                /*moonlink_table_secret=*/ None,
+            )
             .await;
         assert!(res.is_err());
     }
@@ -142,7 +169,13 @@ mod tests {
 
         // Store moonlink table metadata to metadata storage.
         metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+                /*moonlink_table_secret=*/ None,
+            )
             .await
             .unwrap();
 

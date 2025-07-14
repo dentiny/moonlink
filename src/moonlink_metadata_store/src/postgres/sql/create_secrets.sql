@@ -1,13 +1,15 @@
 -- SQL statements to store moonlink secret related fields.
+BEGIN;
+
 CREATE TABLE mooncake.secrets (
     id SERIAL PRIMARY KEY,          -- unique row identifier
     uid text DEFAULT current_user,  -- user for the secret
     oid oid,               -- Mooncake table OID.
-    type TEXT,             -- One of (S3, GCS, R2)
+    secret_type TEXT,             -- One of (S3, GCS, R2)
     key_id TEXT,        
     secret TEXT,          
     endpoint TEXT,         -- (optional)
-    region TEXT,           -- (optional)
+    region TEXT            -- (optional)
 );
 
 -- Index to enable query on (oid, uid).
@@ -23,3 +25,5 @@ CREATE POLICY secrets_self_access_policy
   WITH CHECK (uid = current_user);
 
 GRANT SELECT, INSERT, UPDATE, DELETE ON mooncake.secrets TO PUBLIC;
+
+COMMIT;

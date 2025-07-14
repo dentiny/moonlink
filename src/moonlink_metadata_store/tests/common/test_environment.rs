@@ -20,6 +20,10 @@ impl TestEnvironment {
             .await
             .unwrap();
         postgres_client
+            .simple_query("DROP TABLE IF EXISTS mooncake.secrets")
+            .await
+            .unwrap();
+        postgres_client
             .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake;")
             .await
             .unwrap();
@@ -32,7 +36,7 @@ impl TestEnvironment {
     /// Delete moonlink schema.
     pub(crate) async fn delete_mooncake_schema(&self) {
         self.postgres_client
-            .simple_query("DROP SCHEMA IF EXISTS mooncake")
+            .simple_query("DROP SCHEMA IF EXISTS mooncake CASCADE")
             .await
             .unwrap();
     }

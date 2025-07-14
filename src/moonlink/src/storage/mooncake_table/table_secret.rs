@@ -1,8 +1,9 @@
 /// Secret entry for object object storage access.
 /// WARNING: Not expected to log anywhere!
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum SecretType {
+    Unknown,
     #[cfg(feature = "storage-gcs")]
     Gcs,
     #[cfg(feature = "storage-s3")]
@@ -16,4 +17,41 @@ pub struct SecretEntry {
     pub secret: String,
     pub endpoint: Option<String>,
     pub region: Option<String>,
+}
+
+impl SecretEntry {
+    /// Get secret type in string format.
+    pub fn get_secret_type(&self) -> String {
+        match &self.secret_type {
+            #[cfg(feature = "storage-gcs")]
+            SecretType::Gcs => "gcs".to_string(),
+            #[cfg(feature = "storage-s3")]
+            SecretType::S3 => "s3".to_string(),
+            // Used to suppress compiler warning.
+            _ => panic!(
+                "Unknown secret type {:?}, maybe add features!",
+                self.secret_type
+            ),
+        }
+    }
+
+    /// Convert secret type from string format.
+    pub fn convert_secret_type(secret_type: &str) -> SecretType {
+        #[cfg(feature = "storage-gcs")]
+        {
+            if secret_type == "gcs" {
+                return SecretType::Gcs;
+            }
+        }
+        #[cfg(feature = "storage-s3")]
+        {
+            if secret_type == "s3" {
+                return SecretType::S3;
+            }
+        }
+        unreachable!(
+            "Unknown secret type {}, maybe add proper features!",
+            secret_type
+        );
+    }
 }
