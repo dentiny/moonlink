@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils;
-use crate::storage::iceberg::utils::to_iceberg_error;
 use crate::storage::index::persisted_bucket_hash_map::IndexBlock as MooncakeIndexBlock;
 /// This module defines the file index struct used for iceberg, which corresponds to in-memory mooncake table file index structs, and supports the serde between mooncake table format and iceberg format.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
@@ -135,6 +134,7 @@ impl FileIndex {
                             cur_index_block.filepath, e
                         ),
                     )
+                    .with_retryable(true)
                 })?;
             evicted_files_to_delete.extend(cur_evicted_files);
 
@@ -172,9 +172,18 @@ impl FileIndex {
         };
 
         // Delete all evicted files inline.
-        io_utils::delete_local_files(evicted_files_to_delete)
+        io_utils::delete_local_files(evicted_files_to_delete.clone())
             .await
-            .map_err(to_iceberg_error)?;
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to delete files for {:?}: {:?}",
+                        evicted_files_to_delete, e
+                    ),
+                )
+                .with_retryable(true)
+            })?;
 
         Ok(file_indice)
     }

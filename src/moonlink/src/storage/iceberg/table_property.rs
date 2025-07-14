@@ -23,8 +23,6 @@ pub(crate) const TABLE_COMMIT_RETRY_MAX_MS_DEFAULT: u64 = 30000; // 30 second
 pub(crate) const TABLE_COMMIT_RETRY_TIMEOUT_MS: &str = "commit.retry.total-timeout-ms";
 pub(crate) const TABLE_COMMIT_RETRY_TIMEOUT_MS_DEFAULT: u64 = 120000; // 2 min
 
-pub(crate) const TABLE_COMMIT_RETRY_FACTOR: u64 = 2;
-
 // Create iceberg table properties from table config.
 pub(crate) fn create_iceberg_table_properties() -> HashMap<String, String> {
     let mut props = HashMap::with_capacity(6);

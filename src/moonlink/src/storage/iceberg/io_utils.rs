@@ -38,6 +38,7 @@ pub(crate) async fn write_record_batch_to_iceberg(
                 iceberg::ErrorKind::Unexpected,
                 format!("Failed to copy from {local_filepath} to {remote_filepath}: {e:?}"),
             )
+            .with_retryable(true)
         })?;
 
     // Get data file from local parquet file.
@@ -72,6 +73,7 @@ pub(crate) async fn upload_index_file(
                 iceberg::ErrorKind::Unexpected,
                 format!("Failed to copy from {local_index_filepath} to {remote_filepath}: {e:?}"),
             )
+            .with_retryable(true)
         })?;
     Ok(remote_filepath)
 }

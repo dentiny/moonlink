@@ -138,8 +138,3 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
     let table = catalog.load_table(&table_ident).await?;
     Ok(Some(table))
 }
-
-/// Util function to convert the given error to iceberg "unexpected" error.
-pub(crate) fn to_iceberg_error<E: std::fmt::Debug>(err: E) -> IcebergError {
-    IcebergError::new(iceberg::ErrorKind::Unexpected, format!("Error: {err:?}"))
-}

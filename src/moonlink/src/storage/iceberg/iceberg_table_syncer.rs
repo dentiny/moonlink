@@ -10,11 +10,6 @@ use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
-use crate::storage::iceberg::table_property::{
-    TABLE_COMMIT_RETRY_FACTOR, TABLE_COMMIT_RETRY_MAX_MS_DEFAULT,
-    TABLE_COMMIT_RETRY_MIN_MS_DEFAULT, TABLE_COMMIT_RETRY_NUM_DEFAULT,
-};
-use crate::storage::iceberg::utils;
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::take_data_files_to_remove;
@@ -129,10 +124,25 @@ impl IcebergTableManager {
                 self.filesystem_accessor.as_ref(),
             )
             .await
-            .map_err(utils::to_iceberg_error)?;
-        io_utils::delete_local_files(evicted_files_to_delete)
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!("Failed to get cache entry for {}: {:?}", puffin_filepath, e),
+                )
+                .with_retryable(true)
+            })?;
+        io_utils::delete_local_files(evicted_files_to_delete.clone())
             .await
-            .map_err(utils::to_iceberg_error)?;
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to delete files for {:?}: {:?}",
+                        evicted_files_to_delete, e
+                    ),
+                )
+                .with_retryable(true)
+            })?;
 
         let puffin_blob_ref = PuffinBlobRef {
             puffin_file_cache_handle: cache_handle.unwrap(),

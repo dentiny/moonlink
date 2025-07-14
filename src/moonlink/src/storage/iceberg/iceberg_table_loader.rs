@@ -17,6 +17,7 @@ use std::vec;
 
 use iceberg::io::FileIO;
 use iceberg::spec::{DataFileFormat, ManifestEntry};
+use iceberg::Error as IcebergError;
 use iceberg::Result as IcebergResult;
 
 /// Results for recovering file indices from iceberg table.
@@ -137,10 +138,29 @@ impl IcebergTableManager {
                 self.filesystem_accessor.as_ref(),
             )
             .await
-            .map_err(utils::to_iceberg_error)?;
-        io_utils::delete_local_files(evicted_files_to_delete)
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to get cache entry for {}: {:?}",
+                        data_file.file_path(),
+                        e
+                    ),
+                )
+                .with_retryable(true)
+            })?;
+        io_utils::delete_local_files(evicted_files_to_delete.clone())
             .await
-            .map_err(utils::to_iceberg_error)?;
+            .map_err(|e| {
+                IcebergError::new(
+                    iceberg::ErrorKind::Unexpected,
+                    format!(
+                        "Failed to delete files for {:?}: {:?}",
+                        evicted_files_to_delete, e
+                    ),
+                )
+                .with_retryable(true)
+            })?;
 
         data_file_entry.persisted_deletion_vector = Some(PuffinBlobRef {
             // Deletion vector should be pinned on cache.
