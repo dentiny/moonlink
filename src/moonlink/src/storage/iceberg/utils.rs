@@ -7,9 +7,7 @@ use arrow_schema::Schema as ArrowSchema;
 use iceberg::arrow as IcebergArrow;
 use iceberg::spec::{DataContentType, DataFileFormat, ManifestEntry};
 use iceberg::table::Table as IcebergTable;
-use iceberg::{
-    Error as IcebergError, NamespaceIdent, Result as IcebergResult, TableCreation, TableIdent,
-};
+use iceberg::{NamespaceIdent, Result as IcebergResult, TableCreation, TableIdent};
 
 /// Return whether the given manifest entry represents data files.
 pub fn is_data_file_entry(entry: &ManifestEntry) -> bool {

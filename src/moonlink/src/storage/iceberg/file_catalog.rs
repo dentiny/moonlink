@@ -465,7 +465,7 @@ impl Catalog for FileCatalog {
         _namespace_ident: &NamespaceIdent,
         _properties: HashMap<String, String>,
     ) -> IcebergResult<()> {
-        todo!()
+        todo!("Update namespace is not supported yet!")
     }
 
     /// Create a new table inside the namespace.
@@ -580,7 +580,7 @@ impl Catalog for FileCatalog {
 
     /// Rename a table in the catalog.
     async fn rename_table(&self, _src: &TableIdent, _dest: &TableIdent) -> IcebergResult<()> {
-        todo!()
+        todo!("rename table is not supported yet!")
     }
 
     /// Update a table to the catalog, which writes metadata file and version hint file.

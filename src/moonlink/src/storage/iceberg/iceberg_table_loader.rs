@@ -154,10 +154,7 @@ impl IcebergTableManager {
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!(
-                        "Failed to delete files for {:?}: {:?}",
-                        evicted_files_to_delete, e
-                    ),
+                    format!("Failed to delete files for {evicted_files_to_delete:?}: {e:?}"),
                 )
                 .with_retryable(true)
             })?;

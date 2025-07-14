@@ -26,10 +26,8 @@ use crate::storage::{io_utils, storage_utils};
 use std::collections::{HashMap, HashSet};
 use std::vec;
 
-use backon::{ExponentialBuilder, Retryable};
 use iceberg::puffin::CompressionCodec;
 use iceberg::spec::DataFile;
-use iceberg::table::Table as IcebergTable;
 use iceberg::transaction::{ApplyTransactionAction, Transaction};
 use iceberg::{Error as IcebergError, Result as IcebergResult};
 
@@ -127,7 +125,7 @@ impl IcebergTableManager {
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!("Failed to get cache entry for {}: {:?}", puffin_filepath, e),
+                    format!("Failed to get cache entry for {puffin_filepath}: {e:?}"),
                 )
                 .with_retryable(true)
             })?;
@@ -136,10 +134,7 @@ impl IcebergTableManager {
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!(
-                        "Failed to delete files for {:?}: {:?}",
-                        evicted_files_to_delete, e
-                    ),
+                    format!("Failed to delete files for {evicted_files_to_delete:?}: {e:?}"),
                 )
                 .with_retryable(true)
             })?;
