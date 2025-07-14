@@ -12,9 +12,8 @@ pub enum SecretType {
 #[derive(Clone)]
 pub struct SecretEntry {
     pub secret_type: SecretType,
-    pub project: String,
-    pub region: String,
-    pub bucket: String,
-    pub access_key_id: String,
-    pub secret_access_key: String,
+    pub key_id: String,
+    pub secret: String,
+    pub endpoint: Option<String>,
+    pub region: Option<String>,
 }
