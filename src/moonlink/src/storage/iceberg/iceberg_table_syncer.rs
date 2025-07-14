@@ -421,37 +421,6 @@ impl IcebergTableManager {
         Ok(remote_file_indices)
     }
 
-    /// Commit transaction with retry.
-    ///
-    /// TODO(hjiang): Add unit test; currently it's hard due to the difficulty to mock opendal or catalog.
-    async fn commit_transaction_with_retry(&self, txn: Transaction) -> IcebergResult<IcebergTable> {
-        let backoff = ExponentialBuilder::default()
-            .with_min_delay(std::time::Duration::from_millis(
-                TABLE_COMMIT_RETRY_MIN_MS_DEFAULT,
-            ))
-            .with_factor(TABLE_COMMIT_RETRY_FACTOR as f32)
-            .with_max_delay(std::time::Duration::from_millis(
-                TABLE_COMMIT_RETRY_MAX_MS_DEFAULT,
-            ))
-            .with_max_times(TABLE_COMMIT_RETRY_NUM_DEFAULT as usize);
-
-        let catalog = &*self.catalog;
-
-        (move || {
-            let txn = txn.clone();
-            async move { txn.commit(catalog).await }
-        })
-        .retry(backoff)
-        .sleep(tokio::time::sleep)
-        .when(|e: &IcebergError| {
-            matches!(
-                e.kind(),
-                iceberg::ErrorKind::Unexpected | iceberg::ErrorKind::CatalogCommitConflicts
-            )
-        })
-        .await
-    }
-
     pub(crate) async fn sync_snapshot_impl(
         &mut self,
         mut snapshot_payload: IcebergSnapshotPayload,
@@ -503,7 +472,7 @@ impl IcebergTableManager {
             snapshot_payload.flush_lsn.to_string(),
         );
         txn = action.apply(txn)?;
-        let updated_iceberg_table = self.commit_transaction_with_retry(txn).await?;
+        let updated_iceberg_table = txn.commit(&*self.catalog).await?;
         self.iceberg_table = Some(updated_iceberg_table);
 
         self.catalog.clear_puffin_metadata();

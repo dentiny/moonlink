@@ -153,6 +153,7 @@ impl FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to read version hint file on load table: {e}"),
                 )
+                .with_retryable(true)
             })?;
         let version = version_str
             .trim()
@@ -176,6 +177,7 @@ impl FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to read table metadata file on load table: {e}"),
                 )
+                .with_retryable(true)
             })?;
         let metadata = serde_json::from_slice::<TableMetadata>(&metadata_bytes)
             .map_err(|e| IcebergError::new(iceberg::ErrorKind::DataInvalid, e.to_string()))?;
@@ -302,6 +304,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to list namespaces: {e}"),
                 )
+                .with_retryable(true)
             })?;
 
         // Start multiple async functions in parallel to check whether namespace.
@@ -369,6 +372,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to write metadata file at namespace creation: {e}"),
                 )
+                .with_retryable(true)
             })?;
 
         Ok(Namespace::new(namespace_ident.clone()))
@@ -398,6 +402,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to check namespace {namespace_ident:?} existence: {e:?}"),
                 )
+                .with_retryable(true)
             })?;
         Ok(exists)
     }
@@ -413,6 +418,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to drop namespace {namespace_ident:?} existence: {e:?}"),
                 )
+                .with_retryable(true)
             })?;
         Ok(())
     }
@@ -487,6 +493,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to write version hint file at table creation: {e}"),
                 )
+                .with_retryable(true)
             })?;
 
         // Create metadata file.
@@ -507,6 +514,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to write metadata file at table creation: {e}"),
                 )
+                .with_retryable(true)
             })?;
 
         let table = Table::builder()
@@ -543,6 +551,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to delete directory {directory}: {e:?}"),
                 )
+                .with_retryable(true)
             })?;
         Ok(())
     }
@@ -564,7 +573,7 @@ impl Catalog for FileCatalog {
                     format!(
                         "Failed to check version hint file existence {version_hint_filepath:?}: {e:?}"
                     ),
-                )
+                ).with_retryable(true)
             })?;
         Ok(exists)
     }
@@ -607,6 +616,7 @@ impl Catalog for FileCatalog {
                     iceberg::ErrorKind::Unexpected,
                     format!("Failed to write metadata file at table update: {e}"),
                 )
+                .with_retryable(true)
             })?;
 
         // Manifest files and manifest list has persisted into storage, make modifications based on puffin blobs.
@@ -633,6 +643,7 @@ impl Catalog for FileCatalog {
                         "Failed to write version hint file existencee {version_hint_path}: {e:?}"
                     ),
                 )
+                .with_retryable(true)
             })?;
 
         Table::builder()
