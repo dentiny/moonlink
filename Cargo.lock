@@ -1921,7 +1921,7 @@ dependencies = [
 [[package]]
 name = "iceberg"
 version = "0.5.1"
-source = "git+https://github.com/apache/iceberg-rust.git?rev=3fa902789dae510acb0bd3e9e57e9f7b92a0677d#3fa902789dae510acb0bd3e9e57e9f7b92a0677d"
+source = "git+https://github.com/apache/iceberg-rust.git?rev=e47b268a6d58a58b8d79263d13cded55ff93fcff#e47b268a6d58a58b8d79263d13cded55ff93fcff"
 dependencies = [
  "anyhow",
  "apache-avro",
@@ -1936,6 +1936,7 @@ dependencies = [
  "arrow-string",
  "as-any",
  "async-trait",
+ "backon",
  "base64 0.22.1",
  "bimap",
  "bytes",
@@ -1945,6 +1946,7 @@ dependencies = [
  "fnv",
  "futures",
  "itertools 0.13.0",
+ "mockall",
  "moka",
  "murmur3",
  "num-bigint",
