@@ -1,21 +1,9 @@
 /// This module interacts with iceberg snapshot status, which corresponds to one mooncake table.
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
+use crate::event_sync::EventSyncReceiver;
 use crate::Result;
 use crate::TableEvent;
-
-/// Contains a few receivers, which get notified after certain iceberg events completion.
-pub struct EventSyncReceiver {
-    /// Get notified when drop table completes.
-    pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
-    /// Get notified when iceberg flush lsn advances.
-    pub flush_lsn_rx: watch::Receiver<u64>,
-    /// Used to create notifier when index merge completes.
-    /// TODO(hjiang): Error status propagation.
-    pub index_merge_completion_tx: broadcast::Sender<()>,
-    /// Used to create notifier when data compaction completes.
-    pub data_compaction_completion_tx: broadcast::Sender<Result<()>>,
-}
 
 /// At most one outstanding snapshot request is allowed.
 pub struct TableEventManager {

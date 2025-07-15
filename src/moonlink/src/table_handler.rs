@@ -1,3 +1,4 @@
+use crate::event_sync::EventSyncSender;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::MaintainanceOption;
 use crate::storage::mooncake_table::SnapshotOption;
@@ -7,7 +8,7 @@ use crate::table_notify::TableEvent;
 use crate::{Error, Result};
 use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::sync::{broadcast, oneshot, watch};
+use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
 use tracing::Instrument;
@@ -23,19 +24,6 @@ pub struct TableHandler {
 
     /// Sender for the table event queue
     event_sender: Sender<TableEvent>,
-}
-
-/// Contains a few senders, which notifies after certain iceberg events completion.
-pub struct EventSyncSender {
-    /// Notifies when drop table completes.
-    pub drop_table_completion_tx: oneshot::Sender<Result<()>>,
-    /// Notifies when iceberg flush LSN advances.
-    pub flush_lsn_tx: watch::Sender<u64>,
-    /// Notifies when index merge finishes.
-    /// TODO(hjiang): Error status propagation.
-    pub index_merge_completion_tx: broadcast::Sender<()>,
-    /// Notifies when data compaction finishes.
-    pub data_compaction_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 #[derive(PartialEq)]

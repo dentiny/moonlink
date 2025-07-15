@@ -10,6 +10,7 @@ pub(crate) mod parquet_utils;
 pub(crate) mod path_utils;
 pub(crate) mod storage_utils;
 
+pub use crate::event_sync::EventSyncReceiver;
 pub use cache::object_storage::cache_config::ObjectStorageCacheConfig;
 pub(crate) use cache::object_storage::cache_handle::NonEvictableHandle;
 pub use cache::object_storage::object_storage_cache::ObjectStorageCache;
@@ -17,7 +18,7 @@ pub use filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 pub use filesystem::filesystem_config::FileSystemConfig;
 pub use iceberg::iceberg_table_config::IcebergTableConfig;
 pub use iceberg::iceberg_table_manager::IcebergTableManager;
-pub use iceberg::table_event_manager::{EventSyncReceiver, TableEventManager};
+pub use iceberg::table_event_manager::TableEventManager;
 pub use iceberg::table_manager::TableManager;
 pub use mooncake_table::table_config::TableConfig as MoonlinkTableConfig;
 pub use mooncake_table::table_secret::{

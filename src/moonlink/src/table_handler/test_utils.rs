@@ -1,15 +1,13 @@
+use crate::event_sync::create_table_event_syncer;
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::table_creation_test_utils::create_test_arrow_schema;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::IcebergTableConfig;
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
-use crate::table_handler::{EventSyncSender, TableEvent, TableHandler}; // Ensure this path is correct
+use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::{decode_read_state_for_testing, ReadStateManager};
-use crate::{
-    EventSyncReceiver, FileSystemConfig, IcebergTableManager, MooncakeTableConfig,
-    TableEventManager,
-};
+use crate::{FileSystemConfig, IcebergTableManager, MooncakeTableConfig, TableEventManager};
 use crate::{ObjectStorageCache, Result};
 
 use arrow_array::RecordBatch;
@@ -18,7 +16,7 @@ use iceberg::io::FileRead;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::{broadcast, mpsc, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 
 /// Creates a `MoonlinkRow` for testing purposes.
 pub fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
@@ -87,24 +85,18 @@ impl TestEnvironment {
             last_commit_rx,
         )));
 
-        let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
-        let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
-        let (index_merge_completion_tx, _) = broadcast::channel(64usize);
-        let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
-        let event_sync_sender = EventSyncSender {
-            drop_table_completion_tx,
-            flush_lsn_tx,
-            index_merge_completion_tx: index_merge_completion_tx.clone(),
-            data_compaction_completion_tx: data_compaction_completion_tx.clone(),
-        };
-        let table_event_sync_receiver = EventSyncReceiver {
-            drop_table_completion_rx,
-            flush_lsn_rx,
-            index_merge_completion_tx: index_merge_completion_tx.clone(),
-            data_compaction_completion_tx: data_compaction_completion_tx.clone(),
-        };
-        let handler =
-            TableHandler::new(mooncake_table, event_sync_sender, replication_rx.clone()).await;
+        let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
+        let index_merge_completion_tx = table_event_sync_sender.index_merge_completion_tx.clone();
+        let data_compaction_completion_tx = table_event_sync_sender
+            .data_compaction_completion_tx
+            .clone();
+
+        let handler = TableHandler::new(
+            mooncake_table,
+            table_event_sync_sender,
+            replication_rx.clone(),
+        )
+        .await;
         let table_event_manager =
             TableEventManager::new(handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = handler.get_event_sender();
