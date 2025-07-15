@@ -5,6 +5,7 @@ use moonlink::{
 };
 /// This module contains util functions related to moonlink config.
 use serde::{Deserialize, Serialize};
+#[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use url::Url;
 
 /// Struct for iceberg table config.
