@@ -1,6 +1,7 @@
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::{Error as IcebergError, ErrorKind};
 use tempfile::tempdir;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 
 use super::test_utils::*;
@@ -1511,7 +1512,8 @@ async fn test_discard_duplicate_writes() {
 /// - replication lsn >= iceberg snapshot lsn, if assigned
 #[test]
 fn test_is_iceberg_snapshot_satisfy_force_snapshot() {
-    let mut table_handler_state = TableHandlerState::new();
+    let (index_merge_completion_tx, _) = broadcast::channel(64usize);
+    let mut table_handler_state = TableHandlerState::new(index_merge_completion_tx);
     // Case-1: iceberg snapshot already satisfies requested lsn.
     {
         let requested_lsn = 0;

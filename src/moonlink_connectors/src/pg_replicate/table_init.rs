@@ -11,7 +11,7 @@ use moonlink::{
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tokio::sync::{mpsc, mpsc::Sender, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, mpsc::Sender, oneshot, watch};
 
 /// Components required to replicate a single table.
 /// Components that the [`Sink`] needs for processing CDC events.
@@ -32,13 +32,16 @@ pub struct TableResources {
 fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
+    let (index_merge_completion_tx, _) = broadcast::channel(64usize);
     let event_sync_sender = EventSyncSender {
         drop_table_completion_tx,
         flush_lsn_tx,
+        index_merge_completion_tx: index_merge_completion_tx.clone(),
     };
     let event_sync_receiver = EventSyncReceiver {
         drop_table_completion_rx,
         flush_lsn_rx,
+        index_merge_completion_tx,
     };
     (event_sync_sender, event_sync_receiver)
 }

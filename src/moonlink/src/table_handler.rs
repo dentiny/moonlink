@@ -1,3 +1,4 @@
+use crate::storage::mooncake_table::MaintainanceOption;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
 use crate::storage::{io_utils, MooncakeTable};
@@ -5,7 +6,7 @@ use crate::table_notify::TableEvent;
 use crate::{Error, Result};
 use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::{broadcast, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{self, Duration};
 use tracing::Instrument;
@@ -29,6 +30,9 @@ pub struct EventSyncSender {
     pub drop_table_completion_tx: oneshot::Sender<Result<()>>,
     /// Notifies when iceberg flush LSN advances.
     pub flush_lsn_tx: watch::Sender<u64>,
+    /// Notifies when index merge finishes.
+    /// TODO(hjiang): Error status propagation.
+    pub index_merge_completion_tx: broadcast::Sender<()>,
 }
 
 #[derive(PartialEq)]
@@ -71,6 +75,11 @@ struct TableHandlerState {
     mooncake_snapshot_ongoing: bool,
     // Pending force snapshot requests.
     pending_force_snapshot_lsns: BTreeMap<u64, Vec<Option<Sender<Result<()>>>>>,
+    // Whether force index merge has been requested.
+    force_index_merge_requested: bool,
+    /// Notify when index merge completes.
+    /// TODO(hjiang): Error status propagation.
+    index_merge_completion_tx: broadcast::Sender<()>,
     // Special table state, for example, initial copy, alter table, drop table, etc.
     special_table_state: SpecialTableState,
     // Buffered events during blocking operations: initial copy, alter table, drop table, etc.
@@ -78,7 +87,7 @@ struct TableHandlerState {
 }
 
 impl TableHandlerState {
-    fn new() -> Self {
+    fn new(index_merge_completion_tx: broadcast::Sender<()>) -> Self {
         Self {
             iceberg_snapshot_result_consumed: true,
             iceberg_snapshot_ongoing: false,
@@ -88,6 +97,8 @@ impl TableHandlerState {
             table_consistent_view_lsn: None,
             latest_commit_lsn: None,
             pending_force_snapshot_lsns: BTreeMap::new(),
+            force_index_merge_requested: false,
+            index_merge_completion_tx,
             special_table_state: SpecialTableState::Normal,
             initial_copy_buffered_events: Vec::new(),
         }
@@ -105,6 +116,32 @@ impl TableHandlerState {
                 }
             }
         }
+    }
+
+    /// Get index merge operation option.
+    fn get_index_merge_option(&self) -> MaintainanceOption {
+        if self.maintainance_ongoing {
+            return MaintainanceOption::Skip;
+        }
+        if self.force_index_merge_requested {
+            return MaintainanceOption::Force;
+        }
+        return MaintainanceOption::BestEffort;
+    }
+
+    /// Mark index merge completion.
+    async fn mark_index_merge_completed(&mut self) {
+        self.maintainance_ongoing = false;
+        self.force_index_merge_requested = false;
+        self.index_merge_completion_tx.send(()).unwrap();
+    }
+
+    /// Get data compaction operation option.
+    fn get_data_compaction_option(&self) -> MaintainanceOption {
+        if self.maintainance_ongoing {
+            return MaintainanceOption::Skip;
+        }
+        return MaintainanceOption::BestEffort;
     }
 
     // Used to decide whether we could create an iceberg snapshot.
@@ -245,7 +282,8 @@ impl TableHandler {
         replication_lsn_rx: watch::Receiver<u64>,
         mut table: MooncakeTable,
     ) {
-        let mut table_handler_state = TableHandlerState::new();
+        let mut table_handler_state =
+            TableHandlerState::new(event_sync_sender.index_merge_completion_tx.clone());
         table_handler_state.initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
         // Used to clean up mooncake table status, and send completion notification.
         let drop_table = async |table: &mut MooncakeTable, event_sync_sender: EventSyncSender| {
@@ -354,6 +392,10 @@ impl TableHandler {
                                 table_handler_state.pending_force_snapshot_lsns.entry(requested_lsn).or_default().push(tx);
                             }
                         }
+                        // Branch to trigger a force index merge request.
+                        TableEvent::ForceIndexMerge => {
+                            table_handler_state.force_index_merge_requested = true;
+                        }
                         // Branch to drop the iceberg table and clear pinned data files from the global object storage cache, only used when the whole table requested to drop.
                         // So we block wait for asynchronous request completion.
                         TableEvent::DropTable => {
@@ -382,8 +424,8 @@ impl TableHandler {
                             assert!(table.create_snapshot(SnapshotOption {
                                 force_create: true,
                                 skip_iceberg_snapshot: true,
-                                skip_file_indices_merge: true,
-                                skip_data_file_compaction: true,
+                                index_merge_option: MaintainanceOption::Skip,
+                                data_compaction_option: MaintainanceOption::Skip,
                             }));
                             table_handler_state.mooncake_snapshot_ongoing = true;
                             table_handler_state.finish_initial_copy();
@@ -412,8 +454,8 @@ impl TableHandler {
                                     assert!(table.create_snapshot(SnapshotOption {
                                         force_create: true,
                                         skip_iceberg_snapshot: table_handler_state.iceberg_snapshot_ongoing,
-                                        skip_file_indices_merge: table_handler_state.maintainance_ongoing,
-                                        skip_data_file_compaction: table_handler_state.maintainance_ongoing,
+                                        index_merge_option: table_handler_state.get_index_merge_option(),
+                                        data_compaction_option: table_handler_state.get_data_compaction_option(),
                                     }));
                                     table_handler_state.mooncake_snapshot_ongoing = true;
                                     continue;
@@ -425,8 +467,8 @@ impl TableHandler {
                             table_handler_state.mooncake_snapshot_ongoing = table.create_snapshot(SnapshotOption {
                                 force_create: false,
                                 skip_iceberg_snapshot: table_handler_state.iceberg_snapshot_ongoing,
-                                skip_file_indices_merge: table_handler_state.maintainance_ongoing,
-                                skip_data_file_compaction:  table_handler_state.maintainance_ongoing,
+                                index_merge_option: table_handler_state.get_index_merge_option(),
+                                data_compaction_option: table_handler_state.get_data_compaction_option(),
                             });
                         }
                         TableEvent::MooncakeTableSnapshotResult { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
@@ -512,7 +554,7 @@ impl TableHandler {
                         }
                         TableEvent::IndexMerge { index_merge_result } => {
                             table.set_file_indices_merge_res(index_merge_result);
-                            table_handler_state.maintainance_ongoing = false;
+                            table_handler_state.mark_index_merge_completed().await;
                         }
                         TableEvent::DataCompaction { data_compaction_result } => {
                             match data_compaction_result {
@@ -562,7 +604,6 @@ impl TableHandler {
         // Replication events
         // ==============================
         //
-
         if table_handler_state.should_discard_event(&event) {
             return;
         }
@@ -648,8 +689,8 @@ impl TableHandler {
                     assert!(table.create_snapshot(SnapshotOption {
                         force_create: true,
                         skip_iceberg_snapshot: table_handler_state.iceberg_snapshot_ongoing,
-                        skip_file_indices_merge: table_handler_state.maintainance_ongoing,
-                        skip_data_file_compaction: table_handler_state.maintainance_ongoing,
+                        index_merge_option: table_handler_state.get_index_merge_option(),
+                        data_compaction_option: table_handler_state.get_data_compaction_option(),
                     }));
                     table_handler_state.mooncake_snapshot_ongoing = true;
                 }

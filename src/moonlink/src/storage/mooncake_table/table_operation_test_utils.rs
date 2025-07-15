@@ -7,7 +7,7 @@ use crate::row::MoonlinkRow;
 use crate::storage::io_utils;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload, FileIndiceMergeResult,
-    IcebergSnapshotPayload, IcebergSnapshotResult, SnapshotOption,
+    IcebergSnapshotPayload, IcebergSnapshotResult, MaintainanceOption, SnapshotOption,
 };
 use crate::table_notify::TableEvent;
 use crate::{MooncakeTable, SnapshotReadOutput};
@@ -70,8 +70,8 @@ pub(crate) async fn perform_index_merge_for_test(
     assert!(table.create_snapshot(SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_file_indices_merge: false,
-        skip_data_file_compaction: true,
+        index_merge_option: MaintainanceOption::BestEffort,
+        data_compaction_option: MaintainanceOption::Skip,
     }));
     let (_, _, _, _, evicted_files_to_delete) = sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
@@ -101,8 +101,8 @@ pub(crate) async fn perform_data_compaction_for_test(
     assert!(table.create_snapshot(SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_file_indices_merge: true,
-        skip_data_file_compaction: false,
+        index_merge_option: MaintainanceOption::Skip,
+        data_compaction_option: MaintainanceOption::BestEffort,
     }));
     let (_, _, _, _, evicted_files_to_delete) = sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
@@ -198,8 +198,8 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
     let mooncake_snapshot_created = table.create_snapshot(SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_data_file_compaction: false,
-        skip_file_indices_merge: false,
+        data_compaction_option: MaintainanceOption::BestEffort,
+        index_merge_option: MaintainanceOption::BestEffort,
     });
     assert!(mooncake_snapshot_created);
     sync_mooncake_snapshot(table, receiver).await
@@ -248,8 +248,8 @@ async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
     assert!(table.create_snapshot(SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: true,
-        skip_file_indices_merge: true,
-        skip_data_file_compaction: true,
+        index_merge_option: MaintainanceOption::Skip,
+        data_compaction_option: MaintainanceOption::Skip,
     }));
     sync_mooncake_snapshot(table, receiver).await;
 }
@@ -292,8 +292,8 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     let force_snapshot_option = SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_file_indices_merge: true,
-        skip_data_file_compaction: false,
+        index_merge_option: MaintainanceOption::Skip,
+        data_compaction_option: MaintainanceOption::BestEffort,
     };
     assert!(table.create_snapshot(force_snapshot_option.clone()));
 
@@ -341,8 +341,8 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     assert!(table.create_snapshot(SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_file_indices_merge: true,
-        skip_data_file_compaction: false,
+        index_merge_option: MaintainanceOption::Skip,
+        data_compaction_option: MaintainanceOption::BestEffort,
     }));
     sync_mooncake_snapshot_and_create_new_by_iceberg_payload(table, receiver).await;
 }
@@ -357,8 +357,8 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
     let force_snapshot_option = SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_file_indices_merge: false,
-        skip_data_file_compaction: false,
+        index_merge_option: MaintainanceOption::BestEffort,
+        data_compaction_option: MaintainanceOption::BestEffort,
     };
     assert!(table.create_snapshot(force_snapshot_option.clone()));
 
@@ -394,8 +394,8 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
     assert!(table.create_snapshot(SnapshotOption {
         force_create: true,
         skip_iceberg_snapshot: false,
-        skip_file_indices_merge: false,
-        skip_data_file_compaction: false,
+        index_merge_option: MaintainanceOption::BestEffort,
+        data_compaction_option: MaintainanceOption::BestEffort,
     }));
     sync_mooncake_snapshot_and_create_new_by_iceberg_payload(table, receiver).await;
 }

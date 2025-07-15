@@ -25,6 +25,7 @@ use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::MaintainanceOption;
 use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
@@ -241,8 +242,8 @@ async fn test_skip_iceberg_snapshot() {
     assert!(table.create_snapshot(SnapshotOption {
         force_create: false,
         skip_iceberg_snapshot: true,
-        skip_file_indices_merge: false,
-        skip_data_file_compaction: false,
+        index_merge_option: MaintainanceOption::BestEffort,
+        data_compaction_option: MaintainanceOption::BestEffort,
     }));
     let (_, iceberg_snapshot_payload, _, _, _) =
         sync_mooncake_snapshot(&mut table, &mut notify_rx).await;

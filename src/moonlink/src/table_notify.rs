@@ -60,6 +60,8 @@ pub enum TableEvent {
         lsn: Option<u64>,
         tx: Option<Sender<Result<()>>>,
     },
+    /// Force an index merge operation.
+    ForceIndexMerge,
     /// Drop table.
     DropTable,
     /// Alter table,

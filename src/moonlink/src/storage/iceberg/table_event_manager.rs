@@ -1,5 +1,5 @@
 /// This module interacts with iceberg snapshot status, which corresponds to one mooncake table.
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 use crate::Result;
 use crate::TableEvent;
@@ -10,6 +10,9 @@ pub struct EventSyncReceiver {
     pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
+    /// Used to create notification when index merge completes.
+    /// TODO(hjiang): Error status propagation.
+    pub index_merge_completion_tx: broadcast::Sender<()>,
 }
 
 /// At most one outstanding snapshot request is allowed.
@@ -20,6 +23,9 @@ pub struct TableEventManager {
     drop_table_completion_rx: Option<oneshot::Receiver<Result<()>>>,
     /// Channel to observe latest flush LSN reported by iceberg.
     flush_lsn_rx: watch::Receiver<u64>,
+    /// Sender which is used to create notification at latest index merge completion.
+    /// TODO(hjiang): Error status propagation.
+    index_merge_completion_tx: broadcast::Sender<()>,
 }
 
 impl TableEventManager {
@@ -31,6 +37,7 @@ impl TableEventManager {
             table_event_tx,
             drop_table_completion_rx: Some(table_event_sync_rx.drop_table_completion_rx),
             flush_lsn_rx: table_event_sync_rx.flush_lsn_rx,
+            index_merge_completion_tx: table_event_sync_rx.index_merge_completion_tx,
         }
     }
 
@@ -50,6 +57,16 @@ impl TableEventManager {
             .await
             .unwrap();
         rx
+    }
+
+    /// Initiate an index merge event, return the channel for synchronization.
+    /// TODO(hjiang): Error status propagation.
+    pub async fn initiate_index_merge(&mut self) -> broadcast::Receiver<()> {
+        self.table_event_tx
+            .send(TableEvent::ForceIndexMerge)
+            .await
+            .unwrap();
+        self.index_merge_completion_tx.subscribe()
     }
 
     /// Drop a mooncake table.

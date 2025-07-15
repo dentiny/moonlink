@@ -415,6 +415,17 @@ impl SnapshotTask {
     }
 }
 
+/// Option for a maintainance option.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum MaintainanceOption {
+    /// Perform a best effort index merge.
+    BestEffort,
+    /// Force an index merge if there're multiple file indices.
+    Force,
+    /// Skip index merge.
+    Skip,
+}
+
 /// Options to create mooncake snapshot.
 #[derive(Clone, Debug)]
 pub struct SnapshotOption {
@@ -423,10 +434,10 @@ pub struct SnapshotOption {
     pub(crate) force_create: bool,
     /// Whether to skip iceberg snapshot creation.
     pub(crate) skip_iceberg_snapshot: bool,
-    /// Whether to skip file indices merge payload creation.
-    pub(crate) skip_file_indices_merge: bool,
-    /// Whether to skip data file compaction payload creation.
-    pub(crate) skip_data_file_compaction: bool,
+    /// Whether to file index merge option.
+    pub(crate) index_merge_option: MaintainanceOption,
+    /// Whether to data file compaction option.
+    pub(crate) data_compaction_option: MaintainanceOption,
 }
 
 impl SnapshotOption {
@@ -434,8 +445,8 @@ impl SnapshotOption {
         Self {
             force_create: false,
             skip_iceberg_snapshot: false,
-            skip_file_indices_merge: false,
-            skip_data_file_compaction: false,
+            index_merge_option: MaintainanceOption::BestEffort,
+            data_compaction_option: MaintainanceOption::BestEffort,
         }
     }
 }

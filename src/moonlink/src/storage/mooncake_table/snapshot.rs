@@ -24,10 +24,10 @@ use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
 };
 use crate::storage::mooncake_table::transaction_stream::TransactionStreamOutput;
-use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
 };
+use crate::storage::mooncake_table::{MaintainanceOption, SnapshotOption};
 use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
@@ -430,16 +430,24 @@ impl SnapshotTableState {
 
     /// Util function to decide whether and what to compact data files.
     /// To simplify states (aka, avoid data compaction already in iceberg with those not), only merge those already persisted.
-    fn get_payload_to_compact(&self) -> Option<DataCompactionPayload> {
+    fn get_payload_to_compact(
+        &self,
+        data_compaction_option: &MaintainanceOption,
+    ) -> Option<DataCompactionPayload> {
+        let data_compaction_file_threshold = match data_compaction_option {
+            MaintainanceOption::Skip => usize::MAX,
+            MaintainanceOption::Force => 2,
+            MaintainanceOption::BestEffort => {
+                self.mooncake_table_metadata
+                    .config
+                    .data_compaction_config
+                    .data_file_to_compact as usize
+            }
+        };
+
         // Fast-path: not enough data files to trigger compaction.
         let all_disk_files = &self.current_snapshot.disk_files;
-        if all_disk_files.len()
-            < self
-                .mooncake_table_metadata
-                .config
-                .data_compaction_config
-                .data_file_to_compact as usize
-        {
+        if all_disk_files.len() < data_compaction_file_threshold {
             return None;
         }
 
@@ -478,13 +486,7 @@ impl SnapshotTableState {
             tentative_data_files_to_compact.push(single_file_to_compact);
         }
 
-        if tentative_data_files_to_compact.len()
-            < self
-                .mooncake_table_metadata
-                .config
-                .data_compaction_config
-                .data_file_to_compact as usize
-        {
+        if tentative_data_files_to_compact.len() < data_compaction_file_threshold {
             return None;
         }
 
@@ -514,17 +516,25 @@ impl SnapshotTableState {
     /// Util function to decide whether and what to merge index.
     /// To simplify states (aka, avoid merging file indices already in iceberg with those not), only merge those already persisted.
     #[allow(clippy::mutable_key_type)]
-    fn get_file_indices_to_merge(&self) -> Option<FileIndiceMergePayload> {
+    fn get_file_indices_to_merge(
+        &self,
+        index_merge_option: &MaintainanceOption,
+    ) -> Option<FileIndiceMergePayload> {
+        let index_merge_file_threshold = match index_merge_option {
+            MaintainanceOption::Skip => usize::MAX,
+            MaintainanceOption::Force => 2,
+            MaintainanceOption::BestEffort => {
+                self.mooncake_table_metadata
+                    .config
+                    .file_index_config
+                    .file_indices_to_merge as usize
+            }
+        };
+
         // Fast-path: not enough file indices to trigger index merge.
         let mut file_indices_to_merge = HashSet::new();
         let all_file_indices = &self.current_snapshot.indices.file_indices;
-        if all_file_indices.len()
-            < self
-                .mooncake_table_metadata
-                .config
-                .file_index_config
-                .file_indices_to_merge as usize
-        {
+        if all_file_indices.len() < index_merge_file_threshold {
             return None;
         }
 
@@ -549,13 +559,7 @@ impl SnapshotTableState {
             assert!(file_indices_to_merge.insert(cur_file_index.clone()));
         }
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
-        if file_indices_to_merge.len()
-            >= self
-                .mooncake_table_metadata
-                .config
-                .file_index_config
-                .file_indices_to_merge as usize
-        {
+        if file_indices_to_merge.len() >= index_merge_file_threshold {
             return Some(FileIndiceMergePayload {
                 file_indices: file_indices_to_merge,
             });
@@ -1132,18 +1136,16 @@ impl SnapshotTableState {
             .if_persist_by_new_files_or_maintainence(opt.force_create);
 
         // Decide whether to perform a data compaction.
-        let mut data_compaction_payload: Option<DataCompactionPayload> = None;
-        if !opt.skip_data_file_compaction {
-            // No need to pin puffin file during compaction:
-            // - only compaction deletes puffin file
-            // - there's no two ongoing compaction
-            data_compaction_payload = self.get_payload_to_compact();
-        }
+        //
+        // No need to pin puffin file during compaction:
+        // - only compaction deletes puffin file
+        // - there's no two ongoing compaction
+        let data_compaction_payload = self.get_payload_to_compact(&opt.data_compaction_option);
 
         // Decide whether to merge an index merge, which cannot be performed together with data compaction.
         let mut file_indices_merge_payload: Option<FileIndiceMergePayload> = None;
-        if !opt.skip_file_indices_merge && data_compaction_payload.is_none() {
-            file_indices_merge_payload = self.get_file_indices_to_merge();
+        if data_compaction_payload.is_none() {
+            file_indices_merge_payload = self.get_file_indices_to_merge(&opt.index_merge_option);
         }
 
         // TODO(hjiang): Add whether to flush based on merged file indices.
