@@ -180,7 +180,7 @@ impl DiskSliceWriter {
                 let file =
                     tokio::fs::File::create(dir_path.join(data_file.as_ref().unwrap().file_path()))
                         .await
-                        .map_err(Error::Io)?;
+                        .map_err(Into::<Error>::into)?;
                 let properties = parquet_utils::get_default_parquet_properties();
                 writer = Some(AsyncArrowWriter::try_new(
                     file,
@@ -294,7 +294,7 @@ mod tests {
     #[tokio::test]
     async fn test_disk_slice_builder() -> Result<()> {
         // Create a temporary directory for the test
-        let temp_dir = tempdir().map_err(Error::Io)?;
+        let temp_dir = tempdir().map_err(Into::<Error>::into)?;
         // Create a schema for testing
         let schema = get_test_schema();
 
@@ -352,7 +352,7 @@ mod tests {
             assert_eq!(record_batch, expected_record_batch);
         }
         // Clean up temporary directory
-        temp_dir.close().map_err(Error::Io)?;
+        temp_dir.close().map_err(Into::<Error>::into)?;
 
         Ok(())
     }
@@ -360,7 +360,7 @@ mod tests {
     #[tokio::test]
     async fn test_index_remapping() -> Result<()> {
         // Create a temporary directory for the test
-        let temp_dir = tempdir().map_err(Error::Io)?;
+        let temp_dir = tempdir().map_err(Into::<Error>::into)?;
 
         // Create a schema for testing
         let schema = get_test_schema();
@@ -478,7 +478,7 @@ mod tests {
         );
 
         // Clean up temporary directory
-        temp_dir.close().map_err(Error::Io)?;
+        temp_dir.close().map_err(Into::<Error>::into)?;
 
         Ok(())
     }

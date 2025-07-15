@@ -3,20 +3,21 @@ use iceberg::Error as IcebergError;
 use parquet::errors::ParquetError;
 use std::io;
 use std::result;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::watch;
 
 /// Custom error type for moonlink
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum Error {
     #[error("Arrow error: {source}")]
-    Arrow { source: ArrowError },
+    Arrow { source: Arc<ArrowError> },
 
-    #[error("IO error: {0}")]
-    Io(#[from] io::Error),
+    #[error("IO error: {source}")]
+    Io { source: Arc<io::Error> },
 
     #[error("Parquet error: {0}")]
-    Parquet(#[from] ParquetError),
+    Parquet(#[from] Arc<ParquetError>),
 
     #[error("Transaction {0} not found")]
     TransactionNotFound(u32),
@@ -31,31 +32,61 @@ pub enum Error {
     TokioJoinError(String),
 
     #[error("Iceberg error: {source}")]
-    IcebergError { source: IcebergError },
+    IcebergError { source: Arc<IcebergError> },
 
     #[error("Iceberg error: {0}")]
     IcebergMessage(String),
 
     #[error("OpenDAL error: {0}")]
-    OpenDal(#[from] opendal::Error),
+    OpenDal(#[from] Arc<opendal::Error>),
 
     #[error("UTF-8 conversion error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 
     #[error("Join error: {0}")]
-    JoinError(#[from] tokio::task::JoinError),
+    JoinError(#[from] Arc<tokio::task::JoinError>),
 }
 
 pub type Result<T> = result::Result<T, Error>;
 
 impl From<ArrowError> for Error {
     fn from(source: ArrowError) -> Self {
-        Error::Arrow { source }
+        Error::Arrow {
+            source: Arc::new(source),
+        }
     }
 }
 
 impl From<IcebergError> for Error {
     fn from(source: IcebergError) -> Self {
-        Error::IcebergError { source }
+        Error::IcebergError {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<io::Error> for Error {
+    fn from(source: io::Error) -> Self {
+        Error::Io {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<opendal::Error> for Error {
+    fn from(source: opendal::Error) -> Self {
+        Error::OpenDal(Arc::new(source))
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(source: tokio::task::JoinError) -> Self {
+        Error::JoinError(Arc::new(source))
+    }
+}
+
+impl From<ParquetError> for Error {
+    fn from(source: ParquetError) -> Self {
+        Error::Parquet(Arc::new(source))
     }
 }
