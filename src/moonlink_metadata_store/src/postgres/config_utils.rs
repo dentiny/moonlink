@@ -12,7 +12,6 @@ use url::Url;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 struct IcebergTableConfigForPersistence {
     /// Table warehouse location.
-    /// TODO(hjiang): Store along with security as well.
     warehouse_uri: String,
     /// Namespace for the iceberg table.
     namespace: String,
@@ -22,6 +21,7 @@ struct IcebergTableConfigForPersistence {
 
 impl IcebergTableConfigForPersistence {
     /// Get bucket for iceberg table config, only applies to object storage backend.
+    #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
     fn get_bucket_name(&self) -> Option<String> {
         if let Ok(url) = Url::parse(&self.warehouse_uri) {
             return Some(url.host_str()?.to_string());
@@ -148,5 +148,25 @@ mod tests {
         let new_moonlink_table_config =
             deserialze_moonlink_table_config(serialized_persisted_config, secret_entry).unwrap();
         assert_eq!(old_moonlink_table_config, new_moonlink_table_config);
+    }
+
+    #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
+    #[test]
+    fn test_get_bucket_name() {
+        // Test on S3 bucket.
+        let config = IcebergTableConfigForPersistence {
+            warehouse_uri: "s3://my-bucket-name/path/to/table".to_string(),
+            namespace: "test_ns".to_string(),
+            table_name: "test_table".to_string(),
+        };
+        assert_eq!(config.get_bucket_name(), Some("my-bucket-name".to_string()));
+
+        // Test on GCS bucket.
+        let config = IcebergTableConfigForPersistence {
+            warehouse_uri: "gs://my-bucket-name/path/to/table".to_string(),
+            namespace: "test_ns".to_string(),
+            table_name: "test_table".to_string(),
+        };
+        assert_eq!(config.get_bucket_name(), Some("my-bucket-name".to_string()));
     }
 }

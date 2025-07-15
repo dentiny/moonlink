@@ -26,8 +26,6 @@ mod tests {
             .get_all_table_metadata_entries()
             .await
             .unwrap();
-
-        // Check metadata entries.
         assert_eq!(metadata_entries.len(), 1);
         let table_metadata_entry = &metadata_entries[0];
         assert_eq!(table_metadata_entry.table_id, TABLE_ID);

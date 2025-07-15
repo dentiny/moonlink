@@ -4,8 +4,8 @@ BEGIN;
 CREATE TABLE mooncake.secrets (
     id SERIAL PRIMARY KEY,          -- unique row identifier
     uid text DEFAULT current_user,  -- user for the secret
-    oid oid,               -- Mooncake table OID.
-    secret_type TEXT,             -- One of (S3, GCS, R2)
+    oid oid,                        -- Mooncake table OID.
+    secret_type TEXT,               -- One of (S3, GCS)
     key_id TEXT,        
     secret TEXT,        
     project TEXT,          -- (optional)  

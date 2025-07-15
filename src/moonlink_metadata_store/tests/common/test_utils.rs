@@ -9,7 +9,7 @@ pub(crate) fn get_moonlink_table_config() -> MoonlinkTableConfig {
             namespace: vec!["namespace".to_string()],
             table_name: "table".to_string(),
             filesystem_config: FileSystemConfig::FileSystem {
-                root_directory: "/tmp/iceberg_warehouse".to_string(),
+                root_directory: "/tmp/test_warehouse_uri".to_string(),
             },
         },
         ..Default::default()

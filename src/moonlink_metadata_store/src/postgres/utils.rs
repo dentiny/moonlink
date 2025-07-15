@@ -36,3 +36,16 @@ pub async fn create_table(postgres_client: &Client, statements: &str) -> Result<
     postgres_client.simple_query(statements).await?;
     Ok(())
 }
+
+/// Create table if not exist.
+pub async fn create_table_if_non_existent(
+    postgres_client: &Client,
+    schema_name: &str,
+    table_name: &str,
+    statements: &str,
+) -> Result<()> {
+    if table_exists(postgres_client, schema_name, table_name).await? {
+        return Ok(());
+    }
+    create_table(postgres_client, statements).await
+}

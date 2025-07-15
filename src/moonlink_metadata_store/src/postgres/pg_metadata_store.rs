@@ -131,26 +131,22 @@ impl MetadataStoreTrait for PgMetadataStore {
         }
 
         // Create metadata table if not exist.
-        if !utils::table_exists(
+        utils::create_table_if_non_existent(
             &pg_client.postgres_client,
             MOONLINK_SCHEMA,
             MOONLINK_METADATA_TABLE,
+            CREATE_TABLE_SCHEMA_SQL,
         )
-        .await?
-        {
-            utils::create_table(&pg_client.postgres_client, CREATE_TABLE_SCHEMA_SQL).await?;
-        }
+        .await?;
 
         // Create secret table if not exist.
-        if !utils::table_exists(
+        utils::create_table_if_non_existent(
             &pg_client.postgres_client,
             MOONLINK_SCHEMA,
             MOONLINK_SECRET_TABLE,
+            CREATE_SECRET_SCHEMA_SQL,
         )
-        .await?
-        {
-            utils::create_table(&pg_client.postgres_client, CREATE_SECRET_SCHEMA_SQL).await?;
-        }
+        .await?;
 
         // Start a transaction to insert rows into metadata table and secret table.
         pg_client.postgres_client.execute("BEGIN", &[]).await?;
@@ -179,7 +175,7 @@ impl MetadataStoreTrait for PgMetadataStore {
             let rows_affected = pg_client
                 .postgres_client
                 .execute(
-                    "INSERT INTO mooncake.secrets (oid, secret_type, key_id, secret, endpoint, region)
+                    "INSERT INTO mooncake.secrets (oid, secret_type, key_id, secret, endpoint, region, project)
                     VALUES ($1, $2, $3, $4, $5, $6)",
                     &[
                         &table_id,
@@ -188,6 +184,7 @@ impl MetadataStoreTrait for PgMetadataStore {
                         &table_secret.secret,
                         &table_secret.endpoint.as_deref(),
                         &table_secret.region.as_deref(),
+                        &table_secret.project.as_deref(),
                     ],
                 )
                 .await?;
