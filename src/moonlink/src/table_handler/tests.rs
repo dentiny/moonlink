@@ -1344,10 +1344,11 @@ async fn test_multiple_index_merge_requested() {
     // Check iceberg snapshot result.
     let mut iceberg_table_manager =
         env.create_iceberg_table_manager(MooncakeTableConfig::default());
-    let (_, snapshot) = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 5);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 3); // three data files created by three flushes
     assert_eq!(snapshot.indices.file_indices.len(), 2); // one merged file index, another unmerged
@@ -1394,10 +1395,11 @@ async fn test_index_merge_with_sufficient_file_indices() {
     // Check iceberg snapshot result.
     let mut iceberg_table_manager =
         env.create_iceberg_table_manager(MooncakeTableConfig::default());
-    let (_, snapshot) = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 5);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 3); // three data files created by three flushes
     assert_eq!(snapshot.indices.file_indices.len(), 2); // one merged file index, another unmerged
@@ -1434,12 +1436,12 @@ async fn test_multiple_data_compaction_requested() {
     env.commit(20).await;
     env.flush_table_and_sync(/*lsn=*/ 20).await;
 
-    // Synchronize on both index merge operations.
+    // Synchronize on both data compaction operations.
     data_compaction_handle1.await.unwrap();
     data_compaction_handle2.await.unwrap();
 
     // Append another row to trigger mooncake and iceberg snapshot.
-    // TODO(hjiang): Should consider index merge return only when iceberg snapshot completed.
+    // TODO(hjiang): Should consider data compaction return only when iceberg snapshot completed.
     env.append_row(
         /*id=*/ 4, /*name=*/ "David", /*age=*/ 40, /*lsn=*/ 25,
         /*xact_id=*/ None,
@@ -1455,10 +1457,11 @@ async fn test_multiple_data_compaction_requested() {
     // Check iceberg snapshot result.
     let mut iceberg_table_manager =
         env.create_iceberg_table_manager(MooncakeTableConfig::default());
-    let (_, snapshot) = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 4);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 2); // one compacted data file, another uncompacted
     assert_eq!(snapshot.indices.file_indices.len(), 2); // one merged file index, another unmerged
@@ -1505,10 +1508,11 @@ async fn test_data_compaction_with_sufficient_data_files() {
     // Check iceberg snapshot result.
     let mut iceberg_table_manager =
         env.create_iceberg_table_manager(MooncakeTableConfig::default());
-    let (_, snapshot) = iceberg_table_manager
+    let (next_file_id, snapshot) = iceberg_table_manager
         .load_snapshot_from_table()
         .await
         .unwrap();
+    assert_eq!(next_file_id, 4);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 2); // one compacted data file, another uncompacted
     assert_eq!(snapshot.indices.file_indices.len(), 2); // one compacted file index, another uncompacted
