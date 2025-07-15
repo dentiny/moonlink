@@ -1,4 +1,4 @@
-use moonlink::{FileSystemConfig, IcebergTableConfig, MoonlinkTableConfig};
+use moonlink::{FileSystemConfig, IcebergTableConfig, MoonlinkTableConfig, MoonlinkTableSecret};
 
 /// Test utils for postgres metadata storage tests.
 ///
@@ -13,5 +13,16 @@ pub(crate) fn get_moonlink_table_config() -> MoonlinkTableConfig {
             },
         },
         ..Default::default()
+    }
+}
+
+/// Create a moonlink secret entry for test.
+pub(crate) fn get_moonlink_secret_entry() -> MoonlinkTableSecret {
+    MoonlinkTableSecret {
+        secret_type: moonlink::MoonlinkSecretType::Unknown,
+        key_id: "key-id".to_string(),
+        secret: "secret".to_string(),
+        endpoint: None,
+        region: None,
     }
 }
