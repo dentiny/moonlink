@@ -405,7 +405,7 @@ impl TableHandler {
                             }
 
                             // Check whether a flush and force snapshot is needed.
-                            if !table_handler_state.pending_force_snapshot_lsns.is_empty() {
+                            if !table_handler_state.pending_force_snapshot_lsns.is_empty() && !table_handler_state.iceberg_snapshot_ongoing {
                                 if let Some(commit_lsn) = table_handler_state.table_consistent_view_lsn {
                                     table.flush(commit_lsn).await.unwrap();
                                     table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
