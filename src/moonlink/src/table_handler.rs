@@ -126,7 +126,7 @@ impl TableHandlerState {
         if self.force_index_merge_requested {
             return MaintainanceOption::Force;
         }
-        return MaintainanceOption::BestEffort;
+        MaintainanceOption::BestEffort
     }
 
     /// Mark index merge completion.
@@ -141,7 +141,7 @@ impl TableHandlerState {
         if self.maintainance_ongoing {
             return MaintainanceOption::Skip;
         }
-        return MaintainanceOption::BestEffort;
+        MaintainanceOption::BestEffort
     }
 
     // Used to decide whether we could create an iceberg snapshot.
@@ -394,6 +394,7 @@ impl TableHandler {
                         }
                         // Branch to trigger a force index merge request.
                         TableEvent::ForceIndexMerge => {
+                            // TODO(hjiang): Handle cases where there're not enough file indices to merge.
                             table_handler_state.force_index_merge_requested = true;
                         }
                         // Branch to drop the iceberg table and clear pinned data files from the global object storage cache, only used when the whole table requested to drop.

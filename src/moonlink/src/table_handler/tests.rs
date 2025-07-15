@@ -1290,6 +1290,56 @@ async fn test_periodical_force_snapshot() {
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 10);
 }
 
+#[tokio::test]
+async fn test_index_merge_with_sufficient_file_indices() {
+    let env = TestEnvironment::default().await;
+
+    // Append two rows to the table, and flush right afterwards.
+    env.append_row(
+        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 40, /*lsn=*/ 5,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(10).await;
+    env.flush_table_and_sync(/*lsn=*/ 10).await;
+
+    env.append_row(
+        /*id=*/ 3, /*name=*/ "Tom", /*age=*/ 50, /*lsn=*/ 15,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(20).await;
+    env.flush_table_and_sync(/*lsn=*/ 20).await;
+
+    // Force index merge and iceberg snapshot, check result.
+    env.force_index_merge_and_sync().await;
+
+    // Append another row to trigger mooncake and iceberg snapshot.
+    // TODO(hjiang): Should consider index merge return only when iceberg snapshot completed.
+    env.append_row(
+        /*id=*/ 4, /*name=*/ "David", /*age=*/ 40, /*lsn=*/ 25,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30).await;
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 20, /*ids=*/ &[2, 3, 4])
+        .await;
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.disk_files.len(), 3); // three data files created by three flushes
+    assert_eq!(snapshot.indices.file_indices.len(), 2); // one merged file index, another unmerged
+}
+
 /// ---- Mock unit test ----
 #[tokio::test]
 async fn test_iceberg_snapshot_failure_mock_test() {

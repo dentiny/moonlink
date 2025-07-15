@@ -73,6 +73,22 @@ where
         Ok(())
     }
 
+    /// Perform an index merge operation, return when it completes.
+    /// Notice: the function will be returned right after index merge results reflected to mooncake snapshot, instead of being persisted into iceberg.
+    pub async fn perform_index_merge(&self, database_id: D, table_id: T) -> Result<()> {
+        let mut rx = {
+            let mut manager = self.replication_manager.write().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let writer = manager.get_table_event_manager(&mooncake_table_id);
+            writer.initiate_index_merge().await
+        };
+        rx.recv().await.unwrap();
+        Ok(())
+    }
+
     /// # Arguments
     ///
     /// * src_uri: connection string for source database (row storage database).
