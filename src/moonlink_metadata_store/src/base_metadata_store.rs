@@ -58,11 +58,16 @@ pub trait MetadataStoreTrait: Send + Sync {
     #[allow(async_fn_in_trait)]
     async fn get_all_table_metadata_entries(
         &self,
-    ) -> Result<HashMap<u32, (TableMetadataEntry, Option<MoonlinkTableSecret>)>>;
+    ) -> Result<Vec<TableMetadataEntry>>;
 
     /// Store table metadata and secret for the given mooncake table.
     /// Metadata table will be created if it doesn't exists.
     ///
+    /// # Arguments
+    /// 
+    /// * moonlink_table_config: contains both mooncake table config and iceberg table config;
+    /// meanwhile iceberg table config contains necessary security entry to access object storage.
+    /// 
     /// Precondition:
     /// - moonlink schema already exists;
     /// - the requested table id hasn't been recorded in the metadata storage.
@@ -73,7 +78,6 @@ pub trait MetadataStoreTrait: Send + Sync {
         table_name: &str,
         table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
-        moonlink_table_secret: Option<MoonlinkTableSecret>,
     ) -> Result<()>;
 
     /// Delete table config for the given table.

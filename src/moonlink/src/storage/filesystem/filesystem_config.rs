@@ -90,4 +90,7 @@ impl FileSystemConfig {
             FileSystemConfig::S3 { bucket, .. } => format!("s3://{bucket}"),
         }
     }
+
+    /// Extract security metadata entry.
+    
 }

@@ -60,7 +60,7 @@ impl MetadataStoreTrait for PgMetadataStore {
 
     async fn get_all_table_metadata_entries(
         &self,
-    ) -> Result<HashMap<u32, (TableMetadataEntry, Option<MoonlinkTableSecret>)>> {
+    ) -> Result<Vec<TableMetadataEntry>> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
         let rows = pg_client
             .postgres_client
@@ -90,17 +90,7 @@ impl MetadataStoreTrait for PgMetadataStore {
             let src_table_name: String = row.get("table_name");
             let src_table_uri: String = row.get("uri");
             let serialized_config: serde_json::Value = row.get("config");
-            let moonlink_table_config =
-                config_utils::deserialze_moonlink_table_config(serialized_config)?;
-
-            // Extract optional secret fields.
             let secret_type: Option<String> = row.get("secret_type");
-            let metadata_entry = TableMetadataEntry {
-                table_id,
-                src_table_name,
-                src_table_uri,
-                moonlink_table_config,
-            };
             let secret_entry: Option<MoonlinkTableSecret> = {
                 secret_type.map(|secret_type| MoonlinkTableSecret {
                     secret_type: MoonlinkTableSecret::convert_secret_type(&secret_type),
@@ -109,6 +99,15 @@ impl MetadataStoreTrait for PgMetadataStore {
                     endpoint: row.get("endpoint"),
                     region: row.get("region"),
                 })
+            };
+            let moonlink_table_config =
+                config_utils::deserialze_moonlink_table_config(serialized_config, secret_entry)?;
+            
+            let metadata_entry = TableMetadataEntry {
+                table_id,
+                src_table_name,
+                src_table_uri,
+                moonlink_table_config,
             };
             metadata_entries.insert(table_id, (metadata_entry, secret_entry));
         }
@@ -122,11 +121,10 @@ impl MetadataStoreTrait for PgMetadataStore {
         table_name: &str,
         table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
-        moonlink_table_secret: Option<MoonlinkTableSecret>,
     ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
-        let serialized_config =
-            config_utils::serialize_moonlink_table_config(moonlink_table_config)?;
+        let (serialized_config =
+            config_utils::parse_moonlink_table_config(moonlink_table_config)?;
 
         if !utils::schema_exists(&pg_client.postgres_client, MOONLINK_SCHEMA).await? {
             return Err(Error::MetadataStoreFailedPrecondition(format!(

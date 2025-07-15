@@ -16,6 +16,7 @@ pub struct SecretEntry {
     pub secret_type: SecretType,
     pub key_id: String,
     pub secret: String,
+    pub project: String,
     pub endpoint: Option<String>,
     pub region: Option<String>,
 }
@@ -26,6 +27,7 @@ impl std::fmt::Debug for SecretEntry {
             .field("secret_type", &self.secret_type)
             .field("key_id", &"<key>")
             .field("secret", &"<secret>")
+            .field("project", &self.project)
             .field("endpoint", &self.endpoint)
             .field("region", &self.region)
             .finish()
