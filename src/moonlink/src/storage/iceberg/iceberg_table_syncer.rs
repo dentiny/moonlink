@@ -129,7 +129,7 @@ impl IcebergTableManager {
                 )
                 .with_retryable(true)
             })?;
-        io_utils::delete_local_files(evicted_files_to_delete.clone())
+        io_utils::delete_local_files(&evicted_files_to_delete)
             .await
             .map_err(|e| {
                 IcebergError::new(

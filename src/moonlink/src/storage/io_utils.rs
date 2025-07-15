@@ -1,9 +1,9 @@
 use crate::Result;
 
 /// Util function to delete local file in parallel.
-pub(crate) async fn delete_local_files(local_files: Vec<String>) -> Result<()> {
+pub(crate) async fn delete_local_files(local_files: &[String]) -> Result<()> {
     let delete_futures = local_files
-        .into_iter()
+        .iter()
         .map(|file_path| async move { tokio::fs::remove_file(file_path).await });
     let delete_results = futures::future::join_all(delete_futures).await;
     for cur_res in delete_results.into_iter() {
@@ -34,7 +34,7 @@ mod tests {
             file1.to_string_lossy().to_string(),
             file2.to_string_lossy().to_string(),
         ];
-        delete_local_files(paths).await.unwrap();
+        delete_local_files(&paths).await.unwrap();
 
         // Confirm files are deleted.
         assert!(!tokio::fs::try_exists(&file1).await.unwrap());
