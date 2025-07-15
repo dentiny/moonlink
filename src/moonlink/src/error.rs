@@ -16,8 +16,8 @@ pub enum Error {
     #[error("IO error: {source}")]
     Io { source: Arc<io::Error> },
 
-    #[error("Parquet error: {0}")]
-    Parquet(#[from] Arc<ParquetError>),
+    #[error("Parquet error: {source}")]
+    Parquet { source: Arc<ParquetError> },
 
     #[error("Transaction {0} not found")]
     TransactionNotFound(u32),
@@ -37,14 +37,14 @@ pub enum Error {
     #[error("Iceberg error: {0}")]
     IcebergMessage(String),
 
-    #[error("OpenDAL error: {0}")]
-    OpenDal(#[from] Arc<opendal::Error>),
+    #[error("OpenDAL error: {source}")]
+    OpenDal { source: Arc<opendal::Error> },
 
     #[error("UTF-8 conversion error: {0}")]
     Utf8(#[from] std::string::FromUtf8Error),
 
-    #[error("Join error: {0}")]
-    JoinError(#[from] Arc<tokio::task::JoinError>),
+    #[error("Join error: {source}")]
+    JoinError { source: Arc<tokio::task::JoinError> },
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -75,18 +75,24 @@ impl From<io::Error> for Error {
 
 impl From<opendal::Error> for Error {
     fn from(source: opendal::Error) -> Self {
-        Error::OpenDal(Arc::new(source))
+        Error::OpenDal {
+            source: Arc::new(source),
+        }
     }
 }
 
 impl From<tokio::task::JoinError> for Error {
     fn from(source: tokio::task::JoinError) -> Self {
-        Error::JoinError(Arc::new(source))
+        Error::JoinError {
+            source: Arc::new(source),
+        }
     }
 }
 
 impl From<ParquetError> for Error {
     fn from(source: ParquetError) -> Self {
-        Error::Parquet(Arc::new(source))
+        Error::Parquet {
+            source: Arc::new(source),
+        }
     }
 }
