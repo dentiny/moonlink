@@ -16,6 +16,13 @@ use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub enum TableOptimizationMode {
+    /// Perform an index merge operation.
+    IndexMerge,
+    /// Perform a data compaction operation.
+    DataCompaction,
+}
+
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
@@ -75,7 +82,7 @@ where
 
     /// Perform an index merge operation, return when it completes.
     /// Notice: the function will be returned right after index merge results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    pub async fn perform_index_merge(&self, database_id: D, table_id: T) -> Result<()> {
+    async fn perform_index_merge(&self, database_id: D, table_id: T) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
             let mooncake_table_id = MooncakeTableId {
@@ -91,7 +98,7 @@ where
 
     /// Perform a data compaction operation, return when it completes.
     /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    pub async fn perform_data_compaction(&self, database_id: D, table_id: T) -> Result<()> {
+    async fn perform_data_compaction(&self, database_id: D, table_id: T) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
             let mooncake_table_id = MooncakeTableId {
@@ -103,6 +110,23 @@ where
         };
         rx.recv().await.unwrap()?;
         Ok(())
+    }
+
+    /// Perform a table maintaince operation based on requested mode.
+    pub async fn optimize_table(
+        &self,
+        database_id: D,
+        table_id: T,
+        mode: TableOptimizationMode,
+    ) -> Result<()> {
+        match mode {
+            TableOptimizationMode::DataCompaction => {
+                self.perform_data_compaction(database_id, table_id).await
+            }
+            TableOptimizationMode::IndexMerge => {
+                self.perform_index_merge(database_id, table_id).await
+            }
+        }
     }
 
     /// # Arguments
