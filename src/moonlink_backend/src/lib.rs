@@ -101,7 +101,7 @@ where
             let writer = manager.get_table_event_manager(&mooncake_table_id);
             writer.initiate_data_compaction().await
         };
-        rx.recv().await.unwrap();
+        rx.recv().await.unwrap()?;
         Ok(())
     }
 
