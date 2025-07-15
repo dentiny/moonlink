@@ -33,6 +33,7 @@ fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
     let (index_merge_completion_tx, _) = broadcast::channel(64usize);
+    let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
     let event_sync_sender = EventSyncSender {
         drop_table_completion_tx,
         flush_lsn_tx,

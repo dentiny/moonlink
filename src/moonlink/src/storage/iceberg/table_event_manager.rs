@@ -10,9 +10,11 @@ pub struct EventSyncReceiver {
     pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
-    /// Used to create notification when index merge completes.
+    /// Used to create notifier when index merge completes.
     /// TODO(hjiang): Error status propagation.
     pub index_merge_completion_tx: broadcast::Sender<()>,
+    /// Used to create notifier when data compaction completes.
+    pub data_compaction_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 /// At most one outstanding snapshot request is allowed.
@@ -26,6 +28,8 @@ pub struct TableEventManager {
     /// Sender which is used to create notification at latest index merge completion.
     /// TODO(hjiang): Error status propagation.
     index_merge_completion_tx: broadcast::Sender<()>,
+    /// Sender which is used to create notification at latest data compaction completion.
+    data_compaction_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 impl TableEventManager {
@@ -38,6 +42,7 @@ impl TableEventManager {
             drop_table_completion_rx: Some(table_event_sync_rx.drop_table_completion_rx),
             flush_lsn_rx: table_event_sync_rx.flush_lsn_rx,
             index_merge_completion_tx: table_event_sync_rx.index_merge_completion_tx,
+            data_compaction_completion_tx: table_event_sync_rx.data_compaction_completion_tx,
         }
     }
 
@@ -67,6 +72,15 @@ impl TableEventManager {
             .await
             .unwrap();
         self.index_merge_completion_tx.subscribe()
+    }
+
+    /// Initialte a data compaction event, return the channel for synchronization/
+    pub async fn initiate_data_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
+        self.table_event_tx
+            .send(TableEvent::ForceDataCompaction)
+            .await
+            .unwrap();
+        self.data_compaction_completion_tx.subscribe()
     }
 
     /// Drop a mooncake table.

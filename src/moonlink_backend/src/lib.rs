@@ -91,8 +91,18 @@ where
 
     /// Perform a data compaction operation, return when it completes.
     /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    pub async fn perform_data_compaction(&self, _database_id: D, _table_id: T) -> Result<()> {
-        todo!("perform data compaction not implmented!")
+    pub async fn perform_data_compaction(&self, database_id: D, table_id: T) -> Result<()> {
+        let mut rx = {
+            let mut manager = self.replication_manager.write().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let writer = manager.get_table_event_manager(&mooncake_table_id);
+            writer.initiate_data_compaction().await
+        };
+        rx.recv().await.unwrap();
+        Ok(())
     }
 
     /// # Arguments

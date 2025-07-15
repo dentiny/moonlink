@@ -1626,7 +1626,9 @@ async fn test_discard_duplicate_writes() {
 #[test]
 fn test_is_iceberg_snapshot_satisfy_force_snapshot() {
     let (index_merge_completion_tx, _) = broadcast::channel(64usize);
-    let mut table_handler_state = TableHandlerState::new(index_merge_completion_tx);
+    let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
+    let mut table_handler_state =
+        TableHandlerState::new(index_merge_completion_tx, data_compaction_completion_tx);
     // Case-1: iceberg snapshot already satisfies requested lsn.
     {
         let requested_lsn = 0;
@@ -1706,7 +1708,9 @@ fn test_is_iceberg_snapshot_satisfy_force_snapshot() {
 #[test]
 fn test_can_initiate_iceberg_snapshot_pending_flush() {
     let (index_merge_completion_tx, _) = broadcast::channel(64usize);
-    let mut state = TableHandlerState::new(index_merge_completion_tx);
+    let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
+    let mut state =
+        TableHandlerState::new(index_merge_completion_tx, data_compaction_completion_tx);
 
     // Normal conditions with no pending snapshot and result consumed
     state.iceberg_snapshot_result_consumed = true;

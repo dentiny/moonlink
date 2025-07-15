@@ -1,3 +1,4 @@
+use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::MaintainanceOption;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
@@ -33,6 +34,8 @@ pub struct EventSyncSender {
     /// Notifies when index merge finishes.
     /// TODO(hjiang): Error status propagation.
     pub index_merge_completion_tx: broadcast::Sender<()>,
+    /// Notifies when data compaction finishes.
+    pub data_compaction_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 #[derive(PartialEq)]
@@ -80,6 +83,10 @@ struct TableHandlerState {
     /// Notify when index merge completes.
     /// TODO(hjiang): Error status propagation.
     index_merge_completion_tx: broadcast::Sender<()>,
+    /// Whether force data compaction has been requested.
+    force_data_compaction_requested: bool,
+    /// Notify when data compaction completes.
+    data_compaction_completion_tx: broadcast::Sender<Result<()>>,
     // Special table state, for example, initial copy, alter table, drop table, etc.
     special_table_state: SpecialTableState,
     // Buffered events during blocking operations: initial copy, alter table, drop table, etc.
@@ -87,7 +94,10 @@ struct TableHandlerState {
 }
 
 impl TableHandlerState {
-    fn new(index_merge_completion_tx: broadcast::Sender<()>) -> Self {
+    fn new(
+        index_merge_completion_tx: broadcast::Sender<()>,
+        data_compaction_completion_tx: broadcast::Sender<Result<()>>,
+    ) -> Self {
         Self {
             iceberg_snapshot_result_consumed: true,
             iceberg_snapshot_ongoing: false,
@@ -99,6 +109,8 @@ impl TableHandlerState {
             pending_force_snapshot_lsns: BTreeMap::new(),
             force_index_merge_requested: false,
             index_merge_completion_tx,
+            force_data_compaction_requested: false,
+            data_compaction_completion_tx,
             special_table_state: SpecialTableState::Normal,
             initial_copy_buffered_events: Vec::new(),
         }
@@ -131,6 +143,7 @@ impl TableHandlerState {
 
     /// Mark index merge completion.
     async fn mark_index_merge_completed(&mut self) {
+        assert!(self.maintainance_ongoing);
         self.maintainance_ongoing = false;
         self.force_index_merge_requested = false;
         self.index_merge_completion_tx.send(()).unwrap();
@@ -141,7 +154,30 @@ impl TableHandlerState {
         if self.maintainance_ongoing {
             return MaintainanceOption::Skip;
         }
+        if self.force_data_compaction_requested {
+            return MaintainanceOption::Force;
+        }
         MaintainanceOption::BestEffort
+    }
+
+    /// Mark data compaction completion.
+    async fn mark_data_compaction_completed(
+        &mut self,
+        data_compaction_result: &Result<DataCompactionResult>,
+    ) {
+        assert!(self.maintainance_ongoing);
+        self.maintainance_ongoing = false;
+        self.force_data_compaction_requested = false;
+        match &data_compaction_result {
+            Ok(_) => {
+                self.data_compaction_completion_tx.send(Ok(())).unwrap();
+            }
+            Err(err) => {
+                self.data_compaction_completion_tx
+                    .send(Err(err.clone()))
+                    .unwrap();
+            }
+        }
     }
 
     // Used to decide whether we could create an iceberg snapshot.
@@ -285,8 +321,10 @@ impl TableHandler {
         replication_lsn_rx: watch::Receiver<u64>,
         mut table: MooncakeTable,
     ) {
-        let mut table_handler_state =
-            TableHandlerState::new(event_sync_sender.index_merge_completion_tx.clone());
+        let mut table_handler_state = TableHandlerState::new(
+            event_sync_sender.index_merge_completion_tx.clone(),
+            event_sync_sender.data_compaction_completion_tx.clone(),
+        );
         table_handler_state.initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
         // Used to clean up mooncake table status, and send completion notification.
         let drop_table = async |table: &mut MooncakeTable, event_sync_sender: EventSyncSender| {
@@ -399,6 +437,10 @@ impl TableHandler {
                         TableEvent::ForceIndexMerge => {
                             // TODO(hjiang): Handle cases where there're not enough file indices to merge.
                             table_handler_state.force_index_merge_requested = true;
+                        }
+                        // Branch to trigger a force data compaction request.
+                        TableEvent::ForceDataCompaction => {
+                            table_handler_state.force_data_compaction_requested = true;
                         }
                         // Branch to drop the iceberg table and clear pinned data files from the global object storage cache, only used when the whole table requested to drop.
                         // So we block wait for asynchronous request completion.
@@ -562,6 +604,7 @@ impl TableHandler {
                             table_handler_state.mark_index_merge_completed().await;
                         }
                         TableEvent::DataCompaction { data_compaction_result } => {
+                            table_handler_state.mark_data_compaction_completed(&data_compaction_result).await;
                             match data_compaction_result {
                                 Ok(data_compaction_res) => {
                                     table.set_data_compaction_res(data_compaction_res)
