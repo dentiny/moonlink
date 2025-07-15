@@ -226,11 +226,18 @@ impl TestEnvironment {
         self.send_event(TableEvent::StreamAbort { xact_id }).await;
     }
 
-    /// Force an index meger, and block wait its completion.
+    /// Force an index merge operation, and block wait its completion.
     pub async fn force_index_merge_and_sync(&self) {
         self.send_event(TableEvent::ForceIndexMerge).await;
         let mut index_merge_completion_rx = self.index_merge_completion_tx.subscribe();
         index_merge_completion_rx.recv().await.unwrap();
+    }
+
+    /// Force a data compaction operation, and block wait its completion.
+    pub async fn force_data_compaction_and_sync(&self) {
+        self.send_event(TableEvent::ForceDataCompaction).await;
+        let mut data_compaction_completion_rx = self.data_compaction_completion_tx.subscribe();
+        data_compaction_completion_rx.recv().await.unwrap().unwrap();
     }
 
     pub async fn flush_table_and_sync(&self, lsn: u64) {

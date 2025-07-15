@@ -1403,6 +1403,117 @@ async fn test_index_merge_with_sufficient_file_indices() {
     assert_eq!(snapshot.indices.file_indices.len(), 2); // one merged file index, another unmerged
 }
 
+#[tokio::test]
+async fn test_multiple_data_compaction_requested() {
+    let env = Arc::new(TestEnvironment::default().await);
+
+    let env1 = env.clone();
+    let env2 = env.clone();
+
+    let data_compaction_handle1: JoinHandle<()> = tokio::spawn(async move {
+        env1.force_data_compaction_and_sync().await;
+    });
+    let data_compaction_handle2: JoinHandle<()> = tokio::spawn(async move {
+        env2.force_data_compaction_and_sync().await;
+    });
+
+    // Append two rows to the table, and flush right afterwards.
+    env.append_row(
+        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 40, /*lsn=*/ 5,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(10).await;
+    env.flush_table_and_sync(/*lsn=*/ 10).await;
+
+    env.append_row(
+        /*id=*/ 3, /*name=*/ "Tom", /*age=*/ 50, /*lsn=*/ 15,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(20).await;
+    env.flush_table_and_sync(/*lsn=*/ 20).await;
+
+    // Synchronize on both index merge operations.
+    data_compaction_handle1.await.unwrap();
+    data_compaction_handle2.await.unwrap();
+
+    // Append another row to trigger mooncake and iceberg snapshot.
+    // TODO(hjiang): Should consider index merge return only when iceberg snapshot completed.
+    env.append_row(
+        /*id=*/ 4, /*name=*/ "David", /*age=*/ 40, /*lsn=*/ 25,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30).await;
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 20, /*ids=*/ &[2, 3, 4])
+        .await;
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.disk_files.len(), 2); // one compacted data file, another uncompacted
+    assert_eq!(snapshot.indices.file_indices.len(), 2); // one merged file index, another unmerged
+}
+
+#[tokio::test]
+async fn test_data_compaction_with_sufficient_data_files() {
+    let env = TestEnvironment::default().await;
+
+    // Append two rows to the table, and flush right afterwards.
+    env.append_row(
+        /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 40, /*lsn=*/ 5,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(10).await;
+    env.flush_table_and_sync(/*lsn=*/ 10).await;
+
+    env.append_row(
+        /*id=*/ 3, /*name=*/ "Tom", /*age=*/ 50, /*lsn=*/ 15,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(20).await;
+    env.flush_table_and_sync(/*lsn=*/ 20).await;
+
+    // Force index merge and iceberg snapshot, check result.
+    env.force_data_compaction_and_sync().await;
+
+    // Append another row to trigger mooncake and iceberg snapshot.
+    // TODO(hjiang): Should consider data compaction return only when iceberg snapshot completed.
+    env.append_row(
+        /*id=*/ 4, /*name=*/ "David", /*age=*/ 40, /*lsn=*/ 25,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30).await;
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 20, /*ids=*/ &[2, 3, 4])
+        .await;
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.disk_files.len(), 2); // one compacted data file, another uncompacted
+    assert_eq!(snapshot.indices.file_indices.len(), 2); // one compacted file index, another uncompacted
+}
+
 /// ---- Mock unit test ----
 #[tokio::test]
 async fn test_iceberg_snapshot_failure_mock_test() {

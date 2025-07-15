@@ -38,11 +38,13 @@ fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
         drop_table_completion_tx,
         flush_lsn_tx,
         index_merge_completion_tx: index_merge_completion_tx.clone(),
+        data_compaction_completion_tx: data_compaction_completion_tx.clone(),
     };
     let event_sync_receiver = EventSyncReceiver {
         drop_table_completion_rx,
         flush_lsn_rx,
         index_merge_completion_tx,
+        data_compaction_completion_tx,
     };
     (event_sync_sender, event_sync_receiver)
 }
