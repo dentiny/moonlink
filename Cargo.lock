@@ -1921,7 +1921,7 @@ dependencies = [
 [[package]]
 name = "iceberg"
 version = "0.5.1"
-source = "git+https://github.com/apache/iceberg-rust.git?rev=e47b268a6d58a58b8d79263d13cded55ff93fcff#e47b268a6d58a58b8d79263d13cded55ff93fcff"
+source = "git+https://github.com/apache/iceberg-rust.git?rev=36af3f7ae5202c0d10ef97d35387fa32ec796371#36af3f7ae5202c0d10ef97d35387fa32ec796371"
 dependencies = [
  "anyhow",
  "apache-avro",
@@ -1946,7 +1946,6 @@ dependencies = [
  "fnv",
  "futures",
  "itertools 0.13.0",
- "mockall",
  "moka",
  "murmur3",
  "num-bigint",
