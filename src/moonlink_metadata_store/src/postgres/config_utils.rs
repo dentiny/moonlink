@@ -1,5 +1,8 @@
 use crate::error::Result;
-use moonlink::{FileSystemConfig, IcebergTableConfig, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig, MoonlinkTableSecret};
+use moonlink::{
+    FileSystemConfig, IcebergTableConfig, MooncakeTableConfig, MoonlinkSecretType,
+    MoonlinkTableConfig, MoonlinkTableSecret,
+};
 /// This module contains util functions related to moonlink config.
 use serde::{Deserialize, Serialize};
 use url::Url;
@@ -39,7 +42,7 @@ struct MoonlinkTableConfigForPersistence {
 /// TODO(hjiang): Handle namespace better.
 pub(crate) fn parse_moonlink_table_config(
     moonlink_table_config: MoonlinkTableConfig,
-) -> Result<(serde_json::Value, MoonlinkTableSecret)> {
+) -> Result<(serde_json::Value, Option<MoonlinkTableSecret>)> {
     // Serialize mooncake table config.
     let iceberg_config = moonlink_table_config.iceberg_table_config;
     let persisted = MoonlinkTableConfigForPersistence {
@@ -52,43 +55,59 @@ pub(crate) fn parse_moonlink_table_config(
     let config_json = serde_json::to_value(&persisted)?;
 
     // Extract table secret entry.
-    
+    let security_metadata_entry = iceberg_config
+        .filesystem_config
+        .extract_security_metadata_entry();
 
-    Ok(config_json)
+    Ok((config_json, security_metadata_entry))
 }
 
 /// Recover filesystem config from persisted config and secret.
-fn recover_filesystem_config(persisted_config: &MoonlinkTableConfigForPersistence, secret_entry: Option<MoonlinkTableSecret>) -> FileSystemConfig {
+fn recover_filesystem_config(
+    persisted_config: &MoonlinkTableConfigForPersistence,
+    secret_entry: Option<MoonlinkTableSecret>,
+) -> FileSystemConfig {
     if let Some(secret_entry) = secret_entry {
         match &secret_entry.secret_type {
             #[cfg(feature = "storage-gcs")]
             MoonlinkSecretType::Gcs => {
-                return FileSystemConfig::Gcs { 
-                    project: secret_entry.project,
-                    region: secret_entry.region,
-                    bucket: persisted_config.iceberg_table_config.get_bucket_name().unwrap(),
+                return FileSystemConfig::Gcs {
+                    project: secret_entry.project.unwrap(),
+                    region: secret_entry.region.unwrap(),
+                    bucket: persisted_config
+                        .iceberg_table_config
+                        .get_bucket_name()
+                        .unwrap(),
                     access_key_id: secret_entry.key_id,
                     secret_access_key: secret_entry.secret,
                     endpoint: secret_entry.endpoint,
                     disable_auth: false,
                 };
-            },
+            }
             #[cfg(feature = "storage-s3")]
             MoonlinkSecretType::S3 => {
-                return FileSystemConfig::S3 { 
+                return FileSystemConfig::S3 {
                     access_key_id: secret_entry.key_id,
                     secret_access_key: secret_entry.secret,
-                    region: secret_entry.region,
-                    bucket: persisted_config.iceberg_table_config.get_bucket_name().unwrap(),
+                    region: secret_entry.region.unwrap(),
+                    bucket: persisted_config
+                        .iceberg_table_config
+                        .get_bucket_name()
+                        .unwrap(),
                     endpoint: secret_entry.endpoint,
                 };
-            },
-            MoonlinkSecretType::Unknown => {
-                return FileSystemConfig::FileSystem { root_directory: persisted_config.iceberg_table_config.warehouse_uri.clone() };
+            }
+            #[cfg(feature = "storage-fs")]
+            MoonlinkSecretType::FileSystem => {
+                return FileSystemConfig::FileSystem {
+                    root_directory: persisted_config.iceberg_table_config.warehouse_uri.clone(),
+                };
             }
         }
     }
-    FileSystemConfig::FileSystem { root_directory: persisted_config.iceberg_table_config.warehouse_uri.clone() }
+    FileSystemConfig::FileSystem {
+        root_directory: persisted_config.iceberg_table_config.warehouse_uri.clone(),
+    }
 }
 
 /// Deserialize json value to moonlink table config.
@@ -124,9 +143,10 @@ mod tests {
             iceberg_table_config: IcebergTableConfig::default(),
             mooncake_table_config: MooncakeTableConfig::default(),
         };
-        let serialized =
-            serialize_moonlink_table_config(old_moonlink_table_config.clone()).unwrap();
-        let new_moonlink_table_config = deserialze_moonlink_table_config(serialized).unwrap();
+        let (serialized_persisted_config, secret_entry) =
+            parse_moonlink_table_config(old_moonlink_table_config.clone()).unwrap();
+        let new_moonlink_table_config =
+            deserialze_moonlink_table_config(serialized_persisted_config, secret_entry).unwrap();
         assert_eq!(old_moonlink_table_config, new_moonlink_table_config);
     }
 }

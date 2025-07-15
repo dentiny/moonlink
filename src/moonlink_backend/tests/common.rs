@@ -293,6 +293,10 @@ async fn setup_backend(
         .simple_query("DROP TABLE IF EXISTS mooncake.tables")
         .await
         .unwrap();
+    client
+        .simple_query("DROP TABLE IF EXISTS mooncake.secrets")
+        .await
+        .unwrap();
 
     // Re-create the working table.
     if let Some(table_name) = table_name {

@@ -7,7 +7,8 @@ CREATE TABLE mooncake.secrets (
     oid oid,               -- Mooncake table OID.
     secret_type TEXT,             -- One of (S3, GCS, R2)
     key_id TEXT,        
-    secret TEXT,          
+    secret TEXT,        
+    project TEXT,          -- (optional)  
     endpoint TEXT,         -- (optional)
     region TEXT            -- (optional)
 );

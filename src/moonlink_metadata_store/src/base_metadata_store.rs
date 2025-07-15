@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 /// This trait provides the interface for moonlink table metadata storage.
 use async_trait::async_trait;
 
 use crate::error::Result;
-use moonlink::{MoonlinkTableConfig, MoonlinkTableSecret};
+use moonlink::MoonlinkTableConfig;
 
 /// Constants for moonlink metadata storage.
 ///
@@ -56,18 +54,16 @@ pub trait MetadataStoreTrait: Send + Sync {
     /// - moonlink schema already exists;
     /// - metadata table already exists.
     #[allow(async_fn_in_trait)]
-    async fn get_all_table_metadata_entries(
-        &self,
-    ) -> Result<Vec<TableMetadataEntry>>;
+    async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>>;
 
     /// Store table metadata and secret for the given mooncake table.
     /// Metadata table will be created if it doesn't exists.
     ///
     /// # Arguments
-    /// 
+    ///
     /// * moonlink_table_config: contains both mooncake table config and iceberg table config;
     /// meanwhile iceberg table config contains necessary security entry to access object storage.
-    /// 
+    ///
     /// Precondition:
     /// - moonlink schema already exists;
     /// - the requested table id hasn't been recorded in the metadata storage.

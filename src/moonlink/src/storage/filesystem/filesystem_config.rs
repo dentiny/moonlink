@@ -1,3 +1,7 @@
+#[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
+use crate::MoonlinkSecretType;
+use crate::MoonlinkTableSecret;
+
 /// FileSystemConfig contains configuration for multiple storage backends.
 #[derive(Clone, PartialEq)]
 pub enum FileSystemConfig {
@@ -9,7 +13,6 @@ pub enum FileSystemConfig {
         secret_access_key: String,
         region: String,
         bucket: String,
-        /// Used for fake S3.
         endpoint: Option<String>,
     },
     #[cfg(feature = "storage-gcs")]
@@ -91,6 +94,42 @@ impl FileSystemConfig {
         }
     }
 
-    /// Extract security metadata entry.
-    
+    /// Extract security metadata entry from current filesystem config.
+    pub fn extract_security_metadata_entry(&self) -> Option<MoonlinkTableSecret> {
+        match &self {
+            #[cfg(feature = "storage-fs")]
+            FileSystemConfig::FileSystem { .. } => None,
+            #[cfg(feature = "storage-gcs")]
+            FileSystemConfig::Gcs {
+                project,
+                region,
+                access_key_id,
+                secret_access_key,
+                endpoint,
+                ..
+            } => Some(MoonlinkTableSecret {
+                secret_type: MoonlinkSecretType::Gcs,
+                key_id: access_key_id.to_string(),
+                secret: secret_access_key.to_string(),
+                project: Some(project.to_string()),
+                endpoint: endpoint.clone(),
+                region: Some(region.to_string()),
+            }),
+            #[cfg(feature = "storage-s3")]
+            FileSystemConfig::S3 {
+                access_key_id,
+                secret_access_key,
+                region,
+                endpoint,
+                ..
+            } => Some(MoonlinkTableSecret {
+                secret_type: MoonlinkSecretType::S3,
+                key_id: access_key_id.to_string(),
+                secret: secret_access_key.to_string(),
+                project: None,
+                endpoint: endpoint.clone(),
+                region: Some(region.clone()),
+            }),
+        }
+    }
 }

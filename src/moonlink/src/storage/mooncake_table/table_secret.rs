@@ -3,8 +3,8 @@
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SecretType {
-    // Used to suppress compilation warning.
-    Unknown,
+    #[cfg(feature = "storage-fs")]
+    FileSystem,
     #[cfg(feature = "storage-gcs")]
     Gcs,
     #[cfg(feature = "storage-s3")]
@@ -16,7 +16,7 @@ pub struct SecretEntry {
     pub secret_type: SecretType,
     pub key_id: String,
     pub secret: String,
-    pub project: String,
+    pub project: Option<String>,
     pub endpoint: Option<String>,
     pub region: Option<String>,
 }
@@ -38,7 +38,7 @@ impl SecretEntry {
     /// Get secret type in string format.
     pub fn get_secret_type(&self) -> String {
         match &self.secret_type {
-            SecretType::Unknown => "unknown".to_string(),
+            SecretType::FileSystem => "filesystem".to_string(),
             #[cfg(feature = "storage-gcs")]
             SecretType::Gcs => "gcs".to_string(),
             #[cfg(feature = "storage-s3")]
@@ -61,7 +61,7 @@ impl SecretEntry {
             }
         }
         // Used to suppress compilation warning.
-        assert_eq!(secret_type, "unknown");
-        SecretType::Unknown
+        assert_eq!(secret_type, "filesystem");
+        SecretType::FileSystem
     }
 }

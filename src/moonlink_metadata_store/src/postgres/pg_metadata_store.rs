@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::base_metadata_store::MetadataStoreTrait;
 use crate::base_metadata_store::TableMetadataEntry;
 use crate::base_metadata_store::MOONLINK_SECRET_TABLE;
@@ -9,9 +7,9 @@ use crate::postgres::config_utils;
 use crate::postgres::pg_client_wrapper::PgClientWrapper;
 use crate::postgres::utils;
 use moonlink::MoonlinkTableConfig;
+use moonlink::MoonlinkTableSecret;
 
 use async_trait::async_trait;
-use moonlink::MoonlinkTableSecret;
 use postgres_types::Json as PgJson;
 
 /// SQL statements for moonlink metadata table schema.
@@ -58,9 +56,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         Ok(oid)
     }
 
-    async fn get_all_table_metadata_entries(
-        &self,
-    ) -> Result<Vec<TableMetadataEntry>> {
+    async fn get_all_table_metadata_entries(&self) -> Result<Vec<TableMetadataEntry>> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
         let rows = pg_client
             .postgres_client
@@ -75,7 +71,8 @@ impl MetadataStoreTrait for PgMetadataStore {
                     s.key_id,
                     s.secret,
                     s.endpoint,
-                    s.region
+                    s.region,
+                    s.project
                 FROM mooncake.tables t
                 LEFT JOIN mooncake.secrets s
                     ON t.oid = s.oid AND s.uid = current_user
@@ -84,7 +81,7 @@ impl MetadataStoreTrait for PgMetadataStore {
             )
             .await?;
 
-        let mut metadata_entries = HashMap::with_capacity(rows.len());
+        let mut metadata_entries = Vec::with_capacity(rows.len());
         for row in rows {
             let table_id: u32 = row.get("oid");
             let src_table_name: String = row.get("table_name");
@@ -98,18 +95,19 @@ impl MetadataStoreTrait for PgMetadataStore {
                     secret: row.get("secret"),
                     endpoint: row.get("endpoint"),
                     region: row.get("region"),
+                    project: row.get("project"),
                 })
             };
             let moonlink_table_config =
                 config_utils::deserialze_moonlink_table_config(serialized_config, secret_entry)?;
-            
+
             let metadata_entry = TableMetadataEntry {
                 table_id,
                 src_table_name,
                 src_table_uri,
                 moonlink_table_config,
             };
-            metadata_entries.insert(table_id, (metadata_entry, secret_entry));
+            metadata_entries.push(metadata_entry);
         }
 
         Ok(metadata_entries)
@@ -123,7 +121,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
-        let (serialized_config =
+        let (serialized_config, moonlink_table_secret) =
             config_utils::parse_moonlink_table_config(moonlink_table_config)?;
 
         if !utils::schema_exists(&pg_client.postgres_client, MOONLINK_SCHEMA).await? {

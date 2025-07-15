@@ -1,6 +1,5 @@
 use crate::error::Result;
 use crate::mooncake_table_id::MooncakeTableId;
-use moonlink::MoonlinkTableSecret;
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMetadataEntry};
 use moonlink_metadata_store::metadata_store_utils;
@@ -8,14 +7,10 @@ use moonlink_metadata_store::metadata_store_utils;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
 
-/// Get filesystem config with table metadata and secret.
-fn recover_filesystem_config(metadata_entry: &TableMetadataEntry, secret_entry: Option<MoonlinkTableSecret>,)
-
 /// Recovery the given table.
 async fn recover_table<D, T>(
     database_id: u32,
     metadata_entry: TableMetadataEntry,
-    secret_entry: Option<MoonlinkTableSecret>,
     replication_manager: &mut ReplicationManager<MooncakeTableId<D, T>>,
 ) -> Result<()>
 where
@@ -90,7 +85,7 @@ where
             .await?;
 
         // Perform recovery on all managed tables.
-        for (_, (cur_metadata_entry, _)) in table_metadata_entries.into_iter() {
+        for cur_metadata_entry in table_metadata_entries.into_iter() {
             unique_uris.insert(cur_metadata_entry.src_table_uri.clone());
             recover_table(database_id, cur_metadata_entry, replication_manager).await?;
         }
