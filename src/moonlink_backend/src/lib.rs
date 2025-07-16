@@ -16,13 +16,6 @@ use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-pub enum TableOptimizationMode {
-    /// Perform an index merge operation.
-    IndexMerge,
-    /// Perform a data compaction operation.
-    DataCompaction,
-}
-
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
@@ -112,20 +105,26 @@ where
         Ok(())
     }
 
+    /// Perform a full compaction, return when it completes.
+    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
+    async fn perform_full_compaction(&self, _database_id: D, _table_id: T) -> Result<()> {
+        todo!("Full compaction is not implemented yet!");
+    }
+
     /// Perform a table maintaince operation based on requested mode.
-    pub async fn optimize_table(
-        &self,
-        database_id: D,
-        table_id: T,
-        mode: TableOptimizationMode,
-    ) -> Result<()> {
-        match mode {
-            TableOptimizationMode::DataCompaction => {
-                self.perform_data_compaction(database_id, table_id).await
-            }
-            TableOptimizationMode::IndexMerge => {
-                self.perform_index_merge(database_id, table_id).await
-            }
+    /// Notice, it's only exposed for debugging, testing and admin usage.
+    ///
+    /// There're currently three modes supported:
+    /// - "index": perform an index merge operation, only index files smaller than a threshold, or with too many deleted rows will be merged.
+    /// - "data": perform a data compaction, only data files smaller than a threshold, or with too many deleted rows will be compacted.
+    /// - "full": perform a full compaction, which merges all data files and all index files, whatever file size they are of.
+    pub async fn optimize_table(&self, database_id: D, table_id: T, mode: &str) -> Result<()> {
+        if mode == "index" {
+            self.perform_index_merge(database_id, table_id).await
+        } else if mode == "data" {
+            self.perform_data_compaction(database_id, table_id).await
+        } else {
+            self.perform_full_compaction(database_id, table_id).await
         }
     }
 
