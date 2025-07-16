@@ -14,6 +14,8 @@ pub struct EventSyncReceiver {
     pub index_merge_completion_tx: broadcast::Sender<()>,
     /// Used to create notifier when data compaction completes.
     pub data_compaction_completion_tx: broadcast::Sender<Result<()>>,
+    /// Used to create notifier when full compaction completes.
+    pub full_maintainance_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 /// Contains a few senders, which notifies after certain iceberg events completion.
@@ -27,6 +29,8 @@ pub struct EventSyncSender {
     pub index_merge_completion_tx: broadcast::Sender<()>,
     /// Notifies when data compaction finishes.
     pub data_compaction_completion_tx: broadcast::Sender<Result<()>>,
+    /// Notifies when full maintainance finishes.
+    pub full_maintainance_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 /// Create table event manager sender and receiver.
@@ -35,17 +39,20 @@ pub fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
     let (index_merge_completion_tx, _) = broadcast::channel(64usize);
     let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
+    let (full_maintainance_completion_tx, _) = broadcast::channel(64usize);
     let event_sync_sender = EventSyncSender {
         drop_table_completion_tx,
         flush_lsn_tx,
         index_merge_completion_tx: index_merge_completion_tx.clone(),
         data_compaction_completion_tx: data_compaction_completion_tx.clone(),
+        full_maintainance_completion_tx: full_maintainance_completion_tx.clone(),
     };
     let event_sync_receiver = EventSyncReceiver {
         drop_table_completion_rx,
         flush_lsn_rx,
         index_merge_completion_tx,
         data_compaction_completion_tx,
+        full_maintainance_completion_tx: full_maintainance_completion_tx,
     };
     (event_sync_sender, event_sync_receiver)
 }
