@@ -2,8 +2,8 @@ use crate::base_metadata_store::MetadataStoreTrait;
 use crate::base_metadata_store::TableMetadataEntry;
 use crate::base_metadata_store::MOONLINK_SECRET_TABLE;
 use crate::base_metadata_store::{MOONLINK_METADATA_TABLE, MOONLINK_SCHEMA};
+use crate::config_utils;
 use crate::error::{Error, Result};
-use crate::postgres::config_utils;
 use crate::postgres::pg_client_wrapper::PgClientWrapper;
 use crate::postgres::utils;
 use moonlink::MoonlinkTableConfig;
@@ -31,16 +31,12 @@ impl MetadataStoreTrait for PgMetadataStore {
 
     async fn metadata_table_exists(&self) -> Result<bool> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
-        if !utils::table_exists(
+        utils::table_exists(
             &pg_client.postgres_client,
             MOONLINK_SCHEMA,
             MOONLINK_METADATA_TABLE,
         )
-        .await?
-        {
-            return Ok(false);
-        }
-        Ok(true)
+        .await
     }
 
     async fn get_database_id(&self) -> Result<u32> {

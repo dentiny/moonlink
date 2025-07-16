@@ -5,22 +5,29 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [features]
-default = ["storage-fs"]
+default = ["storage-fs", "metadata-postgres", "metadata-sqlite"]
+
 storage-all = ["storage-fs", "storage-s3", "storage-gcs"]
 storage-fs = []
 storage-gcs = []
 storage-s3 = []
 
+metadata-all = ["metadata-sqlite", "metadata-postgres"]
+metadata-postgres = ["postgres-types", "tokio-postgres"]
+metadata-sqlite = ["sqlx"]
+
 [dependencies]
 async-trait = { workspace = true }
 moonlink = { path = "../moonlink" }
 more-asserts = { workspace = true }
-postgres-types = { workspace = true }
+postgres-types = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"], optional = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
-tokio-postgres = { workspace = true }
+tokio-postgres = { workspace = true, optional = true }
 url = { workspace = true }
 
 [dev-dependencies]

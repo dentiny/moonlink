@@ -21,6 +21,8 @@ mod tests {
     use serial_test::serial;
 
     /// Test util function to get table metadata entries, and check whether it matches written one.
+    ///
+    /// TODO(hjiang): Refactor to take a trait.
     async fn check_persisted_metadata(pg_metadata_store: &PgMetadataStore) {
         let metadata_entries = pg_metadata_store
             .get_all_table_metadata_entries()

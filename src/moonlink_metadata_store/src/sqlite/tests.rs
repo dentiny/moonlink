@@ -1,0 +1,73 @@
+use crate::base_metadata_store::MetadataStoreTrait;
+use crate::sqlite::sqlite_metadata_store::SqliteMetadataStore;
+use moonlink::{FileSystemConfig, IcebergTableConfig, MoonlinkTableConfig};
+
+use tempfile::{tempdir, TempDir};
+
+/// Source table uri.
+const SRC_TABLE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
+/// Test table id.
+const TABLE_ID: u32 = 0;
+/// Test table name.
+const TABLE_NAME: &str = "table";
+
+/// Create a moonlink table config for test.
+pub(crate) fn get_moonlink_table_config() -> MoonlinkTableConfig {
+    MoonlinkTableConfig {
+        iceberg_table_config: IcebergTableConfig {
+            namespace: vec!["namespace".to_string()],
+            table_name: "table".to_string(),
+            filesystem_config: FileSystemConfig::FileSystem {
+                root_directory: "/tmp/test_warehouse_uri".to_string(),
+            },
+        },
+        ..Default::default()
+    }
+}
+
+async fn check_persisted_metadata(sqlite_metadata_store: &SqliteMetadataStore) {
+    let metadata_entries = sqlite_metadata_store
+        .get_all_table_metadata_entries()
+        .await
+        .unwrap();
+    assert_eq!(metadata_entries.len(), 1);
+    let table_metadata_entry = &metadata_entries[0];
+    assert_eq!(table_metadata_entry.table_id, TABLE_ID);
+    assert_eq!(table_metadata_entry.src_table_name, TABLE_NAME);
+    assert_eq!(table_metadata_entry.src_table_uri, SRC_TABLE_URI);
+    assert_eq!(
+        table_metadata_entry.moonlink_table_config,
+        get_moonlink_table_config()
+    );
+}
+
+/// Test util function to get sqlite database filepath.
+fn get_sqlite_database_filepath(tmp_dir: &TempDir) -> String {
+    format!(
+        "sqlite://{}/sqlite_metadata_store.db",
+        tmp_dir.path().to_str().unwrap()
+    )
+}
+
+#[tokio::test]
+async fn test_table_metadata_store_and_load() {
+    let tmp_dir = tempdir().unwrap();
+    let sqlite_path = get_sqlite_database_filepath(&tmp_dir);
+
+    let metadata_store = SqliteMetadataStore::new(sqlite_path.clone()).await.unwrap();
+    let moonlink_table_config = get_moonlink_table_config();
+
+    // Store moonlink table config to metadata storage.
+    metadata_store
+        .store_table_metadata(
+            TABLE_ID,
+            TABLE_NAME,
+            SRC_TABLE_URI,
+            moonlink_table_config.clone(),
+        )
+        .await
+        .unwrap();
+
+    // Load moonlink table config from metadata config.
+    check_persisted_metadata(&metadata_store).await;
+}
