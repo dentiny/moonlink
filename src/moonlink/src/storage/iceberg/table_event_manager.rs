@@ -69,7 +69,11 @@ impl TableEventManager {
 
     /// Initialte full table maintenance event, return the channel for synchronization.
     pub async fn initiate_full_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
-        todo!("unimplemented")
+        self.table_event_tx
+            .send(TableEvent::ForceFullMaintenance)
+            .await
+            .unwrap();
+        self.table_maintenance_completion_tx.subscribe()
     }
 
     /// Drop a mooncake table.

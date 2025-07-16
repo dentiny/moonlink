@@ -1292,7 +1292,7 @@ async fn test_periodical_force_snapshot() {
 
 #[tokio::test]
 async fn test_index_merge_with_sufficient_file_indices() {
-    let env = TestEnvironment::default().await;
+    let mut env = TestEnvironment::default().await;
 
     // Append two rows to the table, and flush right afterwards.
     env.append_row(
@@ -1343,7 +1343,7 @@ async fn test_index_merge_with_sufficient_file_indices() {
 
 #[tokio::test]
 async fn test_data_compaction_with_sufficient_data_files() {
-    let env = TestEnvironment::default().await;
+    let mut env = TestEnvironment::default().await;
 
     // Append two rows to the table, and flush right afterwards.
     env.append_row(
@@ -1407,7 +1407,7 @@ async fn test_full_maintenance_with_sufficient_data_files() {
         },
         ..Default::default()
     };
-    let env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
+    let mut env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
 
     // Append two rows to the table, and flush right afterwards.
     env.append_row(

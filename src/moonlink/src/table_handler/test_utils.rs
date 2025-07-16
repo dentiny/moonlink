@@ -216,25 +216,21 @@ impl TestEnvironment {
     }
 
     /// Force an index merge operation, and block wait its completion.
-    pub async fn force_index_merge_and_sync(&self) {
-        self.send_event(TableEvent::ForceRegularIndexMerge).await;
-        let mut index_merge_completion_rx = self.table_maintenance_completion_tx.subscribe();
-        index_merge_completion_rx.recv().await.unwrap().unwrap();
+    pub async fn force_index_merge_and_sync(&mut self) {
+        let mut rx = self.table_event_manager.initiate_index_merge().await;
+        rx.recv().await.unwrap().unwrap();
     }
 
     /// Force a data compaction operation, and block wait its completion.
-    pub async fn force_data_compaction_and_sync(&self) {
-        self.send_event(TableEvent::ForceRegularDataCompaction)
-            .await;
-        let mut data_compaction_completion_rx = self.table_maintenance_completion_tx.subscribe();
-        data_compaction_completion_rx.recv().await.unwrap().unwrap();
+    pub async fn force_data_compaction_and_sync(&mut self) {
+        let mut rx = self.table_event_manager.initiate_data_compaction().await;
+        rx.recv().await.unwrap().unwrap();
     }
 
     /// Force a full table maintenance task operation, and block wait its completion.
-    pub async fn force_full_maintenance_and_sync(&self) {
-        self.send_event(TableEvent::ForceFullMaintenance).await;
-        let mut data_compaction_completion_rx = self.table_maintenance_completion_tx.subscribe();
-        data_compaction_completion_rx.recv().await.unwrap().unwrap();
+    pub async fn force_full_maintenance_and_sync(&mut self) {
+        let mut rx = self.table_event_manager.initiate_full_compaction().await;
+        rx.recv().await.unwrap().unwrap();
     }
 
     pub async fn flush_table_and_sync(&self, lsn: u64) {
