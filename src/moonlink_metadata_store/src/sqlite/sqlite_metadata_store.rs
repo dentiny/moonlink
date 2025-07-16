@@ -172,8 +172,29 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         Ok(())
     }
 
-    async fn delete_table_metadata(&self, _table_id: u32) -> Result<()> {
-        todo!("Table metadata deletion not implemented!")
+    async fn delete_table_metadata(&self, table_id: u32) -> Result<()> {
+        let sqlite_conn = SqliteConnWrapper::new(&self.database_uri).await?;
+        let mut tx = sqlite_conn.pool.begin().await?;
+
+        // Delete from metadata table.
+        let rows_affected = sqlx::query("DELETE FROM tables WHERE oid = ?")
+            .bind(table_id)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+        if rows_affected != 1 {
+            return Err(Error::SqliteRowCountError(1, rows_affected as u32));
+        }
+
+        // Delete from secret table.
+        sqlx::query("DELETE FROM secrets WHERE oid = ?")
+            .bind(table_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }
 
