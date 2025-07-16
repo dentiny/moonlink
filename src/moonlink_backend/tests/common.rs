@@ -314,6 +314,7 @@ async fn setup_backend(
                 DST_URI.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
@@ -351,6 +352,7 @@ pub async fn smoke_create_and_insert(
             DST_URI.to_string(),
             "public.test".to_string(),
             uri.to_string(),
+            /*table_config=*/ "".to_string(),
         )
         .await
         .unwrap();

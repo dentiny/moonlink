@@ -50,6 +50,7 @@ mod tests {
                 DST_URI.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
@@ -121,6 +122,7 @@ mod tests {
                 DST_URI.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
@@ -184,6 +186,7 @@ mod tests {
                     DST_URI.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
+                    /*table_config=*/ "".to_string(),
                 )
                 .await
                 .unwrap();
@@ -256,6 +259,7 @@ mod tests {
                     DST_URI.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
+                    /*table_config=*/ "".to_string(),
                 )
                 .await
                 .unwrap();
@@ -360,6 +364,7 @@ mod tests {
                 DST_URI.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
@@ -434,6 +439,7 @@ mod tests {
                 DST_URI.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
@@ -512,6 +518,7 @@ mod tests {
                 DST_URI.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();

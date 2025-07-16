@@ -64,7 +64,14 @@ async fn handle_stream(
                 src_uri,
             } => {
                 backend
-                    .create_table(database_id, table_id, dst_uri, src, src_uri)
+                    .create_table(
+                        database_id,
+                        table_id,
+                        dst_uri,
+                        src,
+                        src_uri,
+                        /*table_config=*/ "".to_string(),
+                    )
                     .await
                     .unwrap();
                 write(&mut stream, &()).await?;

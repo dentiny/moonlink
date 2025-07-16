@@ -185,6 +185,7 @@ mod tests {
                 DST_URI.to_string(),
                 /*table_name=*/ "public.repl_test".to_string(),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
@@ -316,6 +317,7 @@ mod tests {
                 DST_URI.to_string(),
                 "public.recovery".to_string(),
                 SRC_URI.to_string(),
+                /*table_config=*/ "".to_string(),
             )
             .await
             .unwrap();
