@@ -3,7 +3,6 @@ use iceberg::{Error as IcebergError, ErrorKind};
 use tempfile::tempdir;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 
 use super::test_utils::*;
 use super::TableEvent;

@@ -516,7 +516,7 @@ impl TableHandler {
                             // Fallback to normal periodic snapshot.
                             table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
                             table_handler_state.mooncake_snapshot_ongoing = table.create_snapshot(SnapshotOption {
-                                force_create: false,
+                                force_create: table_handler_state.index_merge_request_status != MaintainanceRequestStatus::Unrequested || table_handler_state.data_compaction_request_status != MaintainanceRequestStatus::Unrequested,
                                 skip_iceberg_snapshot: table_handler_state.iceberg_snapshot_ongoing,
                                 index_merge_option: table_handler_state.get_index_merge_maintainance_option(),
                                 data_compaction_option: table_handler_state.get_data_compaction_maintainance_option(),

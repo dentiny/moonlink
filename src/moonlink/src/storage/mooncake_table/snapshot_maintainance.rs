@@ -32,9 +32,9 @@ impl SnapshotTableState {
             .data_compaction_config
             .data_file_final_size as usize;
         let data_compaction_file_size_threshold = match data_compaction_option {
-            MaintainanceOption::Skip => usize::MAX,
+            MaintainanceOption::Skip => 0,
             MaintainanceOption::ForceRegular => default_final_file_size,
-            MaintainanceOption::ForceFull => 0,
+            MaintainanceOption::ForceFull => usize::MAX,
             MaintainanceOption::BestEffort => default_final_file_size,
         };
 

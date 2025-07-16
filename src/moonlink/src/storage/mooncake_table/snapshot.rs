@@ -10,7 +10,7 @@ use crate::storage::cache::object_storage::base_cache::{
 };
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::compaction::table_compaction::{
-    CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation, SingleFileToCompact,
+    CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
 };
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -24,10 +24,10 @@ use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
 };
 use crate::storage::mooncake_table::transaction_stream::TransactionStreamOutput;
+use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
 };
-use crate::storage::mooncake_table::{MaintainanceOption, SnapshotOption};
 use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,

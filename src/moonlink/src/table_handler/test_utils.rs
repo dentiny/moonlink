@@ -48,7 +48,6 @@ pub struct TestEnvironment {
     snapshot_lsn_tx: watch::Sender<u64>,
     index_merge_completion_tx: broadcast::Sender<()>,
     data_compaction_completion_tx: broadcast::Sender<Result<()>>,
-    full_maintainance_completion_tx: broadcast::Sender<Result<()>>,
     pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
@@ -91,9 +90,6 @@ impl TestEnvironment {
         let data_compaction_completion_tx = table_event_sync_sender
             .data_compaction_completion_tx
             .clone();
-        let full_maintainance_completion_tx = table_event_sync_sender
-            .full_maintainance_completion_tx
-            .clone();
 
         let handler = TableHandler::new(
             mooncake_table,
@@ -116,7 +112,6 @@ impl TestEnvironment {
             snapshot_lsn_tx,
             index_merge_completion_tx,
             data_compaction_completion_tx,
-            full_maintainance_completion_tx,
             table_event_manager,
             temp_dir,
             object_storage_cache,
@@ -241,12 +236,8 @@ impl TestEnvironment {
     /// Force a full table maintainance task operation, and block wait its completion.
     pub async fn force_full_maintainance_and_sync(&self) {
         self.send_event(TableEvent::ForceFullMaintainance).await;
-        let mut full_maintainance_completion_tx = self.full_maintainance_completion_tx.subscribe();
-        full_maintainance_completion_tx
-            .recv()
-            .await
-            .unwrap()
-            .unwrap();
+        let mut data_compaction_completion_rx = self.data_compaction_completion_tx.subscribe();
+        data_compaction_completion_rx.recv().await.unwrap().unwrap();
     }
 
     pub async fn flush_table_and_sync(&self, lsn: u64) {
