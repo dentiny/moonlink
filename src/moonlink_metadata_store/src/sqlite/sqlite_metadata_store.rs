@@ -186,6 +186,7 @@ impl SqliteMetadataStore {
         }
         tokio::fs::OpenOptions::new()
             .create(true)
+            .truncate(false)
             .write(true)
             .open(location)
             .await?;
