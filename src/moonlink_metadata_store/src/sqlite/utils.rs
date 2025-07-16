@@ -14,7 +14,7 @@ pub(crate) fn get_database_uri_and_filepath(
         let filepath = location.trim_start_matches(PREFIX).to_string();
         (filepath.clone(), location.to_string())
     } else {
-        let uri = format!("sqlite://{}", location);
+        let uri = format!("sqlite://{location}");
         (location.to_string(), uri)
     }
 }
