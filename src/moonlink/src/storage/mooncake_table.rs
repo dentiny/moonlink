@@ -822,6 +822,14 @@ impl MooncakeTable {
     // - tracks all record batches by current snapshot task
     // - persists all full batch records to local filesystem
     pub async fn flush(&mut self, lsn: u64) -> Result<()> {
+        // Sanith check flush LSN doesn't regress.
+        assert!(
+            self.next_snapshot_task.new_flush_lsn.is_none()
+                || self.next_snapshot_task.new_flush_lsn.unwrap() <= lsn,
+            "Current flush LSN is {:?}, new flush LSN is {}",
+            self.next_snapshot_task.new_flush_lsn,
+            lsn,
+        );
         self.next_snapshot_task.new_flush_lsn = Some(lsn);
 
         if self.mem_slice.is_empty() {

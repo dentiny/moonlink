@@ -388,8 +388,8 @@ async fn test_stream_delete_from_stream_memslice_row() {
 
     // Phase 4: Commit the streaming transaction
     env.stream_commit(stream_commit_lsn, xact_id).await;
-
     println!("Phase 5: Verifying final state post-commit");
+
     // Phase 5: Verify final state
     env.set_table_commit_lsn(stream_commit_lsn);
     env.set_replication_lsn(stream_commit_lsn + 5);

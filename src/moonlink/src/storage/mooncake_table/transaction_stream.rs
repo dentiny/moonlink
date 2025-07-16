@@ -253,6 +253,15 @@ impl MooncakeTable {
     pub async fn commit_transaction_stream(&mut self, xact_id: u32, lsn: u64) -> Result<()> {
         self.flush_transaction_stream(xact_id).await?;
         if let Some(mut stream_state) = self.transaction_stream_states.remove(&xact_id) {
+            // Sanith check flush LSN doesn't regress.
+            assert!(
+                self.next_snapshot_task.new_flush_lsn.is_none()
+                    || self.next_snapshot_task.new_flush_lsn.unwrap() <= lsn,
+                "Current flush LSN is {:?}, new flush LSN is {}",
+                self.next_snapshot_task.new_flush_lsn,
+                lsn,
+            );
+
             let snapshot_task = &mut self.next_snapshot_task;
             snapshot_task.new_commit_lsn = lsn;
 
