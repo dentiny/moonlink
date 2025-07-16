@@ -713,6 +713,14 @@ impl MooncakeTable {
         flush_result: Option<Result<DiskSliceWriter>>,
         lsn: u64,
     ) {
+        assert!(
+            self.next_snapshot_task.new_flush_lsn.is_none()
+                || self.next_snapshot_task.new_flush_lsn.unwrap() < lsn,
+            "Current flush LSN is {:?}, new coming LSN is {}",
+            self.next_snapshot_task.new_flush_lsn,
+            lsn
+        );
+
         self.next_snapshot_task.new_flush_lsn = Some(lsn);
         match flush_result {
             Some(Ok(disk_slice)) => {
