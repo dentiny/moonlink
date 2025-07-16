@@ -73,37 +73,22 @@ where
         Ok(())
     }
 
-    /// Perform an index merge operation, return when it completes.
-    /// Notice: the function will be returned right after index merge results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    async fn perform_index_merge(&self, database_id: D, table_id: T) -> Result<()> {
-        let mut rx = {
-            let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id,
-                table_id,
-            };
-            let writer = manager.get_table_event_manager(&mooncake_table_id);
-            writer.initiate_index_merge().await
-        };
-        rx.recv().await.unwrap();
-        Ok(())
-    }
-
     /// Perform a table maintaince operation based on requested mode.
     /// Notice, it's only exposed for debugging, testing and admin usage.
     ///
     /// There're currently three modes supported:
-    /// - "index": perform an index merge operation, only index files smaller than a threshold, or with too many deleted rows will be merged.
     /// - "data": perform a data compaction, only data files smaller than a threshold, or with too many deleted rows will be compacted.
+    /// - "index": perform an index merge operation, only index files smaller than a threshold, or with too many deleted rows will be merged.    
     /// - "full": perform a full compaction, which merges all data files and all index files, whatever file size they are of.
     pub async fn optimize_table(&self, database_id: D, table_id: T, mode: &str) -> Result<()> {
-        if mode == "index" {
-            self.perform_index_merge(database_id, table_id).await
-        } else if mode == "data" {
-            self.perform_data_compaction(database_id, table_id).await
-        } else {
-            self.perform_full_compaction(database_id, table_id).await
+        if mode == "data" {
+            return self.perform_data_compaction(database_id, table_id).await;
+        } else if mode == "index" {
+            return self.perform_index_merge(database_id, table_id).await;
+        } else if mode == "full" {
+            return self.perform_full_compaction(database_id, table_id).await;
         }
+        Err(Error::InvalidArgumentError(format!("Unrecognizable table optimization mode {mode}, which should be one of `data`, `index`, `full`")))
     }
 
     /// # Arguments
@@ -224,6 +209,22 @@ where
             writer.initiate_data_compaction().await
         };
         rx.recv().await.unwrap()?;
+        Ok(())
+    }
+
+    /// Perform an index merge operation, return when it completes.
+    /// Notice: the function will be returned right after index merge results buffered to mooncake snapshot, instead of being persisted into iceberg.
+    async fn perform_index_merge(&self, database_id: D, table_id: T) -> Result<()> {
+        let mut rx = {
+            let mut manager = self.replication_manager.write().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let writer = manager.get_table_event_manager(&mooncake_table_id);
+            writer.initiate_index_merge().await
+        };
+        rx.recv().await.unwrap();
         Ok(())
     }
 
