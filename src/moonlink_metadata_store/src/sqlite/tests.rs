@@ -47,7 +47,10 @@ fn get_filesystem_config() -> FileSystemConfig {
         };
     }
 
-    panic!("No storage backend feature enabled");
+    #[allow(unreachable_code)]
+    {
+        panic!("No storage backend feature enabled");
+    }
 }
 
 /// Create a moonlink table config for test.
