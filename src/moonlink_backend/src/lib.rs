@@ -89,28 +89,6 @@ where
         Ok(())
     }
 
-    /// Perform a data compaction operation, return when it completes.
-    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    async fn perform_data_compaction(&self, database_id: D, table_id: T) -> Result<()> {
-        let mut rx = {
-            let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id,
-                table_id,
-            };
-            let writer = manager.get_table_event_manager(&mooncake_table_id);
-            writer.initiate_data_compaction().await
-        };
-        rx.recv().await.unwrap()?;
-        Ok(())
-    }
-
-    /// Perform a full compaction, return when it completes.
-    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    async fn perform_full_compaction(&self, _database_id: D, _table_id: T) -> Result<()> {
-        todo!("Full compaction is not implemented yet!");
-    }
-
     /// Perform a table maintaince operation based on requested mode.
     /// Notice, it's only exposed for debugging, testing and admin usage.
     ///
@@ -231,5 +209,27 @@ where
     pub async fn shutdown_connection(&self, uri: &str) {
         let mut manager = self.replication_manager.write().await;
         manager.shutdown_connection(uri);
+    }
+
+    /// Perform a data compaction operation, return when it completes.
+    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
+    async fn perform_data_compaction(&self, database_id: D, table_id: T) -> Result<()> {
+        let mut rx = {
+            let mut manager = self.replication_manager.write().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let writer = manager.get_table_event_manager(&mooncake_table_id);
+            writer.initiate_data_compaction().await
+        };
+        rx.recv().await.unwrap()?;
+        Ok(())
+    }
+
+    /// Perform a full compaction, return when it completes.
+    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
+    async fn perform_full_compaction(&self, _database_id: D, _table_id: T) -> Result<()> {
+        todo!("Full compaction is not implemented yet!");
     }
 }
