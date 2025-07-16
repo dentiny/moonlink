@@ -11,15 +11,52 @@ const TABLE_ID: u32 = 0;
 /// Test table name.
 const TABLE_NAME: &str = "table";
 
+/// Create a filesystem config for test.
+fn get_filesystem_config() -> FileSystemConfig {
+    #[allow(unreachable_code)]
+    #[cfg(feature = "storage-gcs")]
+    {
+        return FileSystemConfig::Gcs {
+            project: "project".to_string(),
+            region: "region".to_string(),
+            bucket: "bucket".to_string(),
+            access_key_id: "access_key_id".to_string(),
+            secret_access_key: "secret_access_key".to_string(),
+            endpoint: None,
+            disable_auth: false,
+        };
+    }
+
+    #[allow(unreachable_code)]
+    #[cfg(feature = "storage-s3")]
+    {
+        return FileSystemConfig::S3 {
+            access_key_id: "access_key_id".to_string(),
+            secret_access_key: "secret_access_key".to_string(),
+            region: "region".to_string(),
+            bucket: "bucket".to_string(),
+            endpoint: None,
+        };
+    }
+
+    #[allow(unreachable_code)]
+    #[cfg(feature = "storage-fs")]
+    {
+        return FileSystemConfig::FileSystem {
+            root_directory: "/tmp/test_warehouse_uri".to_string(),
+        };
+    }
+
+    panic!("No storage backend feature enabled");
+}
+
 /// Create a moonlink table config for test.
 pub(crate) fn get_moonlink_table_config() -> MoonlinkTableConfig {
     MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
             namespace: vec!["namespace".to_string()],
             table_name: "table".to_string(),
-            filesystem_config: FileSystemConfig::FileSystem {
-                root_directory: "/tmp/test_warehouse_uri".to_string(),
-            },
+            filesystem_config: get_filesystem_config(),
         },
         ..Default::default()
     }
