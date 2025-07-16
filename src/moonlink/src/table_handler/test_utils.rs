@@ -220,14 +220,15 @@ impl TestEnvironment {
 
     /// Force an index merge operation, and block wait its completion.
     pub async fn force_index_merge_and_sync(&self) {
-        self.send_event(TableEvent::ForceIndexMerge).await;
+        self.send_event(TableEvent::ForceRegularIndexMerge).await;
         let mut index_merge_completion_rx = self.index_merge_completion_tx.subscribe();
         index_merge_completion_rx.recv().await.unwrap();
     }
 
     /// Force a data compaction operation, and block wait its completion.
     pub async fn force_data_compaction_and_sync(&self) {
-        self.send_event(TableEvent::ForceDataCompaction).await;
+        self.send_event(TableEvent::ForceRegularDataCompaction)
+            .await;
         let mut data_compaction_completion_rx = self.data_compaction_completion_tx.subscribe();
         data_compaction_completion_rx.recv().await.unwrap().unwrap();
     }

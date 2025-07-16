@@ -56,7 +56,7 @@ impl TableEventManager {
     /// TODO(hjiang): Error status propagation.
     pub async fn initiate_index_merge(&mut self) -> broadcast::Receiver<()> {
         self.table_event_tx
-            .send(TableEvent::ForceIndexMerge)
+            .send(TableEvent::ForceRegularIndexMerge)
             .await
             .unwrap();
         self.index_merge_completion_tx.subscribe()
@@ -65,7 +65,7 @@ impl TableEventManager {
     /// Initialte a data compaction event, return the channel for synchronization/
     pub async fn initiate_data_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
         self.table_event_tx
-            .send(TableEvent::ForceDataCompaction)
+            .send(TableEvent::ForceRegularDataCompaction)
             .await
             .unwrap();
         self.data_compaction_completion_tx.subscribe()
