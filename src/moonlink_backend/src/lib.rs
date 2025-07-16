@@ -16,6 +16,14 @@ use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[allow(dead_code)]
+struct TableConfig {
+    /// Whether to enable index merge on the newly created table, by default on.
+    enable_index_merge: bool,
+    /// Whether to enable data compaction on the newly created table, by default on.
+    enable_data_compaction: bool,
+}
+
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
@@ -108,6 +116,7 @@ where
     /// # Arguments
     ///
     /// * src_uri: connection string for source database (row storage database).
+    /// * table_config: json format for [`TableConfig`].
     pub async fn create_table(
         &self,
         database_id: D,
@@ -115,6 +124,7 @@ where
         metadata_store_uri: String,
         src_table_name: String,
         src_uri: String,
+        _table_config: String,
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
             database_id: database_id.clone(),
