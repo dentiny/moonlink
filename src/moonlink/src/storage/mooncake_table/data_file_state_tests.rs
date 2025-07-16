@@ -378,7 +378,7 @@ async fn validate_state_3(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
             .await,
-        1, // index file reference count is always 1, if no maintainance job
+        1, // index file reference count is always 1, if no maintenance job
     );
 
     // Testing scenario: cache size is not enough to hold two data files, if we import fake file when table data file unpinned, it would be evicted.
@@ -411,7 +411,7 @@ async fn validate_state_4(
         cache
             .get_non_evictable_entry_ref_count(&get_unique_table_file_id(index_block_file_id))
             .await,
-        1, // index file reference count is always 1, if no maintainance job
+        1, // index file reference count is always 1, if no maintenance job
     );
 }
 

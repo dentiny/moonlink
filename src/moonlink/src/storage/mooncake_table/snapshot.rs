@@ -241,7 +241,7 @@ impl SnapshotTableState {
     }
 
     /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from object storage cache.
-    /// Provide [`persisted_data_files`] could come from imported new files, or maintainance jobs like compaction.
+    /// Provide [`persisted_data_files`] could come from imported new files, or maintenance jobs like compaction.
     /// Return cache evicted files to delete.
     async fn update_data_files_to_persisted(
         &mut self,

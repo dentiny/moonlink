@@ -233,9 +233,9 @@ impl TestEnvironment {
         data_compaction_completion_rx.recv().await.unwrap().unwrap();
     }
 
-    /// Force a full table maintainance task operation, and block wait its completion.
-    pub async fn force_full_maintainance_and_sync(&self) {
-        self.send_event(TableEvent::ForceFullMaintainance).await;
+    /// Force a full table maintenance task operation, and block wait its completion.
+    pub async fn force_full_maintenance_and_sync(&self) {
+        self.send_event(TableEvent::ForceFullMaintenance).await;
         let mut data_compaction_completion_rx = self.data_compaction_completion_tx.subscribe();
         data_compaction_completion_rx.recv().await.unwrap().unwrap();
     }

@@ -1393,7 +1393,7 @@ async fn test_data_compaction_with_sufficient_data_files() {
 }
 
 #[tokio::test]
-async fn test_full_maintainance_with_sufficient_data_files() {
+async fn test_full_maintenance_with_sufficient_data_files() {
     let temp_dir = tempdir().unwrap();
     // Setup mooncake config, which won't trigger any data compaction or index merge, if not full table maintaince.
     let mooncake_table_config = MooncakeTableConfig {
@@ -1427,7 +1427,7 @@ async fn test_full_maintainance_with_sufficient_data_files() {
     env.flush_table_and_sync(/*lsn=*/ 20).await;
 
     // Force index merge and iceberg snapshot, check result.
-    env.force_full_maintainance_and_sync().await;
+    env.force_full_maintenance_and_sync().await;
 
     // Append another row to trigger mooncake and iceberg snapshot.
     // TODO(hjiang): Should consider data compaction return only when iceberg snapshot completed.

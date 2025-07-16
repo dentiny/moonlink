@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use crate::storage::compaction::table_compaction::SingleFileToCompact;
 use crate::storage::mooncake_table::snapshot::SnapshotTableState;
 use crate::storage::mooncake_table::{
-    DataCompactionPayload, FileIndiceMergePayload, MaintainanceOption,
+    DataCompactionPayload, FileIndiceMergePayload, MaintenanceOption,
 };
 use crate::storage::storage_utils::{TableId, TableUniqueFileId};
 
@@ -13,13 +13,13 @@ impl SnapshotTableState {
     /// To simplify states (aka, avoid data compaction already in iceberg with those not), only merge those already persisted.
     pub(super) fn get_payload_to_compact(
         &self,
-        data_compaction_option: &MaintainanceOption,
+        data_compaction_option: &MaintenanceOption,
     ) -> Option<DataCompactionPayload> {
         let data_compaction_file_num_threshold = match data_compaction_option {
-            MaintainanceOption::Skip => usize::MAX,
-            MaintainanceOption::ForceRegular => 2,
-            MaintainanceOption::ForceFull => 2,
-            MaintainanceOption::BestEffort => {
+            MaintenanceOption::Skip => usize::MAX,
+            MaintenanceOption::ForceRegular => 2,
+            MaintenanceOption::ForceFull => 2,
+            MaintenanceOption::BestEffort => {
                 self.mooncake_table_metadata
                     .config
                     .data_compaction_config
@@ -32,10 +32,10 @@ impl SnapshotTableState {
             .data_compaction_config
             .data_file_final_size as usize;
         let data_compaction_file_size_threshold = match data_compaction_option {
-            MaintainanceOption::Skip => 0,
-            MaintainanceOption::ForceRegular => default_final_file_size,
-            MaintainanceOption::ForceFull => usize::MAX,
-            MaintainanceOption::BestEffort => default_final_file_size,
+            MaintenanceOption::Skip => 0,
+            MaintenanceOption::ForceRegular => default_final_file_size,
+            MaintenanceOption::ForceFull => usize::MAX,
+            MaintenanceOption::BestEffort => default_final_file_size,
         };
 
         // Fast-path: not enough data files to trigger compaction.
@@ -106,13 +106,13 @@ impl SnapshotTableState {
     #[allow(clippy::mutable_key_type)]
     pub(super) fn get_file_indices_to_merge(
         &self,
-        index_merge_option: &MaintainanceOption,
+        index_merge_option: &MaintenanceOption,
     ) -> Option<FileIndiceMergePayload> {
         let index_merge_file_num_threshold = match index_merge_option {
-            MaintainanceOption::Skip => usize::MAX,
-            MaintainanceOption::ForceRegular => 2,
-            MaintainanceOption::ForceFull => 2,
-            MaintainanceOption::BestEffort => {
+            MaintenanceOption::Skip => usize::MAX,
+            MaintenanceOption::ForceRegular => 2,
+            MaintenanceOption::ForceFull => 2,
+            MaintenanceOption::BestEffort => {
                 self.mooncake_table_metadata
                     .config
                     .file_index_config
@@ -125,10 +125,10 @@ impl SnapshotTableState {
             .file_index_config
             .index_block_final_size;
         let index_merge_file_size_threshold = match index_merge_option {
-            MaintainanceOption::Skip => u64::MAX,
-            MaintainanceOption::ForceRegular => default_final_file_size,
-            MaintainanceOption::ForceFull => 0,
-            MaintainanceOption::BestEffort => default_final_file_size,
+            MaintenanceOption::Skip => u64::MAX,
+            MaintenanceOption::ForceRegular => default_final_file_size,
+            MaintenanceOption::ForceFull => 0,
+            MaintenanceOption::BestEffort => default_final_file_size,
         };
 
         // Fast-path: not enough file indices to trigger index merge.

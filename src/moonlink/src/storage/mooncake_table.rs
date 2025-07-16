@@ -5,7 +5,7 @@ mod mem_slice;
 mod persistence_buffer;
 mod shared_array;
 mod snapshot;
-mod snapshot_maintainance;
+mod snapshot_maintenance;
 pub mod snapshot_read_output;
 mod snapshot_validation;
 pub mod table_config;
@@ -416,23 +416,23 @@ impl SnapshotTask {
     }
 }
 
-/// Option for a maintainance option.
+/// Option for a maintenance option.
 ///
 /// For all types of maintaince tasks, we have two basic dimensions:
-/// - Selection criteria: for full-mode maintainance task, all files will take part in, however big it is; for non-full-mode, only those meet certain threshold will be selected.
+/// - Selection criteria: for full-mode maintenance task, all files will take part in, however big it is; for non-full-mode, only those meet certain threshold will be selected.
 ///   For example, for non-full-mode, only small files will be compacted.
 /// - Trigger criteria: to avoid overly frequent background maintaince task, it's only triggered when selected files reaches certain threshold.
-///   While for force maintainance request, as long as there're at least two files, task will be triggered.
+///   While for force maintenance request, as long as there're at least two files, task will be triggered.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MaintainanceOption {
-    /// Regular maintainance task, which perform a best effort attempt.
+pub enum MaintenanceOption {
+    /// Regular maintenance task, which perform a best effort attempt.
     /// This is the default option, which is used for background task.
     BestEffort,
-    /// Force a regular maintainance attempt.
+    /// Force a regular maintenance attempt.
     ForceRegular,
     /// Force a full maintaince attempt.
     ForceFull,
-    /// Skip maintainance attempt.
+    /// Skip maintenance attempt.
     Skip,
 }
 
@@ -445,9 +445,9 @@ pub struct SnapshotOption {
     /// Whether to skip iceberg snapshot creation.
     pub(crate) skip_iceberg_snapshot: bool,
     /// Index merge operation option.
-    pub(crate) index_merge_option: MaintainanceOption,
+    pub(crate) index_merge_option: MaintenanceOption,
     /// Data compaction operation option.
-    pub(crate) data_compaction_option: MaintainanceOption,
+    pub(crate) data_compaction_option: MaintenanceOption,
 }
 
 impl SnapshotOption {
@@ -455,8 +455,8 @@ impl SnapshotOption {
         Self {
             force_create: false,
             skip_iceberg_snapshot: false,
-            index_merge_option: MaintainanceOption::BestEffort,
-            data_compaction_option: MaintainanceOption::BestEffort,
+            index_merge_option: MaintenanceOption::BestEffort,
+            data_compaction_option: MaintenanceOption::BestEffort,
         }
     }
 }

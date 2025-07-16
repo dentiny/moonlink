@@ -267,7 +267,7 @@ impl UnpersistedRecords {
         self.new_data_files.len() >= data_file_snapshot_threshold
     }
 
-    /// Util function to decide whether to flush by new data files or maintainance task.
+    /// Util function to decide whether to flush by new data files or maintenance task.
     pub(crate) fn if_persist_by_new_files_or_maintainence(&self, force_create: bool) -> bool {
         if self.if_persist_by_data_files(force_create) {
             return true;
