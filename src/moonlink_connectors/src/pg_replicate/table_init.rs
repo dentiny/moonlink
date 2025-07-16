@@ -32,19 +32,16 @@ pub struct TableResources {
 fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
-    let (index_merge_completion_tx, _) = broadcast::channel(64usize);
-    let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
+    let (table_maintenance_completion_tx, _) = broadcast::channel(64usize);
     let event_sync_sender = EventSyncSender {
         drop_table_completion_tx,
         flush_lsn_tx,
-        index_merge_completion_tx: index_merge_completion_tx.clone(),
-        data_compaction_completion_tx: data_compaction_completion_tx.clone(),
+        table_maintenance_completion_tx: table_maintenance_completion_tx.clone(),
     };
     let event_sync_receiver = EventSyncReceiver {
         drop_table_completion_rx,
         flush_lsn_rx,
-        index_merge_completion_tx,
-        data_compaction_completion_tx,
+        table_maintenance_completion_tx,
     };
     (event_sync_sender, event_sync_receiver)
 }

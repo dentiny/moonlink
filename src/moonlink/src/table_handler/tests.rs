@@ -1678,10 +1678,8 @@ async fn test_discard_duplicate_writes() {
 /// - replication lsn >= iceberg snapshot lsn, if assigned
 #[test]
 fn test_is_iceberg_snapshot_satisfy_force_snapshot() {
-    let (index_merge_completion_tx, _) = broadcast::channel(64usize);
-    let (data_compaction_completion_tx, _) = broadcast::channel(64usize);
-    let mut table_handler_state =
-        TableHandlerState::new(index_merge_completion_tx, data_compaction_completion_tx);
+    let (table_maintenance_completion_tx, _) = broadcast::channel(64usize);
+    let mut table_handler_state = TableHandlerState::new(table_maintenance_completion_tx);
     // Case-1: iceberg snapshot already satisfies requested lsn.
     {
         let requested_lsn = 0;

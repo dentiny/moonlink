@@ -13,11 +13,8 @@ pub struct TableEventManager {
     drop_table_completion_rx: Option<oneshot::Receiver<Result<()>>>,
     /// Channel to observe latest flush LSN reported by iceberg.
     flush_lsn_rx: watch::Receiver<u64>,
-    /// Sender which is used to create notification at latest index merge completion.
-    /// TODO(hjiang): Error status propagation.
-    index_merge_completion_tx: broadcast::Sender<()>,
     /// Sender which is used to create notification at latest data compaction completion.
-    data_compaction_completion_tx: broadcast::Sender<Result<()>>,
+    table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
 }
 
 impl TableEventManager {
@@ -29,8 +26,7 @@ impl TableEventManager {
             table_event_tx,
             drop_table_completion_rx: Some(table_event_sync_rx.drop_table_completion_rx),
             flush_lsn_rx: table_event_sync_rx.flush_lsn_rx,
-            index_merge_completion_tx: table_event_sync_rx.index_merge_completion_tx,
-            data_compaction_completion_tx: table_event_sync_rx.data_compaction_completion_tx,
+            table_maintenance_completion_tx: table_event_sync_rx.table_maintenance_completion_tx,
         }
     }
 
@@ -54,21 +50,26 @@ impl TableEventManager {
 
     /// Initiate an index merge event, return the channel for synchronization.
     /// TODO(hjiang): Error status propagation.
-    pub async fn initiate_index_merge(&mut self) -> broadcast::Receiver<()> {
+    pub async fn initiate_index_merge(&mut self) -> broadcast::Receiver<Result<()>> {
         self.table_event_tx
             .send(TableEvent::ForceRegularIndexMerge)
             .await
             .unwrap();
-        self.index_merge_completion_tx.subscribe()
+        self.table_maintenance_completion_tx.subscribe()
     }
 
-    /// Initialte a data compaction event, return the channel for synchronization/
+    /// Initialte a data compaction event, return the channel for synchronization.
     pub async fn initiate_data_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
         self.table_event_tx
             .send(TableEvent::ForceRegularDataCompaction)
             .await
             .unwrap();
-        self.data_compaction_completion_tx.subscribe()
+        self.table_maintenance_completion_tx.subscribe()
+    }
+
+    /// Initialte full table maintenance event, return the channel for synchronization.
+    pub async fn initiate_full_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
+        todo!("unimplemented")
     }
 
     /// Drop a mooncake table.

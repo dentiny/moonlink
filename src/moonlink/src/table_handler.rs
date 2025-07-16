@@ -78,13 +78,10 @@ struct TableHandlerState {
     pending_force_snapshot_lsns: BTreeMap<u64, Vec<Option<Sender<Result<()>>>>>,
     // Index merge request status.
     index_merge_request_status: MaintenanceRequestStatus,
-    /// Notify when index merge completes.
-    /// TODO(hjiang): Error status propagation.
-    index_merge_completion_tx: broadcast::Sender<()>,
     /// Data compaction request status.
     data_compaction_request_status: MaintenanceRequestStatus,
     /// Notify when data compaction completes.
-    data_compaction_completion_tx: broadcast::Sender<Result<()>>,
+    table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
     // Special table state, for example, initial copy, alter table, drop table, etc.
     special_table_state: SpecialTableState,
     // Buffered events during blocking operations: initial copy, alter table, drop table, etc.
@@ -92,10 +89,7 @@ struct TableHandlerState {
 }
 
 impl TableHandlerState {
-    fn new(
-        index_merge_completion_tx: broadcast::Sender<()>,
-        data_compaction_completion_tx: broadcast::Sender<Result<()>>,
-    ) -> Self {
+    fn new(table_maintenance_completion_tx: broadcast::Sender<Result<()>>) -> Self {
         Self {
             iceberg_snapshot_result_consumed: true,
             iceberg_snapshot_ongoing: false,
@@ -107,8 +101,7 @@ impl TableHandlerState {
             pending_force_snapshot_lsns: BTreeMap::new(),
             index_merge_request_status: MaintenanceRequestStatus::Unrequested,
             data_compaction_request_status: MaintenanceRequestStatus::Unrequested,
-            index_merge_completion_tx,
-            data_compaction_completion_tx,
+            table_maintenance_completion_tx,
             special_table_state: SpecialTableState::Normal,
             initial_copy_buffered_events: Vec::new(),
         }
@@ -133,7 +126,7 @@ impl TableHandlerState {
         assert!(self.maintenance_ongoing);
         self.maintenance_ongoing = false;
         self.index_merge_request_status = MaintenanceRequestStatus::Unrequested;
-        self.index_merge_completion_tx.send(()).unwrap();
+        self.table_maintenance_completion_tx.send(Ok(())).unwrap();
     }
 
     /// Get Maintenance task operation option.
@@ -167,10 +160,10 @@ impl TableHandlerState {
         self.data_compaction_request_status = MaintenanceRequestStatus::Unrequested;
         match &data_compaction_result {
             Ok(_) => {
-                self.data_compaction_completion_tx.send(Ok(())).unwrap();
+                self.table_maintenance_completion_tx.send(Ok(())).unwrap();
             }
             Err(err) => {
-                self.data_compaction_completion_tx
+                self.table_maintenance_completion_tx
                     .send(Err(err.clone()))
                     .unwrap();
             }
@@ -315,10 +308,8 @@ impl TableHandler {
         replication_lsn_rx: watch::Receiver<u64>,
         mut table: MooncakeTable,
     ) {
-        let mut table_handler_state = TableHandlerState::new(
-            event_sync_sender.index_merge_completion_tx.clone(),
-            event_sync_sender.data_compaction_completion_tx.clone(),
-        );
+        let mut table_handler_state =
+            TableHandlerState::new(event_sync_sender.table_maintenance_completion_tx.clone());
         table_handler_state.initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
         // Used to clean up mooncake table status, and send completion notification.
         let drop_table = async |table: &mut MooncakeTable, event_sync_sender: EventSyncSender| {

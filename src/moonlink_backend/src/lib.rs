@@ -180,57 +180,33 @@ where
     /// - "index": perform an index merge operation, only index files smaller than a threshold, or with too many deleted rows will be merged.    
     /// - "full": perform a full compaction, which merges all data files and all index files, whatever file size they are of.
     pub async fn optimize_table(&self, database_id: D, table_id: T, mode: &str) -> Result<()> {
-        if mode == "data" {
-            return self.perform_data_compaction(database_id, table_id).await;
-        } else if mode == "index" {
-            return self.perform_index_merge(database_id, table_id).await;
-        } else if mode == "full" {
-            return self.perform_full_compaction(database_id, table_id).await;
-        }
-        Err(Error::InvalidArgumentError(format!("Unrecognizable table optimization mode {mode}, which should be one of `data`, `index`, `full`")))
+        let mut rx = {
+            let mut manager = self.replication_manager.write().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let writer = manager.get_table_event_manager(&mooncake_table_id);
+
+            match mode {
+                "data" => writer.initiate_data_compaction().await,
+                "index" => writer.initiate_index_merge().await,
+                "full" => writer.initiate_full_compaction().await,
+                _ => {
+                    return Err(Error::InvalidArgumentError(format!(
+                        "Unrecognizable table optimization mode `{mode}`, expected one of `data`, `index`, or `full`"
+                    )))
+                }
+            }
+        };
+
+        rx.recv().await.unwrap().unwrap();
+        Ok(())
     }
 
     /// Gracefully shutdown a replication connection identified by its URI.
     pub async fn shutdown_connection(&self, uri: &str) {
         let mut manager = self.replication_manager.write().await;
         manager.shutdown_connection(uri);
-    }
-
-    /// Perform a data compaction operation, return when it completes.
-    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    async fn perform_data_compaction(&self, database_id: D, table_id: T) -> Result<()> {
-        let mut rx = {
-            let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id,
-                table_id,
-            };
-            let writer = manager.get_table_event_manager(&mooncake_table_id);
-            writer.initiate_data_compaction().await
-        };
-        rx.recv().await.unwrap()?;
-        Ok(())
-    }
-
-    /// Perform an index merge operation, return when it completes.
-    /// Notice: the function will be returned right after index merge results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    async fn perform_index_merge(&self, database_id: D, table_id: T) -> Result<()> {
-        let mut rx = {
-            let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id,
-                table_id,
-            };
-            let writer = manager.get_table_event_manager(&mooncake_table_id);
-            writer.initiate_index_merge().await
-        };
-        rx.recv().await.unwrap();
-        Ok(())
-    }
-
-    /// Perform a full compaction, return when it completes.
-    /// Notice: the function will be returned right after data compaction results buffered to mooncake snapshot, instead of being persisted into iceberg.
-    async fn perform_full_compaction(&self, _database_id: D, _table_id: T) -> Result<()> {
-        todo!("Full compaction is not implemented yet!");
     }
 }
