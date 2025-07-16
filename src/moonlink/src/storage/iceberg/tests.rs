@@ -1165,13 +1165,10 @@ async fn test_multiple_table_ids_for_deletion_vector() {
         table.delete(cur_row, /*lsn=*/ target_data_files_num).await;
     }
     table.commit(/*lsn=*/ target_data_files_num + 1);
-    flush_table_and_sync(
-        &mut table,
-        &mut notify_rx,
-        /*lsn=*/ target_data_files_num + 1,
-    )
-    .await
-    .unwrap();
+    table
+        .flush(/*lsn=*/ target_data_files_num + 1)
+        .await
+        .unwrap();
 
     // Create the second mooncake and iceberg snapshot, which include [`target_data_files_num`] number of deletion vector puffin files.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;

@@ -21,6 +21,8 @@ pub enum Error {
     MoonlinkError { source: MoonlinkError },
     #[error("Moonlink metadata error: {source}")]
     MoonlinkMetadataStoreError { source: MoonlinkMetadataStoreError },
+    #[error("Invalid argument: {0}")]
+    InvalidArgumentError(String),
 }
 
 pub type Result<T> = result::Result<T, Error>;

@@ -21,17 +21,11 @@ use crate::{ReadState, Result};
 #[cfg(test)]
 pub(crate) async fn flush_table_and_sync(
     table: &mut MooncakeTable,
-    receiver: &mut Receiver<TableEvent>,
+    _receiver: &mut Receiver<TableEvent>,
     lsn: u64,
 ) -> Result<()> {
-    table.flush(lsn).unwrap();
-    let flush_result = receiver.recv().await.unwrap();
-    if let TableEvent::FlushResult { flush_result, lsn } = flush_result {
-        table.set_flush_result(flush_result, lsn);
-    } else {
-        panic!("Expected FlushResult as first event, but got others.");
-    }
-    Ok(())
+    // TODO(Nolan): Use receiver to block wait until table flush finishes.
+    table.flush(lsn).await
 }
 
 /// ===============================

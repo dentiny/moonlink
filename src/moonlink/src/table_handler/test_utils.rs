@@ -251,13 +251,6 @@ impl TestEnvironment {
         self.send_event(TableEvent::StreamFlush { xact_id }).await;
     }
 
-    pub async fn snapshot_table(&self, lsn: Option<u64>) {
-        let (tx, mut rx) = mpsc::channel(1);
-        self.send_event(TableEvent::ForceSnapshot { lsn, tx: Some(tx) })
-            .await;
-        rx.recv().await.unwrap().unwrap();
-    }
-
     // --- LSN and Verification Helpers ---
 
     /// Sets both table commit and replication LSN to the same value.

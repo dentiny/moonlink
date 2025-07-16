@@ -45,10 +45,10 @@ use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
 use delete_vector::BatchDeletionVector;
-pub use disk_slice::DiskSliceWriter;
+pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
 pub(crate) use snapshot::{PuffinDeletionBlobAtRead, SnapshotTableState};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
@@ -56,8 +56,8 @@ use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResul
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{watch, RwLock};
+use tracing::info_span;
 use tracing::Instrument;
-use tracing::{error, info_span};
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
 /// Special transaction id used for initial copy append operation.
@@ -499,9 +499,6 @@ pub struct MooncakeTable {
 
     /// Table notifier, which is used to sent multiple types of event completion information.
     table_notify: Option<Sender<TableEvent>>,
-
-    // LSNs of pending flush operations.
-    pending_flush_lsns: BTreeSet<u64>,
 }
 
 impl MooncakeTable {
@@ -581,7 +578,6 @@ impl MooncakeTable {
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn,
             table_notify: None,
-            pending_flush_lsns: BTreeSet::new(),
         })
     }
 
@@ -707,32 +703,6 @@ impl MooncakeTable {
         self.next_snapshot_task.data_compaction_result = data_compaction_res;
     }
 
-    /// Set flush result, which will append the flushed disk slice into current task.
-    pub(crate) fn set_flush_result(
-        &mut self,
-        flush_result: Option<Result<DiskSliceWriter>>,
-        lsn: u64,
-    ) {
-        assert!(
-            self.next_snapshot_task.new_flush_lsn.is_none()
-                || self.next_snapshot_task.new_flush_lsn.unwrap() < lsn,
-            "Current flush LSN is {:?}, new coming LSN is {}",
-            self.next_snapshot_task.new_flush_lsn,
-            lsn
-        );
-
-        self.next_snapshot_task.new_flush_lsn = Some(lsn);
-        match flush_result {
-            Some(Ok(disk_slice)) => {
-                self.next_snapshot_task.new_disk_slices.push(disk_slice);
-            }
-            Some(Err(err)) => {
-                error!(error = ?err, "failed to flush mem slice");
-            }
-            None => {}
-        }
-    }
-
     /// Get iceberg snapshot flush LSN.
     pub(crate) fn get_iceberg_snapshot_lsn(&self) -> Option<u64> {
         self.last_iceberg_snapshot_lsn
@@ -851,71 +821,26 @@ impl MooncakeTable {
     // This function
     // - tracks all record batches by current snapshot task
     // - persists all full batch records to local filesystem
-    pub fn flush(&mut self, lsn: u64) -> Result<()> {
-        self.pending_flush_lsns.insert(lsn);
-        let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
+    pub async fn flush(&mut self, lsn: u64) -> Result<()> {
+        self.next_snapshot_task.new_flush_lsn = Some(lsn);
 
         if self.mem_slice.is_empty() {
-            tokio::task::spawn(async move {
-                table_notify_tx
-                    .send(TableEvent::FlushResult {
-                        flush_result: None,
-                        lsn,
-                    })
-                    .await
-                    .unwrap();
-            });
             return Ok(());
         }
 
         let next_file_id = self.next_file_id;
         self.next_file_id += 1;
-
-        // Drain mem slice and prepare information for background flush.
-        let (new_batch, batches, index) = self.mem_slice.drain().unwrap();
-        let index = Arc::new(index);
-
-        if let Some(batch) = new_batch {
-            self.next_snapshot_task.new_record_batches.push(batch);
-        }
-        self.next_snapshot_task.new_mem_indices.push(index.clone());
-
-        let path = self.metadata.path.clone();
-        let schema = self.metadata.schema.clone();
-        let parquet_flush_threshold_size = self.metadata.config.disk_slice_parquet_file_size;
-
-        tokio::task::spawn(
-            async move {
-                let mut disk_slice = DiskSliceWriter::new(
-                    schema,
-                    path,
-                    batches,
-                    Some(lsn),
-                    next_file_id,
-                    index,
-                    parquet_flush_threshold_size,
-                );
-                let res = disk_slice.write().await;
-                table_notify_tx
-                    .send(TableEvent::FlushResult {
-                        flush_result: Some(res.map(|_| disk_slice)),
-                        lsn,
-                    })
-                    .await
-                    .unwrap();
-            }
-            .instrument(info_span!("flush_mem_slice")),
-        );
+        let disk_slice = Self::flush_mem_slice(
+            &mut self.mem_slice,
+            &self.metadata,
+            next_file_id,
+            Some(lsn),
+            Some(&mut self.next_snapshot_task),
+        )
+        .await?;
+        self.next_snapshot_task.new_disk_slices.push(disk_slice);
 
         Ok(())
-    }
-
-    pub fn remove_pending_flush_lsn(&mut self, lsn: u64) {
-        self.pending_flush_lsns.remove(&lsn);
-    }
-
-    pub fn get_min_pending_flush_lsn(&self) -> u64 {
-        self.pending_flush_lsns.first().copied().unwrap_or(u64::MAX)
     }
 
     // Create a snapshot of the last committed version, return current snapshot's version and payload to perform iceberg snapshot.
