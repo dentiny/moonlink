@@ -856,7 +856,6 @@ impl MooncakeTable {
         let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
 
         if self.mem_slice.is_empty() {
-            self.next_snapshot_task.new_flush_lsn = Some(lsn);
             tokio::task::spawn(async move {
                 table_notify_tx
                     .send(TableEvent::FlushResult {
