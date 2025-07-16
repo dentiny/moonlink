@@ -416,13 +416,22 @@ impl SnapshotTask {
 }
 
 /// Option for a maintainance option.
+///
+/// For all types of maintaince tasks, we have two basic dimensions:
+/// - Selection criteria: for full-mode maintainance task, all files will take part in, however big it is; for non-full-mode, only those meet certain threshold will be selected.
+/// For example, for non-full-mode, only small files will be compacted.
+/// - Trigger criteria: to avoid overly frequent background maintaince task, it's only triggered when selected files reaches certain threshold.
+/// While for force maintainance request, as long as there're at least two files, task will be triggered.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MaintainanceOption {
-    /// Perform a best effort maintainance operation.
+    /// Regular maintainance task, which perform a best effort attempt.
+    /// This is the default option, which is used for background task.
     BestEffort,
-    /// Force a maintainance operation.
-    Force,
-    /// Skip maintainance operation
+    /// Force a regular maintainance attempt.
+    ForceRegular,
+    /// Force a full maintaince attempt.
+    ForceFull,
+    /// Skip maintainance attempt.
     Skip,
 }
 

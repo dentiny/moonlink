@@ -124,7 +124,7 @@ impl TableHandlerState {
             return MaintainanceOption::Skip;
         }
         if self.force_index_merge_requested {
-            return MaintainanceOption::Force;
+            return MaintainanceOption::ForceRegular;
         }
         MaintainanceOption::BestEffort
     }
@@ -143,7 +143,7 @@ impl TableHandlerState {
             return MaintainanceOption::Skip;
         }
         if self.force_data_compaction_requested {
-            return MaintainanceOption::Force;
+            return MaintainanceOption::ForceRegular;
         }
         MaintainanceOption::BestEffort
     }

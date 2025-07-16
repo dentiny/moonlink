@@ -434,9 +434,10 @@ impl SnapshotTableState {
         &self,
         data_compaction_option: &MaintainanceOption,
     ) -> Option<DataCompactionPayload> {
-        let data_compaction_file_threshold = match data_compaction_option {
+        let data_compaction_file_num_threshold = match data_compaction_option {
             MaintainanceOption::Skip => usize::MAX,
-            MaintainanceOption::Force => 2,
+            MaintainanceOption::ForceRegular => 2,
+            MaintainanceOption::ForceFull => 2,
             MaintainanceOption::BestEffort => {
                 self.mooncake_table_metadata
                     .config
@@ -444,10 +445,21 @@ impl SnapshotTableState {
                     .data_file_to_compact as usize
             }
         };
+        let default_final_file_size = self
+            .mooncake_table_metadata
+            .config
+            .data_compaction_config
+            .data_file_final_size as usize;
+        let data_compaction_file_size_threshold = match data_compaction_option {
+            MaintainanceOption::Skip => usize::MAX,
+            MaintainanceOption::ForceRegular => default_final_file_size,
+            MaintainanceOption::ForceFull => 0,
+            MaintainanceOption::BestEffort => default_final_file_size,
+        };
 
         // Fast-path: not enough data files to trigger compaction.
         let all_disk_files = &self.current_snapshot.disk_files;
-        if all_disk_files.len() < data_compaction_file_threshold {
+        if all_disk_files.len() < data_compaction_file_num_threshold {
             return None;
         }
 
@@ -463,12 +475,7 @@ impl SnapshotTableState {
             }
 
             // Skip compaction if the file size exceeds threshold, AND it has no persisted deletion vectors.
-            if disk_file_entry.file_size
-                >= self
-                    .mooncake_table_metadata
-                    .config
-                    .data_compaction_config
-                    .data_file_final_size as usize
+            if disk_file_entry.file_size >= data_compaction_file_size_threshold
                 && disk_file_entry.batch_deletion_vector.is_empty()
             {
                 continue;
@@ -486,7 +493,7 @@ impl SnapshotTableState {
             tentative_data_files_to_compact.push(single_file_to_compact);
         }
 
-        if tentative_data_files_to_compact.len() < data_compaction_file_threshold {
+        if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
             return None;
         }
 
@@ -520,9 +527,10 @@ impl SnapshotTableState {
         &self,
         index_merge_option: &MaintainanceOption,
     ) -> Option<FileIndiceMergePayload> {
-        let index_merge_file_threshold = match index_merge_option {
+        let index_merge_file_num_threshold = match index_merge_option {
             MaintainanceOption::Skip => usize::MAX,
-            MaintainanceOption::Force => 2,
+            MaintainanceOption::ForceRegular => 2,
+            MaintainanceOption::ForceFull => 2,
             MaintainanceOption::BestEffort => {
                 self.mooncake_table_metadata
                     .config
@@ -530,11 +538,22 @@ impl SnapshotTableState {
                     .file_indices_to_merge as usize
             }
         };
+        let default_final_file_size = self
+            .mooncake_table_metadata
+            .config
+            .file_index_config
+            .index_block_final_size;
+        let index_merge_file_size_threshold = match index_merge_option {
+            MaintainanceOption::Skip => u64::MAX,
+            MaintainanceOption::ForceRegular => default_final_file_size,
+            MaintainanceOption::ForceFull => 0,
+            MaintainanceOption::BestEffort => default_final_file_size,
+        };
 
         // Fast-path: not enough file indices to trigger index merge.
         let mut file_indices_to_merge = HashSet::new();
         let all_file_indices = &self.current_snapshot.indices.file_indices;
-        if all_file_indices.len() < index_merge_file_threshold {
+        if all_file_indices.len() < index_merge_file_num_threshold {
             return None;
         }
 
@@ -547,19 +566,13 @@ impl SnapshotTableState {
                 continue;
             }
 
-            if cur_file_index.get_index_blocks_size()
-                >= self
-                    .mooncake_table_metadata
-                    .config
-                    .file_index_config
-                    .index_block_final_size
-            {
+            if cur_file_index.get_index_blocks_size() >= index_merge_file_size_threshold {
                 continue;
             }
             assert!(file_indices_to_merge.insert(cur_file_index.clone()));
         }
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
-        if file_indices_to_merge.len() >= index_merge_file_threshold {
+        if file_indices_to_merge.len() >= index_merge_file_num_threshold {
             return Some(FileIndiceMergePayload {
                 file_indices: file_indices_to_merge,
             });
