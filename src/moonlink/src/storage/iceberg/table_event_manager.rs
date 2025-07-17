@@ -13,6 +13,8 @@ pub struct TableEventManager {
     drop_table_completion_rx: Option<oneshot::Receiver<Result<()>>>,
     /// Channel to observe latest flush LSN reported by iceberg.
     flush_lsn_rx: watch::Receiver<u64>,
+    /// Sender which is used to create notification at latest force snapshot completion.
+    force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
     /// Sender which is used to create notification at latest data compaction completion.
     table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
 }
@@ -26,6 +28,7 @@ impl TableEventManager {
             table_event_tx,
             drop_table_completion_rx: Some(table_event_sync_rx.drop_table_completion_rx),
             flush_lsn_rx: table_event_sync_rx.flush_lsn_rx,
+            force_snapshot_completion_tx: table_event_sync_rx.force_snapshot_completion_tx,
             table_maintenance_completion_tx: table_event_sync_rx.table_maintenance_completion_tx,
         }
     }
@@ -36,16 +39,12 @@ impl TableEventManager {
     }
 
     /// Initiate an iceberg snapshot event, return the channel for synchronization.
-    pub async fn initiate_snapshot(&mut self, lsn: u64) -> mpsc::Receiver<Result<()>> {
-        let (tx, rx) = mpsc::channel(1);
+    pub async fn initiate_snapshot(&mut self, lsn: u64) -> broadcast::Receiver<Result<u64>> {
         self.table_event_tx
-            .send(TableEvent::ForceSnapshot {
-                lsn: Some(lsn),
-                tx: Some(tx),
-            })
+            .send(TableEvent::ForceSnapshot { lsn: Some(lsn) })
             .await
             .unwrap();
-        rx
+        self.force_snapshot_completion_tx.subscribe()
     }
 
     /// Initiate an index merge event, return the channel for synchronization.
