@@ -89,14 +89,17 @@ struct TableHandlerState {
 }
 
 impl TableHandlerState {
-    fn new(table_maintenance_completion_tx: broadcast::Sender<Result<()>>) -> Self {
+    fn new(
+        table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
+        initial_persistence_lsn: Option<u64>,
+    ) -> Self {
         Self {
             iceberg_snapshot_result_consumed: true,
             iceberg_snapshot_ongoing: false,
             maintenance_ongoing: false,
             mooncake_snapshot_ongoing: false,
-            initial_persistence_lsn: None,
-            table_consistent_view_lsn: None,
+            initial_persistence_lsn,
+            table_consistent_view_lsn: initial_persistence_lsn,
             latest_commit_lsn: None,
             pending_force_snapshot_lsns: BTreeMap::new(),
             index_merge_request_status: MaintenanceRequestStatus::Unrequested,
@@ -308,9 +311,12 @@ impl TableHandler {
         replication_lsn_rx: watch::Receiver<u64>,
         mut table: MooncakeTable,
     ) {
-        let mut table_handler_state =
-            TableHandlerState::new(event_sync_sender.table_maintenance_completion_tx.clone());
-        table_handler_state.initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
+        let initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
+        let mut table_handler_state = TableHandlerState::new(
+            event_sync_sender.table_maintenance_completion_tx.clone(),
+            initial_persistence_lsn,
+        );
+
         // Used to clean up mooncake table status, and send completion notification.
         let drop_table = async |table: &mut MooncakeTable, event_sync_sender: EventSyncSender| {
             // Step-1: shutdown the table, which unreferences and deletes all cache files.
@@ -761,6 +767,32 @@ impl TableHandler {
 }
 
 impl TableHandlerState {
+    /// Get the iceberg snapshot LSN.
+    /// The difference between "persisted table LSN" and "iceberg snapshot LSN" is, suppose we have two tables, table A has persisted all changes to iceberg with flush LSN-1;
+    /// if there're no further updates to the table A, meanwhile there're updates to table B with LSN-2, flush LSN-1 actually represents a consistent view of LSN-2.
+    ///
+    /// In the above situation, LSN-1 is "iceberg snapshot LSN", while LSN-2 is "persisted table LSN".
+    pub(crate) fn get_persisted_table_lsn(
+        &self,
+        iceberg_snapshot_lsn: Option<u64>,
+        replication_lsn: u64,
+    ) -> u64 {
+        // Case-1: there're no activities in the current table, but replication LSN already covers requested LSN.
+        if iceberg_snapshot_lsn.is_none() && self.table_consistent_view_lsn.is_none() {
+            return replication_lsn;
+        }
+
+        // Case-2: if there're no updates since last iceberg snapshot, replication LSN indicates persisted table LSN.
+        if iceberg_snapshot_lsn == self.table_consistent_view_lsn {
+            // Notice: replication LSN comes from replication events, so if all events have been processed (i.e., a clean recovery case), replication LSN is 0.
+            return std::cmp::max(replication_lsn, iceberg_snapshot_lsn.unwrap());
+        }
+
+        // Case-3: iceberg snapshot LSN indicates the persisted table LSN.
+        // No guarantee an iceberg snapshot has been persisted here.
+        iceberg_snapshot_lsn.unwrap_or(0)
+    }
+
     /// Decide whether current iceberg snapshot could serve the force iceberg snapshot request.
     pub(crate) fn is_iceberg_snapshot_satisfy_force_snapshot(
         &self,
@@ -768,27 +800,9 @@ impl TableHandlerState {
         iceberg_snapshot_lsn: Option<u64>,
         replication_lsn: u64,
     ) -> bool {
-        // Case-1: there're no activities in the current table, but replication LSN already covers requested LSN.
-        if iceberg_snapshot_lsn.is_none() && self.table_consistent_view_lsn.is_none() {
-            return replication_lsn >= requested_lsn;
-        }
-
-        // Case-2: iceberg snapshot LSN already satisfies.
-        if let Some(iceberg_snapshot_lsn) = iceberg_snapshot_lsn {
-            if iceberg_snapshot_lsn >= requested_lsn {
-                return true;
-            }
-        }
-
-        // Case-3: table's at a consistent state, which has been fully persisted into iceberg;
-        // meanwhile, replication LSN has covered the requested LSN.
-        if iceberg_snapshot_lsn == self.table_consistent_view_lsn
-            && replication_lsn >= requested_lsn
-        {
-            return true;
-        }
-
-        false
+        let persisted_table_lsn =
+            self.get_persisted_table_lsn(iceberg_snapshot_lsn, replication_lsn);
+        persisted_table_lsn >= requested_lsn
     }
 
     /// Update requested iceberg snapshot LSNs.

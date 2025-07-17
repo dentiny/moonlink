@@ -1679,7 +1679,11 @@ async fn test_discard_duplicate_writes() {
 #[test]
 fn test_is_iceberg_snapshot_satisfy_force_snapshot() {
     let (table_maintenance_completion_tx, _) = broadcast::channel(64usize);
-    let mut table_handler_state = TableHandlerState::new(table_maintenance_completion_tx);
+    let mut table_handler_state = TableHandlerState::new(
+        table_maintenance_completion_tx,
+        /*initial_persistence_lsn=*/ None,
+    );
+
     // Case-1: iceberg snapshot already satisfies requested lsn.
     {
         let requested_lsn = 0;
@@ -1753,5 +1757,47 @@ fn test_is_iceberg_snapshot_satisfy_force_snapshot() {
                 replication_lsn,
             )
         );
+    }
+}
+
+#[test]
+fn test_get_persisted_table_lsn() {
+    let (table_maintenance_completion_tx, _) = broadcast::channel(64usize);
+    let mut table_handler_state = TableHandlerState::new(
+        table_maintenance_completion_tx,
+        /*initial_persistence_lsn=*/ None,
+    );
+
+    // Case-1: no table activity since for the current table.
+    {
+        let iceberg_snapshot_lsn = None;
+        let replication_lsn = 1;
+        table_handler_state.table_consistent_view_lsn = None;
+
+        let persisted_table_lsn =
+            table_handler_state.get_persisted_table_lsn(iceberg_snapshot_lsn, replication_lsn);
+        assert_eq!(persisted_table_lsn, 1);
+    }
+
+    // Case-2: table is at a consistent state, but iceberg persistence doesn't catch up.
+    {
+        let iceberg_snapshot_lsn = Some(1);
+        let replication_lsn = 2;
+        table_handler_state.table_consistent_view_lsn = Some(2);
+
+        let persisted_table_lsn =
+            table_handler_state.get_persisted_table_lsn(iceberg_snapshot_lsn, replication_lsn);
+        assert_eq!(persisted_table_lsn, 1);
+    }
+
+    // Case-3: iceberg snapshot matches table consistent view.
+    {
+        let iceberg_snapshot_lsn = Some(1);
+        let replication_lsn = 2;
+        table_handler_state.table_consistent_view_lsn = Some(1);
+
+        let persisted_table_lsn =
+            table_handler_state.get_persisted_table_lsn(iceberg_snapshot_lsn, replication_lsn);
+        assert_eq!(persisted_table_lsn, 2);
     }
 }
