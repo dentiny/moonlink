@@ -9,6 +9,8 @@ pub struct EventSyncReceiver {
     pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
+    /// Used to create notifier when force snapshot operation completes.
+    pub force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
     /// Used to create notifier when force table maintenance operation completes.
     pub table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
 }
@@ -19,6 +21,8 @@ pub struct EventSyncSender {
     pub drop_table_completion_tx: oneshot::Sender<Result<()>>,
     /// Notifies when iceberg flush LSN advances.
     pub flush_lsn_tx: watch::Sender<u64>,
+    /// Notifies when force snapshot completes.
+    pub force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
     /// Notifies when force table maintenance operation completes.
     pub table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
 }
@@ -27,15 +31,18 @@ pub struct EventSyncSender {
 pub fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
+    let (force_snapshot_completion_tx, _) = broadcast::channel(64usize);
     let (table_maintenance_completion_tx, _) = broadcast::channel(64usize);
     let event_sync_sender = EventSyncSender {
         drop_table_completion_tx,
         flush_lsn_tx,
+        force_snapshot_completion_tx: force_snapshot_completion_tx.clone(),
         table_maintenance_completion_tx: table_maintenance_completion_tx.clone(),
     };
     let event_sync_receiver = EventSyncReceiver {
         drop_table_completion_rx,
         flush_lsn_rx,
+        force_snapshot_completion_tx,
         table_maintenance_completion_tx,
     };
     (event_sync_sender, event_sync_receiver)

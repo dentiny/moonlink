@@ -75,17 +75,19 @@ struct TableHandlerState {
     // Whether there's an ongoing mooncake snapshot operation.
     mooncake_snapshot_ongoing: bool,
     // Pending force snapshot requests.
-    pending_force_snapshot_lsns: BTreeMap<u64, Vec<Option<Sender<Result<()>>>>>,
+    largest_force_snapshot_lsns: Option<u64>,
+    // Notify when force snapshot completions.
+    force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
+    // Special table state, for example, initial copy, alter table, drop table, etc.
+    special_table_state: SpecialTableState,
+    // Buffered events during blocking operations: initial copy, alter table, drop table, etc.
+    initial_copy_buffered_events: Vec<TableEvent>,
     // Index merge request status.
     index_merge_request_status: MaintenanceRequestStatus,
     /// Data compaction request status.
     data_compaction_request_status: MaintenanceRequestStatus,
     /// Notify when data compaction completes.
     table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
-    // Special table state, for example, initial copy, alter table, drop table, etc.
-    special_table_state: SpecialTableState,
-    // Buffered events during blocking operations: initial copy, alter table, drop table, etc.
-    initial_copy_buffered_events: Vec<TableEvent>,
 }
 
 impl TableHandlerState {
@@ -96,16 +98,20 @@ impl TableHandlerState {
         Self {
             iceberg_snapshot_result_consumed: true,
             iceberg_snapshot_ongoing: false,
-            maintenance_ongoing: false,
             mooncake_snapshot_ongoing: false,
             initial_persistence_lsn,
-            table_consistent_view_lsn: initial_persistence_lsn,
             latest_commit_lsn: None,
-            pending_force_snapshot_lsns: BTreeMap::new(),
+            special_table_state: SpecialTableState::Normal,
+            // Force snapshot fields.
+            table_consistent_view_lsn: initial_persistence_lsn,
+            largest_force_snapshot_lsns: None,
+            force_snapshot_completion_tx,
+            // Table maintenance fields.
+            maintenance_ongoing: false,
             index_merge_request_status: MaintenanceRequestStatus::Unrequested,
             data_compaction_request_status: MaintenanceRequestStatus::Unrequested,
             table_maintenance_completion_tx,
-            special_table_state: SpecialTableState::Normal,
+            // Initial copy fields.
             initial_copy_buffered_events: Vec::new(),
         }
     }
@@ -194,17 +200,17 @@ impl TableHandlerState {
         }
     }
 
+    /// Return whether there're pending force snapshot requests.
+    fn has_pending_force_snapshot_request(&self) -> bool {
+        self.largest_force_snapshot_lsns.is_some()
+    }
+
+    // TODO(hjiang): rename.
     fn force_snapshot_requested(&self, cur_lsn: u64) -> bool {
-        !self.pending_force_snapshot_lsns.is_empty()
-            && cur_lsn
-                >= *self
-                    .pending_force_snapshot_lsns
-                    .iter()
-                    .next()
-                    .as_ref()
-                    .unwrap()
-                    .0
-            && !self.mooncake_snapshot_ongoing
+        if let Some(largest_requested_lsn) = self.largest_force_snapshot_lsns {
+            return largest_requested_lsn <= cur_lsn && !self.mooncake_snapshot_ongoing;
+        }
+        return false
     }
 
     fn should_discard_event(&self, event: &TableEvent) -> bool {
@@ -582,15 +588,13 @@ impl TableHandler {
 
                                 }
                                 Err(e) => {
-                                    for (_, tx) in table_handler_state.pending_force_snapshot_lsns.iter() {
-                                        for cur_tx in tx {
-                                            let err = Error::IcebergMessage(format!("Failed to create iceberg snapshot: {e:?}"));
-                                            if let Some(cur_tx) = cur_tx {
-                                                cur_tx.send(Err(err)).await.unwrap();
-                                            }
+                                    let err = Err(Error::IcebergMessage(format!("Failed to create iceberg snapshot: {e:?}")));
+                                    if table_handler_state.has_pending_force_snapshot_request() {
+                                        if let Err(send_err) = table_handler_state.force_snapshot_completion_tx.send(err) {
+                                            error!(error = ?err, "failed to notify force ");
                                         }
                                     }
-                                    table_handler_state.pending_force_snapshot_lsns.clear();
+                                    table_handler_state.largest_force_snapshot_lsns = None;
                                 }
                             }
 
@@ -811,7 +815,11 @@ impl TableHandlerState {
         iceberg_snapshot_lsn: u64,
         replication_lsn: u64,
     ) {
-        let mut updated_requests = BTreeMap::new();
+        if !self.has_pending_force_snapshot_request() {
+            return;
+        }
+
+        
 
         // TODO(hjiang): Could be optimized, since as long as we found the first requested LSN which doesn't satisfy, we could directly place all left requests to updated lsns.
         for (requested_lsn, senders) in std::mem::take(&mut self.pending_force_snapshot_lsns) {
