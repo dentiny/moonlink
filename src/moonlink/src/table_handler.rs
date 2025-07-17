@@ -205,11 +205,11 @@ impl TableHandlerState {
         self.largest_force_snapshot_lsn.is_some()
     }
 
-    fn force_snapshot_requested(&self, cur_lsn: u64) -> bool {
+    fn should_force_snapshot(&self, cur_lsn: u64) -> bool {
         if let Some(largest_requested_lsn) = self.largest_force_snapshot_lsn {
             return largest_requested_lsn <= cur_lsn && !self.mooncake_snapshot_ongoing;
         }
-        return false
+        return false;
     }
 
     fn should_discard_event(&self, event: &TableEvent) -> bool {
@@ -714,7 +714,7 @@ impl TableHandler {
                 // and 2. LSN which meets force snapshot requirement has appeared, before that we still allow buffering
                 // and 3. there's no snapshot creation operation ongoing
 
-                let force_snapshot = table_handler_state.force_snapshot_requested(lsn);
+                let should_force_snapshot = table_handler_state.should_force_snapshot(lsn);
 
                 match xact_id {
                     Some(xact_id) => {
@@ -724,7 +724,7 @@ impl TableHandler {
                     }
                     None => {
                         table.commit(lsn);
-                        if table.should_flush() || force_snapshot {
+                        if table.should_flush() || should_force_snapshot {
                             if let Err(e) = table.flush(lsn).await {
                                 error!(error = %e, "flush failed in commit");
                             }
@@ -732,7 +732,7 @@ impl TableHandler {
                     }
                 }
 
-                if force_snapshot {
+                if should_force_snapshot {
                     table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
                     assert!(table.create_snapshot(SnapshotOption {
                         force_create: true,
@@ -813,7 +813,10 @@ impl TableHandlerState {
 
     /// Broadcast persisted table LSN.
     fn broadcast_persisted_table_lsn(&mut self, persisted_table_lsn: u64) {
-        if let Err(e) = self.force_snapshot_completion_tx.send(Ok(persisted_table_lsn)) {
+        if let Err(e) = self
+            .force_snapshot_completion_tx
+            .send(Ok(persisted_table_lsn))
+        {
             error!(error = ?e, "failed to notify force snapshot, because received end has closed channel");
         }
     }

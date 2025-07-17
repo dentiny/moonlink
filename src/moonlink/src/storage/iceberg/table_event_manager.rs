@@ -40,39 +40,43 @@ impl TableEventManager {
 
     /// Initiate an iceberg snapshot event, return the channel for synchronization.
     pub async fn initiate_snapshot(&mut self, lsn: u64) -> broadcast::Receiver<Result<u64>> {
+        let subscriber = self.force_snapshot_completion_tx.subscribe();
         self.table_event_tx
             .send(TableEvent::ForceSnapshot { lsn: Some(lsn) })
             .await
             .unwrap();
-        self.force_snapshot_completion_tx.subscribe()
+        subscriber
     }
 
     /// Initiate an index merge event, return the channel for synchronization.
     /// TODO(hjiang): Error status propagation.
     pub async fn initiate_index_merge(&mut self) -> broadcast::Receiver<Result<()>> {
+        let subscriber = self.table_maintenance_completion_tx.subscribe();
         self.table_event_tx
             .send(TableEvent::ForceRegularIndexMerge)
             .await
             .unwrap();
-        self.table_maintenance_completion_tx.subscribe()
+        subscriber
     }
 
     /// Initialte a data compaction event, return the channel for synchronization.
     pub async fn initiate_data_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
+        let subscriber = self.table_maintenance_completion_tx.subscribe();
         self.table_event_tx
             .send(TableEvent::ForceRegularDataCompaction)
             .await
             .unwrap();
-        self.table_maintenance_completion_tx.subscribe()
+        subscriber
     }
 
     /// Initialte full table maintenance event, return the channel for synchronization.
     pub async fn initiate_full_compaction(&mut self) -> broadcast::Receiver<Result<()>> {
+        let subscriber = self.table_maintenance_completion_tx.subscribe();
         self.table_event_tx
             .send(TableEvent::ForceFullMaintenance)
             .await
             .unwrap();
-        self.table_maintenance_completion_tx.subscribe()
+        subscriber
     }
 
     /// Drop a mooncake table.

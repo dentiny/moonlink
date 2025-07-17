@@ -1,5 +1,3 @@
-use tokio::sync::mpsc::Sender;
-
 use crate::row::MoonlinkRow;
 use crate::storage::mooncake_table::DataCompactionPayload;
 use crate::storage::mooncake_table::DataCompactionResult;
@@ -55,9 +53,7 @@ pub enum TableEvent {
     ///
     /// Force a mooncake and iceberg snapshot.
     /// - If [`lsn`] unassigned, will force snapshot on the latest committed LSN.
-    ForceSnapshot {
-        lsn: Option<u64>,
-    },
+    ForceSnapshot { lsn: Option<u64> },
     /// There's at most one outstanding force table maintenance requests.
     ///
     /// Force a regular index merge operation.
