@@ -17,7 +17,7 @@ use tracing::debug;
 pub struct ReplicationManager<T: Clone + Eq + Hash + std::fmt::Display> {
     /// Maps from uri to replication connection.
     connections: HashMap<String, ReplicationConnection>,
-    /// Maps from table id (string format) to (uri, row store table id).
+    /// Maps from mooncake table id to (uri, source table id).
     table_info: HashMap<T, (String, SrcTableId)>,
     /// Base directory for mooncake tables.
     table_base_path: String,
@@ -131,7 +131,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     }
 
     pub fn get_table_reader(&self, mooncake_table_id: &T) -> &ReadStateManager {
-        let (uri, table_id) = self
+        let (uri, src_table_id) = self
             .table_info
             .get(mooncake_table_id)
             .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
@@ -139,19 +139,19 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             .connections
             .get(uri)
             .unwrap_or_else(|| panic!("connection for {uri} not found"));
-        connection.get_table_reader(*table_id)
+        connection.get_table_reader(*src_table_id)
     }
 
-    pub fn get_table_event_manager(&mut self, table_id: &T) -> &mut TableEventManager {
-        let (uri, table_id) = self
+    pub fn get_table_event_manager(&mut self, mooncake_table_id: &T) -> &mut TableEventManager {
+        let (uri, src_table_id) = self
             .table_info
-            .get(table_id)
-            .unwrap_or_else(|| panic!("table {table_id} not found"));
+            .get(mooncake_table_id)
+            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
         let connection = self
             .connections
             .get_mut(uri)
             .unwrap_or_else(|| panic!("connection {uri} not found"));
-        connection.get_table_event_manager(*table_id)
+        connection.get_table_event_manager(*src_table_id)
     }
 
     /// Gracefully shutdown a replication connection by its URI.
