@@ -20,7 +20,13 @@ where
 impl<D, T> MooncakeTableId<D, T>
 where
     T: Display,
+    D: Display,
 {
+    /// Get integer value of database id.
+    pub fn get_database_id_value(&self) -> u32 {
+        self.database_id.to_string().parse::<u32>().unwrap()
+    }
+
     /// Get integer version of table id.
     pub fn get_table_id_value(&self) -> u32 {
         self.table_id.to_string().parse::<u32>().unwrap()

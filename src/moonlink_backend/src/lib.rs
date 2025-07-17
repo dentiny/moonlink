@@ -9,9 +9,7 @@ use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
-use moonlink_metadata_store::metadata_store_utils;
-use std::collections::hash_map::Entry as HashMapEntry;
-use std::collections::HashMap;
+use moonlink_metadata_store::SqliteMetadataStore;
 use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -20,14 +18,10 @@ pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 > {
-    // Base directory.
-    base_directory: String,
+    // Metadata storage accessor.
+    metadata_store_accessor: Box<dyn MetadataStoreTrait>,
     // Could be either relative or absolute path.
     replication_manager: RwLock<ReplicationManager<MooncakeTableId<D, T>>>,
-    // Maps from metadata store connection string to metadata store client.
-    //
-    // TODO(hjiang): Use (database id, table id) to uniquely identify a src table.
-    metadata_store_accessors: RwLock<HashMap<D, Box<dyn MetadataStoreTrait>>>,
 }
 
 impl<D, T> MoonlinkBackend<D, T>
@@ -43,6 +37,11 @@ where
     pub async fn new(base_path: String, _metadata_store_uris: Vec<String>) -> Result<Self> {
         logging::init_logging();
 
+        // Create a metadata storage accessor.
+        // TODO(hjiang): pg_mooncake will pass in.
+        let metadata_store_accessor =
+            Box::new(SqliteMetadataStore::new_with_directory(&base_path).await?);
+
         // Re-create directory for temporary files directory and read cache files directory under base directory.
         let temp_files_dir = file_utils::get_temp_file_directory_under_base(&base_path);
         let read_cache_files_dir = file_utils::get_cache_directory_under_base(&base_path);
@@ -54,13 +53,12 @@ where
             temp_files_dir.to_str().unwrap().to_string(),
             file_utils::create_default_object_storage_cache(read_cache_files_dir),
         );
-        let metadata_store_accessors =
-            recovery_utils::recover_all_tables(&base_path, &mut replication_manager).await?;
+        recovery_utils::recover_all_tables(&*metadata_store_accessor, &mut replication_manager)
+            .await?;
 
         Ok(Self {
-            base_directory: base_path,
             replication_manager: RwLock::new(replication_manager),
-            metadata_store_accessors: RwLock::new(metadata_store_accessors),
+            metadata_store_accessor,
         })
     }
 
@@ -96,6 +94,7 @@ where
             database_id: database_id.clone(),
             table_id,
         };
+        let database_id = mooncake_table_id.get_database_id_value();
         let table_id = mooncake_table_id.get_table_id_value();
 
         // Add mooncake table to replication, and create corresponding mooncake table.
@@ -117,21 +116,15 @@ where
         };
 
         // Create metadata store entry.
-        {
-            let mut guard = self.metadata_store_accessors.write().await;
-            let cur_metadata_store_accessor = match guard.entry(database_id.clone()) {
-                HashMapEntry::Occupied(entry) => entry.into_mut(),
-                HashMapEntry::Vacant(entry) => {
-                    let new_metadata_store =
-                        metadata_store_utils::create_metadata_store_accessor(&self.base_directory)
-                            .await?;
-                    entry.insert(new_metadata_store)
-                }
-            };
-            cur_metadata_store_accessor
-                .store_table_metadata(table_id, &src_table_name, &src_uri, moonlink_table_config)
-                .await?;
-        }
+        self.metadata_store_accessor
+            .store_table_metadata(
+                database_id,
+                table_id,
+                &src_table_name,
+                &src_uri,
+                moonlink_table_config,
+            )
+            .await?;
 
         Ok(())
     }
@@ -141,6 +134,7 @@ where
             database_id: database_id.clone(),
             table_id,
         };
+        let database_id = mooncake_table_id.get_database_id_value();
         let table_id = mooncake_table_id.get_table_id_value();
 
         let table_exists = {
@@ -151,12 +145,8 @@ where
             return;
         }
 
-        let metadata_store = {
-            let mut guard = self.metadata_store_accessors.write().await;
-            guard.remove(&database_id).unwrap()
-        };
-        metadata_store
-            .delete_table_metadata(table_id)
+        self.metadata_store_accessor
+            .delete_table_metadata(database_id, table_id)
             .await
             .unwrap()
     }

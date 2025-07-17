@@ -16,6 +16,8 @@ pub const MOONLINK_SECRET_TABLE: &str = "secrets";
 /// Metadata entry for each table.
 #[derive(Clone, Debug)]
 pub struct TableMetadataEntry {
+    /// Database id.
+    pub database_id: u32,
     /// Table id.
     pub table_id: u32,
     /// Src table name.
@@ -28,22 +30,6 @@ pub struct TableMetadataEntry {
 
 #[async_trait]
 pub trait MetadataStoreTrait: Send + Sync {
-    /// =========================
-    /// Database access
-    /// =========================
-    ///
-    /// Get database id.
-    #[allow(async_fn_in_trait)]
-    async fn get_database_id(&self) -> Result<u32>;
-
-    /// =========================
-    /// Table properties
-    /// =========================
-    ///
-    /// Return whether schema exists.
-    #[allow(async_fn_in_trait)]
-    async fn schema_exists(&self) -> Result<bool>;
-
     /// Return whether metadata table exists.
     #[allow(async_fn_in_trait)]
     async fn metadata_table_exists(&self) -> Result<bool>;
@@ -70,6 +56,7 @@ pub trait MetadataStoreTrait: Send + Sync {
     #[allow(async_fn_in_trait)]
     async fn store_table_metadata(
         &self,
+        database_id: u32,
         table_id: u32,
         table_name: &str,
         table_uri: &str,
@@ -79,5 +66,5 @@ pub trait MetadataStoreTrait: Send + Sync {
     /// Delete table config for the given table.
     /// Precondition: the requested table id has been record in the metadata storage.
     #[allow(async_fn_in_trait)]
-    async fn delete_table_metadata(&self, table_id: u32) -> Result<()>;
+    async fn delete_table_metadata(&self, database_id: u32, table_id: u32) -> Result<()>;
 }

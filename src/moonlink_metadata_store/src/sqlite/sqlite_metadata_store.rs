@@ -26,15 +26,6 @@ pub struct SqliteMetadataStore {
 
 #[async_trait]
 impl MetadataStoreTrait for SqliteMetadataStore {
-    async fn schema_exists(&self) -> Result<bool> {
-        // Sqlite doesn't have concept of schema, so always return true.
-        Ok(true)
-    }
-
-    async fn get_database_id(&self) -> Result<u32> {
-        Ok(5)
-    }
-
     async fn metadata_table_exists(&self) -> Result<bool> {
         let sqlite_conn = SqliteConnWrapper::new(&self.database_uri).await?;
         utils::table_exists(&sqlite_conn.pool, MOONLINK_SCHEMA, MOONLINK_METADATA_TABLE).await
@@ -45,7 +36,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         let rows = sqlx::query(
             r#"
             SELECT 
-                t.oid,
+                t.database_id,
+                t.table_id,
                 t.table_name,
                 t.uri,
                 t.config,
@@ -57,7 +49,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 s.project
             FROM tables t
             LEFT JOIN secrets s
-                ON t.oid = s.oid
+                ON t.database_id = s.database_id
+                AND t.table_id = s.table_id
             "#,
         )
         .fetch_all(&sqlite_conn.pool)
@@ -65,7 +58,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
 
         let mut metadata_entries = Vec::with_capacity(rows.len());
         for row in rows {
-            let table_id: i64 = row.get("oid");
+            let database_id: u32 = row.get("database_id");
+            let table_id: u32 = row.get("table_id");
             let src_table_name: String = row.get("table_name");
             let src_table_uri: String = row.get("uri");
             let serialized_config: String = row.get("config");
@@ -86,7 +80,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 config_utils::deserialze_moonlink_table_config(json_value, secret_entry)?;
 
             metadata_entries.push(TableMetadataEntry {
-                table_id: table_id as u32,
+                database_id,
+                table_id,
                 src_table_name,
                 src_table_uri,
                 moonlink_table_config,
@@ -98,6 +93,7 @@ impl MetadataStoreTrait for SqliteMetadataStore {
 
     async fn store_table_metadata(
         &self,
+        database_id: u32,
         table_id: u32,
         table_name: &str,
         table_uri: &str,
@@ -131,10 +127,11 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         // Insert into tables.
         let rows_affected = sqlx::query(
             r#"
-            INSERT INTO tables (oid, table_name, uri, config)
-            VALUES (?, ?, ?, ?);
+            INSERT INTO tables (database_id, table_id, table_name, uri, config)
+            VALUES (?, ?, ?, ?, ?);
             "#,
         )
+        .bind(database_id)
         .bind(table_id)
         .bind(table_name)
         .bind(table_uri)
@@ -150,10 +147,11 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         if let Some(secret) = moonlink_table_secret {
             let rows_affected = sqlx::query(
                 r#"
-                INSERT INTO secrets (oid, secret_type, key_id, secret, endpoint, region, project)
-                VALUES (?, ?, ?, ?, ?, ?, ?);
+                INSERT INTO secrets (database_id, table_id, secret_type, key_id, secret, endpoint, region, project)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 "#,
             )
+            .bind(database_id)
             .bind(table_id)
             .bind(secret.get_secret_type())
             .bind(secret.key_id)
@@ -174,22 +172,25 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         Ok(())
     }
 
-    async fn delete_table_metadata(&self, table_id: u32) -> Result<()> {
+    async fn delete_table_metadata(&self, database_id: u32, table_id: u32) -> Result<()> {
         let sqlite_conn = SqliteConnWrapper::new(&self.database_uri).await?;
         let mut tx = sqlite_conn.pool.begin().await?;
 
         // Delete from metadata table.
-        let rows_affected = sqlx::query("DELETE FROM tables WHERE oid = ?")
-            .bind(table_id)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
+        let rows_affected =
+            sqlx::query("DELETE FROM tables WHERE database_id = ? AND table_id = ?")
+                .bind(database_id)
+                .bind(table_id)
+                .execute(&mut *tx)
+                .await?
+                .rows_affected();
         if rows_affected != 1 {
             return Err(Error::SqliteRowCountError(1, rows_affected as u32));
         }
 
         // Delete from secret table.
-        sqlx::query("DELETE FROM secrets WHERE oid = ?")
+        sqlx::query("DELETE FROM secrets WHERE database_id = ? AND table_id = ?")
+            .bind(database_id)
             .bind(table_id)
             .execute(&mut *tx)
             .await?;

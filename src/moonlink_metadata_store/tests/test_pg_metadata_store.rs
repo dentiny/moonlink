@@ -5,10 +5,10 @@ use common::test_utils::*;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::PgMetadataStore;
 
-use more_asserts as ma;
-
 /// Test connection string.
 const URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
+/// Test database id.
+const DATABASE_ID: u32 = 0;
 /// Test table id.
 const TABLE_ID: u32 = 0;
 /// Test table name.
@@ -41,15 +41,6 @@ mod tests {
 
     #[tokio::test]
     #[serial]
-    async fn test_get_database_id() {
-        let _test_environment = TestEnvironment::new(URI).await;
-        let metadata_store = PgMetadataStore::new(URI.to_string()).unwrap();
-        let database_id = metadata_store.get_database_id().await.unwrap();
-        ma::assert_gt!(database_id, 0);
-    }
-
-    #[tokio::test]
-    #[serial]
     async fn test_table_metadata_store_and_load() {
         let _test_environment = TestEnvironment::new(URI).await;
         // Unused metadata storage, used to check it could be initialized for multiple times idempotently.
@@ -60,7 +51,13 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                DATABASE_ID,
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+            )
             .await
             .unwrap();
 
@@ -95,24 +92,6 @@ mod tests {
         assert!(res.is_err());
     }
 
-    /// Test scenario: store table metadata for non-existent schema fails.
-    #[tokio::test]
-    #[serial]
-    async fn test_table_metadata_store_for_non_existent_schema() {
-        let test_environment = TestEnvironment::new(URI).await;
-        let metadata_store = PgMetadataStore::new(URI.to_string()).unwrap();
-        let moonlink_table_config = get_moonlink_table_config();
-
-        // Delete moonlink schema.
-        test_environment.delete_mooncake_schema().await;
-
-        // Store moonlink table config to metadata storage.
-        let res = metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
-            .await;
-        assert!(res.is_err());
-    }
-
     /// Test scenario: store for duplicate table ids.
     #[tokio::test]
     #[serial]
@@ -123,13 +102,25 @@ mod tests {
 
         // Store moonlink table config to metadata storage.
         metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                DATABASE_ID,
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+            )
             .await
             .unwrap();
 
         // Store moonlink table config to metadata storage.
         let res = metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                DATABASE_ID,
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+            )
             .await;
         assert!(res.is_err());
     }
@@ -144,7 +135,13 @@ mod tests {
 
         // Store moonlink table metadata to metadata storage.
         metadata_store
-            .store_table_metadata(TABLE_ID, TABLE_NAME, URI, moonlink_table_config.clone())
+            .store_table_metadata(
+                DATABASE_ID,
+                TABLE_ID,
+                TABLE_NAME,
+                URI,
+                moonlink_table_config.clone(),
+            )
             .await
             .unwrap();
 
@@ -153,7 +150,7 @@ mod tests {
 
         // Delete moonlink table config to metadata storage and check.
         metadata_store
-            .delete_table_metadata(TABLE_ID)
+            .delete_table_metadata(DATABASE_ID, TABLE_ID)
             .await
             .unwrap();
         let metadata_entries = metadata_store
@@ -163,7 +160,9 @@ mod tests {
         assert_eq!(metadata_entries.len(), 0);
 
         // Delete for the second time also fails.
-        let res = metadata_store.delete_table_metadata(TABLE_ID).await;
+        let res = metadata_store
+            .delete_table_metadata(DATABASE_ID, TABLE_ID)
+            .await;
         assert!(res.is_err());
     }
 }

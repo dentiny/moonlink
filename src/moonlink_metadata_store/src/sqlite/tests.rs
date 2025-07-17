@@ -6,6 +6,8 @@ use tempfile::{tempdir, TempDir};
 
 /// Source table uri.
 const SRC_TABLE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
+/// Test database id.
+const DATABASE_ID: u32 = 0;
 /// Test table id.
 const TABLE_ID: u32 = 0;
 /// Test table name.
@@ -100,6 +102,7 @@ async fn test_table_metadata_store_and_load() {
     // Store moonlink table config to metadata storage.
     metadata_store
         .store_table_metadata(
+            DATABASE_ID,
             TABLE_ID,
             TABLE_NAME,
             SRC_TABLE_URI,
@@ -124,6 +127,7 @@ async fn test_table_metadata_store_for_duplicate_tables() {
     // Store moonlink table config to metadata storage.
     metadata_store
         .store_table_metadata(
+            DATABASE_ID,
             TABLE_ID,
             TABLE_NAME,
             SRC_TABLE_URI,
@@ -135,6 +139,7 @@ async fn test_table_metadata_store_for_duplicate_tables() {
     // Load and check moonlink table config from metadata config.
     let res = metadata_store
         .store_table_metadata(
+            DATABASE_ID,
             TABLE_ID,
             TABLE_NAME,
             SRC_TABLE_URI,
@@ -168,6 +173,7 @@ async fn test_delete_table_metadata_store() {
     // Store moonlink table config to metadata storage.
     metadata_store
         .store_table_metadata(
+            DATABASE_ID,
             TABLE_ID,
             TABLE_NAME,
             SRC_TABLE_URI,
@@ -181,7 +187,7 @@ async fn test_delete_table_metadata_store() {
 
     // Delete moonlink table config to metadata storage and check.
     metadata_store
-        .delete_table_metadata(TABLE_ID)
+        .delete_table_metadata(DATABASE_ID, TABLE_ID)
         .await
         .unwrap();
     let metadata_entries = metadata_store
@@ -191,6 +197,8 @@ async fn test_delete_table_metadata_store() {
     assert_eq!(metadata_entries.len(), 0);
 
     // Delete for the second time also fails.
-    let res = metadata_store.delete_table_metadata(TABLE_ID).await;
+    let res = metadata_store
+        .delete_table_metadata(DATABASE_ID, TABLE_ID)
+        .await;
     assert!(res.is_err());
 }
