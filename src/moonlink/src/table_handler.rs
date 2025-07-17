@@ -6,7 +6,6 @@ use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
 use crate::storage::{io_utils, MooncakeTable};
 use crate::table_notify::TableEvent;
 use crate::{Error, Result};
-use std::collections::BTreeMap;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
@@ -74,8 +73,8 @@ struct TableHandlerState {
     maintenance_ongoing: bool,
     // Whether there's an ongoing mooncake snapshot operation.
     mooncake_snapshot_ongoing: bool,
-    // Pending force snapshot requests.
-    largest_force_snapshot_lsns: Option<u64>,
+    // Largest pending force snapshot LSN.
+    largest_force_snapshot_lsn: Option<u64>,
     // Notify when force snapshot completions.
     force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
     // Special table state, for example, initial copy, alter table, drop table, etc.
@@ -93,6 +92,7 @@ struct TableHandlerState {
 impl TableHandlerState {
     fn new(
         table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
+        force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
         initial_persistence_lsn: Option<u64>,
     ) -> Self {
         Self {
@@ -104,7 +104,7 @@ impl TableHandlerState {
             special_table_state: SpecialTableState::Normal,
             // Force snapshot fields.
             table_consistent_view_lsn: initial_persistence_lsn,
-            largest_force_snapshot_lsns: None,
+            largest_force_snapshot_lsn: None,
             force_snapshot_completion_tx,
             // Table maintenance fields.
             maintenance_ongoing: false,
@@ -202,12 +202,11 @@ impl TableHandlerState {
 
     /// Return whether there're pending force snapshot requests.
     fn has_pending_force_snapshot_request(&self) -> bool {
-        self.largest_force_snapshot_lsns.is_some()
+        self.largest_force_snapshot_lsn.is_some()
     }
 
-    // TODO(hjiang): rename.
     fn force_snapshot_requested(&self, cur_lsn: u64) -> bool {
-        if let Some(largest_requested_lsn) = self.largest_force_snapshot_lsns {
+        if let Some(largest_requested_lsn) = self.largest_force_snapshot_lsn {
             return largest_requested_lsn <= cur_lsn && !self.mooncake_snapshot_ongoing;
         }
         return false
@@ -276,7 +275,7 @@ impl TableHandler {
                         }
                     }
                     _ = periodic_force_snapshot_interval.tick() => {
-                        if event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None, tx: None }).await.is_err() {
+                        if event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None }).await.is_err() {
                             return;
                         }
                     }
@@ -320,6 +319,7 @@ impl TableHandler {
         let initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
         let mut table_handler_state = TableHandlerState::new(
             event_sync_sender.table_maintenance_completion_tx.clone(),
+            event_sync_sender.force_snapshot_completion_tx.clone(),
             initial_persistence_lsn,
         );
 
@@ -393,7 +393,7 @@ impl TableHandler {
                         // Interactive blocking events
                         // ==============================
                         //
-                        TableEvent::ForceSnapshot { lsn, tx } => {
+                        TableEvent::ForceSnapshot { lsn } => {
                             let requested_lsn = if lsn.is_some() {
                                 lsn
                             } else if table_handler_state.latest_commit_lsn.is_some() {
@@ -404,9 +404,6 @@ impl TableHandler {
 
                             // Fast-path: nothing to snapshot.
                             if requested_lsn.is_none() {
-                                if let Some(tx) = tx {
-                                    tx.send(Ok(())).await.unwrap();
-                                }
                                 continue;
                             }
 
@@ -414,20 +411,18 @@ impl TableHandler {
                             let requested_lsn = requested_lsn.unwrap();
                             let last_iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
                             let replication_lsn = *replication_lsn_rx.borrow();
-                            if table_handler_state.is_iceberg_snapshot_satisfy_force_snapshot(
-                                requested_lsn,
-                                last_iceberg_snapshot_lsn,
-                                replication_lsn
-                            ) {
-                                if let Some(tx) = tx {
-                                    tx.send(Ok(())).await.unwrap();
-                                }
+                            let persisted_table_lsn = table_handler_state.get_persisted_table_lsn(last_iceberg_snapshot_lsn, replication_lsn);
+                            if persisted_table_lsn >= requested_lsn {
+                                table_handler_state.broadcast_persisted_table_lsn(persisted_table_lsn);
                                 continue;
                             }
 
                             // Iceberg snapshot LSN requirement is not met, record the required LSN, so later commit will pick up.
                             else {
-                                table_handler_state.pending_force_snapshot_lsns.entry(requested_lsn).or_default().push(tx);
+                                table_handler_state.largest_force_snapshot_lsn = Some(match table_handler_state.largest_force_snapshot_lsn {
+                                    None => requested_lsn,
+                                    Some(old_largest) => std::cmp::max(old_largest, requested_lsn),
+                                });
                             }
                         }
                         // Branch to trigger a force regular index merge request.
@@ -501,7 +496,7 @@ impl TableHandler {
                             }
 
                             // Check whether a flush and force snapshot is needed.
-                            if !table_handler_state.pending_force_snapshot_lsns.is_empty() && !table_handler_state.iceberg_snapshot_ongoing {
+                            if !table_handler_state.has_pending_force_snapshot_request() && !table_handler_state.iceberg_snapshot_ongoing {
                                 if let Some(commit_lsn) = table_handler_state.table_consistent_view_lsn {
                                     table.flush(commit_lsn).await.unwrap();
                                     table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
@@ -582,19 +577,19 @@ impl TableHandler {
 
                                     // Notify all waiters with LSN satisfied.
                                     let replication_lsn = *replication_lsn_rx.borrow();
-                                    table_handler_state.update_force_iceberg_snapshot_requests(iceberg_flush_lsn, replication_lsn).await;
+                                    table_handler_state.update_force_iceberg_snapshot_requests(iceberg_flush_lsn, replication_lsn);
 
                                     // mark alter table as completed if needed
-
                                 }
                                 Err(e) => {
                                     let err = Err(Error::IcebergMessage(format!("Failed to create iceberg snapshot: {e:?}")));
                                     if table_handler_state.has_pending_force_snapshot_request() {
                                         if let Err(send_err) = table_handler_state.force_snapshot_completion_tx.send(err) {
-                                            error!(error = ?err, "failed to notify force ");
+                                            error!(error = ?send_err, "failed to notify force snapshot, because receive end has closed channel");
                                         }
                                     }
-                                    table_handler_state.largest_force_snapshot_lsns = None;
+                                    // If iceberg snapshot fails, send error back to all broadcast subscribers and unset force snapshot requests.
+                                    table_handler_state.largest_force_snapshot_lsn = None;
                                 }
                             }
 
@@ -797,20 +792,8 @@ impl TableHandlerState {
         iceberg_snapshot_lsn.unwrap_or(0)
     }
 
-    /// Decide whether current iceberg snapshot could serve the force iceberg snapshot request.
-    pub(crate) fn is_iceberg_snapshot_satisfy_force_snapshot(
-        &self,
-        requested_lsn: u64,
-        iceberg_snapshot_lsn: Option<u64>,
-        replication_lsn: u64,
-    ) -> bool {
-        let persisted_table_lsn =
-            self.get_persisted_table_lsn(iceberg_snapshot_lsn, replication_lsn);
-        persisted_table_lsn >= requested_lsn
-    }
-
     /// Update requested iceberg snapshot LSNs.
-    async fn update_force_iceberg_snapshot_requests(
+    fn update_force_iceberg_snapshot_requests(
         &mut self,
         iceberg_snapshot_lsn: u64,
         replication_lsn: u64,
@@ -819,24 +802,20 @@ impl TableHandlerState {
             return;
         }
 
-        
-
-        // TODO(hjiang): Could be optimized, since as long as we found the first requested LSN which doesn't satisfy, we could directly place all left requests to updated lsns.
-        for (requested_lsn, senders) in std::mem::take(&mut self.pending_force_snapshot_lsns) {
-            if self.is_iceberg_snapshot_satisfy_force_snapshot(
-                requested_lsn,
-                Some(iceberg_snapshot_lsn),
-                replication_lsn,
-            ) {
-                for cur_sender in senders.into_iter().flatten() {
-                    cur_sender.send(Ok(())).await.unwrap();
-                }
-            } else {
-                updated_requests.insert(requested_lsn, senders);
-            }
+        let persisted_table_lsn =
+            self.get_persisted_table_lsn(Some(iceberg_snapshot_lsn), replication_lsn);
+        self.broadcast_persisted_table_lsn(persisted_table_lsn);
+        let largest_force_snapshot_lsn = self.largest_force_snapshot_lsn.unwrap();
+        if persisted_table_lsn >= largest_force_snapshot_lsn {
+            self.largest_force_snapshot_lsn = None;
         }
+    }
 
-        self.pending_force_snapshot_lsns = updated_requests;
+    /// Broadcast persisted table LSN.
+    fn broadcast_persisted_table_lsn(&mut self, persisted_table_lsn: u64) {
+        if let Err(e) = self.force_snapshot_completion_tx.send(Ok(persisted_table_lsn)) {
+            error!(error = ?e, "failed to notify force snapshot, because received end has closed channel");
+        }
     }
 }
 

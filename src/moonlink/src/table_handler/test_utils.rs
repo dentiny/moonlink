@@ -16,7 +16,7 @@ use iceberg::io::FileRead;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{broadcast, mpsc, watch};
 
 /// Creates a `MoonlinkRow` for testing purposes.
 pub fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
@@ -46,6 +46,7 @@ pub struct TestEnvironment {
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
     snapshot_lsn_tx: watch::Sender<u64>,
+    force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
     pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
@@ -83,6 +84,7 @@ impl TestEnvironment {
             last_commit_rx,
         )));
         let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
+        let force_snapshot_completion_tx = table_event_sync_sender.force_snapshot_completion_tx.clone();
 
         let handler = TableHandler::new(
             mooncake_table,
@@ -103,6 +105,7 @@ impl TestEnvironment {
             replication_tx,
             last_commit_tx,
             snapshot_lsn_tx,
+            force_snapshot_completion_tx,
             table_event_manager,
             temp_dir,
             object_storage_cache,
@@ -229,13 +232,14 @@ impl TestEnvironment {
 
     pub async fn flush_table_and_sync(&self, lsn: u64) {
         self.send_event(TableEvent::Flush { lsn }).await;
-        let (tx, mut rx) = mpsc::channel(1);
         self.send_event(TableEvent::ForceSnapshot {
             lsn: Some(lsn),
-            tx: Some(tx),
         })
         .await;
-        rx.recv().await.unwrap().unwrap();
+        
+        loop {
+            self.forc
+        }
     }
 
     pub async fn flush_table(&self, lsn: u64) {

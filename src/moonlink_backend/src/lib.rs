@@ -73,7 +73,7 @@ where
             let writer = manager.get_table_event_manager(&mooncake_table_id);
             writer.initiate_snapshot(lsn).await
         };
-        while true {
+        loop {
             let completed_lsn = rx.recv().await.unwrap()?;
             if completed_lsn >= lsn {
                 break;

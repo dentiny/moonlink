@@ -33,14 +33,17 @@ fn create_table_event_syncer() -> (EventSyncSender, EventSyncReceiver) {
     let (drop_table_completion_tx, drop_table_completion_rx) = oneshot::channel();
     let (flush_lsn_tx, flush_lsn_rx) = watch::channel(0u64);
     let (table_maintenance_completion_tx, _) = broadcast::channel(64usize);
+    let (force_snapshot_completion_tx, _) = broadcast::channel(64usize);
     let event_sync_sender = EventSyncSender {
         drop_table_completion_tx,
         flush_lsn_tx,
+        force_snapshot_completion_tx: force_snapshot_completion_tx.clone(),
         table_maintenance_completion_tx: table_maintenance_completion_tx.clone(),
     };
     let event_sync_receiver = EventSyncReceiver {
         drop_table_completion_rx,
         flush_lsn_rx,
+        force_snapshot_completion_tx,
         table_maintenance_completion_tx,
     };
     (event_sync_sender, event_sync_receiver)
