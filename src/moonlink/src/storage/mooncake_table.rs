@@ -921,7 +921,7 @@ impl MooncakeTable {
                 new_file_indices: vec![merged],
             };
             table_notify_tx_copy
-                .send(TableEvent::IndexMerge { index_merge_result })
+                .send(TableEvent::IndexMergeResult { index_merge_result })
                 .await
                 .unwrap();
         });
@@ -952,7 +952,7 @@ impl MooncakeTable {
                 let builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
                 let data_compaction_result = builder.build().await;
                 table_notify_tx_copy
-                    .send(TableEvent::DataCompaction {
+                    .send(TableEvent::DataCompactionResult {
                         data_compaction_result,
                     })
                     .await
@@ -1019,7 +1019,7 @@ impl MooncakeTable {
         // Notify on event error.
         if iceberg_persistence_res.is_err() {
             table_notify
-                .send(TableEvent::IcebergSnapshot {
+                .send(TableEvent::IcebergSnapshotResult {
                     iceberg_snapshot_result: Err(iceberg_persistence_res.unwrap_err().into()),
                 })
                 .await
@@ -1080,7 +1080,7 @@ impl MooncakeTable {
             },
         };
         table_notify
-            .send(TableEvent::IcebergSnapshot {
+            .send(TableEvent::IcebergSnapshotResult {
                 iceberg_snapshot_result: Ok(snapshot_result),
             })
             .await

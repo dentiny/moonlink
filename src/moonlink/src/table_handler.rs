@@ -559,7 +559,7 @@ impl TableHandler {
 
                             table_handler_state.mooncake_snapshot_ongoing = false;
                         }
-                        TableEvent::IcebergSnapshot { iceberg_snapshot_result } => {
+                        TableEvent::IcebergSnapshotResult { iceberg_snapshot_result } => {
                             table_handler_state.iceberg_snapshot_ongoing = false;
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
@@ -594,11 +594,11 @@ impl TableHandler {
                                 return;
                             }
                         }
-                        TableEvent::IndexMerge { index_merge_result } => {
+                        TableEvent::IndexMergeResult { index_merge_result } => {
                             table.set_file_indices_merge_res(index_merge_result);
                             table_handler_state.mark_index_merge_completed().await;
                         }
-                        TableEvent::DataCompaction { data_compaction_result } => {
+                        TableEvent::DataCompactionResult { data_compaction_result } => {
                             table_handler_state.mark_data_compaction_completed(&data_compaction_result).await;
                             match data_compaction_result {
                                 Ok(data_compaction_res) => {
@@ -610,7 +610,7 @@ impl TableHandler {
                             }
                             table_handler_state.maintenance_ongoing = false;
                         }
-                        TableEvent::ReadRequest { cache_handles } => {
+                        TableEvent::ReadRequestCompletion { cache_handles } => {
                             table.set_read_request_res(cache_handles);
                         }
                         TableEvent::EvictedDataFilesToDelete { evicted_data_files } => {

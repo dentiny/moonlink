@@ -36,7 +36,7 @@ impl Drop for ReadState {
         if let Some(table_notify) = self.table_notify.clone() {
             tokio::spawn(async move {
                 table_notify
-                    .send(TableEvent::ReadRequest { cache_handles })
+                    .send(TableEvent::ReadRequestCompletion { cache_handles })
                     .await
                     .unwrap();
             });

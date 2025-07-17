@@ -151,7 +151,7 @@ pub(crate) async fn sync_mooncake_snapshot(
 }
 async fn sync_iceberg_snapshot(receiver: &mut Receiver<TableEvent>) -> IcebergSnapshotResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::IcebergSnapshot {
+    if let TableEvent::IcebergSnapshotResult {
         iceberg_snapshot_result,
     } = notification
     {
@@ -162,7 +162,7 @@ async fn sync_iceberg_snapshot(receiver: &mut Receiver<TableEvent>) -> IcebergSn
 }
 async fn sync_index_merge(receiver: &mut Receiver<TableEvent>) -> FileIndiceMergeResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::IndexMerge { index_merge_result } = notification {
+    if let TableEvent::IndexMergeResult { index_merge_result } = notification {
         index_merge_result
     } else {
         panic!("Expected index merge completion notification, but get another one.");
@@ -170,7 +170,7 @@ async fn sync_index_merge(receiver: &mut Receiver<TableEvent>) -> FileIndiceMerg
 }
 async fn sync_data_compaction(receiver: &mut Receiver<TableEvent>) -> DataCompactionResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::DataCompaction {
+    if let TableEvent::DataCompactionResult {
         data_compaction_result,
     } = notification
     {
@@ -263,7 +263,7 @@ pub(crate) async fn create_iceberg_snapshot(
     table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
     let notification = notify_rx.recv().await.unwrap();
     match notification {
-        TableEvent::IcebergSnapshot {
+        TableEvent::IcebergSnapshotResult {
             iceberg_snapshot_result,
         } => iceberg_snapshot_result,
         _ => {
@@ -441,7 +441,7 @@ pub(crate) async fn sync_read_request_for_test(
     receiver: &mut Receiver<TableEvent>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::ReadRequest { cache_handles } = notification {
+    if let TableEvent::ReadRequestCompletion { cache_handles } = notification {
         table.set_read_request_res(cache_handles);
     } else {
         panic!("Receive other notifications other than read request")

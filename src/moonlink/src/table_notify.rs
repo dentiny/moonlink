@@ -96,22 +96,22 @@ pub enum TableEvent {
         evicted_data_files_to_delete: Vec<String>,
     },
     /// Iceberg snapshot completes.
-    IcebergSnapshot {
+    IcebergSnapshotResult {
         /// Result for iceberg snapshot.
         iceberg_snapshot_result: Result<IcebergSnapshotResult>,
     },
     /// Index merge completes.
-    IndexMerge {
+    IndexMergeResult {
         /// Result for index merge.
         index_merge_result: FileIndiceMergeResult,
     },
     /// Data compaction completes.
-    DataCompaction {
+    DataCompactionResult {
         /// Result for data compaction.
         data_compaction_result: Result<DataCompactionResult>,
     },
     /// Read request completion.
-    ReadRequest {
+    ReadRequestCompletion {
         /// Cache handles, which are pinned before query.
         cache_handles: Vec<NonEvictableHandle>,
     },
