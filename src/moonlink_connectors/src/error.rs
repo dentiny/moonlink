@@ -3,28 +3,29 @@ use crate::pg_replicate::postgres_source::{
 };
 use moonlink::Error as MoonlinkError;
 use std::result;
+use std::sync::Arc;
 use thiserror::Error;
 use tokio_postgres::Error as TokioPostgresError;
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum Error {
-    #[error("Postgres source error: {0}")]
-    PostgresSourceError(#[from] PostgresSourceError),
+    #[error("Postgres source error: {source}")]
+    PostgresSource { source: Arc<PostgresSourceError> },
 
-    #[error("tokio postgres error: {0}")]
-    TokioPostgresError(#[from] TokioPostgresError),
+    #[error("tokio postgres error: {source}")]
+    TokioPostgres { source: Arc<TokioPostgresError> },
 
-    #[error("Postgres cdc stream error: {0}")]
-    CdcStreamError(#[from] CdcStreamError),
+    #[error("Postgres cdc stream error: {source}")]
+    CdcStream { source: Arc<CdcStreamError> },
 
-    #[error("Table copy stream error: {0}")]
-    TableCopyStreamError(#[from] TableCopyStreamError),
+    #[error("Table copy stream error: {source}")]
+    TableCopyStream { source: Arc<TableCopyStreamError> },
 
     #[error("Moonlink source error: {source}")]
     MoonlinkError { source: MoonlinkError },
 
-    #[error("IO error: {0}")]
-    Io(#[from] std::io::Error),
+    #[error("IO error: {source}")]
+    Io { source: Arc<std::io::Error> },
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -32,5 +33,45 @@ pub type Result<T> = result::Result<T, Error>;
 impl From<MoonlinkError> for Error {
     fn from(source: MoonlinkError) -> Self {
         Error::MoonlinkError { source }
+    }
+}
+
+impl From<PostgresSourceError> for Error {
+    fn from(source: PostgresSourceError) -> Self {
+        Error::PostgresSource {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<TokioPostgresError> for Error {
+    fn from(source: TokioPostgresError) -> Self {
+        Error::TokioPostgres {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<CdcStreamError> for Error {
+    fn from(source: CdcStreamError) -> Self {
+        Error::CdcStream {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<TableCopyStreamError> for Error {
+    fn from(source: TableCopyStreamError) -> Self {
+        Error::TableCopyStream {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(source: std::io::Error) -> Self {
+        Error::Io {
+            source: Arc::new(source),
+        }
     }
 }

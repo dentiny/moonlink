@@ -73,12 +73,29 @@ where
             let writer = manager.get_table_event_manager(&mooncake_table_id);
             writer.initiate_snapshot(lsn).await
         };
+
+        let is_iceberg_snapshot_ready =
+            |current: &Option<std::result::Result<u64, moonlink::Error>>| -> Result<bool> {
+                match current {
+                    Some(Ok(current_lsn)) => Ok(*current_lsn >= lsn),
+                    Some(Err(e)) => Err(Error::MoonlinkError { source: e.clone() }), // make sure e is moonlink::Error
+                    None => Ok(false),
+                }
+            };
+
+        // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
+        if is_iceberg_snapshot_ready(&*rx.borrow())? {
+            return Ok(());
+        }
+
+        // Otherwise falls back to loop until requested LSN is met.
         loop {
-            let completed_lsn = rx.recv().await.unwrap()?;
-            if completed_lsn >= lsn {
+            rx.changed().await?;
+            if is_iceberg_snapshot_ready(&*rx.borrow())? {
                 break;
             }
         }
+
         Ok(())
     }
 

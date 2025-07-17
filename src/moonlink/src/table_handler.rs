@@ -76,7 +76,7 @@ struct TableHandlerState {
     // Largest pending force snapshot LSN.
     largest_force_snapshot_lsn: Option<u64>,
     // Notify when force snapshot completions.
-    force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
+    force_snapshot_completion_tx: watch::Sender<Option<Result<u64>>>,
     // Special table state, for example, initial copy, alter table, drop table, etc.
     special_table_state: SpecialTableState,
     // Buffered events during blocking operations: initial copy, alter table, drop table, etc.
@@ -92,7 +92,7 @@ struct TableHandlerState {
 impl TableHandlerState {
     fn new(
         table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
-        force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
+        force_snapshot_completion_tx: watch::Sender<Option<Result<u64>>>,
         initial_persistence_lsn: Option<u64>,
     ) -> Self {
         Self {
@@ -413,7 +413,7 @@ impl TableHandler {
                             let replication_lsn = *replication_lsn_rx.borrow();
                             let persisted_table_lsn = table_handler_state.get_persisted_table_lsn(last_iceberg_snapshot_lsn, replication_lsn);
                             if persisted_table_lsn >= requested_lsn {
-                                table_handler_state.broadcast_persisted_table_lsn(persisted_table_lsn);
+                                table_handler_state.notify_persisted_table_lsn(persisted_table_lsn);
                                 continue;
                             }
 
@@ -584,7 +584,7 @@ impl TableHandler {
                                 Err(e) => {
                                     let err = Err(Error::IcebergMessage(format!("Failed to create iceberg snapshot: {e:?}")));
                                     if table_handler_state.has_pending_force_snapshot_request() {
-                                        if let Err(send_err) = table_handler_state.force_snapshot_completion_tx.send(err) {
+                                        if let Err(send_err) = table_handler_state.force_snapshot_completion_tx.send(Some(err)) {
                                             error!(error = ?send_err, "failed to notify force snapshot, because receive end has closed channel");
                                         }
                                     }
@@ -804,7 +804,7 @@ impl TableHandlerState {
 
         let persisted_table_lsn =
             self.get_persisted_table_lsn(Some(iceberg_snapshot_lsn), replication_lsn);
-        self.broadcast_persisted_table_lsn(persisted_table_lsn);
+        self.notify_persisted_table_lsn(persisted_table_lsn);
         let largest_force_snapshot_lsn = self.largest_force_snapshot_lsn.unwrap();
         if persisted_table_lsn >= largest_force_snapshot_lsn {
             self.largest_force_snapshot_lsn = None;
@@ -812,10 +812,10 @@ impl TableHandlerState {
     }
 
     /// Broadcast persisted table LSN.
-    fn broadcast_persisted_table_lsn(&mut self, persisted_table_lsn: u64) {
+    fn notify_persisted_table_lsn(&mut self, persisted_table_lsn: u64) {
         if let Err(e) = self
             .force_snapshot_completion_tx
-            .send(Ok(persisted_table_lsn))
+            .send(Some(Ok(persisted_table_lsn)))
         {
             error!(error = ?e, "failed to notify force snapshot, because received end has closed channel");
         }

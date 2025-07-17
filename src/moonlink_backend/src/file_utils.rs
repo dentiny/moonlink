@@ -1,4 +1,4 @@
-use crate::error::{Error, Result};
+use crate::error::Result;
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 
 use more_asserts as ma;
@@ -55,7 +55,7 @@ pub fn recreate_directory(dir: &str) -> Result<()> {
         Ok(()) => {}
         Err(e) => {
             if e.kind() != ErrorKind::NotFound {
-                return Err(Error::Io(e));
+                return Err(e.into());
             }
         }
     }
