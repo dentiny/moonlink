@@ -15,6 +15,7 @@ mod tests {
     #[serial]
     async fn test_table_exists() {
         const EXISTENT_TABLE: &str = "existent_table";
+        const NON_EXISTENT_TABLE: &str = "non_existent_table";
 
         let (postgres_client, connection) = connect(URI, NoTls).await.unwrap();
 
@@ -25,23 +26,27 @@ mod tests {
             }
         });
 
-        // Re-create mooncake schema.
+        // Drop table.
         postgres_client
-            .simple_query(&format!("DROP SCHEMA IF EXISTS {EXISTENT_TABLE} CASCADE;"))
+            .simple_query(&format!("DROP TABLE IF EXISTS {EXISTENT_TABLE} CASCADE;"))
+            .await
+            .unwrap();
+        postgres_client
+            .simple_query(&format!(
+                "DROP TABLE IF EXISTS {NON_EXISTENT_TABLE} CASCADE;"
+            ))
             .await
             .unwrap();
 
         // Check table existence.
-        //
-        // Case-1: schema existent, but table non-existent.
         assert!(!PgUtils::table_exists(&postgres_client, EXISTENT_TABLE)
             .await
             .unwrap());
-        // Case-2: schema non-existent.
-        assert!(!PgUtils::table_exists(&postgres_client, EXISTENT_TABLE)
+        assert!(!PgUtils::table_exists(&postgres_client, NON_EXISTENT_TABLE)
             .await
             .unwrap());
-        // Case-3: schema existent and table existent.
+
+        // Check table existent after table creation.
         postgres_client
             .simple_query(&format!("CREATE TABLE {EXISTENT_TABLE} (id INT);",))
             .await
