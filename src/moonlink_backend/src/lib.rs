@@ -20,9 +20,13 @@ pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 > {
+    // Base directory.
+    base_directory: String,
     // Could be either relative or absolute path.
     replication_manager: RwLock<ReplicationManager<MooncakeTableId<D, T>>>,
     // Maps from metadata store connection string to metadata store client.
+    //
+    // TODO(hjiang): Use (database id, table id) to uniquely identify a src table.
     metadata_store_accessors: RwLock<HashMap<D, Box<dyn MetadataStoreTrait>>>,
 }
 
@@ -34,7 +38,9 @@ where
     // # Arguments
     //
     // * metadata_store_uris: connection strings for metadata storage database.
-    pub async fn new(base_path: String, metadata_store_uris: Vec<String>) -> Result<Self> {
+    //
+    // TODO(hjiang): [`_metadata_store_uris`] is not needed for moonlink self-managed database.
+    pub async fn new(base_path: String, _metadata_store_uris: Vec<String>) -> Result<Self> {
         logging::init_logging();
 
         // Re-create directory for temporary files directory and read cache files directory under base directory.
@@ -44,15 +50,15 @@ where
         file_utils::recreate_directory(read_cache_files_dir.to_str().unwrap()).unwrap();
 
         let mut replication_manager = ReplicationManager::new(
-            base_path,
+            base_path.clone(),
             temp_files_dir.to_str().unwrap().to_string(),
             file_utils::create_default_object_storage_cache(read_cache_files_dir),
         );
         let metadata_store_accessors =
-            recovery_utils::recover_all_tables(metadata_store_uris, &mut replication_manager)
-                .await?;
+            recovery_utils::recover_all_tables(&base_path, &mut replication_manager).await?;
 
         Ok(Self {
+            base_directory: base_path,
             replication_manager: RwLock::new(replication_manager),
             metadata_store_accessors: RwLock::new(metadata_store_accessors),
         })
@@ -76,11 +82,13 @@ where
     /// # Arguments
     ///
     /// * src_uri: connection string for source database (row storage database).
+    ///
+    /// TODO(hjiang): [`_metadata_store_uris`] is not needed for moonlink self-managed database.
     pub async fn create_table(
         &self,
         database_id: D,
         table_id: T,
-        metadata_store_uri: String,
+        _metadata_store_uri: String,
         src_table_name: String,
         src_uri: String,
     ) -> Result<()> {
@@ -115,7 +123,8 @@ where
                 HashMapEntry::Occupied(entry) => entry.into_mut(),
                 HashMapEntry::Vacant(entry) => {
                     let new_metadata_store =
-                        metadata_store_utils::create_metadata_store_accessor(metadata_store_uri)?;
+                        metadata_store_utils::create_metadata_store_accessor(&self.base_directory)
+                            .await?;
                     entry.insert(new_metadata_store)
                 }
             };
@@ -136,7 +145,6 @@ where
 
         let table_exists = {
             let mut manager = self.replication_manager.write().await;
-
             manager.drop_table(mooncake_table_id).await.unwrap()
         };
         if !table_exists {

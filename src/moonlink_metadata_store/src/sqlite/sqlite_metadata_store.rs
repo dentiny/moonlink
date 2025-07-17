@@ -12,6 +12,8 @@ use crate::sqlite::sqlite_conn_wrapper::SqliteConnWrapper;
 use crate::sqlite::utils;
 use moonlink::{MoonlinkTableConfig, MoonlinkTableSecret};
 
+/// Default sqlite database filename.
+const METADATA_DATABASE_FILENAME: &str = "moonlink_metadata_store.sqlite";
 /// SQL statements for moonlink metadata table schema.
 const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
 /// SQL statements for moonlink secret table schema.
@@ -30,7 +32,7 @@ impl MetadataStoreTrait for SqliteMetadataStore {
     }
 
     async fn get_database_id(&self) -> Result<u32> {
-        Ok(0)
+        Ok(5)
     }
 
     async fn metadata_table_exists(&self) -> Result<bool> {
@@ -222,5 +224,16 @@ impl SqliteMetadataStore {
         Self::create_database_file_if_non_existent(&database_filepath).await?;
 
         Ok(Self { database_uri })
+    }
+
+    pub async fn new_with_directory(directory: &str) -> Result<Self> {
+        let path = std::path::Path::new(directory);
+        let location = path
+            .join(METADATA_DATABASE_FILENAME)
+            .as_path()
+            .to_str()
+            .unwrap()
+            .to_string();
+        Self::new(location).await
     }
 }

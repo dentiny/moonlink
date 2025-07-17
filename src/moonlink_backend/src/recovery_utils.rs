@@ -40,17 +40,11 @@ where
     Ok(())
 }
 
-/// Recovery all databases indicated by the connection strings.
-/// Return recovered metadata storage clients.
-///
-/// Recovery process for each database:
-/// - if schema not exist, skip
-/// - if metadata table not exist, skip
-/// - load metadata table, and perform recovery on all mooncake tables
+/// Load persisted metadata, and return recovered metadata storage clients.
 ///
 /// TODO(hjiang): Parallelize all IO operations.
 pub(super) async fn recover_all_tables<D, T>(
-    metadata_store_uris: Vec<String>,
+    base_directory: &str,
     replication_manager: &mut ReplicationManager<MooncakeTableId<D, T>>,
 ) -> Result<HashMap<D, Box<dyn MetadataStoreTrait>>>
 where
@@ -60,39 +54,32 @@ where
     let mut recovered_metadata_stores: HashMap<D, Box<dyn MetadataStoreTrait>> = HashMap::new();
     let mut unique_uris = HashSet::<String>::new();
 
-    for cur_metadata_store_uri in metadata_store_uris.into_iter() {
-        let metadata_store_accessor =
-            metadata_store_utils::create_metadata_store_accessor(cur_metadata_store_uri)?;
+    let metadata_store_accessor =
+        metadata_store_utils::create_metadata_store_accessor(base_directory).await?;
 
-        // Step-1: check schema existence, skip if not.
-        if !metadata_store_accessor.schema_exists().await? {
-            continue;
-        }
-
-        // Skep-2: check metadata store table existence, skip if not.
-        if !metadata_store_accessor.metadata_table_exists().await? {
-            continue;
-        }
-
-        // Step-3: load persisted metadata from storage, perform recovery for each managed tables.
-        //
-        // Get database id.
-        let database_id = metadata_store_accessor.get_database_id().await?;
-
-        // Get all mooncake tables to recovery.
-        let table_metadata_entries = metadata_store_accessor
-            .get_all_table_metadata_entries()
-            .await?;
-
-        // Perform recovery on all managed tables.
-        for cur_metadata_entry in table_metadata_entries.into_iter() {
-            unique_uris.insert(cur_metadata_entry.src_table_uri.clone());
-            recover_table(database_id, cur_metadata_entry, replication_manager).await?;
-        }
-
-        // Place into metadata store clients map.
-        recovered_metadata_stores.insert(D::from(database_id), metadata_store_accessor);
+    // Skep-1: check metadata store table existence, skip if not.
+    if !metadata_store_accessor.metadata_table_exists().await? {
+        return Ok(recovered_metadata_stores);
     }
+
+    // Step-2: load persisted metadata from storage, perform recovery for each managed tables.
+    //
+    // Get database id.
+    let database_id = metadata_store_accessor.get_database_id().await?;
+
+    // Get all mooncake tables to recovery.
+    let table_metadata_entries = metadata_store_accessor
+        .get_all_table_metadata_entries()
+        .await?;
+
+    // Perform recovery on all managed tables.
+    for cur_metadata_entry in table_metadata_entries.into_iter() {
+        unique_uris.insert(cur_metadata_entry.src_table_uri.clone());
+        recover_table(database_id, cur_metadata_entry, replication_manager).await?;
+    }
+
+    // Place into metadata store clients map.
+    recovered_metadata_stores.insert(D::from(database_id), metadata_store_accessor);
 
     for uri in unique_uris.into_iter() {
         replication_manager.start_replication(&uri).await?;

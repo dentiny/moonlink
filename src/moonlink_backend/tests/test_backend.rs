@@ -2,19 +2,15 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, PgMetadataStore};
-    use tempfile::TempDir;
-    use tokio_postgres::{connect, NoTls};
-
     use super::common::{
         current_wal_lsn, ids_from_state, smoke_create_and_insert, DatabaseId, TableId, TestGuard,
-        TestGuardMode, METADATA_STORE_URI, MOONLINK_SCHEMA, TABLE_ID,
+        TestGuardMode, TABLE_ID,
     };
+    use moonlink_backend::MoonlinkBackend;
+    use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, SqliteMetadataStore};
 
     use serial_test::serial;
     use std::collections::HashSet;
-
-    use moonlink_backend::MoonlinkBackend;
 
     const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
     const DST_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
@@ -27,10 +23,23 @@ mod tests {
     async fn test_moonlink_service() {
         let (guard, client) = TestGuard::new(Some("test")).await;
         let backend = guard.backend();
-
-        smoke_create_and_insert(backend, &client, guard.database_id, SRC_URI).await;
+        smoke_create_and_insert(
+            guard.tmp().unwrap(),
+            backend,
+            &client,
+            guard.database_id,
+            SRC_URI,
+        )
+        .await;
         backend.drop_table(guard.database_id, TABLE_ID).await;
-        smoke_create_and_insert(backend, &client, guard.database_id, SRC_URI).await;
+        smoke_create_and_insert(
+            guard.tmp().unwrap(),
+            backend,
+            &client,
+            guard.database_id,
+            SRC_URI,
+        )
+        .await;
     }
 
     /// End-to-end: inserts should appear in `scan_table`.
@@ -243,7 +252,10 @@ mod tests {
         let (guard, _) = TestGuard::new(Some("metadata_store")).await;
         // Till now, table [`metadata_store`] has been created at both row storage and column storage database.
         let backend = guard.backend();
-        let metadata_store = PgMetadataStore::new(METADATA_STORE_URI.to_string()).unwrap();
+        let database_directory = guard.tmp().as_ref().unwrap().path().to_str().unwrap();
+        let metadata_store = SqliteMetadataStore::new_with_directory(database_directory)
+            .await
+            .unwrap();
 
         // Check metadata storage after table creation.
         let metadata_entries = metadata_store
@@ -267,32 +279,6 @@ mod tests {
             .await
             .unwrap();
         assert!(metadata_entries.is_empty());
-    }
-
-    /// Test recovery, where database to recovery is not managed by moonlink.
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-    #[serial]
-    async fn test_recovery_not_managed_by_moonlink() {
-        // Connect to Postgres.
-        let (client, connection) = connect(SRC_URI, NoTls).await.unwrap();
-        tokio::spawn(async move {
-            let _ = connection.await;
-        });
-
-        // Intentionally drop schema, which means current database is not managed by moonlink.
-        client
-            .simple_query(&format!("DROP SCHEMA IF EXISTS {MOONLINK_SCHEMA} CASCADE;"))
-            .await
-            .unwrap();
-
-        // Attempt recovery logic, no tables should be recovered.
-        let temp_dir = TempDir::new().unwrap();
-        let _backend = MoonlinkBackend::<DatabaseId, TableId>::new(
-            temp_dir.path().to_str().unwrap().to_string(),
-            /*metadata_store_uris=*/ vec![METADATA_STORE_URI.to_string()],
-        )
-        .await
-        .unwrap();
     }
 
     /// Test recovery.
@@ -339,15 +325,18 @@ mod tests {
         // Shutdown pg connection and table handler.
         backend.shutdown_connection(SRC_URI).await;
         // Take the testing directory, for recovery from iceberg table.
-        let _testing_directory_before_recovery = guard.take_test_directory();
+        let testing_directory_before_recovery = guard.take_test_directory();
         // Drop everything for the old backend.
         drop(guard);
 
         // Attempt recovery logic.
-        let temp_dir = TempDir::new().unwrap();
         let backend = MoonlinkBackend::<DatabaseId, TableId>::new(
-            temp_dir.path().to_str().unwrap().to_string(),
-            /*metadata_store_uris=*/ vec![METADATA_STORE_URI.to_string()],
+            testing_directory_before_recovery
+                .path()
+                .to_str()
+                .unwrap()
+                .to_string(),
+            /*metadata_store_uris=*/ vec![],
         )
         .await
         .unwrap();

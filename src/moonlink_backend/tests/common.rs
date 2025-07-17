@@ -10,15 +10,6 @@ use moonlink::decode_read_state_for_testing;
 use moonlink_backend::file_utils::{recreate_directory, DEFAULT_MOONLINK_TEMP_FILE_PATH};
 use moonlink_backend::{MoonlinkBackend, ReadState};
 
-#[allow(dead_code)]
-pub const METADATA_STORE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
-/// Database schema for moonlink.
-#[allow(dead_code)]
-pub const MOONLINK_SCHEMA: &str = "mooncake";
-/// SQL statements to create metadata storage table.
-const CREATE_TABLE_SCHEMA_SQL: &str =
-    include_str!("../../moonlink_metadata_store/src/postgres/sql/create_tables.sql");
-
 pub type DatabaseId = u32;
 pub type TableId = u64;
 pub const TABLE_ID: TableId = 0;
@@ -284,20 +275,6 @@ async fn setup_backend(
         .simple_query("SELECT pg_drop_replication_slot('moonlink_slot_postgres')")
         .await;
 
-    // Reset metadata storage.
-    client
-        .simple_query("CREATE SCHEMA IF NOT EXISTS mooncake")
-        .await
-        .unwrap();
-    client
-        .simple_query("DROP TABLE IF EXISTS mooncake.tables")
-        .await
-        .unwrap();
-    client
-        .simple_query("DROP TABLE IF EXISTS mooncake.secrets")
-        .await
-        .unwrap();
-
     // Re-create the working table.
     if let Some(table_name) = table_name {
         client
@@ -326,6 +303,7 @@ async fn setup_backend(
 /// scenario used in two places.
 #[allow(dead_code)]
 pub async fn smoke_create_and_insert(
+    tmp_dir: &TempDir,
     backend: &MoonlinkBackend<DatabaseId, TableId>,
     client: &Client,
     database_id: DatabaseId,
@@ -338,12 +316,25 @@ pub async fn smoke_create_and_insert(
         )
         .await
         .unwrap();
-    client
-        .simple_query("DROP TABLE IF EXISTS mooncake.tables;")
+
+    // Clean up metadata store by recreating the database file.
+    //
+    // TODO(hjiang): WARNING: This is hacky, and likely only works for sqlite, which assumes the sqlite database file resides at <directory>/moonlink_metadata_store.sqlite
+    // We should probably think of a better way for database initialization.
+    let sqlite_database_file = format!(
+        "{}/moonlink_metadata_store.sqlite",
+        tmp_dir.path().to_str().unwrap()
+    );
+    tokio::fs::remove_file(&sqlite_database_file).await.unwrap();
+    tokio::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .open(&sqlite_database_file)
         .await
         .unwrap();
-    client.simple_query(CREATE_TABLE_SCHEMA_SQL).await.unwrap();
 
+    // Re-create table.
     backend
         .create_table(
             database_id,
