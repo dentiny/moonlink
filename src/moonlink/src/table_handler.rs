@@ -274,7 +274,7 @@ impl TableHandlerState {
     }
 
     /// Return whether should force to create a mooncake and iceberg snapshot, based on the new coming commit LSN.
-    fn should_force_snapshot_impl(&self, commit_lsn: u64) -> bool {
+    fn should_force_snapshot_by_commit_lsn(&self, commit_lsn: u64) -> bool {
         // Case-1: there're completed but not persisted table maintainence changes.
         if self.table_maintenance_process_status == MaintainanceRequestProcessStatus::ReadyToPersist
         {
@@ -664,7 +664,7 @@ impl TableHandler {
                             if table_handler_state.can_initiate_iceberg_snapshot() {
                                 if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
                                     // Update table maintainence status.
-                                    if iceberg_snapshot_payload.contains_table_maintainence_payload() && table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::ReadyToPersist {
+                                    if iceberg_snapshot_payload.contains_table_maintenance_payload() && table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::ReadyToPersist {
                                         table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::InPersist;
                                     }
 
@@ -703,12 +703,8 @@ impl TableHandler {
                             table_handler_state.iceberg_snapshot_ongoing = false;
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
-                                    // Update table maintainence operation status.
-                                    if !snapshot_res.index_merge_result.is_empty() && table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::InPersist {
-                                        table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::Unrequested;
-                                        table_handler_state.table_maintenance_completion_tx.send(Ok(())).unwrap();
-                                    }
-                                    if !snapshot_res.data_compaction_result.is_empty() && table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::InPersist {
+                                    // Update table maintenance operation status.
+                                    if table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::InPersist && snapshot_res.contains_maintanence_result() {
                                         table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::Unrequested;
                                         table_handler_state.table_maintenance_completion_tx.send(Ok(())).unwrap();
                                     }
@@ -865,7 +861,8 @@ impl TableHandler {
                 // and 2. LSN which meets force snapshot requirement has appeared, before that we still allow buffering
                 // and 3. there's no snapshot creation operation ongoing
 
-                let should_force_snapshot = table_handler_state.should_force_snapshot_impl(lsn);
+                let should_force_snapshot =
+                    table_handler_state.should_force_snapshot_by_commit_lsn(lsn);
 
                 match xact_id {
                     Some(xact_id) => {

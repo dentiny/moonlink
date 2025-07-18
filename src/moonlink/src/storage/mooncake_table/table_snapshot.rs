@@ -93,8 +93,8 @@ impl IcebergSnapshotPayload {
         self.import_payload.new_deletion_vector.len() as u32
     }
 
-    /// Return whether the payload contains table maintainence content.
-    pub fn contains_table_maintainence_payload(&self) -> bool {
+    /// Return whether the payload contains table maintenance content.
+    pub fn contains_table_maintenance_payload(&self) -> bool {
         if !self.index_merge_payload.is_empty() {
             return true;
         }
@@ -190,6 +190,19 @@ pub struct IcebergSnapshotResult {
     pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
     /// Iceberg data file compaction result.
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
+}
+
+impl IcebergSnapshotResult {
+    /// Return whether iceberg snapshot result contains table maintenance persistence result.
+    pub fn contains_maintanence_result(&self) -> bool {
+        if !self.index_merge_result.is_empty() {
+            return true;
+        }
+        if !self.data_compaction_result.is_empty() {
+            return true;
+        }
+        false
+    }
 }
 
 impl std::fmt::Debug for IcebergSnapshotResult {
