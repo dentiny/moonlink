@@ -55,11 +55,11 @@ enum MaintenanceRequestStatus {
 
 #[derive(Clone, Debug, PartialEq)]
 enum MaintainanceRequestProcessStatus {
-    /// Force maintainence request is not being processed.
+    /// Force maintainence request is not being requested.
     Unrequested,
     /// Force maintainence request is being processed.
     InProcess,
-    /// Maintainence result has been put into snapshot buffer.
+    /// Maintainence result has been put into snapshot buffer, which will be persisted into iceberg later.
     ReadyToPersist,
     /// Maintainence task result is being peristed into iceberg.
     InPersist,
@@ -116,7 +116,7 @@ struct TableHandlerState {
     index_merge_request_status: MaintenanceRequestStatus,
     /// Data compaction request status.
     data_compaction_request_status: MaintenanceRequestStatus,
-    /// Data compaction process status.
+    /// Table maintainance process status.
     table_maintenance_process_status: MaintainanceRequestProcessStatus,
     /// Notify when data compaction completes.
     table_maintenance_completion_tx: broadcast::Sender<Result<()>>,

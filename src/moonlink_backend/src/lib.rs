@@ -171,7 +171,7 @@ where
         Ok(read_state.clone())
     }
 
-    /// Perform a table maintaince operation based on requested mode.
+    /// Perform a table maintaince operation based on requested mode, block wait until maintenance results have been persisted.
     /// Notice, it's only exposed for debugging, testing and admin usage.
     ///
     /// There're currently three modes supported:
