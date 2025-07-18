@@ -47,7 +47,7 @@ impl TableEventManager {
         self.force_snapshot_completion_rx.clone()
     }
 
-    /// Util function to decide whether current LSN satisfies the requested LSN.
+    /// Util function to decide whether the current LSN satisfies the requested LSN.
     fn is_iceberg_snapshot_ready(
         current_lsn: &Option<Result<u64>>,
         requested_lsn: u64,

@@ -9,7 +9,7 @@ pub struct EventSyncReceiver {
     pub drop_table_completion_rx: oneshot::Receiver<Result<()>>,
     /// Get notified when iceberg flush lsn advances.
     pub flush_lsn_rx: watch::Receiver<u64>,
-    ///  Get notified when force snapshot operation completes.
+    /// Get notified when force snapshot operation completes.
     pub force_snapshot_completion_rx: watch::Receiver<Option<Result<u64>>>,
     /// Used to create notifier when force table maintenance operation completes.
     pub table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
@@ -22,6 +22,10 @@ pub struct EventSyncSender {
     /// Notifies when iceberg flush LSN advances.
     pub flush_lsn_tx: watch::Sender<u64>,
     /// Notifies when force snapshot completes.
+    /// There're a few states:
+    /// - None: no completed iceberg snapshots
+    /// - Ok(lsn): persisted table LSN
+    /// - Err: iceberg snapshot fails
     pub force_snapshot_completion_tx: watch::Sender<Option<Result<u64>>>,
     /// Notifies when force table maintenance operation completes.
     pub table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
