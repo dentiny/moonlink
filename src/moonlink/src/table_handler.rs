@@ -209,7 +209,7 @@ impl TableHandlerState {
         if let Some(largest_requested_lsn) = self.largest_force_snapshot_lsn {
             return largest_requested_lsn <= cur_lsn && !self.mooncake_snapshot_ongoing;
         }
-        return false;
+        false
     }
 
     fn should_discard_event(&self, event: &TableEvent) -> bool {
@@ -405,6 +405,7 @@ impl TableHandler {
                             // Fast-path: nothing to snapshot.
                             if requested_lsn.is_none() {
                                 table_handler_state.force_snapshot_completion_tx.send(Some(Ok(/*lsn=*/0))).unwrap();
+                                continue;
                             }
 
                             // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.
@@ -496,7 +497,7 @@ impl TableHandler {
                             }
 
                             // Check whether a flush and force snapshot is needed.
-                            if !table_handler_state.has_pending_force_snapshot_request() && !table_handler_state.iceberg_snapshot_ongoing {
+                            if table_handler_state.has_pending_force_snapshot_request() && !table_handler_state.iceberg_snapshot_ongoing {
                                 if let Some(commit_lsn) = table_handler_state.table_consistent_view_lsn {
                                     table.flush(commit_lsn).await.unwrap();
                                     table_handler_state.reset_iceberg_state_at_mooncake_snapshot();

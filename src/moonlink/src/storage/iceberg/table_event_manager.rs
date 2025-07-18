@@ -65,19 +65,19 @@ impl TableEventManager {
         requested_lsn: u64,
     ) -> Result<()> {
         // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
-        if Self::is_iceberg_snapshot_ready(&*rx.borrow(), requested_lsn)? {
+        if Self::is_iceberg_snapshot_ready(&rx.borrow(), requested_lsn)? {
             return Ok(());
         }
 
         // Otherwise falls back to loop until requested LSN is met.
         loop {
             rx.changed().await.unwrap();
-            if Self::is_iceberg_snapshot_ready(&*rx.borrow(), requested_lsn)? {
+            if Self::is_iceberg_snapshot_ready(&rx.borrow(), requested_lsn)? {
                 break;
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     /// Initiate an index merge event, return the channel for synchronization.

@@ -236,7 +236,7 @@ impl TestEnvironment {
     fn is_iceberg_snapshot_ready(current_lsn: &Option<Result<u64>>, requested_lsn: u64) -> bool {
         match current_lsn {
             Some(Ok(current_lsn)) => *current_lsn >= requested_lsn,
-            Some(Err(e)) => panic!("Failed to receive persisted table LSN: {:?}", e),
+            Some(Err(e)) => panic!("Failed to receive persisted table LSN: {e:?}"),
             None => false,
         }
     }
@@ -247,14 +247,14 @@ impl TestEnvironment {
             .await;
 
         // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
-        if Self::is_iceberg_snapshot_ready(&*self.force_snapshot_completion_rx.borrow(), lsn) {
+        if Self::is_iceberg_snapshot_ready(&self.force_snapshot_completion_rx.borrow(), lsn) {
             return;
         }
 
         // Otherwise falls back to loop until requested LSN is met.
         loop {
             self.force_snapshot_completion_rx.changed().await.unwrap();
-            if Self::is_iceberg_snapshot_ready(&*self.force_snapshot_completion_rx.borrow(), lsn) {
+            if Self::is_iceberg_snapshot_ready(&self.force_snapshot_completion_rx.borrow(), lsn) {
                 break;
             }
         }
