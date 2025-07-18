@@ -232,32 +232,16 @@ impl TestEnvironment {
         rx.recv().await.unwrap().unwrap();
     }
 
-    /// Return whether the force snapshot satisfies the required persisted table LSN.
-    fn is_iceberg_snapshot_ready(current_lsn: &Option<Result<u64>>, requested_lsn: u64) -> bool {
-        match current_lsn {
-            Some(Ok(current_lsn)) => *current_lsn >= requested_lsn,
-            Some(Err(e)) => panic!("Failed to receive persisted table LSN: {e:?}"),
-            None => false,
-        }
-    }
-
     pub async fn flush_table_and_sync(&mut self, lsn: u64) {
         self.send_event(TableEvent::Flush { lsn }).await;
         self.send_event(TableEvent::ForceSnapshot { lsn: Some(lsn) })
             .await;
-
-        // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
-        if Self::is_iceberg_snapshot_ready(&self.force_snapshot_completion_rx.borrow(), lsn) {
-            return;
-        }
-
-        // Otherwise falls back to loop until requested LSN is met.
-        loop {
-            self.force_snapshot_completion_rx.changed().await.unwrap();
-            if Self::is_iceberg_snapshot_ready(&self.force_snapshot_completion_rx.borrow(), lsn) {
-                break;
-            }
-        }
+        TableEventManager::synchronize_force_snapshot_request(
+            self.force_snapshot_completion_rx.clone(),
+            lsn,
+        )
+        .await
+        .unwrap();
     }
 
     pub async fn flush_table(&self, lsn: u64) {

@@ -1,3 +1,13 @@
+/// There're a few LSN concepts used in the table handler:
+/// - commit LSN: LSN for a streaming or a non-streaming LSN
+/// - flush LSN: LSN for a flush operation
+/// - iceberg snapshot LSN: LSN of the latest committed transaction, before which all updates have been persisted into iceberg
+/// - table consistent view LSN: LSN if the last handled table event is a commit operation, which indicates mooncake table stays at a consistent view, so table could be flushed safely
+/// - replication LSN: LSN come from replication.
+///   It's worth noting that there's no guarantee on the numerical order for "replication LSN" and "commit LSN";
+///   because if a table recovers from a clean state (aka, all committed messages have confirmed), it's possible to have iceberg snapshot LSN but no further replication LSN.
+/// - persisted table LSN: the largest LSN where all updates have been persisted into iceberg
+///   Suppose we have two tables, table-A has persisted all updated into iceberg; with table-B taking new updates. persisted table LSN for table-A grows with table-B.
 use crate::event_sync::EventSyncSender;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::MaintenanceOption;
@@ -9,7 +19,7 @@ use crate::{Error, Result};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::{broadcast, watch};
 use tokio::task::JoinHandle;
-use tokio::time::{self, Duration};
+use tokio::time::Duration;
 use tracing::Instrument;
 use tracing::{debug, error, info_span};
 
@@ -52,7 +62,7 @@ struct TableHandlerState {
     // - For streaming events, we keep a buffer as usual, and decide whether to keep or discard the buffer at stream commit;
     // - For non-streaming events, they start with a [`Begin`] message containing the final LSN of the current transaction, which we could leverage to decide keep or not.
     initial_persistence_lsn: Option<u64>,
-    // Record LSN if the last handled table event is committed, which indicates mooncake table stays at a consistent view, so table could be flushed safely.
+    // Record LSN if the last handled table event is a commit operation, which indicates mooncake table stays at a consistent view, so table could be flushed safely.
     table_consistent_view_lsn: Option<u64>,
     // Latest LSN of the table's latest commit.
     latest_commit_lsn: Option<u64>,
@@ -75,7 +85,7 @@ struct TableHandlerState {
     mooncake_snapshot_ongoing: bool,
     // Largest pending force snapshot LSN.
     largest_force_snapshot_lsn: Option<u64>,
-    // Notify when force snapshot completions.
+    // Notify when force snapshot completes.
     force_snapshot_completion_tx: watch::Sender<Option<Result<u64>>>,
     // Special table state, for example, initial copy, alter table, drop table, etc.
     special_table_state: SpecialTableState,
@@ -205,9 +215,10 @@ impl TableHandlerState {
         self.largest_force_snapshot_lsn.is_some()
     }
 
-    fn should_force_snapshot(&self, cur_lsn: u64) -> bool {
+    /// Return whether should force to create a mooncake and iceberg snapshot, based on the new coming commit LSN.
+    fn should_force_snapshot_impl(&self, commit_lsn: u64) -> bool {
         if let Some(largest_requested_lsn) = self.largest_force_snapshot_lsn {
-            return largest_requested_lsn <= cur_lsn && !self.mooncake_snapshot_ongoing;
+            return largest_requested_lsn <= commit_lsn && !self.mooncake_snapshot_ongoing;
         }
         false
     }
@@ -263,8 +274,9 @@ impl TableHandler {
         let event_sender_for_periodical_snapshot = event_sender.clone();
         let event_sender_for_periodical_force_snapshot = event_sender.clone();
         let periodic_event_handle = tokio::spawn(async move {
-            let mut periodic_snapshot_interval = time::interval(Duration::from_millis(500));
-            let mut periodic_force_snapshot_interval = time::interval(Duration::from_secs(300));
+            let mut periodic_snapshot_interval = tokio::time::interval(Duration::from_millis(500));
+            let mut periodic_force_snapshot_interval =
+                tokio::time::interval(Duration::from_secs(300));
 
             loop {
                 tokio::select! {
@@ -715,7 +727,7 @@ impl TableHandler {
                 // and 2. LSN which meets force snapshot requirement has appeared, before that we still allow buffering
                 // and 3. there's no snapshot creation operation ongoing
 
-                let should_force_snapshot = table_handler_state.should_force_snapshot(lsn);
+                let should_force_snapshot = table_handler_state.should_force_snapshot_impl(lsn);
 
                 match xact_id {
                     Some(xact_id) => {
@@ -767,7 +779,7 @@ impl TableHandler {
 }
 
 impl TableHandlerState {
-    /// Get the iceberg snapshot LSN.
+    /// Get the largest LSN where all updates have been persisted into iceberg.
     /// The difference between "persisted table LSN" and "iceberg snapshot LSN" is, suppose we have two tables, table A has persisted all changes to iceberg with flush LSN-1;
     /// if there're no further updates to the table A, meanwhile there're updates to table B with LSN-2, flush LSN-1 actually represents a consistent view of LSN-2.
     ///
@@ -793,7 +805,7 @@ impl TableHandlerState {
         iceberg_snapshot_lsn.unwrap_or(0)
     }
 
-    /// Update requested iceberg snapshot LSNs.
+    /// Update requested iceberg snapshot LSNs, if applicable.
     fn update_force_iceberg_snapshot_requests(
         &mut self,
         iceberg_snapshot_lsn: u64,
@@ -812,13 +824,13 @@ impl TableHandlerState {
         }
     }
 
-    /// Broadcast persisted table LSN.
+    /// Notify the persisted table LSN.
     fn notify_persisted_table_lsn(&mut self, persisted_table_lsn: u64) {
         if let Err(e) = self
             .force_snapshot_completion_tx
             .send(Some(Ok(persisted_table_lsn)))
         {
-            error!(error = ?e, "failed to notify force snapshot, because received end has closed channel");
+            error!(error = ?e, "failed to notify force snapshot, because receiver end has closed channel");
         }
     }
 }
