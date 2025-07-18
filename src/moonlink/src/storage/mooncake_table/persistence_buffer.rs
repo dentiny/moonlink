@@ -244,16 +244,13 @@ impl UnpersistedRecords {
     /// ==================================
     ///
     /// Util function to decide whether to create iceberg snapshot by data compaction results.
-    fn if_persist_by_data_compaction(&self, force_create: bool) -> bool {
-        force_create
-            && (!self.compacted_data_files_to_add.is_empty()
-                || !self.compacted_data_files_to_remove.is_empty())
+    fn if_persist_by_data_compaction(&self) -> bool {
+        !self.compacted_data_files_to_add.is_empty()
+            || !self.compacted_data_files_to_remove.is_empty()
     }
 
-    /// TODO(hjiang): Decide when to create iceberg snapshot by index merge and data compaction.
-    /// Util function to decide whether to create iceberg snapshot by index merge results.
-    fn if_persist_by_index_merge(&self, force_create: bool) -> bool {
-        force_create && !self.merged_file_indices_to_add.is_empty()
+    fn if_persist_by_index_merge(&self) -> bool {
+        !self.merged_file_indices_to_add.is_empty()
     }
 
     /// Util function to decide whether to create iceberg snapshot by new data files.
@@ -272,10 +269,10 @@ impl UnpersistedRecords {
         if self.if_persist_by_data_files(force_create) {
             return true;
         }
-        if self.if_persist_by_data_compaction(force_create) {
+        if self.if_persist_by_data_compaction() {
             return true;
         }
-        if self.if_persist_by_index_merge(force_create) {
+        if self.if_persist_by_index_merge() {
             return true;
         }
         false

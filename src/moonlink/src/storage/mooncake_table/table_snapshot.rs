@@ -33,6 +33,19 @@ pub struct IcebergSnapshotIndexMergePayload {
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
 }
 
+impl IcebergSnapshotIndexMergePayload {
+    /// Return whether the payload is empty.
+    pub fn is_empty(&self) -> bool {
+        if self.new_file_indices_to_import.is_empty() {
+            assert!(self.old_file_indices_to_remove.is_empty());
+            return true;
+        }
+
+        assert!(!self.old_file_indices_to_remove.is_empty());
+        false
+    }
+}
+
 /// Iceberg snapshot payload by data file compaction operations.
 #[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotDataCompactionPayload {
@@ -44,6 +57,21 @@ pub struct IcebergSnapshotDataCompactionPayload {
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
     /// Old file indices to remove from the iceberg table.
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+}
+
+impl IcebergSnapshotDataCompactionPayload {
+    /// Return whether data compaction payload is empty.
+    pub fn is_empty(&self) -> bool {
+        if self.old_data_files_to_remove.is_empty() {
+            assert!(self.new_data_files_to_import.is_empty());
+            assert!(self.new_file_indices_to_import.is_empty());
+            assert!(self.old_file_indices_to_remove.is_empty());
+            return true;
+        }
+
+        assert!(!self.old_file_indices_to_remove.is_empty());
+        false
+    }
 }
 
 #[derive(Debug)]
@@ -63,6 +91,17 @@ impl IcebergSnapshotPayload {
     pub fn get_new_file_ids_num(&self) -> u32 {
         // Only deletion vector puffin blobs create files with new file ids.
         self.import_payload.new_deletion_vector.len() as u32
+    }
+
+    /// Return whether the payload contains table maintainence content.
+    pub fn contains_table_maintainence_payload(&self) -> bool {
+        if !self.index_merge_payload.is_empty() {
+            return true;
+        }
+        if !self.data_compaction_payload.is_empty() {
+            return true;
+        }
+        false
     }
 }
 
