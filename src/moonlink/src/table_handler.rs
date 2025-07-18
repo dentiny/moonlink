@@ -54,7 +54,7 @@ enum MaintenanceRequestStatus {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-enum MaintainanceRequestProcessStatus {
+enum MaintenanceProcessStatus {
     /// Force maintainence request is not being requested.
     Unrequested,
     /// Force maintainence request is being processed.
@@ -117,7 +117,7 @@ struct TableHandlerState {
     /// Data compaction request status.
     data_compaction_request_status: MaintenanceRequestStatus,
     /// Table maintainance process status.
-    table_maintenance_process_status: MaintainanceRequestProcessStatus,
+    table_maintenance_process_status: MaintenanceProcessStatus,
     /// Notify when data compaction completes.
     table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
 }
@@ -143,7 +143,7 @@ impl TableHandlerState {
             maintenance_ongoing: false,
             index_merge_request_status: MaintenanceRequestStatus::Unrequested,
             data_compaction_request_status: MaintenanceRequestStatus::Unrequested,
-            table_maintenance_process_status: MaintainanceRequestProcessStatus::Unrequested,
+            table_maintenance_process_status: MaintenanceProcessStatus::Unrequested,
             table_maintenance_completion_tx,
             // Initial copy fields.
             initial_copy_buffered_events: Vec::new(),
@@ -169,7 +169,7 @@ impl TableHandlerState {
         assert!(self.maintenance_ongoing);
         self.maintenance_ongoing = false;
         self.index_merge_request_status = MaintenanceRequestStatus::Unrequested;
-        self.table_maintenance_process_status = MaintainanceRequestProcessStatus::ReadyToPersist;
+        self.table_maintenance_process_status = MaintenanceProcessStatus::ReadyToPersist;
     }
 
     /// Get Maintenance task operation option.
@@ -203,12 +203,10 @@ impl TableHandlerState {
         self.data_compaction_request_status = MaintenanceRequestStatus::Unrequested;
         match &data_compaction_result {
             Ok(_) => {
-                self.table_maintenance_process_status =
-                    MaintainanceRequestProcessStatus::ReadyToPersist;
+                self.table_maintenance_process_status = MaintenanceProcessStatus::ReadyToPersist;
             }
             Err(err) => {
-                self.table_maintenance_process_status =
-                    MaintainanceRequestProcessStatus::Unrequested;
+                self.table_maintenance_process_status = MaintenanceProcessStatus::Unrequested;
                 self.table_maintenance_completion_tx
                     .send(Err(err.clone()))
                     .unwrap();
@@ -249,19 +247,16 @@ impl TableHandlerState {
     /// * request_force: request to force create a mooncake / iceberg snapshot.
     fn get_mooncake_snapshot_option(&self, request_force: bool) -> SnapshotOption {
         let mut force_create = request_force;
-        if self.table_maintenance_process_status == MaintainanceRequestProcessStatus::ReadyToPersist
-        {
+        if self.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
             force_create = true;
         }
         if self.index_merge_request_status != MaintenanceRequestStatus::Unrequested
-            && self.table_maintenance_process_status
-                == MaintainanceRequestProcessStatus::Unrequested
+            && self.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested
         {
             force_create = true;
         }
         if self.data_compaction_request_status != MaintenanceRequestStatus::Unrequested
-            && self.table_maintenance_process_status
-                == MaintainanceRequestProcessStatus::Unrequested
+            && self.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested
         {
             force_create = true;
         }
@@ -276,8 +271,7 @@ impl TableHandlerState {
     /// Return whether should force to create a mooncake and iceberg snapshot, based on the new coming commit LSN.
     fn should_force_snapshot_by_commit_lsn(&self, commit_lsn: u64) -> bool {
         // Case-1: there're completed but not persisted table maintainence changes.
-        if self.table_maintenance_process_status == MaintainanceRequestProcessStatus::ReadyToPersist
-        {
+        if self.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
             return true;
         }
 
@@ -664,8 +658,8 @@ impl TableHandler {
                             if table_handler_state.can_initiate_iceberg_snapshot() {
                                 if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
                                     // Update table maintainence status.
-                                    if iceberg_snapshot_payload.contains_table_maintenance_payload() && table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::ReadyToPersist {
-                                        table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::InPersist;
+                                    if iceberg_snapshot_payload.contains_table_maintenance_payload() && table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
+                                        table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InPersist;
                                     }
 
                                     table_handler_state.iceberg_snapshot_ongoing = true;
@@ -679,8 +673,8 @@ impl TableHandler {
                             if !table_handler_state.maintenance_ongoing {
                                 if let Some(data_compaction_payload) = data_compaction_payload {
                                     table_handler_state.maintenance_ongoing = true;
-                                    assert_eq!(table_handler_state.table_maintenance_process_status, MaintainanceRequestProcessStatus::Unrequested);
-                                    table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::InProcess;
+                                    assert_eq!(table_handler_state.table_maintenance_process_status, MaintenanceProcessStatus::Unrequested);
+                                    table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_data_compaction(data_compaction_payload);
                                 }
                             }
@@ -691,8 +685,8 @@ impl TableHandler {
                             if !table_handler_state.maintenance_ongoing {
                                 if let Some(file_indice_merge_payload) = file_indice_merge_payload {
                                     table_handler_state.maintenance_ongoing = true;
-                                    assert_eq!(table_handler_state.table_maintenance_process_status, MaintainanceRequestProcessStatus::Unrequested);
-                                    table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::InProcess;
+                                    assert_eq!(table_handler_state.table_maintenance_process_status, MaintenanceProcessStatus::Unrequested);
+                                    table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_index_merge(file_indice_merge_payload);
                                 }
                             }
@@ -704,8 +698,8 @@ impl TableHandler {
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
                                     // Update table maintenance operation status.
-                                    if table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::InPersist && snapshot_res.contains_maintanence_result() {
-                                        table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::Unrequested;
+                                    if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::InPersist && snapshot_res.contains_maintanence_result() {
+                                        table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::Unrequested;
                                         table_handler_state.table_maintenance_completion_tx.send(Ok(())).unwrap();
                                     }
 
@@ -730,8 +724,8 @@ impl TableHandler {
                                     }
 
                                     // Update table maintainence operation status.
-                                    if table_handler_state.table_maintenance_process_status == MaintainanceRequestProcessStatus::InPersist {
-                                        table_handler_state.table_maintenance_process_status = MaintainanceRequestProcessStatus::Unrequested;
+                                    if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::InPersist {
+                                        table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::Unrequested;
                                         table_handler_state.table_maintenance_completion_tx.send(Err(e)).unwrap();
                                     }
 
