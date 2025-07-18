@@ -653,4 +653,12 @@ impl Catalog for FileCatalog {
             .metadata_location(metadata_filepath)
             .build()
     }
+
+    async fn register_table(
+        &self,
+        _table: &TableIdent,
+        _metadata_location: String,
+    ) -> IcebergResult<Table> {
+        todo!("register existing table is not supported")
+    }
 }
