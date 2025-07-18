@@ -1345,7 +1345,7 @@ async fn test_index_merge_with_sufficient_file_indices() {
     env.flush_table_and_sync(/*lsn=*/ 20).await;
 
     // Force index merge and iceberg snapshot, check result.
-    env.force_index_merge_and_sync().await;
+    env.force_index_merge_and_sync().await.unwrap();
 
     // Check mooncake snapshot.
     env.verify_snapshot(/*target_lsn=*/ 20, /*ids=*/ &[2, 3])
@@ -1386,7 +1386,7 @@ async fn test_data_compaction_with_sufficient_data_files() {
     env.flush_table_and_sync(/*lsn=*/ 20).await;
 
     // Force index merge and iceberg snapshot, check result.
-    env.force_data_compaction_and_sync().await;
+    env.force_data_compaction_and_sync().await.unwrap();
 
     // Check mooncake snapshot.
     env.verify_snapshot(/*target_lsn=*/ 20, /*ids=*/ &[2, 3])
@@ -1440,7 +1440,7 @@ async fn test_full_maintenance_with_sufficient_data_files() {
     env.flush_table_and_sync(/*lsn=*/ 20).await;
 
     // Force index merge and iceberg snapshot, check result.
-    env.force_full_maintenance_and_sync().await;
+    env.force_full_maintenance_and_sync().await.unwrap();
 
     // Check mooncake snapshot.
     env.verify_snapshot(/*target_lsn=*/ 20, /*ids=*/ &[2, 3])
