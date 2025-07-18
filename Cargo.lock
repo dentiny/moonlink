@@ -2007,8 +2007,8 @@ dependencies = [
 
 [[package]]
 name = "iceberg"
-version = "0.5.1"
-source = "git+https://github.com/apache/iceberg-rust.git?rev=36af3f7ae5202c0d10ef97d35387fa32ec796371#36af3f7ae5202c0d10ef97d35387fa32ec796371"
+version = "0.6.0"
+source = "git+https://github.com/apache/iceberg-rust.git?rev=593d49efd0b41de2a1af38eae1a492848b95ffd0#593d49efd0b41de2a1af38eae1a492848b95ffd0"
 dependencies = [
  "anyhow",
  "apache-avro",
@@ -2037,7 +2037,7 @@ dependencies = [
  "murmur3",
  "num-bigint",
  "once_cell",
- "opendal 0.53.3",
+ "opendal",
  "ordered-float 4.6.0",
  "parquet",
  "rand 0.8.5",
@@ -2692,7 +2692,7 @@ dependencies = [
  "multimap",
  "num-bigint",
  "num-traits",
- "opendal 0.54.0",
+ "opendal",
  "parquet",
  "pprof",
  "rand 0.9.1",
@@ -3023,35 +3023,6 @@ name = "oorandom"
 version = "11.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
-
-[[package]]
-name = "opendal"
-version = "0.53.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f947c4efbca344c1a125753366033c8107f552b2e3f8251815ed1908f116ca3e"
-dependencies = [
- "anyhow",
- "async-trait",
- "backon",
- "base64 0.22.1",
- "bytes",
- "chrono",
- "crc32c",
- "futures",
- "getrandom 0.2.16",
- "http 1.3.1",
- "http-body 1.0.1",
- "log",
- "md-5",
- "percent-encoding",
- "quick-xml 0.37.5",
- "reqsign",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "uuid",
-]
 
 [[package]]
 name = "opendal"
