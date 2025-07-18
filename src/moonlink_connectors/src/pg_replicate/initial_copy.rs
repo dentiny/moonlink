@@ -4,6 +4,7 @@ use crate::pg_replicate::util::PostgresTableRow;
 use crate::Result;
 use futures::{pin_mut, Stream, StreamExt};
 use moonlink::TableEvent;
+use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 use tokio::task::JoinHandle;
 use tokio_postgres::types::PgLsn;
@@ -137,9 +138,11 @@ mod tests {
 
     /// Create a simple test error for testing error propagation
     fn make_test_error() -> crate::Error {
-        crate::Error::PostgresSourceError(
-            crate::pg_replicate::postgres_source::PostgresSourceError::MissingPublication,
-        )
+        crate::Error::PostgresSourceError {
+            source: Arc::new(
+                crate::pg_replicate::postgres_source::PostgresSourceError::MissingPublication,
+            ),
+        }
     }
 
     //----------------------------------------------------------------------

@@ -47,6 +47,39 @@ impl TableEventManager {
         self.force_snapshot_completion_rx.clone()
     }
 
+    /// Util function to decide whether current LSN satisfies the requested LSN.
+    fn is_iceberg_snapshot_ready(
+        current_lsn: &Option<Result<u64>>,
+        requested_lsn: u64,
+    ) -> Result<bool> {
+        match current_lsn {
+            Some(Ok(current_lsn)) => Ok(*current_lsn >= requested_lsn),
+            Some(Err(e)) => Err(e.clone()),
+            None => Ok(false),
+        }
+    }
+
+    /// Synchronize on the requested LSN for force snapshot request.
+    pub async fn synchronize_force_snapshot_request(
+        mut rx: watch::Receiver<Option<Result<u64>>>,
+        requested_lsn: u64,
+    ) -> Result<()> {
+        // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
+        if Self::is_iceberg_snapshot_ready(&*rx.borrow(), requested_lsn)? {
+            return Ok(());
+        }
+
+        // Otherwise falls back to loop until requested LSN is met.
+        loop {
+            rx.changed().await.unwrap();
+            if Self::is_iceberg_snapshot_ready(&*rx.borrow(), requested_lsn)? {
+                break;
+            }
+        }
+
+        return Ok(());
+    }
+
     /// Initiate an index merge event, return the channel for synchronization.
     /// TODO(hjiang): Error status propagation.
     pub async fn initiate_index_merge(&mut self) -> broadcast::Receiver<Result<()>> {

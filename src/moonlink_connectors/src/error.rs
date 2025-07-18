@@ -10,7 +10,7 @@ use tokio_postgres::Error as TokioPostgresError;
 #[derive(Clone, Debug, Error)]
 pub enum Error {
     #[error("Postgres source error: {source}")]
-    PostgresSource { source: Arc<PostgresSourceError> },
+    PostgresSourceError { source: Arc<PostgresSourceError> },
 
     #[error("tokio postgres error: {source}")]
     TokioPostgres { source: Arc<TokioPostgresError> },
@@ -38,7 +38,7 @@ impl From<MoonlinkError> for Error {
 
 impl From<PostgresSourceError> for Error {
     fn from(source: PostgresSourceError) -> Self {
-        Error::PostgresSource {
+        Error::PostgresSourceError {
             source: Arc::new(source),
         }
     }

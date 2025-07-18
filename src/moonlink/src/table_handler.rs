@@ -404,7 +404,7 @@ impl TableHandler {
 
                             // Fast-path: nothing to snapshot.
                             if requested_lsn.is_none() {
-                                continue;
+                                table_handler_state.force_snapshot_completion_tx.send(Some(Ok(/*lsn=*/0))).unwrap();
                             }
 
                             // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.

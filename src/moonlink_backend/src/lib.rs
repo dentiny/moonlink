@@ -7,6 +7,7 @@ mod recovery_utils;
 pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
+use moonlink::TableEventManager;
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::SqliteMetadataStore;
@@ -64,7 +65,7 @@ where
 
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
     pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
-        let mut rx = {
+        let rx = {
             let mut manager = self.replication_manager.write().await;
             let mooncake_table_id = MooncakeTableId {
                 database_id,
@@ -73,29 +74,7 @@ where
             let writer = manager.get_table_event_manager(&mooncake_table_id);
             writer.initiate_snapshot(lsn).await
         };
-
-        let is_iceberg_snapshot_ready =
-            |current: &Option<std::result::Result<u64, moonlink::Error>>| -> Result<bool> {
-                match current {
-                    Some(Ok(current_lsn)) => Ok(*current_lsn >= lsn),
-                    Some(Err(e)) => Err(Error::MoonlinkError { source: e.clone() }), // make sure e is moonlink::Error
-                    None => Ok(false),
-                }
-            };
-
-        // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
-        if is_iceberg_snapshot_ready(&*rx.borrow())? {
-            return Ok(());
-        }
-
-        // Otherwise falls back to loop until requested LSN is met.
-        loop {
-            rx.changed().await?;
-            if is_iceberg_snapshot_ready(&*rx.borrow())? {
-                break;
-            }
-        }
-
+        TableEventManager::synchronize_force_snapshot_request(rx, lsn).await?;
         Ok(())
     }
 

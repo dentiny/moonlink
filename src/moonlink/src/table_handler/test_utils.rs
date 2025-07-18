@@ -16,7 +16,7 @@ use iceberg::io::FileRead;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::{broadcast, mpsc, watch};
+use tokio::sync::{mpsc, watch};
 
 /// Creates a `MoonlinkRow` for testing purposes.
 pub fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
@@ -46,7 +46,7 @@ pub struct TestEnvironment {
     replication_tx: watch::Sender<u64>,
     last_commit_tx: watch::Sender<u64>,
     snapshot_lsn_tx: watch::Sender<u64>,
-    pub(crate) force_snapshot_completion_tx: broadcast::Sender<Result<u64>>,
+    pub(crate) force_snapshot_completion_rx: watch::Receiver<Option<Result<u64>>>,
     pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
     pub(crate) object_storage_cache: ObjectStorageCache,
@@ -84,8 +84,9 @@ impl TestEnvironment {
             last_commit_rx,
         )));
         let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
-        let force_snapshot_completion_tx =
-            table_event_sync_sender.force_snapshot_completion_tx.clone();
+        let force_snapshot_completion_rx = table_event_sync_receiver
+            .force_snapshot_completion_rx
+            .clone();
 
         let handler = TableHandler::new(
             mooncake_table,
@@ -106,7 +107,7 @@ impl TestEnvironment {
             replication_tx,
             last_commit_tx,
             snapshot_lsn_tx,
-            force_snapshot_completion_tx,
+            force_snapshot_completion_rx,
             table_event_manager,
             temp_dir,
             object_storage_cache,
@@ -231,15 +232,29 @@ impl TestEnvironment {
         rx.recv().await.unwrap().unwrap();
     }
 
-    pub async fn flush_table_and_sync(&self, lsn: u64) {
-        let mut subscriber = self.force_snapshot_completion_tx.subscribe();
+    /// Return whether the force snapshot satisfies the required persisted table LSN.
+    fn is_iceberg_snapshot_ready(current_lsn: &Option<Result<u64>>, requested_lsn: u64) -> bool {
+        match current_lsn {
+            Some(Ok(current_lsn)) => *current_lsn >= requested_lsn,
+            Some(Err(e)) => panic!("Failed to receive persisted table LSN: {:?}", e),
+            None => false,
+        }
+    }
+
+    pub async fn flush_table_and_sync(&mut self, lsn: u64) {
         self.send_event(TableEvent::Flush { lsn }).await;
         self.send_event(TableEvent::ForceSnapshot { lsn: Some(lsn) })
             .await;
 
+        // Fast-path: check whether existing persisted table LSN has already satisfied the requested LSN.
+        if Self::is_iceberg_snapshot_ready(&*self.force_snapshot_completion_rx.borrow(), lsn) {
+            return;
+        }
+
+        // Otherwise falls back to loop until requested LSN is met.
         loop {
-            let persisted_table_lsn = subscriber.recv().await.unwrap().unwrap();
-            if persisted_table_lsn >= lsn {
+            self.force_snapshot_completion_rx.changed().await.unwrap();
+            if Self::is_iceberg_snapshot_ready(&*self.force_snapshot_completion_rx.borrow(), lsn) {
                 break;
             }
         }
