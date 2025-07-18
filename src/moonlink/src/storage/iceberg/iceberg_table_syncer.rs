@@ -9,6 +9,8 @@ use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+#[cfg(test)]
+use crate::storage::iceberg::schema_utils;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -431,6 +433,15 @@ impl IcebergTableManager {
         mut snapshot_payload: IcebergSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult> {
+        #[cfg(test)]
+        {
+            schema_utils::assert_iceberg_payload_schema_consistent(
+                &snapshot_payload,
+                self.mooncake_table_metadata.as_ref(),
+            )
+            .await;
+        }
+
         // Initialize iceberg table on access.
         self.initialize_iceberg_table_for_once().await?;
 
