@@ -4,7 +4,40 @@ use crate::storage::filesystem::accessor::test_utils::*;
 use crate::storage::filesystem::gcs::gcs_test_utils::*;
 use crate::storage::filesystem::gcs::test_guard::TestGuard;
 
+use futures::StreamExt;
 use rstest::rstest;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[rstest]
+#[case(10)]
+#[case(5 * 1024 * 1024)] // TODO(hjiang): Increase upload size.
+async fn test_stream_read(#[case] file_size: usize) {
+    let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
+    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+
+    // Prepare remote file.
+    let remote_filepath = format!("{warehouse_uri}/remote");
+    let expected_content =
+        create_remote_file(&remote_filepath, gcs_filesystem_config.clone(), file_size).await;
+
+    // Stream read from destination path.
+    let mut actual_content = vec![];
+    let filesystem_accessor = FileSystemAccessor::new(gcs_filesystem_config);
+    let mut read_stream = filesystem_accessor
+        .stream_read(&remote_filepath)
+        .await
+        .unwrap();
+    while let Some(chunk) = read_stream.next().await {
+        let data = chunk.unwrap();
+        actual_content.extend_from_slice(&data);
+    }
+
+    // Validate destination file content.
+    let actual_content = String::from_utf8(actual_content).unwrap();
+    assert_eq!(actual_content.len(), expected_content.len());
+    assert_eq!(actual_content, expected_content);
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[rstest]

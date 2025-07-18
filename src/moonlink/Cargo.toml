@@ -36,6 +36,7 @@ ahash = "0.8.11"
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
+async-stream = { workspace = true }
 async-trait = { workspace = true }
 backon = { workspace = true }
 base64 = { version = "0.22", optional = true }

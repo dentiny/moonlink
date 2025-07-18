@@ -1,6 +1,8 @@
+use async_stream::try_stream;
 use async_trait::async_trait;
 #[cfg(feature = "storage-gcs")]
 use futures::TryStreamExt;
+use futures::{Stream, StreamExt};
 use opendal::layers::RetryLayer;
 use opendal::services;
 use opendal::Operator;
@@ -17,6 +19,8 @@ use crate::storage::filesystem::accessor::configs::*;
 use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::Result;
+
+use std::pin::Pin;
 
 /// IO block size for parallel read and write.
 const IO_BLOCK_SIZE: usize = 2 * 1024 * 1024;
@@ -276,6 +280,47 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         Ok(String::from_utf8(bytes)?)
     }
 
+    async fn stream_read(
+        &self,
+        object_filepath: &str,
+    ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<u8>>> + Send>>> {
+        let sanitized_object = self.sanitize_path(object_filepath).to_string();
+        let operator = self.get_operator().await?.clone();
+        let stream = try_stream! {
+            let meta = operator.stat(&sanitized_object).await?;
+            let file_size = meta.content_length();
+            let mut ranges = Vec::new();
+            let mut start = 0;
+            while start < file_size {
+                let end = (start + IO_BLOCK_SIZE as u64).min(file_size);
+                ranges.push((start, end));
+                start = end;
+            }
+
+            let tasks = futures::stream::iter(ranges.into_iter().map(move |(start, end)| {
+                let op = operator.clone();
+                let path = sanitized_object.clone();
+                async move {
+                    let reader = op.reader(&path).await?;
+                    let buf = reader.read(start..end).await?;
+                    Ok::<_, opendal::Error>(buf)
+                }
+            }))
+            .buffered(MAX_SUB_IO_OPERATION);
+
+            // You may collect and sort if you want ordered output, or yield immediately:
+            futures::pin_mut!(tasks);
+            while let Some(res) = tasks.next().await {
+                let buffer = res?;
+                for chunk in buffer.into_iter() {
+                    yield chunk.to_vec();
+                }
+            }
+        };
+
+        Ok(Box::pin(stream))
+    }
+
     async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
         let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
@@ -408,6 +453,40 @@ mod tests {
     use super::*;
     use crate::storage::filesystem::accessor::test_utils::*;
     use rstest::rstest;
+
+    #[tokio::test]
+    #[rstest]
+    #[case(10)]
+    #[case(18 * 1024 * 1024)]
+    async fn test_stream_read(#[case] file_size: usize) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root_directory = temp_dir.path().to_str().unwrap().to_string();
+        let filesystem_config = FileSystemConfig::FileSystem {
+            root_directory: root_directory.clone(),
+        };
+        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+
+        // Prepare src file.
+        let remote_filepath = format!("{}/remote", &root_directory);
+        let expected_content =
+            create_remote_file(&remote_filepath, filesystem_config.clone(), file_size).await;
+
+        // Stream read from destination path.
+        let mut actual_content = vec![];
+        let mut read_stream = filesystem_accessor
+            .stream_read(&remote_filepath)
+            .await
+            .unwrap();
+        while let Some(chunk) = read_stream.next().await {
+            let data = chunk.unwrap();
+            actual_content.extend_from_slice(&data);
+        }
+
+        // Validate destination file content.
+        let actual_content = String::from_utf8(actual_content).unwrap();
+        assert_eq!(actual_content.len(), expected_content.len());
+        assert_eq!(actual_content, expected_content);
+    }
 
     #[tokio::test]
     #[rstest]

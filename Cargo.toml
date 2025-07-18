@@ -20,6 +20,7 @@ arrow = { version = "55", default-features = false, features = [
 ] }
 arrow-array = "55"
 arrow-schema = "55"
+async-stream = "0.3.6"
 async-trait = "0.1"
 backon = { version = "1.5.1" }
 bincode = { version = "2", features = ["serde"] }
