@@ -39,8 +39,6 @@ pub struct PersistenceResult {
 #[cfg_attr(test, automock)]
 pub trait TableManager: Send {
     /// Perform a schema evoluation the current iceberg table.
-    ///
-    /// Precondition: all table updates under the old schema HAVE TO be persisted already.
     #[allow(async_fn_in_trait)]
     async fn alter_table_schema(
         &mut self,

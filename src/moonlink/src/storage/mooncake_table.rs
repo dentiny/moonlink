@@ -1010,6 +1010,8 @@ impl MooncakeTable {
         );
     }
 
+    /// Update table schema to the provided [`updated_table_metadata`].
+    /// Notice: schema evolution performs IO operation in blocking style, and only returns when completion.
     #[allow(dead_code)]
     pub(crate) async fn alter_table_schema(
         &mut self,

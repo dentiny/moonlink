@@ -225,9 +225,6 @@ impl FileCatalog {
                 TableUpdate::SetCurrentSchema { schema_id } => {
                     builder = builder.set_current_schema(*schema_id)?;
                 }
-                TableUpdate::RemoveSchemas { schema_ids } => {
-                    builder = builder.remove_schemas(schema_ids)?;
-                }
                 _ => {
                     unreachable!("Unimplemented table update: {:?}", update);
                 }
@@ -617,7 +614,6 @@ impl Catalog for FileCatalog {
             commit.identifier().name()
         );
         let new_metadata_filepath = format!("{metadata_directory}/v{version}.metadata.json",);
-
         let metadata_json = serde_json::to_vec(&metadata)?;
         self.filesystem_accessor
             .write_object(&new_metadata_filepath, metadata_json)
@@ -686,9 +682,11 @@ impl SchemaUpdate for FileCatalog {
         metadata_builder = metadata_builder.add_current_schema(new_schema)?;
         let metadata_builder_result = metadata_builder.build()?;
 
-        let mut table_commit_proxy = TableCommitProxy::new(table_ident);
-        table_commit_proxy.updates = metadata_builder_result.changes;
-
+        let table_commit_proxy = TableCommitProxy {
+            ident: table_ident,
+            updates: metadata_builder_result.changes,
+            requirements: vec![],
+        };
         let table_commit = table_commit_proxy.take_as_table_commit();
         self.update_table(table_commit).await?;
         Ok(())

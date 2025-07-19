@@ -9,14 +9,6 @@ pub(crate) struct TableCommitProxy {
 }
 
 impl TableCommitProxy {
-    pub(crate) fn new(ident: TableIdent) -> Self {
-        Self {
-            ident,
-            requirements: vec![],
-            updates: vec![],
-        }
-    }
-
     /// Take as [`TableCommit`].
     pub(crate) fn take_as_table_commit(self) -> TableCommit {
         unsafe { std::mem::transmute::<TableCommitProxy, TableCommit>(self) }
