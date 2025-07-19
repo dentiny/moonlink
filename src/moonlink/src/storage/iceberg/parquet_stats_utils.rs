@@ -344,7 +344,7 @@ impl MinMaxColAggregator {
         self.lower_bounds
             .entry(field_id)
             .and_modify(|e| {
-                if *e > datum {
+                if *e < datum {
                     *e = datum.clone()
                 }
             })
