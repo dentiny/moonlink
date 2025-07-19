@@ -250,7 +250,7 @@ impl IcebergTableManager {
             let parsed_wal = serde_json::from_str(wal).map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::DataInvalid,
-                    format!("failed to parse WAL metadata {}: {:?}", wal, e),
+                    format!("failed to parse WAL metadata {wal}: {e:?}"),
                 )
             })?;
             wal_metadata = Some(parsed_wal);
