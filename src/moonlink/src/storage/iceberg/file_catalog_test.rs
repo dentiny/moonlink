@@ -383,8 +383,6 @@ async fn test_update_table_impl(mut catalog: FileCatalog) -> IcebergResult<()> {
 
 async fn test_update_schema_impl(mut catalog: FileCatalog) {
     create_test_table(&catalog).await.unwrap();
-    let old_schema = get_test_schema();
-    let old_schema_id = old_schema.schema_id();
 
     let namespace_ident = NamespaceIdent::from_strs(["default"]).unwrap();
     let table_name = "test_table".to_string();
@@ -393,7 +391,7 @@ async fn test_update_schema_impl(mut catalog: FileCatalog) {
     let new_schema = get_updated_test_schema();
     let new_schema_id = new_schema.schema_id();
     catalog
-        .update_table_schema(new_schema.clone(), old_schema_id, table_ident.clone())
+        .update_table_schema(new_schema.clone(), table_ident.clone())
         .await
         .unwrap();
 

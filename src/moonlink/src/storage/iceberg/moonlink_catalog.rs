@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 /// A trait which defines deletion vector write related interfaces.
 use iceberg::puffin::PuffinWriter;
-use iceberg::spec::{Schema as IcebergSchema, SchemaId};
+use iceberg::spec::Schema as IcebergSchema;
 use iceberg::{Catalog, Result as IcebergResult, TableIdent};
 
 use std::collections::HashSet;
@@ -34,8 +34,7 @@ pub trait SchemaUpdate {
     /// Update table schema, and return the updated iceberg table.
     async fn update_table_schema(
         &mut self,
-        schema: IcebergSchema,
-        old_schema_id: SchemaId,
+        new_schema: IcebergSchema,
         table_ident: TableIdent,
     ) -> IcebergResult<()>;
 }

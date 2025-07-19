@@ -1921,23 +1921,21 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
 
     // Now the iceberg table has been created, create an iceberg table manager and check table status.
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
-    let iceberg_table_manager_for_load = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
+    let mut iceberg_table_manager_for_load = IcebergTableManager::new(
+        updated_mooncake_table_metadata.clone(),
         object_storage_cache.clone(),
         filesystem_accessor,
         iceberg_table_config.clone(),
     )
     .unwrap();
-
-    // Load table metadata and verify schema.
-    let namespace_ident =
-        NamespaceIdent::from_strs(iceberg_table_config.namespace.clone()).unwrap();
-    let table_ident = TableIdent::new(namespace_ident, iceberg_table_config.table_name.clone());
+    iceberg_table_manager_for_load
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
 
     let table = iceberg_table_manager_for_load
-        .catalog
-        .load_table(&table_ident)
-        .await
+        .iceberg_table
+        .as_ref()
         .unwrap();
     let actual_schema = table.metadata().current_schema();
     let expected_schema =

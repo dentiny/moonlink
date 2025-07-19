@@ -45,8 +45,7 @@ use async_trait::async_trait;
 use iceberg::io::FileIO;
 use iceberg::puffin::PuffinWriter;
 use iceberg::spec::{
-    Schema as IcebergSchema, SchemaId, TableMetadata, TableMetadataBuildResult,
-    TableMetadataBuilder,
+    Schema as IcebergSchema, TableMetadata, TableMetadataBuildResult, TableMetadataBuilder,
 };
 use iceberg::table::Table;
 use iceberg::Result as IcebergResult;
@@ -618,6 +617,7 @@ impl Catalog for FileCatalog {
             commit.identifier().name()
         );
         let new_metadata_filepath = format!("{metadata_directory}/v{version}.metadata.json",);
+
         let metadata_json = serde_json::to_vec(&metadata)?;
         self.filesystem_accessor
             .write_object(&new_metadata_filepath, metadata_json)
@@ -678,12 +678,17 @@ impl Catalog for FileCatalog {
 impl SchemaUpdate for FileCatalog {
     async fn update_table_schema(
         &mut self,
-        schema: IcebergSchema,
-        old_schema_id: SchemaId,
+        new_schema: IcebergSchema,
         table_ident: TableIdent,
     ) -> IcebergResult<()> {
+        let (_, old_metadata) = self.load_metadata(&table_ident).await?;
+        let mut metadata_builder = old_metadata.into_builder(/*current_file_location=*/ None);
+        metadata_builder = metadata_builder.add_current_schema(new_schema)?;
+        let metadata_builder_result = metadata_builder.build()?;
+
         let mut table_commit_proxy = TableCommitProxy::new(table_ident);
-        table_commit_proxy.update_schema(schema, old_schema_id);
+        table_commit_proxy.updates = metadata_builder_result.changes;
+
         let table_commit = table_commit_proxy.take_as_table_commit();
         self.update_table(table_commit).await?;
         Ok(())
