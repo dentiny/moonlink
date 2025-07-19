@@ -6,6 +6,8 @@ use crate::storage::mooncake_table::{
 use crate::storage::storage_utils::MooncakeDataFileRef;
 #[cfg(test)]
 use iceberg::spec::Schema as IcebergSchema;
+#[cfg(test)]
+use iceberg::table::Table as IcebergTable;
 
 /// Schema related utils.
 ///
@@ -26,7 +28,7 @@ pub(crate) fn assert_is_same_schema(lhs: IcebergSchema, rhs: IcebergSchema) {
 ///
 /// Precondition: [`data_file`] is stored at local filesystem.
 #[cfg(test)]
-async fn assert_schema_consistent(
+async fn assert_parquet_file_schema_consistent(
     data_file: &MooncakeDataFileRef,
     mooncake_table_metadata: &MooncakeTableMetadata,
 ) {
@@ -43,19 +45,33 @@ async fn assert_schema_consistent(
 
 /// Validate all data files within iceberg snapshot payload matches the given schema.
 #[cfg(test)]
-pub(crate) async fn assert_iceberg_payload_schema_consistent(
+pub(crate) async fn assert_payload_schema_consistent(
     snapshot_payload: &IcebergSnapshotPayload,
     mooncake_table_metadata: &MooncakeTableMetadata,
 ) {
     // Assert import payload.
     let import_payload = &snapshot_payload.import_payload;
     for cur_data_file in import_payload.data_files.iter() {
-        assert_schema_consistent(cur_data_file, mooncake_table_metadata).await;
+        assert_parquet_file_schema_consistent(cur_data_file, mooncake_table_metadata).await;
     }
 
     // Assert data compaction payload.
     let data_compaction_payload = &snapshot_payload.data_compaction_payload;
     for cur_data_file in data_compaction_payload.new_data_files_to_import.iter() {
-        assert_schema_consistent(cur_data_file, mooncake_table_metadata).await;
+        assert_parquet_file_schema_consistent(cur_data_file, mooncake_table_metadata).await;
     }
+}
+
+/// Validate iceberg table metadata matches the given schema.
+#[cfg(test)]
+pub(crate) fn assert_table_schema_consistent(
+    table: &IcebergTable,
+    mooncake_table_metadata: &MooncakeTableMetadata,
+) {
+    use iceberg::arrow as IcebergArrow;
+
+    let iceberg_schema_1 = table.metadata().current_schema();
+    let iceberg_schema_2 =
+        IcebergArrow::arrow_schema_to_schema(mooncake_table_metadata.schema.as_ref()).unwrap();
+    assert_is_same_schema(iceberg_schema_1.as_ref().clone(), iceberg_schema_2);
 }

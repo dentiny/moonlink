@@ -44,6 +44,29 @@ pub struct DataFileImportResult {
 }
 
 impl IcebergTableManager {
+    /// Validate schema consistency at store operation.
+    async fn validate_schema_consistency_at_store(
+        &self,
+        _snapshot_payload: &IcebergSnapshotPayload,
+    ) {
+        // Validate is expensive, only enable at tests.
+        #[cfg(test)]
+        {
+            // Assert table schema matches iceberg table metadata.
+            schema_utils::assert_table_schema_consistent(
+                self.iceberg_table.as_ref().unwrap(),
+                &self.mooncake_table_metadata,
+            );
+
+            // Assert new data files schema matches table schema.
+            schema_utils::assert_payload_schema_consistent(
+                _snapshot_payload,
+                self.mooncake_table_metadata.as_ref(),
+            )
+            .await;
+        }
+    }
+
     /// Util function to get unique table file id for the deletion vector puffin file.
     ///
     /// Notice: only deletion vector puffin generates new file ids.
@@ -433,17 +456,12 @@ impl IcebergTableManager {
         mut snapshot_payload: IcebergSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult> {
-        #[cfg(test)]
-        {
-            schema_utils::assert_iceberg_payload_schema_consistent(
-                &snapshot_payload,
-                self.mooncake_table_metadata.as_ref(),
-            )
-            .await;
-        }
-
         // Initialize iceberg table on access.
         self.initialize_iceberg_table_for_once().await?;
+
+        // Validate schema consistency before persistence operation.
+        self.validate_schema_consistency_at_store(&snapshot_payload)
+            .await;
 
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
         let old_data_files = take_data_files_to_remove(&mut snapshot_payload);

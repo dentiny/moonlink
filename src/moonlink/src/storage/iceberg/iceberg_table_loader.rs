@@ -3,6 +3,8 @@ use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::*;
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+#[cfg(test)]
+use crate::storage::iceberg::schema_utils;
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
@@ -27,6 +29,19 @@ struct FileIndicesRecoveryResult {
 }
 
 impl IcebergTableManager {
+    /// Validate schema consistency at load operation.
+    fn validate_schema_consistency_at_load(&self) {
+        // Validate is expensive, only enable at tests.
+        #[cfg(test)]
+        {
+            // Assert table schema matches iceberg table metadata.
+            schema_utils::assert_table_schema_consistent(
+                self.iceberg_table.as_ref().unwrap(),
+                &self.mooncake_table_metadata,
+            );
+        }
+    }
+
     /// Load index file into table manager from the current manifest entry.
     async fn load_file_indices_from_manifest_entry(
         &mut self,
@@ -236,6 +251,10 @@ impl IcebergTableManager {
             return Ok((next_file_id as u32, empty_mooncake_snapshot));
         }
 
+        // Perform validation before load operation.
+        self.validate_schema_consistency_at_load();
+
+        // Load moonlink related metadata.
         let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
         let mut flush_lsn: Option<u64> = None;
         if let Some(lsn) = table_metadata.properties().get(MOONCAKE_TABLE_FLUSH_LSN) {
