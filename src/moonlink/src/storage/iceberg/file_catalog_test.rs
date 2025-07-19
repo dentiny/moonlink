@@ -1,8 +1,12 @@
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::s3_test_utils;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::iceberg::catalog_test_utils;
 use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::file_catalog::NAMESPACE_INDICATOR_OBJECT_NAME;
@@ -89,21 +93,19 @@ async fn test_local_iceberg_table_creation() {
 
 // Create S3 catalog with local minio deployment and a random bucket.
 #[cfg(feature = "storage-s3")]
-async fn create_s3_catalog() -> FileCatalog {
+async fn create_s3_catalog() -> (FileCatalog, S3TestGuard) {
     let (bucket_name, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
-    s3_test_utils::create_test_s3_bucket(bucket_name.clone())
-        .await
-        .unwrap();
-    iceberg_s3_test_utils::create_test_s3_catalog(&warehouse_uri)
+    let test_guard = S3TestGuard::new(bucket_name).await;
+    let file_catalog = iceberg_s3_test_utils::create_test_s3_catalog(&warehouse_uri);
+    (file_catalog, test_guard)
 }
 // Create GCS catalog with local fake gcs deployment and a random bucket.
 #[cfg(feature = "storage-gcs")]
-async fn create_gcs_catalog() -> FileCatalog {
+async fn create_gcs_catalog() -> (FileCatalog, GcsTestGuard) {
     let (bucket_name, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-    gcs_test_utils::create_test_gcs_bucket(bucket_name.clone())
-        .await
-        .unwrap();
-    iceberg_gcs_test_utils::create_gcs_catalog(&warehouse_uri)
+    let test_guard = GcsTestGuard::new(bucket_name).await;
+    let file_catalog = iceberg_gcs_test_utils::create_gcs_catalog(&warehouse_uri);
+    (file_catalog, test_guard)
 }
 
 // Test util function to create a new table.
@@ -387,16 +389,16 @@ async fn test_catalog_namespace_operations_filesystem() {
         .await
         .unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_catalog_namespace_operations_s3() -> IcebergResult<()> {
-    let catalog = create_s3_catalog().await;
+    let (catalog, _test_guard) = create_s3_catalog().await;
     test_catalog_namespace_operations_impl(catalog).await
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_catalog_namespace_operations_gcs() -> IcebergResult<()> {
-    let catalog = create_gcs_catalog().await;
+    let (catalog, _test_guard) = create_gcs_catalog().await;
     test_catalog_namespace_operations_impl(catalog).await
 }
 
@@ -407,16 +409,16 @@ async fn test_catalog_table_operations_filesystem() {
     let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_catalog_table_operations_impl(catalog).await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_catalog_table_operations_s3() -> IcebergResult<()> {
-    let catalog = create_s3_catalog().await;
+    let (catalog, _test_guard) = create_s3_catalog().await;
     test_catalog_table_operations_impl(catalog).await
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_catalog_table_operations_gcs() -> IcebergResult<()> {
-    let catalog = create_gcs_catalog().await;
+    let (catalog, _test_guard) = create_gcs_catalog().await;
     test_catalog_table_operations_impl(catalog).await
 }
 
@@ -427,16 +429,16 @@ async fn test_list_operation_filesystem() {
     let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_list_operation_impl(catalog).await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_list_operation_s3() -> IcebergResult<()> {
-    let catalog = create_s3_catalog().await;
+    let (catalog, _test_guard) = create_s3_catalog().await;
     test_list_operation_impl(catalog).await
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_list_operation_gcs() -> IcebergResult<()> {
-    let catalog = create_gcs_catalog().await;
+    let (catalog, _test_guard) = create_gcs_catalog().await;
     test_list_operation_impl(catalog).await
 }
 
@@ -447,17 +449,17 @@ async fn test_update_table_filesystem() {
     let catalog = create_test_file_catalog(&temp_dir, get_test_schema());
     test_update_table_impl(catalog).await.unwrap();
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_update_table_s3() -> IcebergResult<()> {
-    let catalog = create_s3_catalog().await;
+    let (catalog, _test_guard) = create_s3_catalog().await;
     create_test_table(&catalog).await?;
     test_update_table_impl(catalog).await
 }
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
 async fn test_update_table_gcs() -> IcebergResult<()> {
-    let catalog = create_gcs_catalog().await;
+    let (catalog, _test_guard) = create_gcs_catalog().await;
     create_test_table(&catalog).await?;
     test_update_table_impl(catalog).await
 }
