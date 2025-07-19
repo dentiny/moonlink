@@ -32,6 +32,7 @@ use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
+use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::table_notify::TableEvent;
 use crate::{create_data_file, NonEvictableHandle};
 use more_asserts as ma;
@@ -719,11 +720,12 @@ impl SnapshotTableState {
     fn get_iceberg_snapshot_payload(
         &self,
         flush_lsn: u64,
+        wal_persistence_metadata: Option<WalPersistenceMetadata>,
         new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
             flush_lsn,
-            wal_persistence_metadata: None,
+            wal_persistence_metadata,
             import_payload: IcebergSnapshotImportPayload {
                 data_files: self.unpersisted_records.get_unpersisted_data_files(),
                 new_deletion_vector: new_committed_deletion_logs,
@@ -1024,11 +1026,11 @@ impl SnapshotTableState {
             // Only create iceberg snapshot when there's something to import.
             if !aggregated_committed_deletion_logs.is_empty() || flush_by_new_files_or_maintainence
             {
-                iceberg_snapshot_payload =
-                    Some(self.get_iceberg_snapshot_payload(
-                        flush_lsn,
-                        aggregated_committed_deletion_logs,
-                    ));
+                iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
+                    flush_lsn,
+                    self.current_snapshot.wal_metadata.clone(),
+                    aggregated_committed_deletion_logs,
+                ));
             }
         }
 

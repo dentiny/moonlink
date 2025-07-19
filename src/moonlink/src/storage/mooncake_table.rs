@@ -41,6 +41,7 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
 use crate::storage::storage_utils::{FileId, TableId};
+use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
@@ -209,6 +210,8 @@ pub struct Snapshot {
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, DiskFileEntry>,
     /// Current snapshot version, which is the mooncake table commit point.
     pub(crate) snapshot_version: u64,
+    /// WAL persistence metadata.
+    pub(crate) wal_metadata: Option<WalPersistenceMetadata>,
     /// LSN which last data file flush operation happens.
     ///
     /// There're two important time points: commit and flush.
@@ -230,6 +233,7 @@ impl Snapshot {
             disk_files: HashMap::new(),
             snapshot_version: 0,
             data_file_flush_lsn: None,
+            wal_metadata: None,
             indices: MooncakeIndex::new(),
         }
     }
