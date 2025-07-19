@@ -304,6 +304,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
+        wal_persistence_metadata: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_1.clone()],
             new_deletion_vector: test_committed_deletion_log_1(data_file_1.clone()),
@@ -354,6 +355,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 1,
+        wal_persistence_metadata: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_2.clone()],
             new_deletion_vector: test_committed_deletion_log_2(data_file_2.clone()),
@@ -428,6 +430,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let merged_file_index = create_file_index(remote_data_files.clone());
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 2,
+        wal_persistence_metadata: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -506,6 +509,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Attempt a fourth snapshot persistence, which goes after data file compaction.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 3,
+        wal_persistence_metadata: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -573,6 +577,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Remove all existing data files and file indices.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 4,
+        wal_persistence_metadata: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -950,6 +955,7 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
     .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
+        wal_persistence_metadata: None,
         import_payload: IcebergSnapshotImportPayload::default(),
         index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
         data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),

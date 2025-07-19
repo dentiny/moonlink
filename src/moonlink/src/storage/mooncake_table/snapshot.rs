@@ -723,6 +723,7 @@ impl SnapshotTableState {
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
             flush_lsn,
+            wal_persistence_metadata: None,
             import_payload: IcebergSnapshotImportPayload {
                 data_files: self.unpersisted_records.get_unpersisted_data_files(),
                 new_deletion_vector: new_committed_deletion_logs,
