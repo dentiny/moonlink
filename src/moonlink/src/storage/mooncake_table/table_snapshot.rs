@@ -5,6 +5,7 @@ use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::storage::TableManager;
 
 use std::collections::{HashMap, HashSet};
@@ -78,6 +79,8 @@ impl IcebergSnapshotDataCompactionPayload {
 pub struct IcebergSnapshotPayload {
     /// Flush LSN.
     pub(crate) flush_lsn: u64,
+    /// WAL persistence metadata.
+    pub(crate) wal_persistence_metadata: Option<WalPersistenceMetadata>,
     /// Payload by import operations.
     pub(crate) import_payload: IcebergSnapshotImportPayload,
     /// Payload by index merge operations.

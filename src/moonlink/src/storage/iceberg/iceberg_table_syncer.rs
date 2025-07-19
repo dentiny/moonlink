@@ -501,10 +501,16 @@ impl IcebergTableManager {
         }
 
         // Persist flush lsn at table property
-        let action = txn.update_table_properties().set(
+        let mut action = txn.update_table_properties().set(
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),
             snapshot_payload.flush_lsn.to_string(),
         );
+        if let Some(wal_metadata) = snapshot_payload.wal_persistence_metadata {
+            action = action.set(
+                MOONCAKE_WAL_METADATA.to_string(),
+                serde_json::to_string(&wal_metadata).unwrap(),
+            );
+        }
         txn = action.apply(txn)?;
         let updated_iceberg_table = txn.commit(&*self.catalog).await?;
         self.iceberg_table = Some(updated_iceberg_table);

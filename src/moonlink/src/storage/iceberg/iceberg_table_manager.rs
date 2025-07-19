@@ -25,8 +25,12 @@ use iceberg::writer::file_writer::location_generator::LocationGenerator;
 use iceberg::{NamespaceIdent, Result as IcebergResult, TableIdent};
 use uuid::Uuid;
 
-/// Key for iceberg table property, to record flush lsn.
+/// TODO(hjiang): store snapshot property in snapshot summary, instead of table property.
+///
+/// Key for iceberg snapshot property, to record flush lsn.
 pub(super) const MOONCAKE_TABLE_FLUSH_LSN: &str = "moonlink.table-flush-lsn";
+/// Key for iceberg snapshot property, to record WAL persistence metadata.
+pub(super) const MOONCAKE_WAL_METADATA: &str = "moonlink.wal-metadata";
 /// Used to represent uninitialized deletion vector.
 /// TODO(hjiang): Consider using `Option<>` to represent uninitialized, which is more rust-idiometic.
 pub(super) const UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW: usize = 0;
