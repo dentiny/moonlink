@@ -1,6 +1,9 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::accessor::base_unbuffered_stream_writer::BaseUnbufferedStreamWriter;
 use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
+use crate::storage::filesystem::accessor::operator_utils;
 use crate::storage::filesystem::accessor::test_utils::*;
+use crate::storage::filesystem::accessor::unbuffered_stream_writer::UnbufferedStreamWriter;
 use crate::storage::filesystem::s3::s3_test_utils::*;
 use crate::storage::filesystem::s3::test_guard::TestGuard;
 
@@ -98,4 +101,38 @@ async fn test_copy_from_remote_to_local(#[case] file_size: usize) {
     // Validate destination file content.
     let actual_content = tokio::fs::read_to_string(dst_filepath).await.unwrap();
     assert_eq!(actual_content, expected_content);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_unbuffered_stream_writer() {
+    const FILE_SIZE: usize = 10;
+    const CONTENT: &str = "helloworld";
+    let dst_filename = "dst".to_string();
+
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let operator = operator_utils::create_opendal_operator(&s3_filesystem_config).unwrap();
+
+    // Create writer and append in blocks.
+    let mut writer = UnbufferedStreamWriter::new(operator.clone(), dst_filename.clone())
+        .await
+        .unwrap();
+    writer
+        .append_non_blocking(CONTENT[..FILE_SIZE / 2].as_bytes().to_vec())
+        .await
+        .unwrap();
+    writer
+        .append_non_blocking(CONTENT[FILE_SIZE / 2..].as_bytes().to_vec())
+        .await
+        .unwrap();
+    writer.finalize().await.unwrap();
+
+    // Verify content.
+    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config);
+    let actual_content = filesystem_accessor
+        .read_object_as_string(&dst_filename)
+        .await
+        .unwrap();
+    assert_eq!(actual_content, CONTENT);
 }
