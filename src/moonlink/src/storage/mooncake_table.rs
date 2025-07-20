@@ -222,6 +222,8 @@ pub struct Snapshot {
     /// At iceberg snapshot creation, we should only dump consistent data files and deletion logs.
     /// Data file flush LSN is recorded here, to get corresponding deletion logs from "committed deletion logs".
     pub(crate) data_file_flush_lsn: Option<u64>,
+    /// WAL persisted LSN.
+    pub(crate) wal_persisted_lsn: Option<u64>,
     /// indices
     pub(crate) indices: MooncakeIndex,
 }
@@ -233,6 +235,7 @@ impl Snapshot {
             disk_files: HashMap::new(),
             snapshot_version: 0,
             data_file_flush_lsn: None,
+            wal_persisted_lsn: None,
             wal_metadata: None,
             indices: MooncakeIndex::new(),
         }
@@ -331,6 +334,9 @@ pub struct SnapshotTask {
     /// streaming xact
     new_streaming_xact: Vec<TransactionStreamOutput>,
 
+    /// --- States related to WAL operation ---
+    new_wal_persisted_lsn: Option<u64>,
+
     /// --- States related to read operation ---
     read_cache_handles: Vec<NonEvictableHandle>,
 
@@ -361,6 +367,8 @@ impl SnapshotTask {
             new_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
+            // WAL related fields.
+            new_wal_persisted_lsn: None,
             // Read request related fields.
             read_cache_handles: Vec::new(),
             // Index merge related fields.
@@ -739,6 +747,16 @@ impl MooncakeTable {
         self.next_snapshot_task
             .iceberg_persisted_records
             .data_compaction_result = iceberg_snapshot_res.data_compaction_result;
+    }
+
+    /// Update WAL persisted LSN.
+    #[allow(dead_code)]
+    pub(crate) fn set_wal_persisted_lsn(&mut self, lsn: u64) {
+        assert!(self.next_snapshot_task.new_wal_persisted_lsn.is_none() || self.next_snapshot_task.new_wal_persisted_lsn.unwrap() < lsn,
+            "Current WAL persisted LSN is {:?}, new WAL lsn is {:?}",
+            self.next_snapshot_task.new_wal_persisted_lsn, lsn,
+        );
+        self.next_snapshot_task.new_wal_persisted_lsn = Some(lsn);
     }
 
     /// Set read request completion result, which will be sync-ed to mooncake table snapshot in the next periodic snapshot iteration.
