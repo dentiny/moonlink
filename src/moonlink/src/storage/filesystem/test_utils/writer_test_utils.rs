@@ -13,11 +13,11 @@ pub(crate) async fn test_unbuffered_stream_writer_impl(
     const CONTENT: &str = "helloworld";
 
     writer
-        .append_non_blocking(CONTENT.as_bytes()[FILE_SIZE / 2..].to_vec())
+        .append_non_blocking(CONTENT.as_bytes()[..FILE_SIZE / 2].to_vec())
         .await
         .unwrap();
     writer
-        .append_non_blocking(CONTENT.as_bytes()[..FILE_SIZE / 2].to_vec())
+        .append_non_blocking(CONTENT.as_bytes()[FILE_SIZE / 2..].to_vec())
         .await
         .unwrap();
     writer.finalize().await.unwrap();
