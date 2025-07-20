@@ -9,7 +9,6 @@ pub(crate) const TEST_BUCKET_NAME_LEN: usize = 10;
 use rand::Rng;
 
 /// Get object storage bucket name from warehouse uri.
-#[allow(dead_code)]
 pub(crate) fn get_bucket_from_warehouse_uri(warehouse_uri: &str) -> String {
     // Try to parse with url::Url
     if let Ok(url) = url::Url::parse(warehouse_uri) {
@@ -27,7 +26,7 @@ pub(crate) fn get_bucket_from_warehouse_uri(warehouse_uri: &str) -> String {
         .to_string()
 }
 
-#[allow(dead_code)]
+#[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 pub(crate) fn get_bucket_and_warehouse(
     bucket_prefix: &str,
     warehouse_uri_prefix: &str,

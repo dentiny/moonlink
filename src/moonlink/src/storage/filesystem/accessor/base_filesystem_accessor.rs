@@ -1,3 +1,4 @@
+use crate::storage::filesystem::accessor::base_unbuffered_stream_writer::BaseUnbufferedStreamWriter;
 /// This module defines the interface for filesystem accessor.
 use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::Result;
@@ -51,6 +52,15 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
 
     /// Write the whole content to the given object.
     async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()>;
+
+    /// Return a writer, which used for stream writer.
+    /// Notice: no IO operation is performed under the hood.
+    ///
+    /// TODO(hjiang): Consider to take a [`config`]
+    async fn create_unbuffered_stream_writer(
+        &self,
+        object_filepath: &str,
+    ) -> Result<Box<dyn BaseUnbufferedStreamWriter>>;
 
     /// Delete the given object.
     async fn delete_object(&self, object_filepath: &str) -> Result<()>;
