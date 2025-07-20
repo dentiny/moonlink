@@ -720,7 +720,6 @@ impl SnapshotTableState {
     fn get_iceberg_snapshot_payload(
         &self,
         flush_lsn: u64,
-        wal_persisted_lsn: Option<u64>,
         wal_persistence_metadata: Option<WalPersistenceMetadata>,
         new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     ) -> IcebergSnapshotPayload {
@@ -987,12 +986,8 @@ impl SnapshotTableState {
         }
 
         // Assert and update WAL persisted LSN.
-        if let Some(new_wal_persisted_lsn) = task.new_wal_persisted_lsn {
-            // Assert LSN doesn't regress.
-            if let Some(cur_wal_persisted_lsn) = self.current_snapshot.wal_persisted_lsn {
-                ma::assert_lt!(cur_wal_persisted_lsn, new_wal_persisted_lsn);
-            }
-            self.current_snapshot.wal_persisted_lsn = Some(new_wal_persisted_lsn);
+        if let Some(wal_persistence_metadata) = task.new_wal_persistence_metadata {
+            self.current_snapshot.wal_persistence_metadata = Some(wal_persistence_metadata);
         }
 
         if task.new_commit_lsn != 0 {
@@ -1039,7 +1034,6 @@ impl SnapshotTableState {
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
-                    self.current_snapshot.wal_persisted_lsn.clone(),
                     self.current_snapshot.wal_metadata.clone(),
                     aggregated_committed_deletion_logs,
                 ));
