@@ -6,7 +6,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::storage_utils::MooncakeDataFileRef;
 #[cfg(test)]
 use iceberg::spec::Schema as IcebergSchema;
-#[cfg(test)]
+use iceberg::spec::DEFAULT_SCHEMA_ID;
 use iceberg::table::Table as IcebergTable;
 
 /// Schema related utils.
@@ -74,4 +74,10 @@ pub(crate) fn assert_table_schema_consistent(
     let iceberg_schema_2 =
         IcebergArrow::arrow_schema_to_schema(mooncake_table_metadata.schema.as_ref()).unwrap();
     assert_is_same_schema(iceberg_schema_1.as_ref().clone(), iceberg_schema_2);
+}
+
+/// Validate iceberg schema id has been assigned.
+pub(crate) fn assert_table_schema_id(table: &IcebergTable) {
+    let schema_id = table.metadata().current_schema_id();
+    assert_ne!(schema_id, DEFAULT_SCHEMA_ID);
 }

@@ -9,7 +9,6 @@ use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
-#[cfg(test)]
 use crate::storage::iceberg::schema_utils;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::index::FileIndex as MooncakeFileIndex;
@@ -49,7 +48,9 @@ impl IcebergTableManager {
         &self,
         _snapshot_payload: &IcebergSnapshotPayload,
     ) {
-        // Validate is expensive, only enable at tests.
+        schema_utils::assert_table_schema_id(self.iceberg_table.as_ref().unwrap());
+
+        // Perform expensive validations only at tests.
         #[cfg(test)]
         {
             // Assert table schema matches iceberg table metadata.
