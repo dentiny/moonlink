@@ -131,29 +131,14 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         Ok(true)
     }
 
-    // TODO(hjiang): Extract common util functions to retrieve replication connection.
     pub fn get_table_reader(&self, mooncake_table_id: &T) -> &ReadStateManager {
-        let (uri, src_table_id) = self
-            .table_info
-            .get(mooncake_table_id)
-            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
-        let connection = self
-            .connections
-            .get(uri)
-            .unwrap_or_else(|| panic!("connection for {uri} not found"));
-        connection.get_table_reader(*src_table_id)
+        let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
+        connection.get_table_reader(src_table_id)
     }
 
     pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStateReader {
-        let (uri, src_table_id) = self
-            .table_info
-            .get(mooncake_table_id)
-            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
-        let connection = self
-            .connections
-            .get(uri)
-            .unwrap_or_else(|| panic!("connection for {uri} not found"));
-        connection.get_table_state_reader(*src_table_id)
+        let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
+        connection.get_table_state_reader(src_table_id)
     }
 
     pub fn get_table_event_manager(&mut self, mooncake_table_id: &T) -> &mut TableEventManager {
@@ -178,6 +163,22 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             self.shutdown_handles.push(shutdown_handle);
             self.table_info.retain(|_, (u, _)| u != uri);
         }
+    }
+
+    /// Get replication connection by mooncake table id.
+    fn get_replication_connection(
+        &self,
+        mooncake_table_id: &T,
+    ) -> (SrcTableId, &ReplicationConnection) {
+        let (uri, src_table_id) = self
+            .table_info
+            .get(mooncake_table_id)
+            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
+        let connection = self
+            .connections
+            .get(uri)
+            .unwrap_or_else(|| panic!("connection {uri} not found"));
+        (*src_table_id, connection)
     }
 
     /// Clean up completed shutdown handles.
