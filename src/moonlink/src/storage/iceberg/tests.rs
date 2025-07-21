@@ -473,7 +473,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         .unwrap();
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 2);
     assert_eq!(
-        snapshot.wal_metadata.as_ref().unwrap().persisted_file_num,
+        snapshot
+            .wal_persistence_metadata
+            .as_ref()
+            .unwrap()
+            .persisted_file_num,
         10
     );
     assert!(snapshot.indices.in_memory_index.is_empty());
@@ -1975,4 +1979,59 @@ async fn test_test_schema_update_with_gcs() {
 
     // Common testing logic.
     test_schema_update_impl(iceberg_table_config.clone()).await;
+}
+
+/// ================================
+/// Test snapshot property persistence
+/// ================================
+///
+#[tokio::test]
+async fn test_persist_snapshot_property() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().to_path_buf();
+    let warehouse_uri = path.clone().to_str().unwrap().to_string();
+    let mooncake_table_metadata =
+        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    let schema = create_test_arrow_schema();
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*table_id=*/ 1,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(&temp_dir),
+        create_test_filesystem_accessor(&iceberg_table_config),
+    )
+    .await
+    .unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    // Persist data file to local filesystem, so iceberg snapshot should be created, if skip iceberg not specified.
+    let row = test_row_1();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 10);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 10)
+        .await
+        .unwrap();
+
+    let wal_persistence_metadata = WalPersistenceMetadata {
+        persisted_file_num: 10,
+    };
+    table.update_wal_persistence_metadata(wal_persistence_metadata.clone());
+
+    // Create mooncake and iceberg snapshot.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Check persisted table properties.
+    assert_eq!(table.get_iceberg_snapshot_lsn().unwrap(), 10);
+    assert_eq!(
+        table.get_wal_persisted_metadata().unwrap(),
+        wal_persistence_metadata
+    );
 }

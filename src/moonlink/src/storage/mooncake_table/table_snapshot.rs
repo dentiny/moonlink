@@ -187,6 +187,8 @@ pub struct IcebergSnapshotResult {
     pub(crate) table_manager: Box<dyn TableManager>,
     /// Iceberg flush LSN.
     pub(crate) flush_lsn: u64,
+    /// Iceberg WAL persistence.
+    pub(crate) wal_persisted_metadata: Option<WalPersistenceMetadata>,
     /// Iceberg import result.
     pub(crate) import_result: IcebergSnapshotImportResult,
     /// Iceberg index merge result.

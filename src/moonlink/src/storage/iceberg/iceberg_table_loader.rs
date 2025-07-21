@@ -233,7 +233,7 @@ impl IcebergTableManager {
         // Fill in flush LSN.
         mooncake_snapshot.data_file_flush_lsn = flush_lsn;
         // Fill in wal persistence metadata.
-        mooncake_snapshot.wal_metadata = wal_metadata;
+        mooncake_snapshot.wal_persistence_metadata = wal_metadata;
 
         mooncake_snapshot
     }

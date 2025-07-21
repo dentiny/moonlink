@@ -210,8 +210,6 @@ pub struct Snapshot {
     pub(crate) disk_files: HashMap<MooncakeDataFileRef, DiskFileEntry>,
     /// Current snapshot version, which is the mooncake table commit point.
     pub(crate) snapshot_version: u64,
-    /// WAL persistence metadata.
-    pub(crate) wal_metadata: Option<WalPersistenceMetadata>,
     /// LSN which last data file flush operation happens.
     ///
     /// There're two important time points: commit and flush.
@@ -236,7 +234,6 @@ impl Snapshot {
             snapshot_version: 0,
             data_file_flush_lsn: None,
             wal_persistence_metadata: None,
-            wal_metadata: None,
             indices: MooncakeIndex::new(),
         }
     }
@@ -563,6 +560,9 @@ pub struct MooncakeTable {
     /// LSN of the latest iceberg snapshot.
     last_iceberg_snapshot_lsn: Option<u64>,
 
+    /// Metadata for latest WAL persistence.
+    last_wal_persisted_metadata: Option<WalPersistenceMetadata>,
+
     /// Table notifier, which is used to sent multiple types of event completion information.
     table_notify: Option<Sender<TableEvent>>,
 }
@@ -615,6 +615,7 @@ impl MooncakeTable {
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
         let last_iceberg_snapshot_lsn = current_snapshot.data_file_flush_lsn;
+        let last_wal_persisted_metadata = current_snapshot.wal_persistence_metadata.clone();
         if let Some(persistence_lsn) = last_iceberg_snapshot_lsn {
             table_snapshot_watch_sender.send(persistence_lsn).unwrap();
         }
@@ -643,6 +644,7 @@ impl MooncakeTable {
             next_file_id,
             iceberg_table_manager: Some(table_manager),
             last_iceberg_snapshot_lsn,
+            last_wal_persisted_metadata,
             table_notify: None,
         })
     }
@@ -709,6 +711,10 @@ impl MooncakeTable {
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
         self.assert_flush_lsn_on_iceberg_snapshot_res(&iceberg_snapshot_res);
         self.last_iceberg_snapshot_lsn = Some(flush_lsn);
+
+        if let Some(wal_persisted_metadata) = iceberg_snapshot_res.wal_persisted_metadata {
+            self.last_wal_persisted_metadata = Some(wal_persisted_metadata);
+        }
 
         assert!(self.iceberg_table_manager.is_none());
         self.iceberg_table_manager = Some(iceberg_snapshot_res.table_manager);
@@ -781,6 +787,12 @@ impl MooncakeTable {
     /// Get iceberg snapshot flush LSN.
     pub(crate) fn get_iceberg_snapshot_lsn(&self) -> Option<u64> {
         self.last_iceberg_snapshot_lsn
+    }
+
+    /// Get WAL persistened metadata.
+    #[allow(dead_code)]
+    pub(crate) fn get_wal_persisted_metadata(&self) -> Option<WalPersistenceMetadata> {
+        self.last_wal_persisted_metadata.clone()
     }
 
     pub(crate) fn get_state_for_reader(
@@ -1062,7 +1074,7 @@ impl MooncakeTable {
         table_auto_incr_ids: std::ops::Range<u32>,
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
-
+        let wal_persisted_metadata = snapshot_payload.wal_persistence_metadata.clone();
         let new_imported_data_files_count = snapshot_payload.import_payload.data_files.len();
         let new_compacted_data_files_count = snapshot_payload
             .data_compaction_payload
@@ -1136,6 +1148,7 @@ impl MooncakeTable {
         let snapshot_result = IcebergSnapshotResult {
             table_manager: iceberg_table_manager,
             flush_lsn,
+            wal_persisted_metadata,
             import_result: IcebergSnapshotImportResult {
                 new_data_files: iceberg_persistence_res.remote_data_files
                     [0..new_data_files_cutoff_index_1]

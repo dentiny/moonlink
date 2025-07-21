@@ -1034,7 +1034,7 @@ impl SnapshotTableState {
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
-                    self.current_snapshot.wal_metadata.clone(),
+                    self.current_snapshot.wal_persistence_metadata.clone(),
                     aggregated_committed_deletion_logs,
                 ));
             }
