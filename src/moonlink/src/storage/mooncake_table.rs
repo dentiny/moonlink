@@ -311,11 +311,10 @@ impl IcebergPersistedRecords {
 
 #[derive(Default)]
 pub struct SnapshotTask {
-    /// ---- States not recorded by mooncake snapshot ----
-    ///
     /// Mooncake table config.
     mooncake_table_config: MooncakeTableConfig,
-    /// Current task
+
+    /// ---- States not recorded by mooncake snapshot ----
     ///
     new_disk_slices: Vec<DiskSliceWriter>,
     disk_file_lsn_map: HashMap<FileId, u64>,
@@ -332,6 +331,9 @@ pub struct SnapshotTask {
 
     /// streaming xact
     new_streaming_xact: Vec<TransactionStreamOutput>,
+
+    /// Schema change.
+    new_schema: Option<Arc<TableMetadata>>,
 
     /// --- States related to WAL operation ---
     new_wal_persistence_metadata: Option<WalPersistenceMetadata>,
@@ -366,6 +368,7 @@ impl SnapshotTask {
             new_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
+            new_schema: None,
             // WAL related fields.
             new_wal_persistence_metadata: None,
             // Read request related fields.
@@ -413,6 +416,8 @@ impl SnapshotTask {
     pub fn should_create_snapshot(&self) -> bool {
         // If mooncake has new transaction commits.
         self.new_commit_lsn > 0
+        // If mooncake table is requested to update schema.
+            || self.new_schema.is_some()
         // If mooncake table accumulated large enough writes.
             || !self.new_disk_slices.is_empty()
             || self.new_deletions.len()
@@ -1042,21 +1047,11 @@ impl MooncakeTable {
     }
 
     /// Update table schema to the provided [`updated_table_metadata`].
-    /// Notice: schema evolution performs IO operation in blocking style, and only returns when completion.
+    /// To synchronize on its completion, caller should trigger a force snapshot and block wait iceberg snapshot complet
     #[allow(dead_code)]
-    pub(crate) async fn alter_table_schema(
-        &mut self,
-        updated_table_metadata: Arc<TableMetadata>,
-    ) -> Result<()> {
-        self.metadata = updated_table_metadata;
-        assert!(self.mem_slice.is_empty());
-        assert!(self.next_snapshot_task.is_empty());
-        self.iceberg_table_manager
-            .as_mut()
-            .unwrap()
-            .alter_table_schema(self.metadata.clone())
-            .await?;
-        Ok(())
+    pub(crate) fn alter_table_schema(&mut self, updated_table_metadata: Arc<TableMetadata>) {
+        assert!(self.next_snapshot_task.new_schema.is_none());
+        self.next_snapshot_task.new_schema = Some(updated_table_metadata);
     }
 
     pub(crate) fn notify_snapshot_reader(&self, lsn: u64) {
@@ -1077,6 +1072,8 @@ impl MooncakeTable {
     ) {
         let flush_lsn = snapshot_payload.flush_lsn;
         let wal_persisted_metadata = snapshot_payload.wal_persistence_metadata.clone();
+        let new_table_schema = snapshot_payload.new_table_schema.clone();
+
         let new_imported_data_files_count = snapshot_payload.import_payload.data_files.len();
         let new_compacted_data_files_count = snapshot_payload
             .data_compaction_payload
@@ -1151,6 +1148,7 @@ impl MooncakeTable {
             table_manager: iceberg_table_manager,
             flush_lsn,
             wal_persisted_metadata,
+            new_table_schema,
             import_result: IcebergSnapshotImportResult {
                 new_data_files: iceberg_persistence_res.remote_data_files
                     [0..new_data_files_cutoff_index_1]

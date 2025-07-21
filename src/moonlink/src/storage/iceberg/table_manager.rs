@@ -38,13 +38,6 @@ pub struct PersistenceResult {
 #[async_trait]
 #[cfg_attr(test, automock)]
 pub trait TableManager: Send {
-    /// Perform a schema evoluation the current iceberg table.
-    #[allow(async_fn_in_trait)]
-    async fn alter_table_schema(
-        &mut self,
-        updated_table_metadata: Arc<MooncakeTableMetadata>,
-    ) -> IcebergResult<()>;
-
     /// Write a new snapshot to iceberg table.
     /// It could be called for multiple times to write and commit multiple snapshots.
     ///

@@ -3,12 +3,14 @@ use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::storage::TableManager;
 
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 ////////////////////////////
 /// Iceberg snapshot payload
@@ -81,6 +83,8 @@ pub struct IcebergSnapshotPayload {
     pub(crate) flush_lsn: u64,
     /// WAL persistence metadata.
     pub(crate) wal_persistence_metadata: Option<WalPersistenceMetadata>,
+    /// New mooncake table schema.
+    pub(crate) new_table_schema: Option<Arc<MooncakeTableMetadata>>,
     /// Payload by import operations.
     pub(crate) import_payload: IcebergSnapshotImportPayload,
     /// Payload by index merge operations.
@@ -189,6 +193,8 @@ pub struct IcebergSnapshotResult {
     pub(crate) flush_lsn: u64,
     /// Iceberg WAL persistence.
     pub(crate) wal_persisted_metadata: Option<WalPersistenceMetadata>,
+    /// Mooncake schema sync-ed to iceberg.
+    pub(crate) new_table_schema: Option<Arc<MooncakeTableMetadata>>,
     /// Iceberg import result.
     pub(crate) import_result: IcebergSnapshotImportResult,
     /// Iceberg index merge result.

@@ -306,6 +306,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
         wal_persistence_metadata: None,
+        new_table_schema: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_1.clone()],
             new_deletion_vector: test_committed_deletion_log_1(data_file_1.clone()),
@@ -357,6 +358,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 1,
         wal_persistence_metadata: None,
+        new_table_schema: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_2.clone()],
             new_deletion_vector: test_committed_deletion_log_2(data_file_2.clone()),
@@ -434,6 +436,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         wal_persistence_metadata: Some(WalPersistenceMetadata {
             persisted_file_num: 10,
         }),
+        new_table_schema: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -521,6 +524,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 3,
         wal_persistence_metadata: None,
+        new_table_schema: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -589,6 +593,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 4,
         wal_persistence_metadata: None,
+        new_table_schema: None,
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -967,6 +972,7 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
         flush_lsn: 0,
         wal_persistence_metadata: None,
+        new_table_schema: None,
         import_payload: IcebergSnapshotImportPayload::default(),
         index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
         data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),
@@ -1918,10 +1924,7 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
         local_table_directory,
         create_test_updated_arrow_schema(),
     );
-    table
-        .alter_table_schema(updated_mooncake_table_metadata.clone())
-        .await
-        .unwrap();
+    table.alter_table_schema(updated_mooncake_table_metadata.clone());
 
     // Now the iceberg table has been created, create an iceberg table manager and check table status.
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);

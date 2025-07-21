@@ -190,19 +190,19 @@ impl IcebergTableManager {
 /// TODO(hjiang): Parallelize all IO operations.
 #[async_trait]
 impl TableManager for IcebergTableManager {
-    async fn alter_table_schema(
-        &mut self,
-        updated_table_metadata: Arc<MooncakeTableMetadata>,
-    ) -> IcebergResult<()> {
-        self.alter_table_schema_impl(updated_table_metadata).await
-    }
-
     async fn sync_snapshot(
         &mut self,
-        snapshot_payload: IcebergSnapshotPayload,
+        mut snapshot_payload: IcebergSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult> {
-        self.sync_snapshot_impl(snapshot_payload, file_params).await
+        let new_table_schema = std::mem::take(&mut snapshot_payload.new_table_schema);
+        let persistence_result = self
+            .sync_snapshot_impl(snapshot_payload, file_params)
+            .await?;
+        if let Some(new_table_schema) = new_table_schema {
+            self.alter_table_schema_impl(new_table_schema).await?;
+        }
+        Ok(persistence_result)
     }
 
     async fn load_snapshot_from_table(&mut self) -> IcebergResult<(u32, MooncakeSnapshot)> {

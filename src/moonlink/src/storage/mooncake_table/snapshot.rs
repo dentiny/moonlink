@@ -722,11 +722,13 @@ impl SnapshotTableState {
         &self,
         flush_lsn: u64,
         wal_persistence_metadata: Option<WalPersistenceMetadata>,
+        new_table_schema: Option<Arc<MooncakeTableMetadata>>,
         new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
             flush_lsn,
             wal_persistence_metadata,
+            new_table_schema,
             import_payload: IcebergSnapshotImportPayload {
                 data_files: self.unpersisted_records.get_unpersisted_data_files(),
                 new_deletion_vector: new_committed_deletion_logs,
@@ -999,12 +1001,17 @@ impl SnapshotTableState {
         }
 
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
-        // To reduce iceberg persistence overhead, we only snapshot when (1) there're persisted data files, or (2) accumulated unflushed deletion vector exceeds threshold.
+        // To reduce iceberg persistence overhead, there're certain cases an iceberg snapshot will be triggered:
+        // (1) there're persisted data files
+        // or (2) accumulated unflushed deletion vector exceeds threshold
+        // or (3) there're unpersisted table maintenance results
+        // or (4) there's pending table schema update
         let mut iceberg_snapshot_payload: Option<IcebergSnapshotPayload> = None;
         let flush_by_deletion = self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
         let flush_by_new_files_or_maintainence = self
             .unpersisted_records
             .if_persist_by_new_files_or_maintainence(opt.force_create);
+        let flush_by_schema_change = task.new_schema.is_some();
 
         // Decide whether to perform a data compaction.
         //
@@ -1019,10 +1026,10 @@ impl SnapshotTableState {
             file_indices_merge_payload = self.get_file_indices_to_merge(&opt.index_merge_option);
         }
 
-        // TODO(hjiang): Add whether to flush based on merged file indices.
+        // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         if !opt.skip_iceberg_snapshot
             && self.current_snapshot.data_file_flush_lsn.is_some()
-            && (flush_by_new_files_or_maintainence || flush_by_deletion)
+            && (flush_by_new_files_or_maintainence || flush_by_deletion || flush_by_schema_change)
         {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
@@ -1031,11 +1038,15 @@ impl SnapshotTableState {
                 self.aggregate_committed_deletion_logs(flush_lsn);
 
             // Only create iceberg snapshot when there's something to import.
-            if !aggregated_committed_deletion_logs.is_empty() || flush_by_new_files_or_maintainence
+            if !aggregated_committed_deletion_logs.is_empty()
+                || flush_by_new_files_or_maintainence
+                || flush_by_schema_change
             {
+                let new_schema = std::mem::take(&mut task.new_schema);
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
                     self.current_snapshot.wal_persistence_metadata.clone(),
+                    new_schema,
                     aggregated_committed_deletion_logs,
                 ));
             }
