@@ -5,6 +5,7 @@ use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 #[cfg(any(test, debug_assertions))]
 use crate::storage::iceberg::schema_utils;
+use crate::storage::iceberg::snapshot_utils;
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
 use crate::storage::index::{FileIndex as MooncakeFileIndex, MooncakeIndex};
@@ -260,26 +261,13 @@ impl IcebergTableManager {
 
         // Load moonlink related metadata.
         let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
-        let mut flush_lsn: Option<u64> = None;
-        if let Some(lsn) = table_metadata.properties().get(MOONCAKE_TABLE_FLUSH_LSN) {
-            flush_lsn = Some(lsn.parse().unwrap());
-        }
-        let mut wal_metadata: Option<WalPersistenceMetadata> = None;
-        if let Some(wal) = table_metadata.properties().get(MOONCAKE_WAL_METADATA) {
-            let parsed_wal = serde_json::from_str(wal).map_err(|e| {
-                IcebergError::new(
-                    iceberg::ErrorKind::DataInvalid,
-                    format!("failed to parse WAL metadata {wal}: {e:?}"),
-                )
-            })?;
-            wal_metadata = Some(parsed_wal);
-        }
+        let snapshot_property = snapshot_utils::get_snapshot_properties(table_metadata)?;
 
         // There's nothing stored in iceberg table.
         if table_metadata.current_snapshot().is_none() {
             let mut empty_mooncake_snapshot =
                 MooncakeSnapshot::new(self.mooncake_table_metadata.clone());
-            empty_mooncake_snapshot.data_file_flush_lsn = flush_lsn;
+            empty_mooncake_snapshot.data_file_flush_lsn = snapshot_property.flush_lsn;
             return Ok((next_file_id as u32, empty_mooncake_snapshot));
         }
 
@@ -353,8 +341,11 @@ impl IcebergTableManager {
             }
         }
 
-        let mooncake_snapshot =
-            self.transform_to_mooncake_snapshot(loaded_file_indices, flush_lsn, wal_metadata);
+        let mooncake_snapshot = self.transform_to_mooncake_snapshot(
+            loaded_file_indices,
+            snapshot_property.flush_lsn,
+            snapshot_property.wal_persisted_metadata,
+        );
         Ok((next_file_id as u32, mooncake_snapshot))
     }
 }
