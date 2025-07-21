@@ -38,19 +38,23 @@ where
     pub async fn new(base_path: String, _metadata_store_uris: Vec<String>) -> Result<Self> {
         logging::init_logging();
 
+        // Canonicalize moonlink backend directory, so all paths stored are of absolute path.
+        let base_path = tokio::fs::canonicalize(base_path).await?;
+        let base_path_str = base_path.to_str().unwrap();
+
         // Create a metadata storage accessor.
         // TODO(hjiang): pg_mooncake will pass in.
         let metadata_store_accessor =
-            Box::new(SqliteMetadataStore::new_with_directory(&base_path).await?);
+            Box::new(SqliteMetadataStore::new_with_directory(base_path_str).await?);
 
         // Re-create directory for temporary files directory and read cache files directory under base directory.
-        let temp_files_dir = file_utils::get_temp_file_directory_under_base(&base_path);
-        let read_cache_files_dir = file_utils::get_cache_directory_under_base(&base_path);
+        let temp_files_dir = file_utils::get_temp_file_directory_under_base(base_path_str);
+        let read_cache_files_dir = file_utils::get_cache_directory_under_base(base_path_str);
         file_utils::recreate_directory(temp_files_dir.to_str().unwrap()).unwrap();
         file_utils::recreate_directory(read_cache_files_dir.to_str().unwrap()).unwrap();
 
         let mut replication_manager = ReplicationManager::new(
-            base_path.clone(),
+            base_path_str.to_string(),
             temp_files_dir.to_str().unwrap().to_string(),
             file_utils::create_default_object_storage_cache(read_cache_files_dir),
         );

@@ -754,7 +754,6 @@ impl TableHandler {
                                     error!(error = ?err, "failed to perform compaction");
                                 }
                             }
-                            table_handler_state.maintenance_ongoing = false;
                         }
                         TableEvent::ReadRequestCompletion { cache_handles } => {
                             table.set_read_request_res(cache_handles);
