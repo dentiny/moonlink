@@ -149,11 +149,9 @@ impl CompactionBuilder {
             num_rows: self.cur_row_num,
             file_size,
         };
-        // TODO(hjiang): Should be able to save a copy.
-        self.new_data_files.push((
-            self.cur_new_data_file.as_ref().unwrap().clone(),
-            compacted_data_entry,
-        ));
+        let new_data_file = std::mem::take(&mut self.cur_new_data_file).unwrap();
+        self.new_data_files
+            .push((new_data_file, compacted_data_entry));
 
         // Reinitialize states related to current new compacted data file.
         self.cur_arrow_writer = None;
