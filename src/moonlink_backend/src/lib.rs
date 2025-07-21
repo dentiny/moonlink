@@ -152,6 +152,7 @@ where
             .unwrap()
     }
 
+    /// Get the current mooncake table state.
     pub async fn get_table_state(&self, database_id: D, table_id: T) -> Result<TableState> {
         let table_state = {
             let manager = self.replication_manager.read().await;
