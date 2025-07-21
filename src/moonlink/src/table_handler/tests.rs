@@ -1363,7 +1363,7 @@ async fn test_index_merge_with_sufficient_file_indices() {
     assert_eq!(snapshot.disk_files.len(), 2); // two data files created by two flushes
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one merged file index
 
-    // Add another file and trigger a new force full compaction.
+    // Add another file and trigger a new force index merge.
     env.append_row(
         /*id=*/ 4, /*name=*/ "Cat", /*age=*/ 40, /*lsn=*/ 5,
         /*xact_id=*/ None,
@@ -1432,7 +1432,7 @@ async fn test_data_compaction_with_sufficient_data_files() {
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 
-    // Add another file and trigger a new force full compaction.
+    // Add another file and trigger a new force data compaction.
     env.append_row(
         /*id=*/ 4, /*name=*/ "Cat", /*age=*/ 40, /*lsn=*/ 5,
         /*xact_id=*/ None,
