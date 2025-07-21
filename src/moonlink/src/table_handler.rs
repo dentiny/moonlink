@@ -568,7 +568,6 @@ impl TableHandler {
                             // TODO(hjiang): Handle cases where there're not enough file indices to merge.
                             assert_eq!(table_handler_state.index_merge_request_status, MaintenanceRequestStatus::Unrequested);
                             assert_eq!(table_handler_state.data_compaction_request_status, MaintenanceRequestStatus::Unrequested);
-                            table_handler_state.index_merge_request_status = MaintenanceRequestStatus::ForceFull;
                             table_handler_state.data_compaction_request_status = MaintenanceRequestStatus::ForceFull;
                         }
                         // Branch to drop the iceberg table and clear pinned data files from the global object storage cache, only used when the whole table requested to drop.
