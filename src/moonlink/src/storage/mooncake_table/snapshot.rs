@@ -23,6 +23,7 @@ use crate::storage::mooncake_table::snapshot_read_output::{
 use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
 };
+use crate::storage::mooncake_table::table_state::TableSnapshotState;
 use crate::storage::mooncake_table::transaction_stream::TransactionStreamOutput;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
@@ -1475,6 +1476,13 @@ impl SnapshotTableState {
         }
 
         data_files_for_read
+    }
+
+    pub(crate) fn get_table_snapshot_states(&mut self) -> Result<TableSnapshotState> {
+        Ok(TableSnapshotState {
+            table_commit_lsn: self.current_snapshot.snapshot_version,
+            iceberg_flush_lsn: self.current_snapshot.data_file_flush_lsn,
+        })
     }
 
     pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {

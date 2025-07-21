@@ -9,6 +9,7 @@ use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
 use moonlink::{
     FileSystemConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
+    TableStateReader,
 };
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -52,6 +53,7 @@ pub struct ReplicationConnection {
     handle: Option<JoinHandle<Result<()>>>,
     table_readers: HashMap<SrcTableId, ReadStateManager>,
     table_event_managers: HashMap<SrcTableId, TableEventManager>,
+    table_state_readers: HashMap<SrcTableId, TableStateReader>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: Option<mpsc::Receiver<Command>>,
     replication_state: Arc<ReplicationState>,
@@ -124,6 +126,7 @@ impl ReplicationConnection {
             postgres_client,
             handle: None,
             table_readers: HashMap::new(),
+            table_state_readers: HashMap::new(),
             table_event_managers: HashMap::new(),
             cmd_tx,
             cmd_rx: Some(cmd_rx),
@@ -230,6 +233,10 @@ impl ReplicationConnection {
         self.table_readers.get(&src_table_id).unwrap()
     }
 
+    pub fn get_table_state_reader(&self, src_table_id: SrcTableId) -> &TableStateReader {
+        self.table_state_readers.get(&src_table_id).unwrap()
+    }
+
     pub fn table_readers_count(&self) -> usize {
         self.table_readers.len()
     }
@@ -286,6 +293,8 @@ impl ReplicationConnection {
             .insert(src_table_id, table_resources.read_state_manager);
         self.table_event_managers
             .insert(src_table_id, table_resources.table_event_manager);
+        self.table_state_readers
+            .insert(src_table_id, table_resources.table_state_reader);
         if let Err(e) = self
             .cmd_tx
             .send(Command::AddTable {
@@ -367,6 +376,9 @@ impl ReplicationConnection {
     async fn remove_table_from_replication(&mut self, src_table_id: SrcTableId) -> Result<()> {
         debug!(src_table_id, "removing table from replication");
         self.table_readers.remove_entry(&src_table_id).unwrap();
+        self.table_state_readers
+            .remove_entry(&src_table_id)
+            .unwrap();
         // Notify the table handler to clean up cache, mooncake and iceberg table state.
         self.drop_iceberg_table(src_table_id).await?;
         if let Err(e) = self.cmd_tx.send(Command::DropTable { src_table_id }).await {

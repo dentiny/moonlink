@@ -10,14 +10,11 @@ pub use error::*;
 pub use event_sync::EventSyncSender;
 pub use storage::storage_utils::create_data_file;
 pub(crate) use storage::NonEvictableHandle;
-pub use storage::SnapshotReadOutput;
 pub use storage::{
-    EventSyncReceiver, FileSystemConfig, IcebergTableConfig, IcebergTableManager, MooncakeTable,
-    MooncakeTableConfig, TableEventManager, TableManager,
-};
-pub use storage::{
-    FileSystemAccessor, MoonlinkSecretType, MoonlinkTableConfig, MoonlinkTableSecret,
-    ObjectStorageCache, ObjectStorageCacheConfig,
+    EventSyncReceiver, FileSystemAccessor, FileSystemConfig, IcebergTableConfig,
+    IcebergTableManager, MooncakeTable, MooncakeTableConfig, MoonlinkSecretType,
+    MoonlinkTableConfig, MoonlinkTableSecret, ObjectStorageCache, ObjectStorageCacheConfig,
+    SnapshotReadOutput, TableEventManager, TableManager, TableState, TableStateReader,
 };
 pub use table_handler::TableHandler;
 pub use table_notify::TableEvent;

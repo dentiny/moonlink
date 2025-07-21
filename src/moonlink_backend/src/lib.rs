@@ -7,7 +7,7 @@ mod recovery_utils;
 pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
-use moonlink::TableEventManager;
+use moonlink::{TableEventManager, TableState};
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use moonlink_metadata_store::SqliteMetadataStore;
@@ -150,6 +150,19 @@ where
             .delete_table_metadata(database_id, table_id)
             .await
             .unwrap()
+    }
+
+    pub async fn get_table_state(&self, database_id: D, table_id: T) -> Result<TableState> {
+        let table_state = {
+            let manager = self.replication_manager.read().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let table_state_reader = manager.get_table_state_reader(&mooncake_table_id);
+            table_state_reader.get_current_table_state().await?
+        };
+        Ok(table_state)
     }
 
     pub async fn scan_table(
