@@ -1362,6 +1362,34 @@ async fn test_index_merge_with_sufficient_file_indices() {
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 20);
     assert_eq!(snapshot.disk_files.len(), 2); // two data files created by two flushes
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one merged file index
+
+    // Add another file and trigger a new force full compaction.
+    env.append_row(
+        /*id=*/ 4, /*name=*/ "Cat", /*age=*/ 40, /*lsn=*/ 5,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30).await;
+
+    // Force index merge and iceberg snapshot, check result.
+    env.force_index_merge_and_sync().await.unwrap();
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 30, /*ids=*/ &[2, 3, 4])
+        .await;
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id, 4);
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.disk_files.len(), 3); // three data files created by three flushes
+    assert_eq!(snapshot.indices.file_indices.len(), 1); // one merged file index
 }
 
 #[tokio::test]
@@ -1401,6 +1429,34 @@ async fn test_data_compaction_with_sufficient_data_files() {
         .unwrap();
     assert_eq!(next_file_id, 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 20);
+    assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
+    assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
+
+    // Add another file and trigger a new force full compaction.
+    env.append_row(
+        /*id=*/ 4, /*name=*/ "Cat", /*age=*/ 40, /*lsn=*/ 5,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30).await;
+
+    // Force index merge and iceberg snapshot, check result.
+    env.force_data_compaction_and_sync().await.unwrap();
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 30, /*ids=*/ &[2, 3, 4])
+        .await;
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id, 2);
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 }
@@ -1455,6 +1511,34 @@ async fn test_full_maintenance_with_sufficient_data_files() {
         .unwrap();
     assert_eq!(next_file_id, 2);
     assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 20);
+    assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
+    assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
+
+    // Add another file and trigger a new force full compaction.
+    env.append_row(
+        /*id=*/ 4, /*name=*/ "Cat", /*age=*/ 40, /*lsn=*/ 5,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.commit(30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30).await;
+
+    // Force index merge and iceberg snapshot, check result.
+    env.force_full_maintenance_and_sync().await.unwrap();
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 30, /*ids=*/ &[2, 3, 4])
+        .await;
+
+    // Check iceberg snapshot result.
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id, 2);
+    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 }
