@@ -1011,7 +1011,7 @@ impl SnapshotTableState {
         let flush_by_new_files_or_maintainence = self
             .unpersisted_records
             .if_persist_by_new_files_or_maintainence(opt.force_create);
-        let flush_by_schema_change = task.new_schema.is_some();
+        let flush_by_schema_change = task.new_metadata.is_some();
 
         // Decide whether to perform a data compaction.
         //
@@ -1042,11 +1042,11 @@ impl SnapshotTableState {
                 || flush_by_new_files_or_maintainence
                 || flush_by_schema_change
             {
-                let new_schema = std::mem::take(&mut task.new_schema);
+                let new_metadata = std::mem::take(&mut task.new_metadata);
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
                     self.current_snapshot.wal_persistence_metadata.clone(),
-                    new_schema,
+                    new_metadata,
                     aggregated_committed_deletion_logs,
                 ));
             }

@@ -333,7 +333,7 @@ pub struct SnapshotTask {
     new_streaming_xact: Vec<TransactionStreamOutput>,
 
     /// Schema change.
-    new_schema: Option<Arc<TableMetadata>>,
+    new_metadata: Option<Arc<TableMetadata>>,
 
     /// --- States related to WAL operation ---
     new_wal_persistence_metadata: Option<WalPersistenceMetadata>,
@@ -368,7 +368,7 @@ impl SnapshotTask {
             new_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
-            new_schema: None,
+            new_metadata: None,
             // WAL related fields.
             new_wal_persistence_metadata: None,
             // Read request related fields.
@@ -415,14 +415,14 @@ impl SnapshotTask {
 
     /// Return whether current snapshot buffer has pending schema update.
     pub(crate) fn has_schema_update(&self) -> bool {
-        self.new_schema.is_some()
+        self.new_metadata.is_some()
     }
 
     pub fn should_create_snapshot(&self) -> bool {
         // If mooncake has new transaction commits.
         self.new_commit_lsn > 0
         // If mooncake table is requested to update schema.
-            || self.new_schema.is_some()
+            || self.new_metadata.is_some()
         // If mooncake table accumulated large enough writes.
             || !self.new_disk_slices.is_empty()
             || self.new_deletions.len()
@@ -1069,8 +1069,8 @@ impl MooncakeTable {
     /// To synchronize on its completion, caller should trigger a force snapshot and block wait iceberg snapshot complet
     #[allow(dead_code)]
     pub(crate) fn alter_table_schema(&mut self, updated_table_metadata: Arc<TableMetadata>) {
-        assert!(self.next_snapshot_task.new_schema.is_none());
-        self.next_snapshot_task.new_schema = Some(updated_table_metadata);
+        assert!(self.next_snapshot_task.new_metadata.is_none());
+        self.next_snapshot_task.new_metadata = Some(updated_table_metadata);
     }
 
     pub(crate) fn notify_snapshot_reader(&self, lsn: u64) {
@@ -1087,7 +1087,7 @@ impl MooncakeTable {
         if !next_snapshot_task.has_schema_update() {
             return;
         }
-        self.metadata = next_snapshot_task.new_schema.as_ref().unwrap().clone();
+        self.metadata = next_snapshot_task.new_metadata.as_ref().unwrap().clone();
         self.mem_slice = MemSlice::new(
             self.metadata.schema.clone(),
             self.metadata.config.batch_size,
