@@ -6,20 +6,26 @@ use std::io::ErrorKind;
 
 /// Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
 /// The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "./temp/";
+pub const DEFAULT_MOONLINK_TEMP_FILE_PATH: &str = "temp/";
 /// Default object storage read-through cache directory under the above mooncake directory (which defaults to `PGDATA/pg_mooncake`).
 /// The whole directory is cleaned up at moonlink backend start, to prevent file leak.
-pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "./read_through_cache/";
+pub const DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH: &str = "read_through_cache/";
 /// Min left disk space for on-disk cache of the filesystem which cache directory is mounted on.
 const MIN_DISK_SPACE_FOR_CACHE: u64 = 1 << 30; // 1GiB
 
+/// Get directory path under the given base directory.
+fn get_directory_under_base(base: &str, subdir: &str) -> std::path::PathBuf {
+    std::path::PathBuf::from(base).join(subdir)
+}
 /// Get temporary directory under base path.
+/// [`base_path`] is expected to be the canonicalized path.
 pub(super) fn get_temp_file_directory_under_base(base_path: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(base_path).join(DEFAULT_MOONLINK_TEMP_FILE_PATH)
+    get_directory_under_base(base_path, DEFAULT_MOONLINK_TEMP_FILE_PATH)
 }
 /// Get cache directory under base path.
+/// [`base_path`] is expected to be the canonicalized path.
 pub(super) fn get_cache_directory_under_base(base_path: &str) -> std::path::PathBuf {
-    std::path::PathBuf::from(base_path).join(DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH)
+    get_directory_under_base(base_path, DEFAULT_MOONLINK_OBJECT_STORAGE_CACHE_PATH)
 }
 
 /// Util function to get filesystem size for cache directory
@@ -85,5 +91,20 @@ mod tests {
         let inner = tmp.path().join("sub");
         recreate_directory(inner.to_str().unwrap()).unwrap();
         assert!(inner.exists());
+    }
+
+    #[test]
+    fn test_get_directory_under_base() {
+        const SUBDIR: &str = "subdir";
+
+        // Root directory as base path.
+        let base = "/";
+        let newdir = get_directory_under_base(base, SUBDIR);
+        assert_eq!(newdir.to_str().unwrap(), "/subdir");
+
+        // Non-root directory as base path.
+        let base = "/tmp";
+        let newdir = get_directory_under_base(base, SUBDIR);
+        assert_eq!(newdir.to_str().unwrap(), "/tmp/subdir");
     }
 }
