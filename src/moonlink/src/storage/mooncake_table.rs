@@ -961,7 +961,12 @@ impl MooncakeTable {
 
         self.next_snapshot_task.new_rows = Some(self.mem_slice.get_latest_rows());
         let next_snapshot_task = std::mem::take(&mut self.next_snapshot_task);
+
+        // Re-initialize mooncake table fields.
         self.next_snapshot_task = SnapshotTask::new(self.metadata.config.clone());
+        // If table schema has been updated, re-initialize mem slice accordingly.
+        if 
+
         let cur_snapshot = self.snapshot.clone();
         // Create a detached task, whose completion will be notified separately.
         tokio::task::spawn(

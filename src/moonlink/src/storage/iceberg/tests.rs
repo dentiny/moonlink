@@ -121,6 +121,14 @@ fn test_row_3() -> MoonlinkRow {
     ])
 }
 
+/// Test util function to create moonlink row with updated schema with [`create_test_updated_arrow_schema`].
+fn test_row_with_updated_schema() -> MoonlinkRow {
+    MoonlinkRow::new(vec![
+        RowValue::Int32(100),
+        RowValue::ByteArray("new_string".as_bytes().to_vec()),
+    ])
+}
+
 /// Test util function to write arrow record batch into local file.
 async fn write_arrow_record_batch_to_local<P: AsRef<std::path::Path>>(
     path: P,
@@ -1949,6 +1957,17 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
     let expected_schema =
         arrow_schema_to_schema(updated_mooncake_table_metadata.schema.as_ref()).unwrap();
     assert_is_same_schema(actual_schema.as_ref().clone(), expected_schema);
+
+    // Perform more data file with the new schema should go through with no issue.
+    let row = test_row_with_updated_schema();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 10);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 20)
+        .await
+        .unwrap();
+
+    // Create a mooncake and iceberg snapshot to reflect new data file changes.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 }
 
 #[tokio::test]
