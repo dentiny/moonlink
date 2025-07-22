@@ -911,3 +911,6 @@ mod test_utils;
 
 #[cfg(test)]
 mod failure_tests;
+
+#[cfg(test)]
+mod chaos_test;

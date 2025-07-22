@@ -272,13 +272,13 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
     (table, notify_rx)
 }
 
-/// Test util function to create mooncake table and table notify.
-pub(crate) async fn create_mooncake_table_and_notify(
+/// Test util function to create mooncake table.
+pub(crate) async fn create_mooncake_table(
     mooncake_table_metadata: Arc<MooncakeTableMetadata>,
     iceberg_table_config: IcebergTableConfig,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableEvent>) {
-    let mut table = MooncakeTable::new(
+) -> MooncakeTable {
+    let table = MooncakeTable::new(
         create_test_arrow_schema().as_ref().clone(),
         ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
@@ -292,6 +292,21 @@ pub(crate) async fn create_mooncake_table_and_notify(
     .await
     .unwrap();
 
+    table
+}
+
+/// Test util function to create mooncake table and table notify.
+pub(crate) async fn create_mooncake_table_and_notify(
+    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
+    object_storage_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableEvent>) {
+    let mut table = create_mooncake_table(
+        mooncake_table_metadata,
+        iceberg_table_config,
+        object_storage_cache,
+    )
+    .await;
     let (notify_tx, notify_rx) = mpsc::channel(100);
     table.register_table_notify(notify_tx).await;
 
