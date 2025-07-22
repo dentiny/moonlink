@@ -1026,14 +1026,15 @@ impl SnapshotTableState {
             file_indices_merge_payload = self.get_file_indices_to_merge(&opt.index_merge_option);
         }
 
+        let flush_by_table_write = self.current_snapshot.data_file_flush_lsn.is_some()
+            && flush_by_new_files_or_maintainence
+            || flush_by_deletion;
+
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
-        if !opt.skip_iceberg_snapshot
-            && self.current_snapshot.data_file_flush_lsn.is_some()
-            && (flush_by_new_files_or_maintainence || flush_by_deletion || flush_by_schema_change)
-        {
+        if !opt.skip_iceberg_snapshot && (flush_by_schema_change || flush_by_table_write) {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
-            let flush_lsn = self.current_snapshot.data_file_flush_lsn.unwrap();
+            let flush_lsn = self.current_snapshot.data_file_flush_lsn.unwrap_or(0);
             let aggregated_committed_deletion_logs =
                 self.aggregate_committed_deletion_logs(flush_lsn);
 
