@@ -1,4 +1,4 @@
-use super::data_batches::{create_batch_from_rows, InMemoryBatch};
+use super::data_batches::InMemoryBatch;
 use super::delete_vector::BatchDeletionVector;
 use super::{
     DiskFileEntry, IcebergSnapshotPayload, Snapshot, SnapshotTask,
@@ -17,13 +17,9 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
-use crate::storage::mooncake_table::snapshot_read_output::{
-    DataFileForRead, ReadOutput as SnapshotReadOutput,
-};
 use crate::storage::mooncake_table::table_snapshot::{
     FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
 };
-use crate::storage::mooncake_table::table_state::TableSnapshotState;
 use crate::storage::mooncake_table::transaction_stream::TransactionStreamOutput;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::{
@@ -36,11 +32,7 @@ use crate::storage::storage_utils::{
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::table_notify::TableEvent;
 use crate::{create_data_file, NonEvictableHandle};
-use arrow_schema::Schema;
 use more_asserts as ma;
-use parquet::arrow::AsyncArrowWriter;
-use parquet::basic::{Compression, Encoding};
-use parquet::file::properties::WriterProperties;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::mem::take;
@@ -54,10 +46,10 @@ pub(crate) struct SnapshotTableState {
     pub(super) current_snapshot: Snapshot,
 
     /// In memory RecordBatches, maps from batch id to in-memory batch.
-    batches: BTreeMap<u64, InMemoryBatch>,
+    pub(super) batches: BTreeMap<u64, InMemoryBatch>,
 
     /// Latest rows
-    rows: Option<SharedRowBufferSnapshot>,
+    pub(super) rows: Option<SharedRowBufferSnapshot>,
 
     // UNDONE(BATCH_INSERT):
     // Track uncommitted disk files/ batches from big batch insert
@@ -73,7 +65,7 @@ pub(crate) struct SnapshotTableState {
     pub(crate) uncommitted_deletion_log: Vec<Option<ProcessedDeletionRecord>>,
 
     /// Last commit point
-    last_commit: RecordLocation,
+    pub(super) last_commit: RecordLocation,
 
     /// Object storage cache.
     pub(super) object_storage_cache: ObjectStorageCache,
@@ -82,7 +74,7 @@ pub(crate) struct SnapshotTableState {
     pub(super) filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
 
     /// Table notifier.
-    table_notify: Option<Sender<TableEvent>>,
+    pub(super) table_notify: Option<Sender<TableEvent>>,
 
     /// ---- Items not persisted to iceberg snapshot ----
     ///
@@ -141,7 +133,7 @@ impl SnapshotTableState {
     }
 
     /// Util function to get table unique file id.
-    fn get_table_unique_file_id(&self, file_id: FileId) -> TableUniqueFileId {
+    pub(super) fn get_table_unique_file_id(&self, file_id: FileId) -> TableUniqueFileId {
         TableUniqueFileId {
             table_id: TableId(self.mooncake_table_metadata.table_id),
             file_id,
@@ -1421,7 +1413,7 @@ impl SnapshotTableState {
     }
 
     /// Get committed deletion record for current snapshot.
-    async fn get_deletion_records(
+    pub(super) async fn get_deletion_records(
         &mut self,
     ) -> (
         Vec<NonEvictableHandle>,       /*puffin file cache handles*/
@@ -1477,122 +1469,5 @@ impl SnapshotTableState {
             }
         }
         (puffin_cache_handles, deletion_vector_blob_at_read, ret)
-    }
-
-    /// Util function to get read state, which returns all current data files information.
-    /// If a data file already has a pinned reference, increment the reference count directly to avoid unnecessary IO.
-    async fn get_read_files_for_read(&mut self) -> Vec<DataFileForRead> {
-        let mut data_files_for_read = Vec::with_capacity(self.current_snapshot.disk_files.len());
-        for (file, _) in self.current_snapshot.disk_files.iter() {
-            let unique_table_file_id = self.get_table_unique_file_id(file.file_id());
-            data_files_for_read.push(DataFileForRead::RemoteFilePath((
-                unique_table_file_id,
-                file.file_path().to_string(),
-            )));
-        }
-
-        data_files_for_read
-    }
-
-    pub(crate) fn get_table_schema(&self) -> Result<Arc<Schema>> {
-        Ok(self.mooncake_table_metadata.schema.clone())
-    }
-
-    pub(crate) fn get_table_snapshot_states(&self) -> Result<TableSnapshotState> {
-        Ok(TableSnapshotState {
-            table_commit_lsn: self.current_snapshot.snapshot_version,
-            iceberg_flush_lsn: self.current_snapshot.data_file_flush_lsn,
-        })
-    }
-
-    pub(crate) async fn request_read(&mut self) -> Result<SnapshotReadOutput> {
-        let mut data_file_paths = self.get_read_files_for_read().await;
-        let mut associated_files = Vec::new();
-        let (puffin_cache_handles, deletion_vectors_at_read, position_deletes) =
-            self.get_deletion_records().await;
-
-        // For committed but not persisted records, we create a temporary file for them, which gets deleted after query completion.
-        let file_path = self.current_snapshot.get_name_for_inmemory_file();
-        let filepath_exists = tokio::fs::try_exists(&file_path).await?;
-        if filepath_exists {
-            data_file_paths.push(DataFileForRead::TemporaryDataFile(
-                file_path.to_string_lossy().to_string(),
-            ));
-            associated_files.push(file_path.to_string_lossy().to_string());
-            return Ok(SnapshotReadOutput {
-                data_file_paths,
-                puffin_cache_handles,
-                deletion_vectors: deletion_vectors_at_read,
-                position_deletes,
-                associated_files,
-                object_storage_cache: Some(self.object_storage_cache.clone()),
-                filesystem_accessor: Some(self.filesystem_accessor.clone()),
-                table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
-            });
-        }
-
-        assert!(matches!(
-            self.last_commit,
-            RecordLocation::MemoryBatch(_, _)
-        ));
-        let (batch_id, row_id) = self.last_commit.clone().into();
-        if batch_id > 0 || row_id > 0 {
-            // add all batches
-            let mut filtered_batches = Vec::new();
-            let schema = self.current_snapshot.metadata.schema.clone();
-            for (id, batch) in self.batches.iter() {
-                if *id < batch_id {
-                    if let Some(filtered_batch) = batch.get_filtered_batch()? {
-                        filtered_batches.push(filtered_batch);
-                    }
-                } else if *id == batch_id && row_id > 0 {
-                    if batch.data.is_some() {
-                        if let Some(filtered_batch) = batch.get_filtered_batch_with_limit(row_id)? {
-                            filtered_batches.push(filtered_batch);
-                        }
-                    } else {
-                        let rows = self.rows.as_ref().unwrap().get_buffer(row_id);
-                        let deletions = &self
-                            .batches
-                            .values()
-                            .last()
-                            .expect("batch not found")
-                            .deletions;
-                        let batch = create_batch_from_rows(rows, schema.clone(), deletions);
-                        filtered_batches.push(batch);
-                    }
-                }
-            }
-
-            // TODO(hjiang): Check whether we could avoid IO operation inside of critical section.
-            if !filtered_batches.is_empty() {
-                // Build a parquet file from current record batches
-                let temp_file = tokio::fs::File::create(&file_path).await?;
-                let props = WriterProperties::builder()
-                    .set_compression(Compression::UNCOMPRESSED)
-                    .set_dictionary_enabled(false)
-                    .set_encoding(Encoding::PLAIN)
-                    .build();
-                let mut parquet_writer = AsyncArrowWriter::try_new(temp_file, schema, Some(props))?;
-                for batch in filtered_batches.iter() {
-                    parquet_writer.write(batch).await?;
-                }
-                parquet_writer.close().await?;
-                data_file_paths.push(DataFileForRead::TemporaryDataFile(
-                    file_path.to_string_lossy().to_string(),
-                ));
-                associated_files.push(file_path.to_string_lossy().to_string());
-            }
-        }
-        Ok(SnapshotReadOutput {
-            data_file_paths,
-            puffin_cache_handles,
-            deletion_vectors: deletion_vectors_at_read,
-            position_deletes,
-            associated_files,
-            object_storage_cache: Some(self.object_storage_cache.clone()),
-            filesystem_accessor: Some(self.filesystem_accessor.clone()),
-            table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
-        })
     }
 }
