@@ -14,8 +14,11 @@ use crate::ObjectStorageCache;
 use crate::TableEventManager;
 
 use rand::prelude::*;
-use rand::Rng;
+use rand::rngs::StdRng;
+use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
+use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
 use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::watch;
@@ -137,6 +140,7 @@ struct TestEnvironment {
     table_event_manager: TableEventManager,
     table_handler: TableHandler,
     event_sender: Sender<TableEvent>,
+    event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
 }
 
 impl TestEnvironment {
@@ -186,26 +190,49 @@ impl TestEnvironment {
             read_state_manager,
             table_handler,
             event_sender,
+            event_replay_rx,
         }
     }
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos() {
-    let mut rng = rand::rng();
-    let mut state = ChaosState::new();
-    let env = TestEnvironment::new().await;
+    let mut env = TestEnvironment::new().await;
     let event_sender = env.event_sender.clone();
 
-    // TODO(hjiang): Hard-coded times, should better use a CLI flag.
-    for _ in 0..100 {
-        let events = generate_random_events(&mut state, &mut rng);
-        for cur_event in events.into_iter() {
-            event_sender.send(cur_event).await.unwrap();
+    let task = tokio::spawn(async move {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let mut rng = StdRng::seed_from_u64(nanos as u64);
+        let mut state = ChaosState::new();
+
+        for _ in 0..100 {
+            let events = generate_random_events(&mut state, &mut rng);
+            for cur_event in events.into_iter() {
+                event_sender.send(cur_event).await.unwrap();
+            }
+        }
+
+        // TODO(hjiang): Hard-coded wait time, should issue shutdown table event after exit bug resolved.
+        // Ref: https://github.com/Mooncake-Labs/moonlink/issues/970
+        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    });
+    let result = catch_unwind(AssertUnwindSafe(|| {
+        tokio::task::block_in_place(move || {
+            tokio::runtime::Handle::current()
+                .block_on(task)
+                .expect("task panicked unexpectedly");
+        });
+    }));
+
+    // Print out events in order if chaos test fails.
+    println!("result = {:?}!!!", result);
+    if result.is_err() {
+        println!("Chaos test fails with {:?}", result);
+        while let Some(cur_event) = env.event_replay_rx.recv().await {
+            println!("{:?}", cur_event);
         }
     }
-
-    // TODO(hjiang): Hard-coded wait time, should issue shutdown table event after exit bug resolved.
-    // Ref: https://github.com/Mooncake-Labs/moonlink/issues/970
-    tokio::time::sleep(std::time::Duration::from_secs(60)).await;
 }

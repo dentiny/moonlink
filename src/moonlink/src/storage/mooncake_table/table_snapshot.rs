@@ -323,6 +323,20 @@ pub struct IcebergSnapshotResult {
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
 }
 
+impl Clone for IcebergSnapshotResult {
+    fn clone(&self) -> Self {
+        IcebergSnapshotResult {
+            table_manager: None,
+            flush_lsn: self.flush_lsn,
+            wal_persisted_metadata: self.wal_persisted_metadata.clone(),
+            new_table_schema: self.new_table_schema.clone(),
+            import_result: self.import_result.clone(),
+            index_merge_result: self.index_merge_result.clone(),
+            data_compaction_result: self.data_compaction_result.clone(),
+        }
+    }
+}
+
 impl IcebergSnapshotResult {
     /// Return whether iceberg snapshot result contains table maintenance persistence result.
     pub fn contains_maintanence_result(&self) -> bool {
