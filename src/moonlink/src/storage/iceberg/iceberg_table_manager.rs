@@ -195,10 +195,13 @@ impl TableManager for IcebergTableManager {
         mut snapshot_payload: IcebergSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult> {
+        // Persist data files, deletion vectors, and file indices.
         let new_table_schema = std::mem::take(&mut snapshot_payload.new_table_schema);
         let persistence_result = self
             .sync_snapshot_impl(snapshot_payload, file_params)
             .await?;
+
+        // Perform schema evolution if necessary.
         if let Some(new_table_schema) = new_table_schema {
             self.alter_table_schema_impl(new_table_schema).await?;
         }

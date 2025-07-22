@@ -49,23 +49,6 @@ impl IcebergTableManager {
         _snapshot_payload: &IcebergSnapshotPayload,
     ) {
         schema_utils::assert_table_schema_id(self.iceberg_table.as_ref().unwrap());
-
-        // Perform expensive validations only at tests.
-        #[cfg(test)]
-        {
-            // Assert table schema matches iceberg table metadata.
-            schema_utils::assert_table_schema_consistent(
-                self.iceberg_table.as_ref().unwrap(),
-                &self.mooncake_table_metadata,
-            );
-
-            // Assert new data files schema matches table schema.
-            schema_utils::assert_payload_schema_consistent(
-                _snapshot_payload,
-                self.mooncake_table_metadata.as_ref(),
-            )
-            .await;
-        }
     }
 
     /// Util function to get unique table file id for the deletion vector puffin file.

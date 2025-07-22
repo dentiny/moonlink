@@ -413,6 +413,11 @@ impl SnapshotTask {
         true
     }
 
+    /// Return whether current snapshot buffer has pending schema update.
+    pub(crate) fn has_schema_update(&self) -> bool {
+        self.new_schema.is_some()
+    }
+
     pub fn should_create_snapshot(&self) -> bool {
         // If mooncake has new transaction commits.
         self.new_commit_lsn > 0
@@ -964,8 +969,9 @@ impl MooncakeTable {
 
         // Re-initialize mooncake table fields.
         self.next_snapshot_task = SnapshotTask::new(self.metadata.config.clone());
-        // If table schema has been updated, re-initialize mem slice accordingly.
-        if 
+
+        // Special handle schema update.
+        self.reinit_fields_by_schema_change(&next_snapshot_task);
 
         let cur_snapshot = self.snapshot.clone();
         // Create a detached task, whose completion will be notified separately.
@@ -1074,6 +1080,19 @@ impl MooncakeTable {
     #[cfg(test)]
     pub(crate) fn get_snapshot_watch_sender(&self) -> watch::Sender<u64> {
         self.table_snapshot_watch_sender.clone()
+    }
+
+    /// Certain mooncake table fields need to be re-initialized due to schema change.
+    fn reinit_fields_by_schema_change(&mut self, next_snapshot_task: &SnapshotTask) {
+        if !next_snapshot_task.has_schema_update() {
+            return;
+        }
+        self.metadata = next_snapshot_task.new_schema.as_ref().unwrap().clone();
+        self.mem_slice = MemSlice::new(
+            self.metadata.schema.clone(),
+            self.metadata.config.batch_size,
+            self.metadata.identity.clone(),
+        );
     }
 
     /// Persist an iceberg snapshot.

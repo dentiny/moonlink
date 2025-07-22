@@ -1961,7 +1961,7 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
     // Perform more data file with the new schema should go through with no issue.
     let row = test_row_with_updated_schema();
     table.append(row.clone()).unwrap();
-    table.commit(/*lsn=*/ 10);
+    table.commit(/*lsn=*/ 20);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 20)
         .await
         .unwrap();
