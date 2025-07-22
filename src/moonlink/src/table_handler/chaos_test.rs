@@ -208,6 +208,7 @@ async fn test_chaos() {
         let mut rng = StdRng::seed_from_u64(nanos as u64);
         let mut state = ChaosState::new();
 
+        // TODO(hjiang): Make iteration count a CLI configurable constant.
         for _ in 0..100 {
             let events = generate_random_events(&mut state, &mut rng);
             for cur_event in events.into_iter() {
@@ -215,24 +216,25 @@ async fn test_chaos() {
             }
         }
 
-        // TODO(hjiang): Hard-coded wait time, should issue shutdown table event after exit bug resolved.
-        // Ref: https://github.com/Mooncake-Labs/moonlink/issues/970
+        // TODO(hjiang): Temporarily hard code a sleep time to trigger background tasks.
         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+
+        // If anything bad happens in the eventloop, drop table would fail.
+        event_sender.send(TableEvent::DropTable).await.unwrap();
     });
-    let result = catch_unwind(AssertUnwindSafe(|| {
-        tokio::task::block_in_place(move || {
-            tokio::runtime::Handle::current()
-                .block_on(task)
-                .expect("task panicked unexpectedly");
-        });
-    }));
+
+    // Await the task directly and handle its result.
+    let task_result = task.await;
 
     // Print out events in order if chaos test fails.
-    println!("result = {:?}!!!", result);
-    if result.is_err() {
-        println!("Chaos test fails with {:?}", result);
+    if let Err(e) = task_result {
+        // Display all enqueued events for debugging and replay.
         while let Some(cur_event) = env.event_replay_rx.recv().await {
             println!("{:?}", cur_event);
+        }
+        // Propagate the panic to fail the test.
+        if let Ok(panic) = e.try_into_panic() {
+            std::panic::resume_unwind(panic);
         }
     }
 }
