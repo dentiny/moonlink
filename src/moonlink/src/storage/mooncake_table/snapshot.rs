@@ -1027,8 +1027,7 @@ impl SnapshotTableState {
         }
 
         let flush_by_table_write = self.current_snapshot.data_file_flush_lsn.is_some()
-            && flush_by_new_files_or_maintainence
-            || flush_by_deletion;
+            && (flush_by_new_files_or_maintainence || flush_by_deletion);
 
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         if !opt.skip_iceberg_snapshot && (flush_by_schema_change || flush_by_table_write) {
