@@ -12,12 +12,27 @@ use crate::storage::TableManager;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+/// Util function to get index block files for the given file indices.
+fn get_index_block_files_impl(file_indices: &Vec<MooncakeFileIndex>) -> Vec<MooncakeDataFileRef> {
+    let mut index_block_files = vec![];
+    for cur_file_index in file_indices.iter() {
+        let index_blocks = &cur_file_index.index_blocks;
+        index_block_files.extend(
+            index_blocks
+                .iter()
+                .map(|cur_block| cur_block.index_file.clone())
+                .collect::<Vec<_>>(),
+        );
+    }
+    index_block_files
+}
+
 ////////////////////////////
 /// Iceberg snapshot payload
 ////////////////////////////
 ///
 /// Iceberg snapshot payload by write operations.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct IcebergSnapshotImportPayload {
     /// New data files to introduce to the iceberg table.
     pub(crate) data_files: Vec<MooncakeDataFileRef>,
@@ -25,6 +40,22 @@ pub struct IcebergSnapshotImportPayload {
     pub(crate) new_deletion_vector: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     /// New file indices to import.
     pub(crate) file_indices: Vec<MooncakeFileIndex>,
+}
+
+impl IcebergSnapshotImportPayload {
+    fn get_index_block_files(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.file_indices)
+    }
+}
+
+impl std::fmt::Debug for IcebergSnapshotImportPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotImportPayload")
+            .field("data_files", &self.data_files)
+            .field("new_deletion_vector", &self.new_deletion_vector)
+            .field("file_indices", &self.get_index_block_files())
+            .finish()
+    }
 }
 
 /// Iceberg snapshot payload by index merge operations.
@@ -50,7 +81,7 @@ impl IcebergSnapshotIndexMergePayload {
 }
 
 /// Iceberg snapshot payload by data file compaction operations.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct IcebergSnapshotDataCompactionPayload {
     /// New data files to import to the iceberg table.
     pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,
@@ -60,6 +91,33 @@ pub struct IcebergSnapshotDataCompactionPayload {
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
     /// Old file indices to remove from the iceberg table.
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+}
+
+impl IcebergSnapshotDataCompactionPayload {
+    fn get_new_index_block_files_to_import(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.new_file_indices_to_import)
+    }
+
+    fn get_old_index_block_files_to_remove(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.old_file_indices_to_remove)
+    }
+}
+
+impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotDataCompactionPayload")
+            .field("new_data_files_to_import", &self.new_data_files_to_import)
+            .field("old_data_files_to_remove", &self.old_data_files_to_remove)
+            .field(
+                "new_file_indices_to_import",
+                &self.get_new_index_block_files_to_import(),
+            )
+            .field(
+                "old_file_indices_to_remove",
+                &self.get_old_index_block_files_to_remove(),
+            )
+            .finish()
+    }
 }
 
 impl IcebergSnapshotDataCompactionPayload {
@@ -117,7 +175,7 @@ impl IcebergSnapshotPayload {
 ////////////////////////////
 ///
 /// Iceberg snapshot import result.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct IcebergSnapshotImportResult {
     /// Persisted data files.
     pub(crate) new_data_files: Vec<MooncakeDataFileRef>,
@@ -134,10 +192,24 @@ impl IcebergSnapshotImportResult {
             && self.puffin_blob_ref.is_empty()
             && self.new_file_indices.is_empty()
     }
+
+    fn get_new_index_block_files(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.new_file_indices)
+    }
+}
+
+impl std::fmt::Debug for IcebergSnapshotImportResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotImportResult")
+            .field("new_data_files", &self.new_data_files)
+            .field("puffin_blob_ref", &self.puffin_blob_ref)
+            .field("new_file_indices", &self.get_new_index_block_files())
+            .finish()
+    }
 }
 
 /// Iceberg snapshot index merge result.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct IcebergSnapshotIndexMergeResult {
     /// New file indices which are imported the iceberg table.
     pub(crate) new_file_indices_imported: Vec<MooncakeFileIndex>,
@@ -156,10 +228,33 @@ impl IcebergSnapshotIndexMergeResult {
         assert!(!self.old_file_indices_removed.is_empty());
         false
     }
+
+    fn get_new_index_block_files_imported(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.new_file_indices_imported)
+    }
+
+    fn get_old_index_block_files_removed(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.old_file_indices_removed)
+    }
+}
+
+impl std::fmt::Debug for IcebergSnapshotIndexMergeResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotIndexMergeResult")
+            .field(
+                "new_file_indices_imported",
+                &self.get_new_index_block_files_imported(),
+            )
+            .field(
+                "old_file_indices_removed",
+                &self.get_old_index_block_files_removed(),
+            )
+            .finish()
+    }
 }
 
 /// Iceberg snapshot data file compaction result.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct IcebergSnapshotDataCompactionResult {
     /// New data files which are importedthe iceberg table.
     pub(crate) new_data_files_imported: Vec<MooncakeDataFileRef>,
@@ -183,6 +278,31 @@ impl IcebergSnapshotDataCompactionResult {
 
         assert!(!self.old_data_files_removed.is_empty());
         false
+    }
+
+    fn get_new_index_block_files_imported(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.new_file_indices_imported)
+    }
+
+    fn get_old_index_block_files_removed(&self) -> Vec<MooncakeDataFileRef> {
+        get_index_block_files_impl(&self.old_file_indices_removed)
+    }
+}
+
+impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotDataCompactionResult")
+            .field("new_data_files_imported", &self.new_data_files_imported)
+            .field("old_data_files_removed", &self.old_data_files_removed)
+            .field(
+                "new_file_indices_imported",
+                &self.get_new_index_block_files_imported(),
+            )
+            .field(
+                "old_file_indices_removed",
+                &self.get_old_index_block_files_removed(),
+            )
+            .finish()
     }
 }
 
