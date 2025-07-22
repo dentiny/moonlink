@@ -53,6 +53,7 @@ struct TableState {
 /// Manages replication for table(s) within a database.
 pub struct ReplicationConnection {
     uri: String,
+    database_id: u32,
     table_base_path: String,
     table_temp_files_directory: String,
     postgres_client: Client,
@@ -73,6 +74,7 @@ pub struct ReplicationConnection {
 impl ReplicationConnection {
     pub async fn new(
         uri: String,
+        database_id: u32,
         table_base_path: String,
         table_temp_files_directory: String,
         object_storage_cache: ObjectStorageCache,
@@ -125,6 +127,7 @@ impl ReplicationConnection {
 
         Ok(Self {
             uri,
+            database_id,
             table_base_path,
             table_temp_files_directory,
             postgres_client,
@@ -284,6 +287,7 @@ impl ReplicationConnection {
         debug!(src_table_id, "adding table to replication");
         let (table_resources, moonlink_table_config) = build_table_components(
             mooncake_table_id.to_string(),
+            self.database_id,
             table_id,
             schema,
             &self.table_base_path,

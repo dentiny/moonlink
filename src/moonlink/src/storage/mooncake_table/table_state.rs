@@ -10,6 +10,8 @@ pub(crate) struct TableSnapshotState {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct TableState {
+    /// Database id.
+    pub database_id: u32,
     /// Mooncake table id.
     pub table_id: u32,
     /// Mooncake table commit LSN.

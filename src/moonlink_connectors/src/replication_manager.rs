@@ -58,6 +58,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         &mut self,
         src_uri: &str,
         mooncake_table_id: T,
+        database_id: u32,
         table_id: u32,
         table_name: &str,
         filesystem_config: Option<FileSystemConfig>,
@@ -72,6 +73,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             let base_path = tokio::fs::canonicalize(&self.table_base_path).await?;
             let replication_connection = ReplicationConnection::new(
                 src_uri.to_string(),
+                database_id,
                 base_path.to_str().unwrap().to_string(),
                 self.table_temp_files_directory.clone(),
                 self.object_storage_cache.clone(),

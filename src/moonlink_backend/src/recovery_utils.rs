@@ -23,6 +23,7 @@ where
         .add_table(
             &metadata_entry.src_table_uri,
             mooncake_table_id,
+            metadata_entry.database_id,
             metadata_entry.table_id,
             &metadata_entry.src_table_name,
             /*iceberg_filesystem_config=*/
