@@ -100,11 +100,11 @@ mod tests {
         // Root directory as base path.
         let base = "/";
         let newdir = get_directory_under_base(base, SUBDIR);
-        assert_eq!(newdir.to_str().unwrap(), "/subdir");
+        assert_eq!(newdir.to_str().unwrap(), format!("/{SUBDIR}"));
 
         // Non-root directory as base path.
         let base = "/tmp";
         let newdir = get_directory_under_base(base, SUBDIR);
-        assert_eq!(newdir.to_str().unwrap(), "/tmp/subdir");
+        assert_eq!(newdir.to_str().unwrap(), format!("/tmp/{SUBDIR}"));
     }
 }
