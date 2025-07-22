@@ -8,7 +8,8 @@ license = { workspace = true }
 profiling = []
 
 [dependencies]
-arrow-array.workspace = true
+arrow-array = { workspace = true }
+arrow-schema = { workspace = true }
 console-subscriber = { workspace = true }
 moonlink = { path = "../moonlink", features = ["test-utils"] }
 moonlink_connectors = { path = "../moonlink_connectors" }

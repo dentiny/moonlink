@@ -36,6 +36,7 @@ use crate::storage::storage_utils::{
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::table_notify::TableEvent;
 use crate::{create_data_file, NonEvictableHandle};
+use arrow_schema::Schema;
 use more_asserts as ma;
 use parquet::arrow::AsyncArrowWriter;
 use parquet::basic::{Compression, Encoding};
@@ -1000,6 +1001,11 @@ impl SnapshotTableState {
             self.last_commit = cp;
         }
 
+        let flush_by_schema_change = task.new_metadata.is_some();
+        if let Some(new_metadata) = task.new_metadata.as_ref() {
+            self.mooncake_table_metadata = new_metadata.clone();
+        }
+
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
         // To reduce iceberg persistence overhead, there're certain cases an iceberg snapshot will be triggered:
         // (1) there're persisted data files
@@ -1011,7 +1017,6 @@ impl SnapshotTableState {
         let flush_by_new_files_or_maintainence = self
             .unpersisted_records
             .if_persist_by_new_files_or_maintainence(opt.force_create);
-        let flush_by_schema_change = task.new_metadata.is_some();
 
         // Decide whether to perform a data compaction.
         //
@@ -1489,7 +1494,11 @@ impl SnapshotTableState {
         data_files_for_read
     }
 
-    pub(crate) fn get_table_snapshot_states(&mut self) -> Result<TableSnapshotState> {
+    pub(crate) fn get_table_schema(&self) -> Result<Arc<Schema>> {
+        Ok(self.mooncake_table_metadata.schema.clone())
+    }
+
+    pub(crate) fn get_table_snapshot_states(&self) -> Result<TableSnapshotState> {
         Ok(TableSnapshotState {
             table_commit_lsn: self.current_snapshot.snapshot_version,
             iceberg_flush_lsn: self.current_snapshot.data_file_flush_lsn,

@@ -4,6 +4,7 @@ mod logging;
 pub mod mooncake_table_id;
 mod recovery_utils;
 
+use arrow_schema::Schema;
 pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
@@ -144,6 +145,20 @@ where
             .delete_table_metadata(database_id, table_id)
             .await
             .unwrap()
+    }
+
+    /// Get the current mooncake table schema.
+    pub async fn get_table_schema(&self, database_id: D, table_id: T) -> Result<Arc<Schema>> {
+        let table_schema = {
+            let manager = self.replication_manager.read().await;
+            let mooncake_table_id = MooncakeTableId {
+                database_id,
+                table_id,
+            };
+            let table_state_reader = manager.get_table_state_reader(&mooncake_table_id);
+            table_state_reader.get_current_table_schema().await?
+        };
+        Ok(table_schema)
     }
 
     /// Get the current mooncake table state.

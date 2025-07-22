@@ -2718,6 +2718,7 @@ name = "moonlink_backend"
 version = "0.0.1"
 dependencies = [
  "arrow-array",
+ "arrow-schema",
  "console-subscriber",
  "iceberg",
  "moonlink",

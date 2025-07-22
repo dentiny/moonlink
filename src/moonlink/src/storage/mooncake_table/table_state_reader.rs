@@ -7,6 +7,7 @@ use crate::storage::MooncakeTable;
 use crate::storage::SnapshotTableState;
 use crate::Result;
 
+use arrow_schema::Schema;
 use tokio::sync::RwLock;
 
 pub struct TableStateReader {
@@ -35,7 +36,7 @@ impl TableStateReader {
     /// Get current table state.
     pub async fn get_current_table_state(&self) -> Result<TableState> {
         let table_snapshot_state = {
-            let mut snapshot_guard = self.table_snapshot.write().await;
+            let snapshot_guard = self.table_snapshot.read().await;
             snapshot_guard.get_table_snapshot_states()?
         };
         Ok(TableState {
@@ -44,6 +45,15 @@ impl TableStateReader {
             iceberg_flush_lsn: table_snapshot_state.iceberg_flush_lsn,
             iceberg_warehouse_location: self.iceberg_warehouse_location.clone(),
         })
+    }
+
+    /// Get current table schema.
+    pub async fn get_current_table_schema(&self) -> Result<Arc<Schema>> {
+        let table_schema = {
+            let snapshot_guard = self.table_snapshot.read().await;
+            snapshot_guard.get_table_schema()?
+        };
+        Ok(table_schema)
     }
 }
 
@@ -68,6 +78,10 @@ mod tests {
         ])
     }
 
+    /// =========================
+    /// Read table states
+    /// =========================
+    ///
     /// Testing scenario: no write operation to the table.
     #[tokio::test]
     async fn test_initial_table_state() {
@@ -168,5 +182,51 @@ mod tests {
             iceberg_flush_lsn: Some(10),
         };
         assert_eq!(actual_table_state, expected_table_state);
+    }
+
+    /// =========================
+    /// Read table schema
+    /// =========================
+    ///
+    /// Testing scenario: no schema change to the table.
+    #[tokio::test]
+    async fn test_initial_table_schema() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let iceberg_table_config = get_iceberg_table_config(&temp_dir);
+
+        let (table, _, _) = create_table_and_iceberg_manager(&temp_dir).await;
+        let table_state_reader =
+            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+
+        // Get table state and check.
+        let actual_table_schema = table_state_reader.get_current_table_schema().await.unwrap();
+        let expected_table_schema = create_test_arrow_schema();
+        assert_eq!(actual_table_schema, expected_table_schema);
+    }
+
+    /// Testing scenario: get table schema after schema evolution.
+    #[tokio::test]
+    async fn test_table_schema_after_update() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let iceberg_table_config = get_iceberg_table_config(&temp_dir);
+
+        let (mut table, _, mut notifier) = create_table_and_iceberg_manager(&temp_dir).await;
+        let table_state_reader =
+            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+
+        // Perform an schema update.
+        let updated_mooncake_table_metadata = create_test_table_metadata_with_schema(
+            temp_dir.path().to_str().unwrap().to_string(),
+            create_test_updated_arrow_schema(),
+        );
+        table.alter_table_schema(updated_mooncake_table_metadata.clone());
+
+        // Trigger a mooncake and iceberg snapshot, so schema update gets reflected to snapshot.
+        create_mooncake_and_persist_for_test(&mut table, &mut notifier).await;
+
+        // Get table state and check.
+        let actual_table_schema = table_state_reader.get_current_table_schema().await.unwrap();
+        let expected_table_schema = create_test_updated_arrow_schema();
+        assert_eq!(actual_table_schema, expected_table_schema);
     }
 }
