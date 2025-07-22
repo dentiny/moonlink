@@ -16,19 +16,14 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
-use crate::storage::mooncake_table::table_snapshot::{
-    FileIndiceMergePayload, IcebergSnapshotDataCompactionPayload,
-};
+use crate::storage::mooncake_table::table_snapshot::FileIndiceMergePayload;
 use crate::storage::mooncake_table::transaction_stream::TransactionStreamOutput;
+use crate::storage::mooncake_table::MoonlinkRow;
 use crate::storage::mooncake_table::SnapshotOption;
-use crate::storage::mooncake_table::{
-    IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload, MoonlinkRow,
-};
 use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
-use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 use more_asserts as ma;
@@ -384,113 +379,6 @@ impl SnapshotTableState {
         }
 
         evicted_files_to_delete
-    }
-
-    /// Remap single record location after compaction.
-    /// Return if remap succeeds.
-    fn remap_record_location_after_compaction(
-        deletion_log: &mut ProcessedDeletionRecord,
-        task: &mut SnapshotTask,
-    ) -> bool {
-        if task.data_compaction_result.is_empty() {
-            return false;
-        }
-
-        let old_record_location = &deletion_log.pos;
-        let remapped_data_files_after_compaction = &mut task.data_compaction_result;
-        let new_record_location = remapped_data_files_after_compaction
-            .remapped_data_files
-            .remove(old_record_location);
-        if new_record_location.is_none() {
-            return false;
-        }
-        deletion_log.pos = new_record_location.unwrap().record_location;
-        true
-    }
-
-    /// Data compaction might delete existing persisted files, which invalidates record locations and requires a record location remap.
-    fn remap_and_prune_deletion_logs_after_compaction(&mut self, task: &mut SnapshotTask) {
-        // No need to prune and remap if no compaction happening.
-        if task.data_compaction_result.is_empty() {
-            return;
-        }
-
-        // Remap and prune committed deletion log.
-        let mut new_committed_deletion_log = vec![];
-        let old_committed_deletion_log = std::mem::take(&mut self.committed_deletion_log);
-        for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
-            if let Some(file_id) = cur_deletion_log.get_file_id() {
-                // Case-1: the deletion log doesn't indicate a compacted data file.
-                if !task
-                    .data_compaction_result
-                    .old_data_files
-                    .contains(&file_id)
-                {
-                    new_committed_deletion_log.push(cur_deletion_log);
-                    continue;
-                }
-                // Case-2: the deletion log exists in the compacted new data file, perform a remap.
-                let remap_succ =
-                    Self::remap_record_location_after_compaction(&mut cur_deletion_log, task);
-                if remap_succ {
-                    new_committed_deletion_log.push(cur_deletion_log);
-                    continue;
-                }
-                // Case-3: the deletion log doesn't exist in the compacted new file, directly remove it.
-            } else {
-                new_committed_deletion_log.push(cur_deletion_log);
-            }
-        }
-        self.committed_deletion_log = new_committed_deletion_log;
-
-        // Remap uncommitted deletion log.
-        for cur_deletion_log in &mut self.uncommitted_deletion_log {
-            if cur_deletion_log.is_none() {
-                continue;
-            }
-            Self::remap_record_location_after_compaction(cur_deletion_log.as_mut().unwrap(), task);
-        }
-    }
-
-    fn get_iceberg_snapshot_payload(
-        &self,
-        flush_lsn: u64,
-        wal_persistence_metadata: Option<WalPersistenceMetadata>,
-        new_table_schema: Option<Arc<MooncakeTableMetadata>>,
-        new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
-    ) -> IcebergSnapshotPayload {
-        IcebergSnapshotPayload {
-            flush_lsn,
-            wal_persistence_metadata,
-            new_table_schema,
-            import_payload: IcebergSnapshotImportPayload {
-                data_files: self.unpersisted_records.get_unpersisted_data_files(),
-                new_deletion_vector: new_committed_deletion_logs,
-                file_indices: self.unpersisted_records.get_unpersisted_file_indices(),
-            },
-            index_merge_payload: IcebergSnapshotIndexMergePayload {
-                new_file_indices_to_import: self
-                    .unpersisted_records
-                    .get_merged_file_indices_to_add(),
-                old_file_indices_to_remove: self
-                    .unpersisted_records
-                    .get_merged_file_indices_to_remove(),
-            },
-            data_compaction_payload: IcebergSnapshotDataCompactionPayload {
-                new_data_files_to_import: self
-                    .unpersisted_records
-                    .get_compacted_data_files_to_add(),
-                old_data_files_to_remove: self
-                    .unpersisted_records
-                    .get_compacted_data_files_to_remove(),
-                new_file_indices_to_import: self
-                    .unpersisted_records
-                    .get_compacted_file_indices_to_add(),
-                old_file_indices_to_remove: self
-                    .unpersisted_records
-                    .get_compacted_file_indices_to_remove(),
-            },
-        }
     }
 
     /// Unreference pinned cache handles used in read operations.

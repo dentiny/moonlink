@@ -1,14 +1,64 @@
 use crate::create_data_file;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
+use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
+use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::SnapshotTask;
+use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
+use crate::storage::mooncake_table::{
+    IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload,
+};
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 /// This file stores snapshot persistence related features.
 use crate::storage::SnapshotTableState;
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 impl SnapshotTableState {
+    pub(super) fn get_iceberg_snapshot_payload(
+        &self,
+        flush_lsn: u64,
+        wal_persistence_metadata: Option<WalPersistenceMetadata>,
+        new_table_schema: Option<Arc<MooncakeTableMetadata>>,
+        new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
+    ) -> IcebergSnapshotPayload {
+        IcebergSnapshotPayload {
+            flush_lsn,
+            wal_persistence_metadata,
+            new_table_schema,
+            import_payload: IcebergSnapshotImportPayload {
+                data_files: self.unpersisted_records.get_unpersisted_data_files(),
+                new_deletion_vector: new_committed_deletion_logs,
+                file_indices: self.unpersisted_records.get_unpersisted_file_indices(),
+            },
+            index_merge_payload: IcebergSnapshotIndexMergePayload {
+                new_file_indices_to_import: self
+                    .unpersisted_records
+                    .get_merged_file_indices_to_add(),
+                old_file_indices_to_remove: self
+                    .unpersisted_records
+                    .get_merged_file_indices_to_remove(),
+            },
+            data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+                new_data_files_to_import: self
+                    .unpersisted_records
+                    .get_compacted_data_files_to_add(),
+                old_data_files_to_remove: self
+                    .unpersisted_records
+                    .get_compacted_data_files_to_remove(),
+                new_file_indices_to_import: self
+                    .unpersisted_records
+                    .get_compacted_file_indices_to_add(),
+                old_file_indices_to_remove: self
+                    .unpersisted_records
+                    .get_compacted_file_indices_to_remove(),
+            },
+        }
+    }
+
     /// Update disk files in the current snapshot from local data files to remote ones, meanwile unpin write-through cache file from object storage cache.
     /// Provide [`persisted_data_files`] could come from imported new files, or maintenance jobs like compaction.
     /// Return cache evicted files to delete.
