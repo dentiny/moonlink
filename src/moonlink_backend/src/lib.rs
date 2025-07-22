@@ -39,6 +39,7 @@ where
         logging::init_logging();
 
         // Canonicalize moonlink backend directory, so all paths stored are of absolute path.
+        tokio::fs::create_dir_all(&base_path).await?;
         let base_path = tokio::fs::canonicalize(base_path).await?;
         let base_path_str = base_path.to_str().unwrap();
 
