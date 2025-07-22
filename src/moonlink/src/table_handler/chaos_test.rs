@@ -229,7 +229,7 @@ async fn test_chaos() {
     if let Err(e) = task_result {
         // Display all enqueued events for debugging and replay.
         while let Some(cur_event) = env.event_replay_rx.recv().await {
-            println!("{:?}", cur_event);
+            println!("{cur_event:?}");
         }
         // Propagate the panic to fail the test.
         if let Ok(panic) = e.try_into_panic() {
