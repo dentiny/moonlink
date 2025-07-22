@@ -719,6 +719,14 @@ impl MooncakeTable {
         self.assert_flush_lsn_on_iceberg_snapshot_res(&iceberg_snapshot_res);
         self.last_iceberg_snapshot_lsn = Some(flush_lsn);
 
+        // Update mooncake table metadata if necessary.
+        if let Some(new_table_schema) = iceberg_snapshot_res.new_table_schema {
+            // Assert table is at a clean state.
+            assert!(self.mem_slice.is_empty());
+            assert!(self.next_snapshot_task.is_empty());
+            self.metadata = new_table_schema;
+        }
+
         if let Some(wal_persisted_metadata) = iceberg_snapshot_res.wal_persisted_metadata {
             self.last_wal_persisted_metadata = Some(wal_persisted_metadata);
         }

@@ -2,6 +2,7 @@ use async_trait::async_trait;
 /// A trait which defines deletion vector write related interfaces.
 use iceberg::puffin::PuffinWriter;
 use iceberg::spec::Schema as IcebergSchema;
+use iceberg::table::Table;
 use iceberg::{Catalog, Result as IcebergResult, TableIdent};
 
 use std::collections::HashSet;
@@ -36,7 +37,7 @@ pub trait SchemaUpdate {
         &mut self,
         new_schema: IcebergSchema,
         table_ident: TableIdent,
-    ) -> IcebergResult<()>;
+    ) -> IcebergResult<Table>;
 }
 
 pub trait MoonlinkCatalog: PuffinWrite + SchemaUpdate + Catalog {}

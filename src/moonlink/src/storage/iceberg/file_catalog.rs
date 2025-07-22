@@ -676,7 +676,7 @@ impl SchemaUpdate for FileCatalog {
         &mut self,
         new_schema: IcebergSchema,
         table_ident: TableIdent,
-    ) -> IcebergResult<()> {
+    ) -> IcebergResult<Table> {
         let (_, old_metadata) = self.load_metadata(&table_ident).await?;
         let mut metadata_builder = old_metadata.into_builder(/*current_file_location=*/ None);
         metadata_builder = metadata_builder.add_current_schema(new_schema)?;
@@ -688,7 +688,6 @@ impl SchemaUpdate for FileCatalog {
             requirements: vec![],
         };
         let table_commit = table_commit_proxy.take_as_table_commit();
-        self.update_table(table_commit).await?;
-        Ok(())
+        self.update_table(table_commit).await
     }
 }

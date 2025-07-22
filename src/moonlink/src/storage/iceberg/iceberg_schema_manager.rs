@@ -16,9 +16,11 @@ impl IcebergTableManager {
 
         let table_ident = self.get_table_ident();
         let new_schema = IcebergArrow::arrow_schema_to_schema(&updated_table_metadata.schema)?;
-        self.catalog
+        let updated_table = self
+            .catalog
             .update_table_schema(new_schema, table_ident)
             .await?;
+        self.iceberg_table = Some(updated_table);
 
         Ok(())
     }

@@ -1916,8 +1916,6 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 10)
         .await
         .unwrap();
-    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
-    create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Perform an schema update.
     let updated_mooncake_table_metadata = create_test_table_metadata_with_schema(
@@ -1925,6 +1923,9 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
         create_test_updated_arrow_schema(),
     );
     table.alter_table_schema(updated_mooncake_table_metadata.clone());
+
+    // Create a mooncake and iceberg snapshot to reflect both data files and schema changes.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Now the iceberg table has been created, create an iceberg table manager and check table status.
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
@@ -1940,18 +1941,18 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
         .await
         .unwrap();
 
-    let table = iceberg_table_manager_for_load
+    let loaded_table = iceberg_table_manager_for_load
         .iceberg_table
         .as_ref()
         .unwrap();
-    let actual_schema = table.metadata().current_schema();
+    let actual_schema = loaded_table.metadata().current_schema();
     let expected_schema =
         arrow_schema_to_schema(updated_mooncake_table_metadata.schema.as_ref()).unwrap();
     assert_is_same_schema(actual_schema.as_ref().clone(), expected_schema);
 }
 
 #[tokio::test]
-async fn test_test_schema_update() {
+async fn test_schema_update() {
     // Local filesystem for iceberg.
     let iceberg_temp_dir = tempdir().unwrap();
     let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
@@ -1962,7 +1963,7 @@ async fn test_test_schema_update() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
-async fn test_test_schema_update_with_s3() {
+async fn test_schema_update_with_s3() {
     // Remote object storage for iceberg.
     let (bucket, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
@@ -1974,7 +1975,7 @@ async fn test_test_schema_update_with_s3() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-gcs")]
-async fn test_test_schema_update_with_gcs() {
+async fn test_schema_update_with_gcs() {
     // Remote object storage for iceberg.
     let (bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
