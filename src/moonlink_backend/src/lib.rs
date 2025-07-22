@@ -162,18 +162,15 @@ where
         Ok(table_schema)
     }
 
-    /// Get the current mooncake table state.
-    pub async fn get_table_state(&self, database_id: D, table_id: T) -> Result<TableState> {
-        let table_state = {
-            let manager = self.replication_manager.read().await;
-            let mooncake_table_id = MooncakeTableId {
-                database_id,
-                table_id,
-            };
-            let table_state_reader = manager.get_table_state_reader(&mooncake_table_id);
-            table_state_reader.get_current_table_state().await?
-        };
-        Ok(table_state)
+    /// Get the all mooncake table states.
+    pub async fn get_table_states(&self) -> Result<Vec<TableState>> {
+        let mut table_states = vec![];
+        let manager = self.replication_manager.read().await;
+        let table_state_readers = manager.get_table_state_readers();
+        for cur_table_state_reader in table_state_readers.into_iter() {
+            table_states.push(cur_table_state_reader.get_current_table_state().await?);
+        }
+        Ok(table_states)
     }
 
     pub async fn scan_table(

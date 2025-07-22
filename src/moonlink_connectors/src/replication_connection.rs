@@ -242,6 +242,13 @@ impl ReplicationConnection {
         &self.table_states.get(&src_table_id).unwrap().state_reader
     }
 
+    pub fn get_table_state_readers(&self) -> Vec<&TableStateReader> {
+        self.table_states
+            .iter()
+            .map(|(_, cur_table_state)| &cur_table_state.state_reader)
+            .collect::<Vec<_>>()
+    }
+
     pub fn table_count(&self) -> usize {
         self.table_states.len()
     }
