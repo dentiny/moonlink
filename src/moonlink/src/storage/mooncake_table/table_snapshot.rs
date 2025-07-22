@@ -13,18 +13,18 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Util function to get index block files for the given file indices.
-fn get_index_block_files_impl(file_indices: &Vec<MooncakeFileIndex>) -> Vec<MooncakeDataFileRef> {
-    let mut index_block_files = vec![];
-    for cur_file_index in file_indices.iter() {
-        let index_blocks = &cur_file_index.index_blocks;
-        index_block_files.extend(
-            index_blocks
+fn get_index_block_files_impl<'a>(
+    file_indices: impl IntoIterator<Item = &'a MooncakeFileIndex>,
+) -> Vec<MooncakeDataFileRef> {
+    file_indices
+        .into_iter()
+        .flat_map(|cur_file_index| {
+            cur_file_index
+                .index_blocks
                 .iter()
                 .map(|cur_block| cur_block.index_file.clone())
-                .collect::<Vec<_>>(),
-        );
-    }
-    index_block_files
+        })
+        .collect()
 }
 
 ////////////////////////////
@@ -59,7 +59,7 @@ impl std::fmt::Debug for IcebergSnapshotImportPayload {
 }
 
 /// Iceberg snapshot payload by index merge operations.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Default)]
 pub struct IcebergSnapshotIndexMergePayload {
     /// New file indices to import to the iceberg table.
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
@@ -77,6 +77,21 @@ impl IcebergSnapshotIndexMergePayload {
 
         assert!(!self.old_file_indices_to_remove.is_empty());
         false
+    }
+}
+
+impl std::fmt::Debug for IcebergSnapshotIndexMergePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IcebergSnapshotIndexMergePayload")
+            .field(
+                "new_file_indices_to_import",
+                &get_index_block_files_impl(&self.new_file_indices_to_import),
+            )
+            .field(
+                "old_file_indices_to_remove",
+                &get_index_block_files_impl(&self.old_file_indices_to_remove),
+            )
+            .finish()
     }
 }
 
@@ -366,13 +381,24 @@ impl std::fmt::Debug for IcebergSnapshotResult {
 /// Index merge
 ////////////////////////////
 ///
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FileIndiceMergePayload {
     /// File indices to merge.
     pub(crate) file_indices: HashSet<GlobalIndex>,
 }
 
-#[derive(Clone, Debug, Default)]
+impl std::fmt::Debug for FileIndiceMergePayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileIndiceMergePayload")
+            .field(
+                "file_indices",
+                &get_index_block_files_impl(&self.file_indices),
+            )
+            .finish()
+    }
+}
+
+#[derive(Clone, Default)]
 pub struct FileIndiceMergeResult {
     /// Old file indices being merged.
     pub(crate) old_file_indices: HashSet<GlobalIndex>,
@@ -388,6 +414,21 @@ impl FileIndiceMergeResult {
             return true;
         }
         false
+    }
+}
+
+impl std::fmt::Debug for FileIndiceMergeResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileIndiceMergeResult")
+            .field(
+                "old_file_indices",
+                &get_index_block_files_impl(&self.old_file_indices),
+            )
+            .field(
+                "new_file_indices",
+                &get_index_block_files_impl(&self.new_file_indices),
+            )
+            .finish()
     }
 }
 
