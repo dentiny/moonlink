@@ -737,7 +737,7 @@ impl MooncakeTable {
         }
 
         assert!(self.iceberg_table_manager.is_none());
-        self.iceberg_table_manager = Some(iceberg_snapshot_res.table_manager);
+        self.iceberg_table_manager = Some(iceberg_snapshot_res.table_manager.unwrap());
 
         // ---- Buffer iceberg persisted content to next snapshot task ---
         assert!(self
@@ -1177,7 +1177,7 @@ impl MooncakeTable {
         );
 
         let snapshot_result = IcebergSnapshotResult {
-            table_manager: iceberg_table_manager,
+            table_manager: Some(iceberg_table_manager),
             flush_lsn,
             wal_persisted_metadata,
             new_table_schema,

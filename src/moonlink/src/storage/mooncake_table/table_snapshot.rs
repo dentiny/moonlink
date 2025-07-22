@@ -32,7 +32,7 @@ fn get_index_block_files_impl(file_indices: &Vec<MooncakeFileIndex>) -> Vec<Moon
 ////////////////////////////
 ///
 /// Iceberg snapshot payload by write operations.
-#[derive(Default)]
+#[derive(Clone, Default)]
 pub struct IcebergSnapshotImportPayload {
     /// New data files to introduce to the iceberg table.
     pub(crate) data_files: Vec<MooncakeDataFileRef>,
@@ -59,7 +59,7 @@ impl std::fmt::Debug for IcebergSnapshotImportPayload {
 }
 
 /// Iceberg snapshot payload by index merge operations.
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct IcebergSnapshotIndexMergePayload {
     /// New file indices to import to the iceberg table.
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
@@ -135,7 +135,7 @@ impl IcebergSnapshotDataCompactionPayload {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct IcebergSnapshotPayload {
     /// Flush LSN.
     pub(crate) flush_lsn: u64,
@@ -308,7 +308,7 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
 
 pub struct IcebergSnapshotResult {
     /// Table manager is (1) not `Sync` safe; (2) only used at iceberg snapshot creation, so we `move` it around every snapshot.
-    pub(crate) table_manager: Box<dyn TableManager>,
+    pub(crate) table_manager: Option<Box<dyn TableManager>>,
     /// Iceberg flush LSN.
     pub(crate) flush_lsn: u64,
     /// Iceberg WAL persistence.

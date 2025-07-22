@@ -154,4 +154,38 @@ impl TableEvent {
             _ => None,
         }
     }
+
+    fn clone_impl(&self) -> Self {
+        match self {
+            TableEvent::IcebergSnapshotResult {
+                iceberg_snapshot_result,
+            } => match iceberg_snapshot_result {
+                Err(e) => TableEvent::IcebergSnapshotResult {
+                    iceberg_snapshot_result: Err(e.clone()),
+                },
+                Ok(iceberg_snapshot_result) => TableEvent::IcebergSnapshotResult {
+                    iceberg_snapshot_result: Ok(IcebergSnapshotResult {
+                        table_manager: None,
+                        flush_lsn: iceberg_snapshot_result.flush_lsn,
+                        wal_persisted_metadata: iceberg_snapshot_result
+                            .wal_persisted_metadata
+                            .clone(),
+                        new_table_schema: iceberg_snapshot_result.new_table_schema.clone(),
+                        import_result: iceberg_snapshot_result.import_result.clone(),
+                        index_merge_result: iceberg_snapshot_result.index_merge_result.clone(),
+                        data_compaction_result: iceberg_snapshot_result
+                            .data_compaction_result
+                            .clone(),
+                    }),
+                },
+            },
+            _ => self.clone(),
+        }
+    }
+}
+
+impl Clone for TableEvent {
+    fn clone(&self) -> Self {
+        self.clone_impl()
+    }
 }

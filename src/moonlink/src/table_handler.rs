@@ -376,6 +376,7 @@ impl TableHandler {
         mut table: MooncakeTable,
         event_sync_sender: EventSyncSender,
         replication_lsn_rx: watch::Receiver<u64>,
+        event_replay_tx: Option<mpsc::UnboundedSender<TableEvent>>,
     ) -> Self {
         // Create channel for events
         let (event_sender, event_receiver) = mpsc::channel(100);
@@ -414,8 +415,14 @@ impl TableHandler {
         // Spawn the task with the oneshot receiver
         let event_handle = Some(tokio::spawn(
             async move {
-                Self::event_loop(event_sync_sender, event_receiver, replication_lsn_rx, table)
-                    .await;
+                Self::event_loop(
+                    event_sync_sender,
+                    event_receiver,
+                    replication_lsn_rx,
+                    event_replay_tx,
+                    table,
+                )
+                .await;
             }
             .instrument(info_span!("table_event_loop")),
         ));
@@ -439,6 +446,7 @@ impl TableHandler {
         event_sync_sender: EventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
         replication_lsn_rx: watch::Receiver<u64>,
+        event_replay_tx: Option<mpsc::UnboundedSender<TableEvent>>,
         mut table: MooncakeTable,
     ) {
         let initial_persistence_lsn = table.get_iceberg_snapshot_lsn();
@@ -501,6 +509,11 @@ impl TableHandler {
             tokio::select! {
                 // Process events from the queue
                 Some(event) = event_receiver.recv() => {
+                    // Record event if requested.
+                    if let Some(replay_tx) = &event_replay_tx {
+                        replay_tx.send(event.clone()).unwrap();
+                    }
+
                     table_handler_state.update_table_lsns(&event);
 
                     match event {
@@ -913,4 +926,5 @@ mod test_utils;
 mod failure_tests;
 
 #[cfg(test)]
+#[cfg(feature = "chaos-test")]
 mod chaos_test;

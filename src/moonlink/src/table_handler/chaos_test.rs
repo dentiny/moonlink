@@ -17,7 +17,7 @@ use rand::prelude::*;
 use rand::Rng;
 use std::collections::VecDeque;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::watch;
 
 #[derive(Debug)]
@@ -165,8 +165,14 @@ impl TestEnvironment {
         let read_state_manager =
             ReadStateManager::new(&table, replication_rx.clone(), last_commit_rx);
         let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
-        let table_handler =
-            TableHandler::new(table, table_event_sync_sender, replication_rx.clone()).await;
+        let (event_replay_tx, event_replay_rx) = mpsc::unbounded_channel();
+        let table_handler = TableHandler::new(
+            table,
+            table_event_sync_sender,
+            replication_rx.clone(),
+            Some(event_replay_tx),
+        )
+        .await;
         let table_event_manager =
             TableEventManager::new(table_handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = table_handler.get_event_sender();
