@@ -5,6 +5,7 @@ mod mem_slice;
 mod persistence_buffer;
 mod shared_array;
 mod snapshot;
+mod snapshot_cache_utils;
 mod snapshot_maintenance;
 mod snapshot_persistence;
 mod snapshot_read;

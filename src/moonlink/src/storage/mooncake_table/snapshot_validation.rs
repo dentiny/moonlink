@@ -1,8 +1,52 @@
-use crate::storage::SnapshotTableState;
+use crate::storage::mooncake_table::SnapshotTableState;
+use crate::storage::mooncake_table::{SnapshotOption, SnapshotTask};
+use more_asserts as ma;
 #[cfg(test)]
 use std::collections::HashSet;
 
 impl SnapshotTableState {
+    /// Validate mooncake table invariants.
+    pub(super) fn validate_mooncake_table_invariants(
+        &self,
+        task: &SnapshotTask,
+        opt: &SnapshotOption,
+    ) {
+        if let Some(new_flush_lsn) = task.new_flush_lsn {
+            if self.current_snapshot.data_file_flush_lsn.is_some() {
+                // Invariant-1: flush LSN doesn't regress.
+                //
+                // Force snapshot not change table states, it's possible to use the latest flush LSN.
+                if opt.force_create {
+                    ma::assert_le!(
+                        self.current_snapshot.data_file_flush_lsn.unwrap(),
+                        new_flush_lsn
+                    );
+                }
+                // Otherwise, flush LSN always progresses.
+                else {
+                    ma::assert_lt!(
+                        self.current_snapshot.data_file_flush_lsn.unwrap(),
+                        new_flush_lsn
+                    );
+                }
+
+                // Invariant-2: flush must follow a commit, but commit doesn't need to be followed by a flush.
+                //
+                // Force snapshot could flush as long as the table at a clean state (aka, no uncommitted states), possible to go without commit at current snapshot iteration.
+                if opt.force_create {
+                    assert!(
+                        task.new_commit_lsn == 0 || task.new_commit_lsn >= new_flush_lsn,
+                        "New commit LSN is {}, new flush LSN is {}",
+                        task.new_commit_lsn,
+                        new_flush_lsn
+                    );
+                } else {
+                    ma::assert_ge!(task.new_commit_lsn, new_flush_lsn);
+                }
+            }
+        }
+    }
+
     /// Test util functions to assert current snapshot is at a consistent state.
     #[cfg(test)]
     pub(super) async fn assert_current_snapshot_consistent(&self) {

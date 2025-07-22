@@ -18,6 +18,18 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 impl SnapshotTableState {
+    /// Util function to decide whether to create iceberg snapshot by deletion vectors.
+    pub(super) fn create_iceberg_snapshot_by_committed_logs(&self, force_create: bool) -> bool {
+        let deletion_record_snapshot_threshold = if !force_create {
+            self.mooncake_table_metadata
+                .config
+                .iceberg_snapshot_new_committed_deletion_log()
+        } else {
+            1
+        };
+        self.committed_deletion_log.len() >= deletion_record_snapshot_threshold
+    }
+
     pub(super) fn get_iceberg_snapshot_payload(
         &self,
         flush_lsn: u64,
