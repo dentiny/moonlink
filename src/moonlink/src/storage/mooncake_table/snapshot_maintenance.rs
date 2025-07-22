@@ -4,11 +4,15 @@ use std::collections::HashSet;
 use crate::storage::compaction::table_compaction::SingleFileToCompact;
 use crate::storage::mooncake_table::snapshot::SnapshotTableState;
 use crate::storage::mooncake_table::{
-    DataCompactionPayload, FileIndiceMergePayload, MaintenanceOption,
+    DataCompactionPayload, FileIndiceMergePayload, MaintenanceOption, SnapshotTask,
 };
 use crate::storage::storage_utils::{TableId, TableUniqueFileId};
 
 impl SnapshotTableState {
+    /// ===============================
+    /// Get maintence payload
+    /// ===============================
+    ///
     /// Util function to decide whether and what to compact data files.
     /// To simplify states (aka, avoid data compaction already in iceberg with those not), only merge those already persisted.
     pub(super) fn get_payload_to_compact(
@@ -159,5 +163,65 @@ impl SnapshotTableState {
             });
         }
         None
+    }
+
+    /// ===============================
+    /// Reflect maintenance result
+    /// ===============================
+    ///
+    /// Reflect data compaction results to mooncake snapshot.
+    /// Return evicted data files to delete due to data compaction.
+    pub(super) async fn update_data_compaction_to_mooncake_snapshot(
+        &mut self,
+        task: &SnapshotTask,
+    ) -> Vec<String> {
+        // Aggregate evicted files to delete.
+        let mut evicted_files_to_delete = vec![];
+
+        if task.data_compaction_result.is_empty() {
+            return vec![];
+        }
+
+        // NOTICE: Update data files before file indices, so when update file indices, data files for new file indices already exist in disk files map.
+        let data_compaction_res = task.data_compaction_result.clone();
+        let cur_evicted_files = self
+            .update_data_files_to_mooncake_snapshot_impl(
+                data_compaction_res.old_data_files,
+                data_compaction_res.new_data_files,
+                data_compaction_res.remapped_data_files,
+            )
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+
+        let cur_evicted_files = self
+            .update_file_indices_to_mooncake_snapshot_impl(
+                data_compaction_res.old_file_indices,
+                data_compaction_res.new_file_indices,
+            )
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+
+        // Apply evicted data files to delete within data compaction process.
+        evicted_files_to_delete.extend(
+            task.data_compaction_result
+                .evicted_files_to_delete
+                .iter()
+                .cloned()
+                .to_owned(),
+        );
+
+        evicted_files_to_delete
+    }
+
+    /// Return evicted files to delete.
+    pub(super) async fn update_file_indices_merge_to_mooncake_snapshot(
+        &mut self,
+        task: &SnapshotTask,
+    ) -> Vec<String> {
+        self.update_file_indices_to_mooncake_snapshot_impl(
+            task.index_merge_result.old_file_indices.clone(),
+            task.index_merge_result.new_file_indices.clone(),
+        )
+        .await
     }
 }

@@ -6,6 +6,7 @@ mod persistence_buffer;
 mod shared_array;
 mod snapshot;
 mod snapshot_maintenance;
+mod snapshot_persistence;
 mod snapshot_read;
 pub mod snapshot_read_output;
 mod snapshot_validation;

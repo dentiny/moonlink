@@ -5,6 +5,7 @@ use crate::storage::mooncake_table::snapshot_read_output::{
     DataFileForRead, ReadOutput as SnapshotReadOutput,
 };
 use crate::storage::mooncake_table::table_state::TableSnapshotState;
+use crate::storage::mooncake_table::SnapshotTask;
 use crate::storage::storage_utils::RecordLocation;
 use arrow_schema::Schema;
 use parquet::arrow::AsyncArrowWriter;
@@ -140,5 +141,15 @@ impl SnapshotTableState {
             filesystem_accessor: Some(self.filesystem_accessor.clone()),
             table_notifier: Some(self.table_notify.as_ref().unwrap().clone()),
         })
+    }
+
+    /// Take read request result and update mooncake snapshot.
+    /// Return evicted data files to delete.
+    pub(super) async fn update_snapshot_by_read_request_results(
+        &mut self,
+        task: &mut SnapshotTask,
+    ) -> Vec<String> {
+        // Unpin cached files used in the read request.
+        self.unreference_read_cache_handles(task).await
     }
 }
