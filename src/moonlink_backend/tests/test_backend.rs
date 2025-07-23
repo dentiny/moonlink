@@ -156,8 +156,8 @@ mod tests {
         let expected_table_state = TableState {
             database_id: guard.database_id,
             table_id: TABLE_ID as u32,
-            table_commit_lsn: lsn,
-            iceberg_flush_lsn: Some(lsn),
+            commit_lsn: lsn,
+            flush_lsn: Some(lsn),
             iceberg_warehouse_location: guard.tmp().unwrap().path().to_str().unwrap().to_string(),
         };
         assert_eq!(table_states, vec![expected_table_state]);

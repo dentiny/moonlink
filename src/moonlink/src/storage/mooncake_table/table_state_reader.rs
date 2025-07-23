@@ -46,8 +46,8 @@ impl TableStateReader {
         Ok(TableState {
             database_id: self.database_id,
             table_id: self.table_id,
-            table_commit_lsn: table_snapshot_state.table_commit_lsn,
-            iceberg_flush_lsn: table_snapshot_state.iceberg_flush_lsn,
+            commit_lsn: table_snapshot_state.commit_lsn,
+            flush_lsn: table_snapshot_state.flush_lsn,
             iceberg_warehouse_location: self.iceberg_warehouse_location.clone(),
         })
     }
@@ -108,8 +108,8 @@ mod tests {
             database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 0,
-            iceberg_flush_lsn: None,
+            commit_lsn: 0,
+            flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -137,8 +137,8 @@ mod tests {
             database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 0,
-            iceberg_flush_lsn: None,
+            commit_lsn: 0,
+            flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -170,8 +170,8 @@ mod tests {
             database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 10,
-            iceberg_flush_lsn: None,
+            commit_lsn: 10,
+            flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -204,8 +204,8 @@ mod tests {
             database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 10,
-            iceberg_flush_lsn: Some(10),
+            commit_lsn: 10,
+            flush_lsn: Some(10),
         };
         assert_eq!(actual_table_state, expected_table_state);
     }

@@ -28,8 +28,8 @@ impl SnapshotTableState {
     ///
     pub(crate) fn get_table_snapshot_states(&self) -> Result<TableSnapshotState> {
         Ok(TableSnapshotState {
-            table_commit_lsn: self.current_snapshot.snapshot_version,
-            iceberg_flush_lsn: self.current_snapshot.data_file_flush_lsn,
+            commit_lsn: self.current_snapshot.snapshot_version,
+            flush_lsn: self.current_snapshot.data_file_flush_lsn,
         })
     }
 
