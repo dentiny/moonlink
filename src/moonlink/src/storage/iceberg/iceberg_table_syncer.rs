@@ -477,8 +477,6 @@ impl IcebergTableManager {
             .await?;
 
         // Update snapshot summary properties.
-        let mut txn = Transaction::new(self.iceberg_table.as_ref().unwrap());
-        let action = txn.fast_append();
         let mut snapshot_properties = HashMap::<String, String>::from([(
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),
             snapshot_payload.flush_lsn.to_string(),
@@ -489,13 +487,18 @@ impl IcebergTableManager {
                 serde_json::to_string(&wal_metadata).unwrap(),
             );
         }
-        let action = action.set_snapshot_properties(snapshot_properties);
-        txn = action.apply(txn)?;
 
+        let mut txn = Transaction::new(self.iceberg_table.as_ref().unwrap());
+        let action = txn.fast_append();
         // Only start append action when there're new data files.
         if !data_file_import_result.new_iceberg_data_files.is_empty() {
-            let action = txn.fast_append();
             let action = action.add_data_files(data_file_import_result.new_iceberg_data_files);
+            let action = action.set_snapshot_properties(snapshot_properties);
+            txn = action.apply(txn)?;
+        }
+        // Start an append transaction only to add snapshot properties.
+        else {
+            let action = action.set_snapshot_properties(snapshot_properties);
             txn = action.apply(txn)?;
         }
 
