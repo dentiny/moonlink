@@ -19,7 +19,7 @@ use crate::storage::MockTableManager;
 use crate::storage::MooncakeTable;
 use crate::storage::PersistenceResult;
 use crate::storage::TableManager;
-use crate::table_handler::TableHandlerState;
+use crate::table_handler::table_handler_state::TableHandlerState;
 use crate::ObjectStorageCache;
 use crate::TableEventManager;
 
