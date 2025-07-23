@@ -57,7 +57,10 @@ struct ChaosState {
     rng: StdRng,
     /// Used to generate rows to insert.
     next_id: i32,
-    inserted_rows: VecDeque<MoonlinkRow>,
+    /// Inserted rows in committed transactions.
+    committed_inserted_rows: VecDeque<MoonlinkRow>,
+    /// Inserted rows in current transaction.
+    uncommitted_inserted_rows: VecDeque<MoonlinkRow>,
     /// Used to indicate whether there's an ongoing transaction.
     has_begun: bool,
     /// LSN to use for the next operation, including update operations and commits.
@@ -79,7 +82,8 @@ impl ChaosState {
             rng,
             has_begun: false,
             next_id: 0,
-            inserted_rows: VecDeque::new(),
+            committed_inserted_rows: VecDeque::new(),
+            uncommitted_inserted_rows: VecDeque::new(),
             read_state_manager,
             cur_lsn: 0,
             last_commit_lsn: None,
