@@ -53,6 +53,8 @@ impl ChaosEvent {
 }
 
 struct ChaosState {
+    /// Used to generate random events, with current timestamp as random seed.
+    rng: StdRng,
     /// Used to generate rows to insert.
     next_id: i32,
     inserted_rows: VecDeque<MoonlinkRow>,
@@ -68,7 +70,13 @@ struct ChaosState {
 
 impl ChaosState {
     fn new(read_state_manager: ReadStateManager) -> Self {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let rng = StdRng::seed_from_u64(nanos as u64);
         Self {
+            rng,
             has_begun: false,
             next_id: 0,
             inserted_rows: VecDeque::new(),
@@ -102,7 +110,7 @@ impl ChaosState {
         row
     }
 
-    fn generate_random_events(&mut self, rng: &mut impl Rng) -> ChaosEvent {
+    fn generate_random_events(&mut self) -> ChaosEvent {
         #[derive(Debug, Clone)]
         enum EventKind {
             Begin,
@@ -129,7 +137,7 @@ impl ChaosState {
             choices.push(EventKind::EndNoFlush);
         }
 
-        match *choices.choose(rng).unwrap() {
+        match *choices.choose(&mut self.rng).unwrap() {
             EventKind::ReadSnapshot => {
                 ChaosEvent::create_snapshot_read(self.last_commit_lsn.unwrap())
             }
@@ -153,7 +161,7 @@ impl ChaosState {
                 }])
             }
             EventKind::Delete => {
-                let idx = rng.random_range(0..self.inserted_rows.len());
+                let idx = self.rng.random_range(0..self.inserted_rows.len());
                 let row = self.inserted_rows.remove(idx).unwrap();
                 ChaosEvent::create_table_events(vec![TableEvent::Delete {
                     row,
@@ -256,16 +264,11 @@ async fn test_chaos() {
     let replication_lsn_tx = env.replication_lsn_tx.clone();
 
     let task = tokio::spawn(async move {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let mut rng = StdRng::seed_from_u64(nanos as u64);
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
         for _ in 0..100 {
-            let chaos_events = state.generate_random_events(&mut rng);
+            let chaos_events = state.generate_random_events();
             for cur_event in chaos_events.table_events.into_iter() {
                 if let TableEvent::Commit { lsn, .. } = cur_event {
                     replication_lsn_tx.send(lsn).unwrap();
