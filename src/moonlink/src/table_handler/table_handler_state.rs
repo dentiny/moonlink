@@ -242,6 +242,11 @@ impl TableHandlerState {
 
     /// Return whether should force to create a mooncake and iceberg snapshot, based on the new coming commit LSN.
     pub(crate) fn should_force_snapshot_by_commit_lsn(&self, commit_lsn: u64) -> bool {
+        // No force snasphot if already mooncake snapshot ongoing.
+        if self.mooncake_snapshot_ongoing {
+            return false;
+        }
+
         // Case-1: there're completed but not persisted table maintainence changes.
         if self.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
             return true;
