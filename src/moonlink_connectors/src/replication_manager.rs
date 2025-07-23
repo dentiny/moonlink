@@ -141,13 +141,13 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
 
     pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStatusReader {
         let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
-        connection.get_table_state_reader(src_table_id)
+        connection.get_table_status_reader(src_table_id)
     }
 
-    pub fn get_table_state_readers(&self) -> Vec<&TableStatusReader> {
+    pub fn get_table_status_readers(&self) -> Vec<&TableStatusReader> {
         let mut table_state_readers = vec![];
         for (_, cur_repl_conn) in self.connections.iter() {
-            table_state_readers.extend(cur_repl_conn.get_table_state_readers());
+            table_state_readers.extend(cur_repl_conn.get_table_status_readers());
         }
         table_state_readers
     }

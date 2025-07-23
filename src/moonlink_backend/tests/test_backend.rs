@@ -151,16 +151,16 @@ mod tests {
         assert!(meta_dir.exists());
         assert!(meta_dir.read_dir().unwrap().next().is_some());
 
-        // Check table states.
-        let table_states = backend.list_tables().await.unwrap();
-        let expected_table_state = TableStatus {
+        // Check table status.
+        let table_statuses = backend.list_tables().await.unwrap();
+        let expected_table_status = TableStatus {
             database_id: guard.database_id,
             table_id: TABLE_ID as u32,
             commit_lsn: lsn,
             flush_lsn: Some(lsn),
             iceberg_warehouse_location: guard.tmp().unwrap().path().to_str().unwrap().to_string(),
         };
-        assert_eq!(table_states, vec![expected_table_state]);
+        assert_eq!(table_statuses, vec![expected_table_status]);
     }
 
     /// Test that replication connections are properly cleaned up and can be recreated.

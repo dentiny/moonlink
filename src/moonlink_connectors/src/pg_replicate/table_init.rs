@@ -25,7 +25,7 @@ pub struct TableResources {
     pub event_sender: Sender<TableEvent>,
     pub read_state_manager: ReadStateManager,
     pub table_event_manager: TableEventManager,
-    pub table_state_reader: TableStatusReader,
+    pub table_status_reader: TableStatusReader,
     pub commit_lsn_tx: watch::Sender<u64>,
     pub flush_lsn_rx: watch::Receiver<u64>,
 }
@@ -88,7 +88,7 @@ pub async fn build_table_components(
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
-    let table_state_reader =
+    let table_status_reader =
         TableStatusReader::new(database_id, table_id, &iceberg_table_config, &table);
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();
     let table_handler = TableHandler::new(
@@ -106,7 +106,7 @@ pub async fn build_table_components(
     let table_resource = TableResources {
         event_sender,
         read_state_manager,
-        table_state_reader,
+        table_status_reader,
         table_event_manager,
         commit_lsn_tx,
         flush_lsn_rx,

@@ -48,7 +48,7 @@ struct TableStatus {
     schema: TableSchema,
     reader: ReadStateManager,
     event_manager: TableEventManager,
-    state_reader: TableStatusReader,
+    status_reader: TableStatusReader,
 }
 /// Manages replication for table(s) within a database.
 pub struct ReplicationConnection {
@@ -238,14 +238,14 @@ impl ReplicationConnection {
         &self.table_states.get(&src_table_id).unwrap().reader
     }
 
-    pub fn get_table_state_reader(&self, src_table_id: SrcTableId) -> &TableStatusReader {
-        &self.table_states.get(&src_table_id).unwrap().state_reader
+    pub fn get_table_status_reader(&self, src_table_id: SrcTableId) -> &TableStatusReader {
+        &self.table_states.get(&src_table_id).unwrap().status_reader
     }
 
-    pub fn get_table_state_readers(&self) -> Vec<&TableStatusReader> {
+    pub fn get_table_status_readers(&self) -> Vec<&TableStatusReader> {
         self.table_states
             .values()
-            .map(|cur_table_state| &cur_table_state.state_reader)
+            .map(|cur_table_state| &cur_table_state.status_reader)
             .collect::<Vec<_>>()
     }
 
@@ -313,7 +313,7 @@ impl ReplicationConnection {
                 schema: schema.clone(),
                 reader: table_resources.read_state_manager,
                 event_manager: table_resources.table_event_manager,
-                state_reader: table_resources.table_state_reader,
+                status_reader: table_resources.table_status_reader,
             },
         );
         if let Err(e) = self

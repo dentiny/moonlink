@@ -166,7 +166,7 @@ where
     pub async fn list_tables(&self) -> Result<Vec<TableStatus>> {
         let mut table_states = vec![];
         let manager = self.replication_manager.read().await;
-        let table_state_readers = manager.get_table_state_readers();
+        let table_state_readers = manager.get_table_status_readers();
         for cur_table_state_reader in table_state_readers.into_iter() {
             table_states.push(cur_table_state_reader.get_current_table_state().await?);
         }
