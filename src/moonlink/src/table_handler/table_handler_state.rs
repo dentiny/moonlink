@@ -168,6 +168,7 @@ impl TableHandlerState {
         }
     }
 
+    /// Used at recovery, to decide whether the incoming table event should be considered.
     pub(crate) fn should_discard_event(&self, event: &TableEvent) -> bool {
         if self.initial_persistence_lsn.is_none() {
             return false;
@@ -269,6 +270,21 @@ impl TableHandlerState {
     ///
     pub(crate) fn mark_drop_table(&mut self) {
         self.special_table_state = SpecialTableState::DropTable;
+    }
+
+    /// Return whether table handler could be dropped now.
+    /// If there're any background activities ongoing, we cannot drop table now.
+    pub(crate) fn can_drop_table_now(&mut self) -> bool {
+        if self.mooncake_snapshot_ongoing {
+            return false;
+        }
+        if self.iceberg_snapshot_ongoing {
+            return false;
+        }
+        if self.table_maintenance_process_status != MaintenanceProcessStatus::Unrequested {
+            return false;
+        }
+        true
     }
 
     /// ============================

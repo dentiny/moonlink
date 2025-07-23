@@ -256,7 +256,7 @@ impl TableHandler {
                         // So we block wait for asynchronous request completion.
                         TableEvent::DropTable => {
                             // Fast-path: no other concurrent events, directly clean up states and ack back.
-                            if !table_handler_state.mooncake_snapshot_ongoing && !table_handler_state.iceberg_snapshot_ongoing {
+                            if table_handler_state.can_drop_table_now() {
                                 drop_table(&mut table, event_sync_sender).await;
                                 return;
                             }
