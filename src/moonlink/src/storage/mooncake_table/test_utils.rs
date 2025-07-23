@@ -156,8 +156,6 @@ fn verify_files_and_deletions_impl(
     deletions: &[(u32, u32)],
     expected_ids: &[i32],
 ) {
-    println!("file = {:?}", files);
-
     let mut res = vec![];
     for (i, path) in files.iter().enumerate() {
         let mut ids = read_ids_from_parquet(path);
