@@ -147,6 +147,7 @@ pub(crate) fn create_test_table_metadata_with_index_merge(
 }
 
 /// Test util function to create mooncake table metadata, with (1) index merge enabled whenever there're two index blocks; and (2) flush at commit is disabled.
+#[cfg(feature = "chaos-test")]
 pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
     local_table_directory: String,
 ) -> Arc<MooncakeTableMetadata> {
