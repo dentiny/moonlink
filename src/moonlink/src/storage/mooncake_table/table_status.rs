@@ -1,7 +1,7 @@
 /// Mooncake table states.
 use serde::{Deserialize, Serialize};
 
-pub(crate) struct TableSnapshotState {
+pub(crate) struct TableSnapshotStatus {
     /// Mooncake table commit LSN.
     pub(crate) commit_lsn: u64,
     /// Iceberg flush LSN.
@@ -9,7 +9,7 @@ pub(crate) struct TableSnapshotState {
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct TableState {
+pub struct TableStatus {
     /// Database id.
     pub database_id: u32,
     /// Mooncake table id.

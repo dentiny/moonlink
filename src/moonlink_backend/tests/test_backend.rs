@@ -6,7 +6,7 @@ mod tests {
         current_wal_lsn, ids_from_state, smoke_create_and_insert, DatabaseId, TableId, TestGuard,
         TestGuardMode, TABLE_ID,
     };
-    use moonlink::TableState;
+    use moonlink::TableStatus;
     use moonlink_backend::MoonlinkBackend;
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, SqliteMetadataStore};
 
@@ -153,7 +153,7 @@ mod tests {
 
         // Check table states.
         let table_states = backend.list_tables().await.unwrap();
-        let expected_table_state = TableState {
+        let expected_table_state = TableStatus {
             database_id: guard.database_id,
             table_id: TABLE_ID as u32,
             commit_lsn: lsn,

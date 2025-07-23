@@ -25,8 +25,8 @@ pub use mooncake_table::table_config::TableConfig as MoonlinkTableConfig;
 pub use mooncake_table::table_secret::{
     SecretEntry as MoonlinkTableSecret, SecretType as MoonlinkSecretType,
 };
-pub use mooncake_table::table_state::TableState;
-pub use mooncake_table::table_state_reader::TableStateReader;
+pub use mooncake_table::table_status::TableStatus;
+pub use mooncake_table::table_status_reader::TableStatusReader;
 pub use mooncake_table::SnapshotReadOutput;
 pub use mooncake_table::{MooncakeTable, MooncakeTableConfig};
 pub(crate) use mooncake_table::{PuffinDeletionBlobAtRead, SnapshotTableState};

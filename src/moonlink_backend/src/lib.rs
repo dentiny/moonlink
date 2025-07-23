@@ -8,7 +8,7 @@ use arrow_schema::Schema;
 pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
-use moonlink::{TableEventManager, TableState};
+use moonlink::{TableEventManager, TableStatus};
 use moonlink_connectors::ReplicationManager;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use std::hash::Hash;
@@ -163,7 +163,7 @@ where
     }
 
     /// List all tables at moonlink backend, and return their states.
-    pub async fn list_tables(&self) -> Result<Vec<TableState>> {
+    pub async fn list_tables(&self) -> Result<Vec<TableStatus>> {
         let mut table_states = vec![];
         let manager = self.replication_manager.read().await;
         let table_state_readers = manager.get_table_state_readers();

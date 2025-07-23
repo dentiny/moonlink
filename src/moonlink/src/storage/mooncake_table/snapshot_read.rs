@@ -4,7 +4,7 @@ use crate::storage::mooncake_table::snapshot::SnapshotTableState;
 use crate::storage::mooncake_table::snapshot_read_output::{
     DataFileForRead, ReadOutput as SnapshotReadOutput,
 };
-use crate::storage::mooncake_table::table_state::TableSnapshotState;
+use crate::storage::mooncake_table::table_status::TableSnapshotStatus;
 use crate::storage::mooncake_table::SnapshotTask;
 use crate::storage::storage_utils::RecordLocation;
 use arrow_schema::Schema;
@@ -26,8 +26,8 @@ impl SnapshotTableState {
     /// Read snapshot states
     /// =======================
     ///
-    pub(crate) fn get_table_snapshot_states(&self) -> Result<TableSnapshotState> {
-        Ok(TableSnapshotState {
+    pub(crate) fn get_table_snapshot_states(&self) -> Result<TableSnapshotStatus> {
+        Ok(TableSnapshotStatus {
             commit_lsn: self.current_snapshot.snapshot_version,
             flush_lsn: self.current_snapshot.data_file_flush_lsn,
         })

@@ -2,7 +2,7 @@ use crate::pg_replicate::table::SrcTableId;
 use crate::ReplicationConnection;
 use crate::Result;
 use moonlink::FileSystemConfig;
-use moonlink::TableStateReader;
+use moonlink::TableStatusReader;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -139,12 +139,12 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         connection.get_table_reader(src_table_id)
     }
 
-    pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStateReader {
+    pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStatusReader {
         let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
         connection.get_table_state_reader(src_table_id)
     }
 
-    pub fn get_table_state_readers(&self) -> Vec<&TableStateReader> {
+    pub fn get_table_state_readers(&self) -> Vec<&TableStatusReader> {
         let mut table_state_readers = vec![];
         for (_, cur_repl_conn) in self.connections.iter() {
             table_state_readers.extend(cur_repl_conn.get_table_state_readers());

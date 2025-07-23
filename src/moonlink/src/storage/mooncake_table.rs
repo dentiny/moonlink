@@ -14,8 +14,8 @@ mod snapshot_validation;
 pub mod table_config;
 pub mod table_secret;
 mod table_snapshot;
-pub mod table_state;
-pub mod table_state_reader;
+pub mod table_status;
+pub mod table_status_reader;
 mod transaction_stream;
 
 use super::iceberg::puffin_utils::PuffinBlobRef;

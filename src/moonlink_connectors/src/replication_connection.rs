@@ -9,7 +9,7 @@ use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
 use moonlink::{
     FileSystemConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
-    TableStateReader,
+    TableStatusReader,
 };
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -44,11 +44,11 @@ pub enum Command {
     Shutdown,
 }
 
-struct TableState {
+struct TableStatus {
     schema: TableSchema,
     reader: ReadStateManager,
     event_manager: TableEventManager,
-    state_reader: TableStateReader,
+    state_reader: TableStatusReader,
 }
 /// Manages replication for table(s) within a database.
 pub struct ReplicationConnection {
@@ -58,7 +58,7 @@ pub struct ReplicationConnection {
     table_temp_files_directory: String,
     postgres_client: Client,
     handle: Option<JoinHandle<Result<()>>>,
-    table_states: HashMap<SrcTableId, TableState>,
+    table_states: HashMap<SrcTableId, TableStatus>,
     cmd_tx: mpsc::Sender<Command>,
     cmd_rx: Option<mpsc::Receiver<Command>>,
     replication_state: Arc<ReplicationState>,
@@ -238,11 +238,11 @@ impl ReplicationConnection {
         &self.table_states.get(&src_table_id).unwrap().reader
     }
 
-    pub fn get_table_state_reader(&self, src_table_id: SrcTableId) -> &TableStateReader {
+    pub fn get_table_state_reader(&self, src_table_id: SrcTableId) -> &TableStatusReader {
         &self.table_states.get(&src_table_id).unwrap().state_reader
     }
 
-    pub fn get_table_state_readers(&self) -> Vec<&TableStateReader> {
+    pub fn get_table_state_readers(&self) -> Vec<&TableStatusReader> {
         self.table_states
             .values()
             .map(|cur_table_state| &cur_table_state.state_reader)
@@ -309,7 +309,7 @@ impl ReplicationConnection {
 
         self.table_states.insert(
             src_table_id,
-            TableState {
+            TableStatus {
                 schema: schema.clone(),
                 reader: table_resources.read_state_manager,
                 event_manager: table_resources.table_event_manager,
