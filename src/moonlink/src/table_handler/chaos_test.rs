@@ -19,18 +19,10 @@ use rand::{Rng, SeedableRng};
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
-use tokio::sync::mpsc::{self, Sender};
+use tokio::sync::mpsc;
 use tokio::sync::watch;
 
-#[derive(Debug)]
-struct ChaosState {
-    current_lsn: u64,
-    has_begun: bool,
-    // Used to generate rows to insert.
-    next_id: i32,
-    inserted_rows: VecDeque<MoonlinkRow>,
-}
-
+/// Create a test moonlink row.
 fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
     MoonlinkRow::new(vec![
         RowValue::Int32(id),
@@ -39,19 +31,69 @@ fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
     ])
 }
 
-impl ChaosState {
-    fn new() -> Self {
+/// Events randomly selected for chaos test.
+struct ChaosEvent {
+    table_events: Vec<TableEvent>,
+    snapshot_read_lsn: Option<u64>,
+}
+
+impl ChaosEvent {
+    fn create_table_events(table_events: Vec<TableEvent>) -> Self {
         Self {
-            current_lsn: 0,
+            table_events,
+            snapshot_read_lsn: None,
+        }
+    }
+    fn create_snapshot_read(lsn: u64) -> Self {
+        Self {
+            table_events: vec![],
+            snapshot_read_lsn: Some(lsn),
+        }
+    }
+}
+
+struct ChaosState {
+    /// Used to generate rows to insert.
+    next_id: i32,
+    inserted_rows: VecDeque<MoonlinkRow>,
+    /// Used to indicate whether there's an ongoing transaction.
+    has_begun: bool,
+    /// LSN to use for the next operation, including update operations and commits.
+    cur_lsn: u64,
+    /// Used to read snapshot.
+    read_state_manager: ReadStateManager,
+    /// Last commit LSN.
+    last_commit_lsn: Option<u64>,
+}
+
+impl ChaosState {
+    fn new(read_state_manager: ReadStateManager) -> Self {
+        Self {
             has_begun: false,
             next_id: 0,
             inserted_rows: VecDeque::new(),
+            read_state_manager,
+            cur_lsn: 0,
+            last_commit_lsn: None,
         }
     }
 
-    fn next_lsn(&mut self) -> u64 {
-        self.current_lsn += 1;
-        self.current_lsn
+    /// Get the current LSN to use for the current operation, and increment.
+    fn get_and_update_cur_lsn(&mut self) -> u64 {
+        let cur_lsn = self.cur_lsn;
+        self.cur_lsn += 1;
+        cur_lsn
+    }
+
+    fn begin_transaction(&mut self) {
+        assert!(!self.has_begun);
+        self.has_begun = true;
+    }
+
+    fn commit_transaction(&mut self, lsn: u64) {
+        assert!(self.has_begun);
+        self.has_begun = false;
+        self.last_commit_lsn = Some(lsn);
     }
 
     fn next_row(&mut self) -> MoonlinkRow {
@@ -59,72 +101,79 @@ impl ChaosState {
         self.next_id += 1;
         row
     }
-}
 
-fn generate_random_events(state: &mut ChaosState, rng: &mut impl Rng) -> Vec<TableEvent> {
-    #[derive(Debug, Clone)]
-    enum EventKind {
-        Begin,
-        Append,
-        Delete,
-        EndWithFlush,
-        EndNoFlush,
-    }
+    fn generate_random_events(&mut self, rng: &mut impl Rng) -> ChaosEvent {
+        #[derive(Debug, Clone)]
+        enum EventKind {
+            Begin,
+            Append,
+            Delete,
+            EndWithFlush,
+            EndNoFlush,
+            ReadSnapshot,
+        }
 
-    let mut choices = vec![];
+        let mut choices = vec![];
 
-    if !state.has_begun {
-        choices.push(EventKind::Begin);
-    } else {
-        choices.push(EventKind::Append);
-        if !state.inserted_rows.is_empty() {
-            choices.push(EventKind::Delete);
+        if self.last_commit_lsn.is_some() {
+            choices.push(EventKind::ReadSnapshot);
         }
-        choices.push(EventKind::EndWithFlush);
-        choices.push(EventKind::EndNoFlush);
-    }
+        if !self.has_begun {
+            choices.push(EventKind::Begin);
+        } else {
+            choices.push(EventKind::Append);
+            if !self.inserted_rows.is_empty() {
+                choices.push(EventKind::Delete);
+            }
+            choices.push(EventKind::EndWithFlush);
+            choices.push(EventKind::EndNoFlush);
+        }
 
-    match *choices.choose(rng).unwrap() {
-        EventKind::Begin => {
-            state.has_begun = true;
-            vec![TableEvent::Append {
-                row: state.next_row(),
-                xact_id: None,
-                lsn: state.next_lsn(),
-                is_copied: false,
-            }]
-        }
-        EventKind::Append => {
-            let row = state.next_row();
-            state.inserted_rows.push_back(row.clone());
-            vec![TableEvent::Append {
-                row,
-                xact_id: None,
-                lsn: state.next_lsn(),
-                is_copied: false,
-            }]
-        }
-        EventKind::Delete => {
-            let idx = rng.random_range(0..state.inserted_rows.len());
-            let row = state.inserted_rows.remove(idx).unwrap();
-            vec![TableEvent::Delete {
-                row,
-                xact_id: None,
-                lsn: state.next_lsn(),
-            }]
-        }
-        EventKind::EndWithFlush => {
-            let lsn = state.next_lsn();
-            state.has_begun = false;
-            vec![
-                TableEvent::Commit { lsn, xact_id: None },
-                TableEvent::Flush { lsn },
-            ]
-        }
-        EventKind::EndNoFlush => {
-            let lsn = state.next_lsn();
-            state.has_begun = false;
-            vec![TableEvent::Commit { lsn, xact_id: None }]
+        match *choices.choose(rng).unwrap() {
+            EventKind::ReadSnapshot => {
+                ChaosEvent::create_snapshot_read(self.last_commit_lsn.unwrap())
+            }
+            EventKind::Begin => {
+                self.begin_transaction();
+                ChaosEvent::create_table_events(vec![TableEvent::Append {
+                    row: self.next_row(),
+                    xact_id: None,
+                    lsn: self.get_and_update_cur_lsn(),
+                    is_copied: false,
+                }])
+            }
+            EventKind::Append => {
+                let row = self.next_row();
+                self.inserted_rows.push_back(row.clone());
+                ChaosEvent::create_table_events(vec![TableEvent::Append {
+                    row,
+                    xact_id: None,
+                    lsn: self.get_and_update_cur_lsn(),
+                    is_copied: false,
+                }])
+            }
+            EventKind::Delete => {
+                let idx = rng.random_range(0..self.inserted_rows.len());
+                let row = self.inserted_rows.remove(idx).unwrap();
+                ChaosEvent::create_table_events(vec![TableEvent::Delete {
+                    row,
+                    xact_id: None,
+                    lsn: self.get_and_update_cur_lsn(),
+                }])
+            }
+            EventKind::EndWithFlush => {
+                let lsn = self.get_and_update_cur_lsn();
+                self.commit_transaction(lsn);
+                ChaosEvent::create_table_events(vec![
+                    TableEvent::Commit { lsn, xact_id: None },
+                    TableEvent::Flush { lsn },
+                ])
+            }
+            EventKind::EndNoFlush => {
+                let lsn = self.get_and_update_cur_lsn();
+                self.commit_transaction(lsn);
+                ChaosEvent::create_table_events(vec![TableEvent::Commit { lsn, xact_id: None }])
+            }
         }
     }
 }
@@ -138,8 +187,10 @@ struct TestEnvironment {
     read_state_manager: ReadStateManager,
     table_event_manager: TableEventManager,
     table_handler: TableHandler,
-    event_sender: Sender<TableEvent>,
+    event_sender: mpsc::Sender<TableEvent>,
     event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
+    last_commit_lsn_tx: watch::Sender<u64>,
+    replication_lsn_tx: watch::Sender<u64>,
 }
 
 impl TestEnvironment {
@@ -148,7 +199,7 @@ impl TestEnvironment {
         let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
 
         let table_temp_dir = tempdir().unwrap();
-        let mooncake_table_metadata = create_test_table_metadata_with_index_merge(
+        let mooncake_table_metadata = create_test_table_metadata_with_index_merge_disable_flush(
             table_temp_dir.path().to_str().unwrap().to_string(),
         );
 
@@ -163,16 +214,16 @@ impl TestEnvironment {
             object_storage_cache.clone(),
         )
         .await;
-        let (_, replication_rx) = watch::channel(0u64);
-        let (_, last_commit_rx) = watch::channel(0u64);
+        let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
+        let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
         let read_state_manager =
-            ReadStateManager::new(&table, replication_rx.clone(), last_commit_rx);
+            ReadStateManager::new(&table, replication_lsn_rx.clone(), last_commit_lsn_rx);
         let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
         let (event_replay_tx, event_replay_rx) = mpsc::unbounded_channel();
         let table_handler = TableHandler::new(
             table,
             table_event_sync_sender,
-            replication_rx.clone(),
+            replication_lsn_rx.clone(),
             Some(event_replay_tx),
         )
         .await;
@@ -190,6 +241,8 @@ impl TestEnvironment {
             table_handler,
             event_sender,
             event_replay_rx,
+            replication_lsn_tx,
+            last_commit_lsn_tx,
         }
     }
 }
@@ -198,6 +251,9 @@ impl TestEnvironment {
 async fn test_chaos() {
     let mut env = TestEnvironment::new().await;
     let event_sender = env.event_sender.clone();
+    let read_state_manager = env.read_state_manager;
+    let last_commit_lsn_tx = env.last_commit_lsn_tx.clone();
+    let replication_lsn_tx = env.replication_lsn_tx.clone();
 
     let task = tokio::spawn(async move {
         let nanos = SystemTime::now()
@@ -205,13 +261,25 @@ async fn test_chaos() {
             .unwrap()
             .as_nanos();
         let mut rng = StdRng::seed_from_u64(nanos as u64);
-        let mut state = ChaosState::new();
+        let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
         for _ in 0..100 {
-            let events = generate_random_events(&mut state, &mut rng);
-            for cur_event in events.into_iter() {
+            let chaos_events = state.generate_random_events(&mut rng);
+            for cur_event in chaos_events.table_events.into_iter() {
+                if let TableEvent::Commit { lsn, .. } = cur_event {
+                    replication_lsn_tx.send(lsn).unwrap();
+                    last_commit_lsn_tx.send(lsn).unwrap();
+                }
                 event_sender.send(cur_event).await.unwrap();
+            }
+            if let Some(read_lsn) = chaos_events.snapshot_read_lsn {
+                let requested_read_lsn = if read_lsn == 0 { None } else { Some(read_lsn) };
+                let _read_state = state
+                    .read_state_manager
+                    .try_read(requested_read_lsn)
+                    .await
+                    .unwrap();
             }
         }
 
