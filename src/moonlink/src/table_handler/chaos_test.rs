@@ -106,10 +106,13 @@ impl ChaosState {
         assert!(self.has_begun);
         self.has_begun = false;
         self.last_commit_lsn = Some(lsn);
+        self.committed_inserted_rows
+            .extend(self.uncommitted_inserted_rows.drain(..));
     }
 
-    fn next_row(&mut self) -> MoonlinkRow {
+    fn get_next_row_to_append(&mut self) -> MoonlinkRow {
         let row = create_row(self.next_id, /*name=*/ "user", self.next_id % 5);
+        self.uncommitted_inserted_rows.push_back(row.clone());
         self.next_id += 1;
         row
     }
@@ -134,7 +137,7 @@ impl ChaosState {
             choices.push(EventKind::Begin);
         } else {
             choices.push(EventKind::Append);
-            if !self.inserted_rows.is_empty() {
+            if !self.committed_inserted_rows.is_empty() {
                 choices.push(EventKind::Delete);
             }
             choices.push(EventKind::EndWithFlush);
@@ -147,16 +150,16 @@ impl ChaosState {
             }
             EventKind::Begin => {
                 self.begin_transaction();
+                let row = self.get_next_row_to_append();
                 ChaosEvent::create_table_events(vec![TableEvent::Append {
-                    row: self.next_row(),
+                    row,
                     xact_id: None,
                     lsn: self.get_and_update_cur_lsn(),
                     is_copied: false,
                 }])
             }
             EventKind::Append => {
-                let row = self.next_row();
-                self.inserted_rows.push_back(row.clone());
+                let row = self.get_next_row_to_append();
                 ChaosEvent::create_table_events(vec![TableEvent::Append {
                     row,
                     xact_id: None,
@@ -165,8 +168,8 @@ impl ChaosState {
                 }])
             }
             EventKind::Delete => {
-                let idx = self.rng.random_range(0..self.inserted_rows.len());
-                let row = self.inserted_rows.remove(idx).unwrap();
+                let idx = self.rng.random_range(0..self.committed_inserted_rows.len());
+                let row = self.committed_inserted_rows.remove(idx).unwrap();
                 ChaosEvent::create_table_events(vec![TableEvent::Delete {
                     row,
                     xact_id: None,
