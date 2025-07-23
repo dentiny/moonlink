@@ -68,9 +68,6 @@ pub(crate) struct TableHandlerState {
     //
     pub(crate) iceberg_snapshot_result_consumed: bool,
     pub(crate) iceberg_snapshot_ongoing: bool,
-    // Whether there's an ongoing background Maintenance operation, for example, index merge, data compaction, etc.
-    // To simplify state management, we have at most one ongoing Maintenance operation at the same time.
-    pub(crate) maintenance_ongoing: bool,
     // Whether there's an ongoing mooncake snapshot operation.
     pub(crate) mooncake_snapshot_ongoing: bool,
     // Largest pending force snapshot LSN.
@@ -116,7 +113,6 @@ impl TableHandlerState {
             largest_force_snapshot_lsn: None,
             force_snapshot_completion_tx,
             // Table maintenance fields.
-            maintenance_ongoing: false,
             index_merge_request_status: MaintenanceRequestStatus::Unrequested,
             data_compaction_request_status: MaintenanceRequestStatus::Unrequested,
             table_maintenance_process_status: MaintenanceProcessStatus::Unrequested,
@@ -388,7 +384,7 @@ impl TableHandlerState {
         &self,
         request_status: &MaintenanceRequestStatus,
     ) -> MaintenanceOption {
-        if self.maintenance_ongoing {
+        if self.table_maintenance_process_status != MaintenanceProcessStatus::Unrequested {
             return MaintenanceOption::Skip;
         }
         match request_status {
@@ -406,8 +402,10 @@ impl TableHandlerState {
 
     /// Mark index merge completion.
     pub(crate) async fn mark_index_merge_completed(&mut self) {
-        assert!(self.maintenance_ongoing);
-        self.maintenance_ongoing = false;
+        assert_eq!(
+            self.table_maintenance_process_status,
+            MaintenanceProcessStatus::InProcess
+        );
         self.index_merge_request_status = MaintenanceRequestStatus::Unrequested;
         self.table_maintenance_process_status = MaintenanceProcessStatus::ReadyToPersist;
     }
@@ -417,8 +415,6 @@ impl TableHandlerState {
         &mut self,
         data_compaction_result: &Result<DataCompactionResult>,
     ) {
-        assert!(self.maintenance_ongoing);
-        self.maintenance_ongoing = false;
         self.data_compaction_request_status = MaintenanceRequestStatus::Unrequested;
         match &data_compaction_result {
             Ok(_) => {

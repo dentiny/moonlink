@@ -129,36 +129,24 @@ impl TableHandler {
         let drop_table = async |table: &mut MooncakeTable, event_sync_sender: EventSyncSender| {
             // Step-1: shutdown the table, which unreferences and deletes all cache files.
             if let Err(e) = table.shutdown().await {
-                event_sync_sender
-                    .drop_table_completion_tx
-                    .send(Err(e))
-                    .unwrap();
+                let _ = event_sync_sender.drop_table_completion_tx.send(Err(e));
                 return;
             }
 
             // Step-2: delete the iceberg table.
             if let Err(e) = table.drop_iceberg_table().await {
-                event_sync_sender
-                    .drop_table_completion_tx
-                    .send(Err(e))
-                    .unwrap();
+                let _ = event_sync_sender.drop_table_completion_tx.send(Err(e));
                 return;
             }
 
             // Step-3: delete the mooncake table.
             if let Err(e) = table.drop_mooncake_table().await {
-                event_sync_sender
-                    .drop_table_completion_tx
-                    .send(Err(e))
-                    .unwrap();
+                let _ = event_sync_sender.drop_table_completion_tx.send(Err(e));
                 return;
             }
 
             // Step-4: send back completion notification.
-            event_sync_sender
-                .drop_table_completion_tx
-                .send(Ok(()))
-                .unwrap();
+            let _ = event_sync_sender.drop_table_completion_tx.send(Ok(()));
         };
 
         // Util function to spawn a detached task to delete evicted data files.
@@ -360,10 +348,8 @@ impl TableHandler {
                             // Attempt to process data compaction.
                             // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
-                            if !table_handler_state.maintenance_ongoing {
+                            if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
                                 if let Some(data_compaction_payload) = data_compaction_payload {
-                                    table_handler_state.maintenance_ongoing = true;
-                                    assert_eq!(table_handler_state.table_maintenance_process_status, MaintenanceProcessStatus::Unrequested);
                                     table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_data_compaction(data_compaction_payload);
                                 }
@@ -372,9 +358,8 @@ impl TableHandler {
                             // Attempt to process file indices merge.
                             // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
-                            if !table_handler_state.maintenance_ongoing {
+                            if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
                                 if let Some(file_indice_merge_payload) = file_indice_merge_payload {
-                                    table_handler_state.maintenance_ongoing = true;
                                     assert_eq!(table_handler_state.table_maintenance_process_status, MaintenanceProcessStatus::Unrequested);
                                     table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_index_merge(file_indice_merge_payload);
@@ -388,7 +373,8 @@ impl TableHandler {
                                     // Update table maintenance operation status.
                                     if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::InPersist && snapshot_res.contains_maintanence_result() {
                                         table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::Unrequested;
-                                        table_handler_state.table_maintenance_completion_tx.send(Ok(())).unwrap();
+                                        // Table maintenance could come from table internal events, which doesn't have notification receiver.
+                                        let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
                                     }
 
                                     // Buffer iceberg persistence result, which later will be reflected to mooncake snapshot.
@@ -412,7 +398,8 @@ impl TableHandler {
                                     // Update table maintainence operation status.
                                     if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::InPersist {
                                         table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::Unrequested;
-                                        table_handler_state.table_maintenance_completion_tx.send(Err(e)).unwrap();
+                                        // Table maintenance could come from table internal events, which doesn't have notification receiver.
+                                        let _ = table_handler_state.table_maintenance_completion_tx.send(Err(e));
                                     }
 
                                     // If iceberg snapshot fails, send error back to all broadcast subscribers and unset force snapshot requests.
