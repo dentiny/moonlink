@@ -8,7 +8,7 @@ use crate::Result;
 use tokio::sync::{broadcast, watch};
 use tracing::error;
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) enum SpecialTableState {
     Normal,
     InitialCopy,
@@ -264,17 +264,8 @@ impl TableHandlerState {
         self.largest_force_snapshot_lsn.is_some()
     }
 
-    /// ============================
-    /// Drop table
-    /// ============================
-    ///
-    pub(crate) fn mark_drop_table(&mut self) {
-        self.special_table_state = SpecialTableState::DropTable;
-    }
-
-    /// Return whether table handler could be dropped now.
-    /// If there're any background activities ongoing, we cannot drop table now.
-    pub(crate) fn can_drop_table_now(&mut self) -> bool {
+    /// Return whether there's background tasks ongoing.
+    fn has_background_task_ongoing(&mut self) -> bool {
         if self.mooncake_snapshot_ongoing {
             return false;
         }
@@ -285,6 +276,21 @@ impl TableHandlerState {
             return false;
         }
         true
+    }
+
+    /// ============================
+    /// Drop table
+    /// ============================
+    ///
+    pub(crate) fn mark_drop_table(&mut self) {
+        assert_eq!(self.special_table_state, SpecialTableState::Normal);
+        self.special_table_state = SpecialTableState::DropTable;
+    }
+
+    /// Return whether table handler could be dropped now.
+    /// If there're any background activities ongoing, we cannot drop table immediately.
+    pub(crate) fn can_drop_table_now(&mut self) -> bool {
+        self.has_background_task_ongoing()
     }
 
     /// ============================
@@ -337,11 +343,12 @@ impl TableHandlerState {
     /// buffered in `initial_copy_buffered_events` until `finish_initial_copy` is called.
     /// We set `initial_persistence_lsn` to the start LSN to avoid duplicate events that may have already been captured by the initial copy.
     pub(crate) fn start_initial_copy(&mut self) {
+        assert_eq!(self.special_table_state, SpecialTableState::Normal);
         self.special_table_state = SpecialTableState::InitialCopy;
     }
 
     pub(crate) fn finish_initial_copy(&mut self) {
-        assert!(self.special_table_state == SpecialTableState::InitialCopy);
+        assert_eq!(self.special_table_state, SpecialTableState::InitialCopy);
         self.special_table_state = SpecialTableState::Normal;
         self.latest_commit_lsn = Some(0);
         self.table_consistent_view_lsn = Some(0);
@@ -376,14 +383,6 @@ impl TableHandlerState {
     /// Table maintainence
     /// ============================
     ///
-    /// Mark index merge completion.
-    pub(crate) async fn mark_index_merge_completed(&mut self) {
-        assert!(self.maintenance_ongoing);
-        self.maintenance_ongoing = false;
-        self.index_merge_request_status = MaintenanceRequestStatus::Unrequested;
-        self.table_maintenance_process_status = MaintenanceProcessStatus::ReadyToPersist;
-    }
-
     /// Get Maintenance task operation option.
     pub(crate) fn get_maintenance_task_option(
         &self,
@@ -403,6 +402,14 @@ impl TableHandlerState {
     }
     fn get_data_compaction_maintenance_option(&self) -> MaintenanceOption {
         self.get_maintenance_task_option(&self.data_compaction_request_status)
+    }
+
+    /// Mark index merge completion.
+    pub(crate) async fn mark_index_merge_completed(&mut self) {
+        assert!(self.maintenance_ongoing);
+        self.maintenance_ongoing = false;
+        self.index_merge_request_status = MaintenanceRequestStatus::Unrequested;
+        self.table_maintenance_process_status = MaintenanceProcessStatus::ReadyToPersist;
     }
 
     /// Mark data compaction completion.

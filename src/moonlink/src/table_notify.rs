@@ -45,8 +45,6 @@ pub enum TableEvent {
     Flush { lsn: u64 },
     /// Flush the transaction stream with given xact_id
     StreamFlush { xact_id: u32 },
-    /// Shutdown the handler
-    Shutdown,
     /// ==============================
     /// Interactive blocking events
     /// ==============================

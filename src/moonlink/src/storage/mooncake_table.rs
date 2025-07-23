@@ -187,7 +187,7 @@ pub struct TableMetadata {
     /// function to get lookup key from row
     pub(crate) identity: IdentityProp,
 }
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AlterTableRequest {
     pub(crate) new_columns: Vec<arrow_schema::FieldRef>,
     pub(crate) dropped_columns: Vec<String>,

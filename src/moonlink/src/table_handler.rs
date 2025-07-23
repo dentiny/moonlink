@@ -189,13 +189,6 @@ impl TableHandler {
                         event if event.is_ingest_event() => {
                             Self::process_cdc_table_event(event, &mut table, &mut table_handler_state).await;
                         }
-                        TableEvent::Shutdown => {
-                            if let Err(e) = table.shutdown().await {
-                                error!(error = %e, "failed to shutdown table");
-                            }
-                            debug!("shutting down table handler");
-                            break;
-                        }
                         // ==============================
                         // Interactive blocking events
                         // ==============================
@@ -333,7 +326,7 @@ impl TableHandler {
                             table_handler_state.mooncake_snapshot_ongoing = false;
 
                             // Drop table if requested, and table at a clean state.
-                            if table_handler_state.special_table_state == SpecialTableState::DropTable && !table_handler_state.iceberg_snapshot_ongoing {
+                            if table_handler_state.special_table_state == SpecialTableState::DropTable && table_handler_state.can_drop_table_now() {
                                 drop_table(&mut table, event_sync_sender).await;
                                 return;
                             }
@@ -428,7 +421,7 @@ impl TableHandler {
                             }
 
                             // Drop table if requested, and table at a clean state.
-                            if table_handler_state.special_table_state == SpecialTableState::DropTable && !table_handler_state.mooncake_snapshot_ongoing {
+                            if table_handler_state.special_table_state == SpecialTableState::DropTable && table_handler_state.can_drop_table_now() {
                                 drop_table(&mut table, event_sync_sender).await;
                                 return;
                             }
@@ -436,6 +429,11 @@ impl TableHandler {
                         TableEvent::IndexMergeResult { index_merge_result } => {
                             table.set_file_indices_merge_res(index_merge_result);
                             table_handler_state.mark_index_merge_completed().await;
+                            // Check whether need to drop table.
+                            if table_handler_state.special_table_state == SpecialTableState::DropTable && table_handler_state.can_drop_table_now() {
+                                drop_table(&mut table, event_sync_sender).await;
+                                return;
+                            }
                         }
                         TableEvent::DataCompactionResult { data_compaction_result } => {
                             table_handler_state.mark_data_compaction_completed(&data_compaction_result).await;
@@ -446,6 +444,11 @@ impl TableHandler {
                                 Err(err) => {
                                     error!(error = ?err, "failed to perform compaction");
                                 }
+                            }
+                            // Check whether need to drop table.
+                            if table_handler_state.special_table_state == SpecialTableState::DropTable && table_handler_state.can_drop_table_now() {
+                                drop_table(&mut table, event_sync_sender).await;
+                                return;
                             }
                         }
                         TableEvent::ReadRequestCompletion { cache_handles } => {
