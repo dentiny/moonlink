@@ -234,7 +234,8 @@ impl TestEnvironment {
     }
 
     pub async fn flush_table_and_sync(&mut self, lsn: u64) {
-        self.send_event(TableEvent::Flush { lsn }).await;
+        self.send_event(TableEvent::CommitFlush { lsn, xact_id: None })
+            .await;
         self.send_event(TableEvent::ForceSnapshot { lsn: Some(lsn) })
             .await;
         TableEventManager::synchronize_force_snapshot_request(
@@ -246,7 +247,8 @@ impl TestEnvironment {
     }
 
     pub async fn flush_table(&self, lsn: u64) {
-        self.send_event(TableEvent::Flush { lsn }).await;
+        self.send_event(TableEvent::CommitFlush { lsn, xact_id: None })
+            .await;
     }
 
     pub async fn stream_flush(&self, xact_id: u32) {

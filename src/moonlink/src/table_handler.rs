@@ -535,45 +535,27 @@ impl TableHandler {
                 };
             }
             TableEvent::Commit { lsn, xact_id } => {
-                // Force create snapshot if
-                // 1. force snapshot is requested
-                // and 2. LSN which meets force snapshot requirement has appeared, before that we still allow buffering
-                // and 3. there's no snapshot creation operation ongoing
-
-                let should_force_snapshot =
-                    table_handler_state.should_force_snapshot_by_commit_lsn(lsn);
-
-                match xact_id {
-                    Some(xact_id) => {
-                        if let Err(e) = table.commit_transaction_stream(xact_id, lsn).await {
-                            error!(error = %e, "stream commit flush failed");
-                        }
-                    }
-                    None => {
-                        table.commit(lsn);
-                        if table.should_flush() || should_force_snapshot {
-                            if let Err(e) = table.flush(lsn).await {
-                                error!(error = %e, "flush failed in commit");
-                            }
-                        }
-                    }
-                }
-
-                if should_force_snapshot {
-                    table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
-                    assert!(table.create_snapshot(
-                        table_handler_state.get_mooncake_snapshot_option(/*request_force=*/ true)
-                    ));
-                    table_handler_state.mooncake_snapshot_ongoing = true;
-                }
+                Self::commit_and_attempt_flush(
+                    lsn,
+                    xact_id,
+                    table_handler_state,
+                    table,
+                    /*force_flush_requested=*/ false,
+                )
+                .await;
             }
             TableEvent::StreamAbort { xact_id } => {
                 table.abort_in_stream_batch(xact_id);
             }
-            TableEvent::Flush { lsn } => {
-                if let Err(e) = table.flush(lsn).await {
-                    error!(error = %e, "explicit flush failed");
-                }
+            TableEvent::CommitFlush { lsn, xact_id } => {
+                Self::commit_and_attempt_flush(
+                    lsn,
+                    xact_id,
+                    table_handler_state,
+                    table,
+                    /*force_flush_requested=*/ true,
+                )
+                .await;
             }
             TableEvent::StreamFlush { xact_id } => {
                 if let Err(e) = table.flush_transaction_stream(xact_id).await {
@@ -596,6 +578,45 @@ impl TableHandler {
             .collect::<Vec<_>>();
         for event in buffered_events {
             Self::process_cdc_table_event(event, table, table_handler_state).await;
+        }
+    }
+
+    async fn commit_and_attempt_flush(
+        lsn: u64,
+        xact_id: Option<u32>,
+        table_handler_state: &mut TableHandlerState,
+        table: &mut MooncakeTable,
+        force_flush_requested: bool,
+    ) {
+        // Force create snapshot if
+        // 1. force snapshot is requested
+        // and 2. LSN which meets force snapshot requirement has appeared, before that we still allow buffering
+        // and 3. there's no snapshot creation operation ongoing
+
+        let should_force_snapshot = table_handler_state.should_force_snapshot_by_commit_lsn(lsn);
+
+        match xact_id {
+            Some(xact_id) => {
+                if let Err(e) = table.commit_transaction_stream(xact_id, lsn).await {
+                    error!(error = %e, "stream commit flush failed");
+                }
+            }
+            None => {
+                table.commit(lsn);
+                if table.should_flush() || should_force_snapshot || force_flush_requested {
+                    if let Err(e) = table.flush(lsn).await {
+                        error!(error = %e, "flush failed in commit");
+                    }
+                }
+            }
+        }
+
+        if should_force_snapshot {
+            table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
+            assert!(table.create_snapshot(
+                table_handler_state.get_mooncake_snapshot_option(/*request_force=*/ true)
+            ));
+            table_handler_state.mooncake_snapshot_ongoing = true;
         }
     }
 }

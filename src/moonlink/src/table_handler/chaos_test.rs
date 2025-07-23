@@ -172,10 +172,10 @@ impl ChaosState {
             EventKind::EndWithFlush => {
                 let lsn = self.get_and_update_cur_lsn();
                 self.commit_transaction(lsn);
-                ChaosEvent::create_table_events(vec![
-                    TableEvent::Commit { lsn, xact_id: None },
-                    TableEvent::Flush { lsn },
-                ])
+                ChaosEvent::create_table_events(vec![TableEvent::CommitFlush {
+                    lsn,
+                    xact_id: None,
+                }])
             }
             EventKind::EndNoFlush => {
                 let lsn = self.get_and_update_cur_lsn();
@@ -271,6 +271,9 @@ async fn test_chaos() {
             let chaos_events = state.generate_random_events();
             for cur_event in chaos_events.table_events.into_iter() {
                 if let TableEvent::Commit { lsn, .. } = cur_event {
+                    replication_lsn_tx.send(lsn).unwrap();
+                    last_commit_lsn_tx.send(lsn).unwrap();
+                } else if let TableEvent::CommitFlush { lsn, .. } = cur_event {
                     replication_lsn_tx.send(lsn).unwrap();
                     last_commit_lsn_tx.send(lsn).unwrap();
                 }

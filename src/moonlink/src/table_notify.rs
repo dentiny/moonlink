@@ -41,8 +41,8 @@ pub enum TableEvent {
     /// Test events
     /// ==============================
     ///
-    /// Flush the table to disk
-    Flush { lsn: u64 },
+    /// Commit and flush the table to disk
+    CommitFlush { lsn: u64, xact_id: Option<u32> },
     /// Flush the transaction stream with given xact_id
     StreamFlush { xact_id: u32 },
     /// ==============================
@@ -126,7 +126,7 @@ impl TableEvent {
                     | TableEvent::Delete { .. }
                     | TableEvent::Commit { .. }
                     | TableEvent::StreamAbort { .. }
-                    | TableEvent::Flush { .. }
+                    | TableEvent::CommitFlush { .. }
                     | TableEvent::StreamFlush { .. }
             )
         }
@@ -148,7 +148,7 @@ impl TableEvent {
             TableEvent::Delete { lsn, .. } => Some(*lsn),
             TableEvent::Commit { lsn, .. } => Some(*lsn),
             TableEvent::StreamAbort { .. } => None,
-            TableEvent::Flush { lsn } => Some(*lsn),
+            TableEvent::CommitFlush { lsn, .. } => Some(*lsn),
             _ => None,
         }
     }
