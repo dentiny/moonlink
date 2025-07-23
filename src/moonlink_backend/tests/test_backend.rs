@@ -152,7 +152,7 @@ mod tests {
         assert!(meta_dir.read_dir().unwrap().next().is_some());
 
         // Check table states.
-        let table_states = backend.get_table_states().await.unwrap();
+        let table_states = backend.list_tables().await.unwrap();
         let expected_table_state = TableState {
             database_id: guard.database_id,
             table_id: TABLE_ID as u32,

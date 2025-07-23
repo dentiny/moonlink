@@ -162,8 +162,8 @@ where
         Ok(table_schema)
     }
 
-    /// Get the all mooncake table states.
-    pub async fn get_table_states(&self) -> Result<Vec<TableState>> {
+    /// List all tables at moonlink backend, and return their states.
+    pub async fn list_tables(&self) -> Result<Vec<TableState>> {
         let mut table_states = vec![];
         let manager = self.replication_manager.read().await;
         let table_state_readers = manager.get_table_state_readers();
