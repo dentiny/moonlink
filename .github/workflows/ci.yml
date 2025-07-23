@@ -187,3 +187,15 @@ jobs:
         with:
           files: lcov.info
           fail_ci_if_error: true
+
+  # ──────────────────────── 4 · Chaos test ────────────────────────────
+  chaos_test:
+    name: Chaos test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start chaos test
+        run: |
+          cargo test test_chaos --features=chaos-test -p moonlink -- --nocapture
