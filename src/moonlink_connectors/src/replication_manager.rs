@@ -54,6 +54,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     /// # Arguments
     ///
     /// * secret_entry: secret necessary to access object storage, use local filesystem if not assigned.
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_table(
         &mut self,
         src_uri: &str,

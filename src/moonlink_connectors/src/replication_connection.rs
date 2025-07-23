@@ -244,8 +244,8 @@ impl ReplicationConnection {
 
     pub fn get_table_state_readers(&self) -> Vec<&TableStateReader> {
         self.table_states
-            .iter()
-            .map(|(_, cur_table_state)| &cur_table_state.state_reader)
+            .values()
+            .map(|cur_table_state| &cur_table_state.state_reader)
             .collect::<Vec<_>>()
     }
 
