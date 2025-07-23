@@ -31,7 +31,7 @@ crc32fast = "1"
 fastbloom = "0.12.0"
 futures = { version = "0.3", default-features = false }
 hashbrown = "0.15.3"
-iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "560a1241c75471d5f7d695af265b3e8aad454faa", default-features = false, features = [
+iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "b3ea8d1fca14ddc23154615862a62d3e3e56a769", default-features = false, features = [
   "storage-fs",
 ] }
 itertools = { version = "0.14" }

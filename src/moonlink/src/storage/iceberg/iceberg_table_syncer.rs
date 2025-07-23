@@ -476,26 +476,30 @@ impl IcebergTableManager {
             )
             .await?;
 
-        // Only start append action when there're new data files.
+        // Update snapshot summary properties.
         let mut txn = Transaction::new(self.iceberg_table.as_ref().unwrap());
+        let action = txn.fast_append();
+        let mut snapshot_properties = HashMap::<String, String>::from([(
+            MOONCAKE_TABLE_FLUSH_LSN.to_string(),
+            snapshot_payload.flush_lsn.to_string(),
+        )]);
+        if let Some(wal_metadata) = snapshot_payload.wal_persistence_metadata {
+            snapshot_properties.insert(
+                MOONCAKE_WAL_METADATA.to_string(),
+                serde_json::to_string(&wal_metadata).unwrap(),
+            );
+        }
+        let action = action.set_snapshot_properties(snapshot_properties);
+        txn = action.apply(txn)?;
+
+        // Only start append action when there're new data files.
         if !data_file_import_result.new_iceberg_data_files.is_empty() {
             let action = txn.fast_append();
             let action = action.add_data_files(data_file_import_result.new_iceberg_data_files);
             txn = action.apply(txn)?;
         }
 
-        // Persist flush lsn at table property
-        let mut action = txn.update_table_properties().set(
-            MOONCAKE_TABLE_FLUSH_LSN.to_string(),
-            snapshot_payload.flush_lsn.to_string(),
-        );
-        if let Some(wal_metadata) = snapshot_payload.wal_persistence_metadata {
-            action = action.set(
-                MOONCAKE_WAL_METADATA.to_string(),
-                serde_json::to_string(&wal_metadata).unwrap(),
-            );
-        }
-        txn = action.apply(txn)?;
+        // Commit the transaction.
         let updated_iceberg_table = txn.commit(&*self.catalog).await?;
         self.iceberg_table = Some(updated_iceberg_table);
 
