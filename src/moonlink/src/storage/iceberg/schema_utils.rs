@@ -1,13 +1,13 @@
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 use iceberg::spec::Schema as IcebergSchema;
 use iceberg::spec::DEFAULT_SCHEMA_ID;
 use iceberg::table::Table as IcebergTable;
 
 /// Schema related utils.
 ///
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 pub(crate) fn assert_is_same_schema(lhs: IcebergSchema, rhs: IcebergSchema) {
     let lhs_highest_field_id = lhs.highest_field_id();
     let rhs_highest_field_id = rhs.highest_field_id();
@@ -21,7 +21,7 @@ pub(crate) fn assert_is_same_schema(lhs: IcebergSchema, rhs: IcebergSchema) {
 }
 
 /// Validate iceberg table metadata matches the given schema.
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 pub(crate) fn assert_table_schema_consistent(
     table: &IcebergTable,
     mooncake_table_metadata: &MooncakeTableMetadata,

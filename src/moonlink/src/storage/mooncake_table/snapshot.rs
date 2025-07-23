@@ -518,7 +518,7 @@ impl SnapshotTableState {
         }
 
         // Expensive assertion, which is only enabled in unit tests.
-        #[cfg(test)]
+        #[cfg(any(test, debug_assertions))]
         {
             self.assert_current_snapshot_consistent().await;
         }

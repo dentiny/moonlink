@@ -3,7 +3,7 @@ use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::iceberg_table_manager::*;
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 use crate::storage::iceberg::schema_utils;
 use crate::storage::iceberg::utils;
 use crate::storage::iceberg::validation as IcebergValidation;
@@ -33,7 +33,7 @@ impl IcebergTableManager {
     /// Validate schema consistency at load operation.
     fn validate_schema_consistency_at_load(&self) {
         // Validate is expensive, only enable at tests.
-        #[cfg(test)]
+        #[cfg(any(test, debug_assertions))]
         {
             // Assert table schema matches iceberg table metadata.
             schema_utils::assert_table_schema_consistent(

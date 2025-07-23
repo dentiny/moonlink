@@ -1,7 +1,7 @@
 use crate::storage::mooncake_table::SnapshotTableState;
 use crate::storage::mooncake_table::{SnapshotOption, SnapshotTask};
 use more_asserts as ma;
-#[cfg(test)]
+#[cfg(any(test, debug_assertions))]
 use std::collections::HashSet;
 
 impl SnapshotTableState {
@@ -48,7 +48,7 @@ impl SnapshotTableState {
     }
 
     /// Test util functions to assert current snapshot is at a consistent state.
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     pub(super) async fn assert_current_snapshot_consistent(&self) {
         // Check data files and file indices match each other.
         self.assert_data_files_and_file_indices_match();
@@ -63,7 +63,7 @@ impl SnapshotTableState {
     }
 
     /// Test util function to validate data files and file indices match each other.
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     fn assert_data_files_and_file_indices_match(&self) {
         let mut all_data_files_1 = HashSet::new();
         let mut all_data_files_2 = HashSet::new();
@@ -79,7 +79,7 @@ impl SnapshotTableState {
     }
 
     /// Test util function to validate all index block files are cached, and cache handle filepath matches index file path.
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     async fn assert_index_blocks_cached(&self) {
         for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
             for cur_index_block in cur_file_index.index_blocks.iter() {
@@ -102,7 +102,7 @@ impl SnapshotTableState {
     }
 
     /// Test util function to validate one data file is referenced by exactly one file index.
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     fn assert_file_indices_no_duplicate(&self) {
         // Get referenced data files by file indices.
         let mut referenced_data_files = HashSet::new();
@@ -123,7 +123,7 @@ impl SnapshotTableState {
     }
 
     /// Test util function to validate file ids don't have duplicates.
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     fn assert_file_ids_no_duplicate(&self) {
         let mut file_ids = HashSet::new();
         for (cur_data_file, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
