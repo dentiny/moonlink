@@ -11,6 +11,7 @@ use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
 use crate::ObjectStorageCache;
+use crate::table_handler::test_utils::*;
 use crate::TableEventManager;
 
 use rand::prelude::*;
@@ -57,7 +58,8 @@ struct ChaosState {
     rng: StdRng,
     /// Used to generate rows to insert.
     next_id: i32,
-    inserted_rows: VecDeque<MoonlinkRow>,
+    /// All rows which have been appended to the mooncake table.
+    inserted_rows: VecDeque<(i32, MoonlinkRow)>,
     /// Used to indicate whether there's an ongoing transaction.
     has_begun: bool,
     /// LSN to use for the next operation, including update operations and commits.
@@ -104,11 +106,17 @@ impl ChaosState {
         self.last_commit_lsn = Some(lsn);
     }
 
-    fn next_row(&mut self) -> MoonlinkRow {
+    fn get_next_row_to_append(&mut self) -> MoonlinkRow {
         let row = create_row(self.next_id, /*name=*/ "user", self.next_id % 5);
+        self.inserted_rows.push_back((self.next_id, row.clone()));
         self.next_id += 1;
         row
     }
+
+    /// Return all [`id`] fields for the moonlink rows which haven't been deleted in the alphabetical order.
+    fn get_valid_ids(&self) -> Vec<i32> {
+        self.inserted_rows.iter().map(|(id, _)| *id).collect::<Vec<_>>()
+    }    
 
     fn generate_random_events(&mut self) -> ChaosEvent {
         #[derive(Debug, Clone)]
@@ -143,16 +151,18 @@ impl ChaosState {
             }
             EventKind::Begin => {
                 self.begin_transaction();
+                let row = self.get_next_row_to_append();
+                println!("insert row {:?}", row);
                 ChaosEvent::create_table_events(vec![TableEvent::Append {
-                    row: self.next_row(),
+                    row,
                     xact_id: None,
                     lsn: self.get_and_update_cur_lsn(),
                     is_copied: false,
                 }])
             }
             EventKind::Append => {
-                let row = self.next_row();
-                self.inserted_rows.push_back(row.clone());
+                let row = self.get_next_row_to_append();
+                println!("insert {:?}", row);
                 ChaosEvent::create_table_events(vec![TableEvent::Append {
                     row,
                     xact_id: None,
@@ -162,7 +172,10 @@ impl ChaosState {
             }
             EventKind::Delete => {
                 let idx = self.rng.random_range(0..self.inserted_rows.len());
-                let row = self.inserted_rows.remove(idx).unwrap();
+                let row = self.inserted_rows.remove(idx).unwrap().1;
+
+                println!("remove {:?}", row);
+
                 ChaosEvent::create_table_events(vec![TableEvent::Delete {
                     row,
                     xact_id: None,
@@ -281,11 +294,8 @@ async fn test_chaos() {
             }
             if let Some(read_lsn) = chaos_events.snapshot_read_lsn {
                 let requested_read_lsn = if read_lsn == 0 { None } else { Some(read_lsn) };
-                let _read_state = state
-                    .read_state_manager
-                    .try_read(requested_read_lsn)
-                    .await
-                    .unwrap();
+                let expected_ids = state.get_valid_ids();
+                check_read_snapshot(&state.read_state_manager, requested_read_lsn, /*expected_ids=*/&expected_ids).await;
             }
         }
 
