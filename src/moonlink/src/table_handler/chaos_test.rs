@@ -58,8 +58,10 @@ struct ChaosState {
     rng: StdRng,
     /// Used to generate rows to insert.
     next_id: i32,
-    /// All rows which have been appended to the mooncake table.
-    inserted_rows: VecDeque<(i32, MoonlinkRow)>,
+    /// Inserted rows in committed transactions.
+    committed_inserted_rows: VecDeque<MoonlinkRow>,
+    /// Inserted rows in current transaction.
+    uncommitted_inserted_rows: VecDeque<MoonlinkRow>,
     /// Used to indicate whether there's an ongoing transaction.
     has_begun: bool,
     /// LSN to use for the next operation, including update operations and commits.
@@ -81,7 +83,8 @@ impl ChaosState {
             rng,
             has_begun: false,
             next_id: 0,
-            inserted_rows: VecDeque::new(),
+            committed_inserted_rows: VecDeque::new(),
+            uncommitted_inserted_rows: VecDeque::new(),
             read_state_manager,
             cur_lsn: 0,
             last_commit_lsn: None,
@@ -104,11 +107,13 @@ impl ChaosState {
         assert!(self.has_begun);
         self.has_begun = false;
         self.last_commit_lsn = Some(lsn);
+        self.committed_inserted_rows
+            .extend(self.uncommitted_inserted_rows.drain(..));
     }
 
     fn get_next_row_to_append(&mut self) -> MoonlinkRow {
         let row = create_row(self.next_id, /*name=*/ "user", self.next_id % 5);
-        self.inserted_rows.push_back((self.next_id, row.clone()));
+        self.uncommitted_inserted_rows.push_back(row.clone());
         self.next_id += 1;
         row
     }
@@ -138,7 +143,7 @@ impl ChaosState {
             choices.push(EventKind::Begin);
         } else {
             choices.push(EventKind::Append);
-            if !self.inserted_rows.is_empty() {
+            if !self.committed_inserted_rows.is_empty() {
                 choices.push(EventKind::Delete);
             }
             choices.push(EventKind::EndWithFlush);
@@ -171,8 +176,8 @@ impl ChaosState {
                 }])
             }
             EventKind::Delete => {
-                let idx = self.rng.random_range(0..self.inserted_rows.len());
-                let row = self.inserted_rows.remove(idx).unwrap().1;
+                let idx = self.rng.random_range(0..self.committed_inserted_rows.len());
+                let row = self.committed_inserted_rows.remove(idx).unwrap();
 
                 println!("remove {:?}", row);
 
