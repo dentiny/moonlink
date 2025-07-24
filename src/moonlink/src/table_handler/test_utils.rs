@@ -297,7 +297,7 @@ impl TestEnvironment {
     pub async fn verify_snapshot(&self, target_lsn: u64, expected_ids: &[i32]) {
         check_read_snapshot(
             self.read_state_manager.as_ref().unwrap(),
-            target_lsn,
+            Some(target_lsn),
             expected_ids,
         )
         .await;
@@ -315,16 +315,16 @@ impl TestEnvironment {
 /// Verifies the state of a read snapshot against expected row IDs.
 pub async fn check_read_snapshot(
     read_manager: &ReadStateManager,
-    target_lsn: u64,
+    target_lsn: Option<u64>,
     expected_ids: &[i32],
 ) {
-    let read_state = read_manager.try_read(Some(target_lsn)).await.unwrap();
+    let read_state = read_manager.try_read(target_lsn).await.unwrap();
     let (data_files, puffin_files, deletion_vectors, position_deletes) =
         decode_read_state_for_testing(&read_state);
 
     if data_files.is_empty() && !expected_ids.is_empty() {
         unreachable!(
-            "No snapshot files returned for LSN {} when rows (IDs: {:?}) were expected. Expected files because expected_ids is not empty.",
+            "No snapshot files returned for LSN {:?} when rows (IDs: {:?}) were expected. Expected files because expected_ids is not empty.",
             target_lsn, expected_ids
         );
     }

@@ -8,6 +8,7 @@
 use crate::event_sync::create_table_event_syncer;
 use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
 use crate::ObjectStorageCache;
@@ -16,7 +17,7 @@ use crate::TableEventManager;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
 use tokio::sync::mpsc;
@@ -58,9 +59,11 @@ struct ChaosState {
     /// Used to generate rows to insert.
     next_id: i32,
     /// Inserted rows in committed transactions.
-    committed_inserted_rows: VecDeque<MoonlinkRow>,
-    /// Inserted rows in current transaction.
-    uncommitted_inserted_rows: VecDeque<MoonlinkRow>,
+    committed_inserted_rows: VecDeque<(i32 /*id*/, MoonlinkRow)>,
+    /// Inserted rows in the current uncommitted transaction.
+    uncommitted_inserted_rows: VecDeque<(i32 /*id*/, MoonlinkRow)>,
+    /// Deleted row ids in the current uncommitted transaction.
+    uncommitted_deleted_rows: HashSet<i32>,
     /// Used to indicate whether there's an ongoing transaction.
     has_begun: bool,
     /// LSN to use for the next operation, including update operations and commits.
@@ -84,6 +87,7 @@ impl ChaosState {
             next_id: 0,
             committed_inserted_rows: VecDeque::new(),
             uncommitted_inserted_rows: VecDeque::new(),
+            uncommitted_deleted_rows: HashSet::new(),
             read_state_manager,
             cur_lsn: 0,
             last_commit_lsn: None,
@@ -103,18 +107,46 @@ impl ChaosState {
     }
 
     fn commit_transaction(&mut self, lsn: u64) {
+        // Set chaos test states.
         assert!(self.has_begun);
         self.has_begun = false;
         self.last_commit_lsn = Some(lsn);
+
+        // Set table states.
+        self.committed_inserted_rows
+            .retain(|(id, _)| !self.uncommitted_deleted_rows.contains(id));
         self.committed_inserted_rows
             .extend(self.uncommitted_inserted_rows.drain(..));
     }
 
     fn get_next_row_to_append(&mut self) -> MoonlinkRow {
         let row = create_row(self.next_id, /*name=*/ "user", self.next_id % 5);
-        self.uncommitted_inserted_rows.push_back(row.clone());
+        self.uncommitted_inserted_rows
+            .push_back((self.next_id, row.clone()));
         self.next_id += 1;
         row
+    }
+
+    /// Return all [`id`] fields for the moonlink rows which haven't been deleted in the alphabetical order.
+    fn get_valid_ids(&self) -> Vec<i32> {
+        self.committed_inserted_rows
+            .iter()
+            .map(|(id, _)| *id)
+            .collect::<Vec<_>>()
+    }
+
+    /// Get a random row to delete.
+    fn get_random_row_to_delete(&mut self) -> (i32, MoonlinkRow) {
+        let candidates: Vec<_> = self
+            .committed_inserted_rows
+            .iter()
+            .filter(|(id, _)| !self.uncommitted_deleted_rows.contains(id))
+            .collect();
+        assert!(!candidates.is_empty());
+
+        let random_idx = self.rng.random_range(0..candidates.len());
+        let (id, row) = candidates[random_idx];
+        (*id, row.clone())
     }
 
     fn generate_random_events(&mut self) -> ChaosEvent {
@@ -137,7 +169,9 @@ impl ChaosState {
             choices.push(EventKind::Begin);
         } else {
             choices.push(EventKind::Append);
-            if !self.committed_inserted_rows.is_empty() {
+            if !self.committed_inserted_rows.is_empty()
+                && self.committed_inserted_rows.len() != self.uncommitted_deleted_rows.len()
+            {
                 choices.push(EventKind::Delete);
             }
             choices.push(EventKind::EndWithFlush);
@@ -168,8 +202,8 @@ impl ChaosState {
                 }])
             }
             EventKind::Delete => {
-                let idx = self.rng.random_range(0..self.committed_inserted_rows.len());
-                let row = self.committed_inserted_rows.remove(idx).unwrap();
+                let (id, row) = self.get_random_row_to_delete();
+                self.uncommitted_deleted_rows.insert(id);
                 ChaosEvent::create_table_events(vec![TableEvent::Delete {
                     row,
                     xact_id: None,
@@ -288,11 +322,13 @@ async fn test_chaos() {
             }
             if let Some(read_lsn) = chaos_events.snapshot_read_lsn {
                 let requested_read_lsn = if read_lsn == 0 { None } else { Some(read_lsn) };
-                let _read_state = state
-                    .read_state_manager
-                    .try_read(requested_read_lsn)
-                    .await
-                    .unwrap();
+                let expected_ids = state.get_valid_ids();
+                check_read_snapshot(
+                    &state.read_state_manager,
+                    requested_read_lsn,
+                    /*expected_ids=*/ &expected_ids,
+                )
+                .await;
             }
         }
 
