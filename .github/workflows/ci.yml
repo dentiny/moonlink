@@ -77,6 +77,7 @@ jobs:
 
       # ───────────────────── Wait for Fake GCS to be ready ───────────────────
       - name: Wait for Fake GCS ready
+        timeout-minutes: 5
         run: |
           for i in {1..10}; do
             if curl -sf http://gcs.local:4443/storage/v1/b; then
@@ -118,6 +119,7 @@ jobs:
 
       # ───────────────────── Wait for Fake S3 to be ready ───────────────────
       - name: Wait for Fake S3
+        timeout-minutes: 5
         run: |
           for i in {1..10}; do
             if curl -sf http://minio:9000/minio/health/ready; then
@@ -197,5 +199,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start chaos test
+        timeout-minutes: 5
         run: |
           cargo test test_chaos --features=chaos-test -p moonlink -- --nocapture
