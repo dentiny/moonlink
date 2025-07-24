@@ -575,7 +575,7 @@ pub struct MooncakeTable {
     mem_slice: MemSlice,
 
     /// Current snapshot of the table
-    snapshot: Arc<RwLock<SnapshotTableState>>,
+    pub snapshot: Arc<RwLock<SnapshotTableState>>,
     /// Whether there's ongoing mooncake snapshot.
     mooncake_snapshot_ongoing: bool,
 

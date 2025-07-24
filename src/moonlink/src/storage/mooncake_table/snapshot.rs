@@ -893,9 +893,16 @@ impl SnapshotTableState {
         // Get puffin blobs for deletion vector.
         let mut puffin_cache_handles = vec![];
         let mut deletion_vector_blob_at_read = vec![];
-        for (idx, (_, disk_deletion_vector)) in self.current_snapshot.disk_files.iter().enumerate()
+        // Get committed but un-persisted positional deletes.
+        let mut positional_deletes = Vec::new();
+
+        for (idx, (f, disk_deletion_vector)) in self.current_snapshot.disk_files.iter().enumerate()
         {
+            // Then place puffin blob.
             if disk_deletion_vector.puffin_deletion_blob.is_none() {
+
+                println!("read: f: {}, puffin: {}, deletion vector: {:?}", f.file_path(), disk_deletion_vector.puffin_deletion_blob.is_some(), disk_deletion_vector.batch_deletion_vector);
+
                 continue;
             }
             let puffin_deletion_blob = disk_deletion_vector.puffin_deletion_blob.as_ref().unwrap();
@@ -923,18 +930,17 @@ impl SnapshotTableState {
             });
         }
 
-        // Get committed but un-persisted deletion vector.
-        let mut ret = Vec::new();
         for deletion in self.committed_deletion_log.iter() {
             if let RecordLocation::DiskFile(file_id, row_id) = &deletion.pos {
                 for (id, (file, _)) in self.current_snapshot.disk_files.iter().enumerate() {
                     if file.file_id() == *file_id {
-                        ret.push((id as u32, *row_id as u32));
+                        println!("pos delete: f: {}, row id {}", file.file_path(), *row_id);
+                        positional_deletes.push((id as u32, *row_id as u32));
                         break;
                     }
                 }
             }
         }
-        (puffin_cache_handles, deletion_vector_blob_at_read, ret)
+        (puffin_cache_handles, deletion_vector_blob_at_read, positional_deletes)
     }
 }

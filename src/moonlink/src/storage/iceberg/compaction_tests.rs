@@ -25,9 +25,9 @@
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::table_manager::TableManager;
-use crate::storage::iceberg::test_utils::*;
+use crate::storage::iceberg::{io_utils, test_utils::*};
 use crate::storage::index::{FileIndex, MooncakeIndex};
-use crate::storage::mooncake_table::table_accessor_test_utils::*;
+use crate::storage::mooncake_table::{table_accessor_test_utils::*, MaintenanceOption, SnapshotOption};
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
@@ -35,8 +35,8 @@ use crate::storage::mooncake_table::Snapshot;
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
-use crate::storage::MooncakeTable;
-use crate::{FileSystemAccessor, TableEvent};
+use crate::storage::{verify_files_and_deletions, MooncakeTable};
+use crate::{decode_read_state_for_testing, FileSystemAccessor, TableEvent};
 
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::io::FileIOBuilder;
@@ -44,7 +44,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 
 /// Test data.
-const ID_VALUES: [i32; 4] = [1, 2, 3, 4];
+const ID_VALUES: [i32; 4] = [0, 1, 2, 3];
 const NAME_VALUES: [&str; 4] = ["a", "b", "c", "d"];
 const AGE_VALUES: [i32; 4] = [10, 20, 30, 40];
 
@@ -1192,4 +1192,88 @@ async fn test_compaction_3_3_1() {
         get_deletion_logs_for_snapshot(&table).await;
     assert!(committed_deletion_log.is_empty());
     assert!(uncommitted_deletion_log.is_empty());
+}
+
+
+#[tokio::test]
+async fn test_debug() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let filesystem_accessor = FileSystemAccessor::default_for_test(&temp_dir);
+    let (mut table, mut iceberg_table_manager_to_load, mut receiver) =
+        create_table_and_iceberg_manager_with_data_compaction_config(
+            &temp_dir,
+            get_data_compaction_config(),
+        )
+        .await;
+    let rows = prepare_committed_and_flushed_data_files(&mut table, &mut receiver).await;
+
+    // Create mooncake snapshot.
+    let force_snapshot_option = SnapshotOption {
+        force_create: true,
+        skip_iceberg_snapshot: false,
+        index_merge_option: MaintenanceOption::Skip,
+        data_compaction_option: MaintenanceOption::BestEffort,
+    };
+    assert!(table.create_snapshot(force_snapshot_option.clone()));
+
+    // Create iceberg snapshot.
+    let (_, iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
+        sync_mooncake_snapshot(&mut table, &mut receiver).await;
+
+    if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+        table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+        let iceberg_snapshot_result = sync_iceberg_snapshot(&mut receiver).await;
+        table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+    }
+
+    // Get data compaction payload.
+    assert!(table.create_snapshot(force_snapshot_option.clone()));
+    let (_, iceberg_snapshot_payload, _, data_compaction_payload, evicted_data_files_to_delete) =
+        sync_mooncake_snapshot(&mut table, &mut receiver).await;
+
+    assert!(iceberg_snapshot_payload.is_none());
+    let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
+
+    // Perform and block wait data compaction.
+    table.perform_data_compaction(data_compaction_payload);
+    let data_compaction_result = sync_data_compaction(&mut receiver).await;
+
+    // In between, we delete a few rows.
+    table.delete(rows[0].clone(), /*lsn=*/ 2).await;
+    table.commit(/*lsn=*/ 3);
+    table.delete(rows[2].clone(), /*lsn=*/ 4).await;
+    table.commit(/*lsn=*/ 5);
+    create_mooncake_snapshot_for_test(&mut table, &mut receiver).await;
+
+    // Read from snapshot.
+    let mut snapshot = table.snapshot.clone();
+    let mut read_output = snapshot.write().await.request_read().await.unwrap();
+    let read_state = read_output.take_as_read_state().await;
+    let (data_files, puffin_files, deletion_vectors, position_deletes) =
+        decode_read_state_for_testing(&read_state);
+    verify_files_and_deletions(&data_files, &puffin_files, position_deletes, deletion_vectors, &[1, 3]).await;
+
+    // Set data compaction result and trigger another iceberg snapshot.
+    table.set_data_compaction_res(data_compaction_result);
+    assert!(table.create_snapshot(SnapshotOption {
+        force_create: true,
+        skip_iceberg_snapshot: false,
+        index_merge_option: MaintenanceOption::Skip,
+        data_compaction_option: MaintenanceOption::BestEffort,
+    }));
+    sync_mooncake_snapshot_and_create_new_by_iceberg_payload(&mut table, &mut receiver).await;
+
+    // Delete some rows after iceberg persistence.
+    table.delete(rows[1].clone(), /*lsn=*/ 6).await;
+    table.commit(/*lsn=*/ 7);
+    table.delete(rows[3].clone(), /*lsn=*/ 8).await;
+    table.commit(/*lsn=*/ 9);
+    create_mooncake_snapshot_for_test(&mut table, &mut receiver).await;
+
+    let mut snapshot = table.snapshot.clone();
+    let mut read_output = snapshot.write().await.request_read().await.unwrap();
+    let read_state = read_output.take_as_read_state().await;
+    let (data_files, puffin_files, deletion_vectors, position_deletes) =
+        decode_read_state_for_testing(&read_state);
+    verify_files_and_deletions(&data_files, &puffin_files, position_deletes, deletion_vectors, &[]).await;
 }

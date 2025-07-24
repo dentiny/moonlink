@@ -196,8 +196,8 @@ impl ChaosState {
             if self.uncommitted_inserted_rows.is_empty()
                 && self.uncommitted_inserted_rows.is_empty()
             {
-                choices.push(EventKind::ForegroundForceSnapshot);
-                choices.push(EventKind::ForegroundForceIndexMerge);
+                // choices.push(EventKind::ForegroundForceSnapshot);
+                // choices.push(EventKind::ForegroundForceIndexMerge);
                 choices.push(EventKind::ForegroundForceDataCompaction);
             }
         }
@@ -366,7 +366,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..100 {
+        for _ in 0..1000 {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
