@@ -7,9 +7,7 @@ use crate::storage::mooncake_table::{
     DataCompactionPayload, FileIndiceMergePayload, MaintenanceOption, SnapshotTask,
 };
 use crate::storage::storage_utils::{ProcessedDeletionRecord, TableId, TableUniqueFileId};
-use crate::table_notify::{
-    DataCompactionMaintenanceStatus, IndexMergeMaintenanceStatus, TableMainenanceStatus,
-};
+use crate::table_notify::{DataCompactionMaintenanceStatus, IndexMergeMaintenanceStatus};
 
 /// Remap single record location after compaction.
 /// Return if remap succeeds.
@@ -81,17 +79,21 @@ impl SnapshotTableState {
         let unpersisted_data_files = self.unpersisted_records.get_unpersisted_data_files_set();
         let mut tentative_data_files_to_compact = vec![];
 
+        // Number of data files rejected to merge due to unpersistence.
+        let mut reject_by_unpersistence = 0;
+
         // TODO(hjiang): We should be able to early exit, if left items are not enough to reach the compaction threshold.
         for (cur_data_file, disk_file_entry) in all_disk_files.iter() {
-            // Doesn't compact those unpersisted files.
-            if unpersisted_data_files.contains(cur_data_file) {
-                continue;
-            }
-
             // Skip compaction if the file size exceeds threshold, AND it has no persisted deletion vectors.
             if disk_file_entry.file_size >= data_compaction_file_size_threshold
                 && disk_file_entry.batch_deletion_vector.is_empty()
             {
+                continue;
+            }
+
+            // Doesn't compact those unpersisted files.
+            if unpersisted_data_files.contains(cur_data_file) {
+                reject_by_unpersistence += 1;
                 continue;
             }
 
@@ -108,7 +110,17 @@ impl SnapshotTableState {
         }
 
         if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
-            return DataCompactionMaintenanceStatus::Nothing;
+            // There're two possibilities here:
+            // 1. If due to unpersistence, data compaction should wait until persistence completion.
+            if tentative_data_files_to_compact.len() + reject_by_unpersistence
+                >= data_compaction_file_num_threshold
+            {
+                return DataCompactionMaintenanceStatus::Unknown;
+            }
+            // 2. There're not enough number of small data files to merge.
+            else {
+                return DataCompactionMaintenanceStatus::Nothing;
+            }
         }
 
         // Calculate related file indices to compact.
@@ -177,26 +189,38 @@ impl SnapshotTableState {
 
         // To simplify state management, only compact data files which have been persisted into iceberg table.
         let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
-
+        // Number of index blocks rejected to merge due to unpersistence.
+        let mut reject_by_unpersistence = 0;
         for cur_file_index in all_file_indices.iter() {
-            // Don't merge unpersisted file indices.
-            if unpersisted_file_indices.contains(cur_file_index) {
-                continue;
-            }
-
             if cur_file_index.get_index_blocks_size() >= index_merge_file_size_threshold {
                 continue;
             }
+
+            // Don't merge unpersisted file indices.
+            if unpersisted_file_indices.contains(cur_file_index) {
+                reject_by_unpersistence += 1;
+                continue;
+            }
+
             assert!(file_indices_to_merge.insert(cur_file_index.clone()));
         }
+
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
-        if file_indices_to_merge.len() < index_merge_file_num_threshold {
-            return IndexMergeMaintenanceStatus::Nothing;
+        if file_indices_to_merge.len() >= index_merge_file_num_threshold {
+            let payload = FileIndiceMergePayload {
+                file_indices: file_indices_to_merge,
+            };
+            return IndexMergeMaintenanceStatus::Payload(payload);
         }
-        let payload = FileIndiceMergePayload {
-            file_indices: file_indices_to_merge,
-        };
-        IndexMergeMaintenanceStatus::Payload(payload)
+
+        // There're two possibilities here:
+        // 1. If due to unpersistence, index merge should wait until persistence completion.
+        if file_indices_to_merge.len() + reject_by_unpersistence >= index_merge_file_num_threshold {
+            return IndexMergeMaintenanceStatus::Unknown;
+        }
+
+        // 2. There're not enough number of small index blocks to merge.
+        IndexMergeMaintenanceStatus::Nothing
     }
 
     /// ===============================

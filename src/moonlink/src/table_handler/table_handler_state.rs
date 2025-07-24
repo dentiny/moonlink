@@ -29,6 +29,16 @@ pub(crate) enum MaintenanceRequestStatus {
     ForceFull,
 }
 
+impl MaintenanceRequestStatus {
+    /// Return whether the current maintenance request is force one.
+    pub(crate) fn is_force_request(&self) -> bool {
+        matches!(
+            self,
+            MaintenanceRequestStatus::ForceRegular | MaintenanceRequestStatus::ForceFull
+        )
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum MaintenanceProcessStatus {
     /// Force maintainence request is not being requested.

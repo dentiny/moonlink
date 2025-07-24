@@ -23,6 +23,10 @@ pub type IndexMergeMaintenanceStatus = TableMainenanceStatus<FileIndiceMergePayl
 pub type DataCompactionMaintenanceStatus = TableMainenanceStatus<DataCompactionPayload>;
 
 impl<T> TableMainenanceStatus<T> {
+    /// Return whether there's nothing to maintain.
+    pub fn is_nothing(&self) -> bool {
+        matches!(self, TableMainenanceStatus::Nothing)
+    }
     pub fn has_payload(&self) -> bool {
         matches!(self, TableMainenanceStatus::Payload(_))
     }

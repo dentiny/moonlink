@@ -1399,6 +1399,9 @@ async fn test_index_merge_with_sufficient_file_indices() {
 async fn test_data_compaction_with_sufficient_data_files() {
     let mut env = TestEnvironment::default().await;
 
+    // Force index merge when there's nothing to merge.
+    env.force_data_compaction_and_sync().await.unwrap();
+
     // Append two rows to the table, and flush right afterwards.
     env.append_row(
         /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 40, /*lsn=*/ 5,
@@ -1480,6 +1483,9 @@ async fn test_full_maintenance_with_sufficient_data_files() {
         ..Default::default()
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
+
+    // Force index merge when there's nothing to merge.
+    env.force_data_compaction_and_sync().await.unwrap();
 
     // Append two rows to the table, and flush right afterwards.
     env.append_row(

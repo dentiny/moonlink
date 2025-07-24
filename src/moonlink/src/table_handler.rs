@@ -345,20 +345,40 @@ impl TableHandler {
                                 }
                             }
 
-                            // Attempt to process data compaction.
-                            // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
-                            // to simplify workflow we limit at most one ongoing.
+                            // Only attempt new maintenance when there's ongoing one.
                             if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
+                                // ==========================
+                                // Data compaction
+                                // ==========================
+                                //
+                                // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
+                                // to simplify workflow we limit at most one ongoing.
+                                //
+                                // If there's force compact request, and there's nothing to compact, directly ack back.
+                                if table_handler_state.data_compaction_request_status.is_force_request() && data_compaction_payload.is_nothing() {
+                                    let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
+                                    table_handler_state.data_compaction_request_status = MaintenanceRequestStatus::Unrequested;
+                                }
+
+                                // Get payload and try perform maintenance operations.
                                 if let Some(data_compaction_payload) = data_compaction_payload.take_payload() {
                                     table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_data_compaction(data_compaction_payload);
                                 }
-                            }
 
-                            // Attempt to process file indices merge.
-                            // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
-                            // to simplify workflow we limit at most one ongoing.
-                            if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
+                                // ==========================
+                                // Index merge
+                                // ==========================
+                                //
+                                // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
+                                // to simplify workflow we limit at most one ongoing.
+                                //
+                                // If there's force merge request, and there's nothing to merge, directly ack back.
+                                if table_handler_state.index_merge_request_status.is_force_request() && file_indice_merge_payload.is_nothing() {
+                                    let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
+                                    table_handler_state.index_merge_request_status = MaintenanceRequestStatus::Unrequested;
+                                }
+
                                 if let Some(file_indice_merge_payload) = file_indice_merge_payload.take_payload() {
                                     assert_eq!(table_handler_state.table_maintenance_process_status, MaintenanceProcessStatus::Unrequested);
                                     table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;

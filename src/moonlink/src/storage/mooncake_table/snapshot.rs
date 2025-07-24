@@ -9,14 +9,11 @@ use crate::storage::cache::object_storage::base_cache::{
     CacheEntry as DataFileCacheEntry, CacheTrait, FileMetadata,
 };
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
-use crate::storage::compaction::table_compaction::{
-    CompactedDataEntry, DataCompactionPayload, RemappedRecordLocation,
-};
+use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
-use crate::storage::mooncake_table::table_snapshot::FileIndiceMergePayload;
 use crate::storage::mooncake_table::MoonlinkRow;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
