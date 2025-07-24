@@ -267,6 +267,13 @@ impl ChaosState {
     }
 }
 
+enum TestEnvConfig {
+    /// Index merge is enabled by default: merge take place as long as there're at least two index files.
+    IndexMerge,
+    /// Data compaction is enabled by default: compaction take place as long as there're at least two data files.
+    DataCompaction,
+}
+
 #[allow(dead_code)]
 struct TestEnvironment {
     iceberg_temp_dir: TempDir,
@@ -283,14 +290,21 @@ struct TestEnvironment {
 }
 
 impl TestEnvironment {
-    async fn new() -> Self {
+    async fn new(config: TestEnvConfig) -> Self {
         let iceberg_temp_dir = tempdir().unwrap();
         let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
 
         let table_temp_dir = tempdir().unwrap();
-        let mooncake_table_metadata = create_test_table_metadata_with_index_merge_disable_flush(
-            table_temp_dir.path().to_str().unwrap().to_string(),
-        );
+        let mooncake_table_metadata = match &config {
+            TestEnvConfig::IndexMerge => create_test_table_metadata_with_index_merge_disable_flush(
+                table_temp_dir.path().to_str().unwrap().to_string(),
+            ),
+            TestEnvConfig::DataCompaction => {
+                create_test_table_metadata_with_data_compaction_disable_flush(
+                    table_temp_dir.path().to_str().unwrap().to_string(),
+                )
+            }
+        };
 
         // Local filesystem to store read-through cache.
         let cache_temp_dir = tempdir().unwrap();
@@ -336,9 +350,7 @@ impl TestEnvironment {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_chaos() {
-    let mut env = TestEnvironment::new().await;
+async fn chaos_test_impl(mut env: TestEnvironment) {
     let event_sender = env.event_sender.clone();
     let read_state_manager = env.read_state_manager;
     let mut table_event_manager = env.table_event_manager;
@@ -349,7 +361,7 @@ async fn test_chaos() {
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..100 {
+        for _ in 0..250 {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
@@ -414,4 +426,18 @@ async fn test_chaos() {
             std::panic::resume_unwind(panic);
         }
     }
+}
+
+/// Chaos test with index merge enabled by default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_index_merge() {
+    let env = TestEnvironment::new(TestEnvConfig::IndexMerge).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with data compaction enabled by default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_data_compaction() {
+    let env = TestEnvironment::new(TestEnvConfig::DataCompaction).await;
+    chaos_test_impl(env).await;
 }
