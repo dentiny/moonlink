@@ -125,13 +125,23 @@ impl TableHandlerState {
     pub(crate) fn update_table_lsns(&mut self, event: &TableEvent) {
         if event.is_ingest_event() {
             match event {
+                // Update LSN for commit operations.
                 TableEvent::Commit { lsn, .. } => {
                     self.latest_commit_lsn = Some(*lsn);
                     self.table_consistent_view_lsn = Some(*lsn);
                 }
-                _ => {
+                TableEvent::CommitFlush { lsn, .. } => {
+                    self.latest_commit_lsn = Some(*lsn);
+                    self.table_consistent_view_lsn = Some(*lsn);
+                }
+                // Unset for table write operations.
+                TableEvent::Append { .. }
+                | TableEvent::Delete { .. }
+                | TableEvent::StreamAbort { .. } => {
                     self.table_consistent_view_lsn = None;
                 }
+                // Doesn't update for [`StreamAbort`] and [`StreamFlush`].
+                _ => {}
             }
         }
     }
@@ -222,21 +232,19 @@ impl TableHandlerState {
     /// ============================
     ///
     /// Update requested iceberg snapshot LSNs, if applicable.
-    pub(crate) fn update_force_iceberg_snapshot_requests(
+    pub(crate) fn update_iceberg_persisted_lsn(
         &mut self,
         iceberg_snapshot_lsn: u64,
         replication_lsn: u64,
     ) {
-        if !self.has_pending_force_snapshot_request() {
-            return;
-        }
-
         let persisted_table_lsn =
             self.get_persisted_table_lsn(Some(iceberg_snapshot_lsn), replication_lsn);
         self.notify_persisted_table_lsn(persisted_table_lsn);
-        let largest_force_snapshot_lsn = self.largest_force_snapshot_lsn.unwrap();
-        if persisted_table_lsn >= largest_force_snapshot_lsn {
-            self.largest_force_snapshot_lsn = None;
+
+        if let Some(largest_force_snapshot_lsn) = self.largest_force_snapshot_lsn {
+            if persisted_table_lsn >= largest_force_snapshot_lsn {
+                self.largest_force_snapshot_lsn = None;
+            }
         }
     }
 

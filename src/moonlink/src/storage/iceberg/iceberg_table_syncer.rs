@@ -476,8 +476,6 @@ impl IcebergTableManager {
             )
             .await?;
 
-        println!("persist iceberg snapshot at {}", snapshot_payload.flush_lsn);
-            
         // Update snapshot summary properties.
         let mut snapshot_properties = HashMap::<String, String>::from([(
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),

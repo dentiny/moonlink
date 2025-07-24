@@ -190,8 +190,6 @@ impl TableHandler {
                                 None
                             };
 
-                            println!("request force {:?}", lsn);
-
                             // Fast-path: nothing to snapshot.
                             if requested_lsn.is_none() {
                                 table_handler_state.force_snapshot_completion_tx.send(Some(Ok(/*lsn=*/0))).unwrap();
@@ -297,9 +295,6 @@ impl TableHandler {
                                     if let SpecialTableState::AlterTable { .. } = table_handler_state.special_table_state {
                                         table.force_empty_iceberg_payload();
                                     }
-
-                                    println!("force snapshot for {}", commit_lsn);
-
                                     assert!(table.create_snapshot(table_handler_state.get_mooncake_snapshot_option(/*request_force=*/true)));
                                     table_handler_state.mooncake_snapshot_ongoing = true;
                                     continue;
@@ -375,9 +370,6 @@ impl TableHandler {
                             table_handler_state.iceberg_snapshot_ongoing = false;
                             match iceberg_snapshot_result {
                                 Ok(snapshot_res) => {
-
-                                    println!("iceberg snapshot finished: {}", snapshot_res.flush_lsn);
-
                                     // Update table maintenance operation status.
                                     if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::InPersist && snapshot_res.contains_maintanence_result() {
                                         table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::Unrequested;
@@ -393,7 +385,7 @@ impl TableHandler {
 
                                     // Notify all waiters with LSN satisfied.
                                     let replication_lsn = *replication_lsn_rx.borrow();
-                                    table_handler_state.update_force_iceberg_snapshot_requests(iceberg_flush_lsn, replication_lsn);
+                                    table_handler_state.update_iceberg_persisted_lsn(iceberg_flush_lsn, replication_lsn);
                                 }
                                 Err(e) => {
                                     let err = Err(Error::IcebergMessage(format!("Failed to create iceberg snapshot: {e:?}")));
