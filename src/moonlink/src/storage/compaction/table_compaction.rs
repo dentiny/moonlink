@@ -60,7 +60,7 @@ pub(crate) struct RemappedRecordLocation {
 }
 
 /// Result for a compaction operation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct DataCompactionResult {
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
@@ -93,5 +93,17 @@ impl DataCompactionResult {
         // If all rows have been deleted after compaction, there'll be no new data files, file indices and remaps.
         assert!(!self.old_file_indices.is_empty());
         false
+    }
+}
+
+impl std::fmt::Debug for DataCompactionResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DataCompactionResult")
+            .field("remapped data files count", &self.remapped_data_files.len())
+            .field("old data files count", &self.old_data_files.len())
+            .field("old file indices count", &self.old_file_indices.len())
+            .field("new data files count", &self.new_data_files.len())
+            .field("new file indices count", &self.new_file_indices.len())
+            .finish()
     }
 }

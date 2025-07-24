@@ -166,7 +166,11 @@ impl IcebergSnapshotImportResult {
 
 impl std::fmt::Debug for IcebergSnapshotImportResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotImportResult").finish()
+        f.debug_struct("IcebergSnapshotImportResult")
+            .field("new data file counnt", &self.new_data_files.len())
+            .field("new file indices counnt", &self.new_file_indices.len())
+            .field("puffin blob ref counnt", &self.puffin_blob_ref.len())
+            .finish()
     }
 }
 
