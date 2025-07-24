@@ -352,16 +352,12 @@ async fn test_chaos() {
         for _ in 0..100 {
             let chaos_events = state.generate_random_events();
 
-            println!("event = {:?}", chaos_events);
-
             // Perform table maintenance operations.
             if let Some(cur_table_event) = chaos_events.table_maintenance_event {
                 match &cur_table_event {
                     TableEvent::ForceRegularIndexMerge => {
-                        println!("before index merge");
                         let mut rx = table_event_manager.initiate_index_merge().await;
                         rx.recv().await.unwrap().unwrap();
-                        println!("after index merge");
                     }
                     _ => {}
                 }

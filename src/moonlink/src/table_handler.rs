@@ -216,19 +216,32 @@ impl TableHandler {
                         }
                         // Branch to trigger a force regular index merge request.
                         TableEvent::ForceRegularIndexMerge => {
-                            // TODO(hjiang): Handle cases where there're not enough file indices to merge.
+                            // TODO(hjiang): If there's already table maintenance ongoing, skip.
+                            if table_handler_state.table_maintenance_process_status.is_maintenance_ongoing() {
+                                let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
+                                continue;
+                            }
+                            // Otherwise queue a request.
                             assert_eq!(table_handler_state.index_merge_request_status, MaintenanceRequestStatus::Unrequested);
                             table_handler_state.index_merge_request_status = MaintenanceRequestStatus::ForceRegular;
                         }
                         // Branch to trigger a force regular data compaction request.
                         TableEvent::ForceRegularDataCompaction => {
-                            // TODO(hjiang): Handle cases where there're not enough files to compact.
+                            if table_handler_state.table_maintenance_process_status.is_maintenance_ongoing() {
+                                let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
+                                continue;
+                            }
+                            // Otherwise queue a request.
                             assert_eq!(table_handler_state.data_compaction_request_status, MaintenanceRequestStatus::Unrequested);
                             table_handler_state.data_compaction_request_status = MaintenanceRequestStatus::ForceRegular;
                         }
                         // Branch to trigger a force full index merge request.
                         TableEvent::ForceFullMaintenance => {
-                            // TODO(hjiang): Handle cases where there're not enough file indices to merge.
+                            if table_handler_state.table_maintenance_process_status.is_maintenance_ongoing() {
+                                let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
+                                continue;
+                            }
+                            // Otherwise queue a request.
                             assert_eq!(table_handler_state.index_merge_request_status, MaintenanceRequestStatus::Unrequested);
                             assert_eq!(table_handler_state.data_compaction_request_status, MaintenanceRequestStatus::Unrequested);
                             table_handler_state.data_compaction_request_status = MaintenanceRequestStatus::ForceFull;

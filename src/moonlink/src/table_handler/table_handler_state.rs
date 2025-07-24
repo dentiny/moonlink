@@ -51,6 +51,13 @@ pub(crate) enum MaintenanceProcessStatus {
     InPersist,
 }
 
+impl MaintenanceProcessStatus {
+    /// Return whether there's maintenance process ongoing.
+    pub(crate) fn is_maintenance_ongoing(&self) -> bool {
+        !matches!(self, MaintenanceProcessStatus::Unrequested)
+    }
+}
+
 pub(crate) struct TableHandlerState {
     // cached table states
     //
