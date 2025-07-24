@@ -39,9 +39,9 @@ pub struct FileSystemAccessor {
 impl std::fmt::Debug for FileSystemAccessor {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FileSystemAccessor")
-        .field("root_path", &self.root_path)
-        .field("config", &self.config)
-        .finish()
+            .field("root_path", &self.root_path)
+            .field("config", &self.config)
+            .finish()
     }
 }
 
