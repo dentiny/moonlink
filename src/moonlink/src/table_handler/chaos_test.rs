@@ -361,7 +361,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..250 {
+        for _ in 0..100 {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.

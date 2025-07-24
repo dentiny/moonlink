@@ -217,7 +217,7 @@ impl TableHandler {
                         // Branch to trigger a force regular index merge request.
                         TableEvent::ForceRegularIndexMerge => {
                             // TODO(hjiang): If there's already table maintenance ongoing, skip.
-                            if table_handler_state.table_maintenance_process_status.is_maintenance_ongoing() {
+                            if !table_handler_state.can_start_new_maintenance() {
                                 let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
                                 continue;
                             }
@@ -227,7 +227,7 @@ impl TableHandler {
                         }
                         // Branch to trigger a force regular data compaction request.
                         TableEvent::ForceRegularDataCompaction => {
-                            if table_handler_state.table_maintenance_process_status.is_maintenance_ongoing() {
+                            if !table_handler_state.can_start_new_maintenance() {
                                 let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
                                 continue;
                             }
@@ -237,7 +237,7 @@ impl TableHandler {
                         }
                         // Branch to trigger a force full index merge request.
                         TableEvent::ForceFullMaintenance => {
-                            if table_handler_state.table_maintenance_process_status.is_maintenance_ongoing() {
+                            if !table_handler_state.can_start_new_maintenance() {
                                 let _ = table_handler_state.table_maintenance_completion_tx.send(Ok(()));
                                 continue;
                             }
@@ -358,7 +358,7 @@ impl TableHandler {
                                 }
                             }
 
-                            // Only attempt new maintenance when there's no ongoing one.
+                            // Only attempt new maintenance when there's no other requests nor ongoing one.
                             if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
                                 // ==========================
                                 // Data compaction
