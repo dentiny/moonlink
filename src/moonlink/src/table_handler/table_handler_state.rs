@@ -169,6 +169,11 @@ impl TableHandlerState {
         if self.initial_persistence_lsn.is_none() {
             return false;
         }
+        // Streaming events cannot be discarded, whose LSN is sent at commit phase.
+        if event.is_streaming_update() {
+            return false;
+        }
+        // For non-streaming events, discard if LSN is less than flush LSN.
         let initial_persistence_lsn = self.initial_persistence_lsn.unwrap();
         if let Some(lsn) = event.get_lsn_for_ingest_event() {
             lsn <= initial_persistence_lsn

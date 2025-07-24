@@ -1543,7 +1543,7 @@ async fn test_full_maintenance_with_sufficient_data_files() {
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 }
 
-/// Testing scenario: write operations no later than persisted LSN shall be discarded.
+/// Testing scenario: non-streaming write operations no later than persisted LSN shall be discarded.
 #[tokio::test]
 async fn test_discard_duplicate_writes() {
     let temp_dir = tempdir().unwrap();
@@ -1626,7 +1626,7 @@ async fn test_discard_duplicate_writes() {
         /*id=*/ 40,
         /*name=*/ "Dog",
         /*age=*/ 40,
-        /*lsn=*/ 25,
+        /*lsn=*/ 0,
         /*xact_id=*/ Some(40),
     )
     .await;

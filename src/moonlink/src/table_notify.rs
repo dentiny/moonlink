@@ -142,6 +142,19 @@ impl TableEvent {
         }
     }
 
+    /// Whether current table event indicates a streaming write transaction.
+    pub fn is_streaming_update(&self) -> bool {
+        match &self {
+            TableEvent::Append { xact_id, .. } => xact_id.is_some(),
+            TableEvent::Delete { xact_id, .. } => xact_id.is_some(),
+            TableEvent::StreamAbort { .. } => true,
+            TableEvent::Commit { xact_id, .. } => xact_id.is_some(),
+            TableEvent::CommitFlush { xact_id, .. } => xact_id.is_some(),
+            TableEvent::StreamFlush { .. } => true,
+            _ => false,
+        }
+    }
+
     pub fn get_lsn_for_ingest_event(&self) -> Option<u64> {
         match self {
             TableEvent::Append { lsn, .. } => Some(*lsn),

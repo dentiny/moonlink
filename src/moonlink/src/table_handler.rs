@@ -597,6 +597,14 @@ impl TableHandler {
 
         match xact_id {
             Some(xact_id) => {
+                // For streaming writers, whose commit LSN is only finalized at commit phase, delay decision whether to discard now.
+                // If commit LSN is no fresher than persistence LSN, it means already persisted, directly discard.
+                if let Some(initial_persistence_lsn) = table_handler_state.initial_persistence_lsn {
+                    if lsn <= initial_persistence_lsn {
+                        table.abort_in_stream_batch(xact_id);
+                        return;
+                    }
+                }
                 if let Err(e) = table.commit_transaction_stream(xact_id, lsn).await {
                     error!(error = %e, "stream commit flush failed");
                 }
