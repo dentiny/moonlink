@@ -23,7 +23,7 @@ pub struct SingleFileToCompact {
 }
 
 /// Payload to trigger a compaction operation.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DataCompactionPayload {
     /// Object storage cache.
     pub(crate) object_storage_cache: ObjectStorageCache,
@@ -33,6 +33,17 @@ pub struct DataCompactionPayload {
     pub(crate) disk_files: Vec<SingleFileToCompact>,
     /// File indices to compact and rewrite.
     pub(crate) file_indices: Vec<FileIndex>,
+}
+
+impl std::fmt::Debug for DataCompactionPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DataCompactionPayload")
+            .field("object_storage_cache", &self.object_storage_cache)
+            .field("filesystem_accessor", &self.filesystem_accessor)
+            .field("disk file number", &self.disk_files.len())
+            .field("file indices number", &self.file_indices.len())
+            .finish()
+    }
 }
 
 impl DataCompactionPayload {
