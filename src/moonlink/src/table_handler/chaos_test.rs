@@ -353,14 +353,10 @@ async fn test_chaos() {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
-            if let Some(cur_table_event) = chaos_events.table_maintenance_event {
-                match &cur_table_event {
-                    TableEvent::ForceRegularIndexMerge => {
-                        let mut rx = table_event_manager.initiate_index_merge().await;
-                        rx.recv().await.unwrap().unwrap();
-                    }
-                    _ => {}
-                }
+            if let Some(TableEvent::ForceRegularIndexMerge) = &chaos_events.table_maintenance_event
+            {
+                let mut rx = table_event_manager.initiate_index_merge().await;
+                rx.recv().await.unwrap().unwrap();
             }
 
             // Perform table update operations.
