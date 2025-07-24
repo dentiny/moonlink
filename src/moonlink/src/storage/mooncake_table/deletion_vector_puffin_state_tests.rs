@@ -528,7 +528,7 @@ async fn test_2_compact_without_local_optimization() {
     let evicted_files = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     // Include both two data files and their puffin files, index blocks.
@@ -616,7 +616,7 @@ async fn test_2_compact_with_local_optimization() {
     let evicted_files = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     assert!(evicted_files.is_empty());

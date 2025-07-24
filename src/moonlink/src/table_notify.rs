@@ -9,6 +9,31 @@ use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::NonEvictableHandle;
 use crate::Result;
 
+/// Table maintenance status.
+#[derive(Clone, Debug)]
+pub enum TableMainenanceStatus<T> {
+    /// Requested to skip table maintenance, so it's unknown whether there's maintenance payload.
+    Unknown,
+    /// Nothing to maintenance.
+    Nothing,
+    /// Table maintenance payload.
+    Payload(T),
+}
+pub type IndexMergeMaintenanceStatus = TableMainenanceStatus<FileIndiceMergePayload>;
+pub type DataCompactionMaintenanceStatus = TableMainenanceStatus<DataCompactionPayload>;
+
+impl<T> TableMainenanceStatus<T> {
+    pub fn has_payload(&self) -> bool {
+        matches!(self, TableMainenanceStatus::Payload(_))
+    }
+    pub fn take_payload(self) -> Option<T> {
+        match self {
+            TableMainenanceStatus::Payload(payload) => Some(payload),
+            _ => None,
+        }
+    }
+}
+
 /// Completion notifications for mooncake table, including snapshot creation and compaction, etc.
 ///
 /// TODO(hjiang): Revisit whether we need to place the payload into box.
@@ -82,10 +107,10 @@ pub enum TableEvent {
         lsn: u64,
         /// Payload used to create an iceberg snapshot.
         iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
-        /// Payload used to trigger a data compaction.
-        data_compaction_payload: Option<DataCompactionPayload>,
         /// Payload used to trigger an index merge.
-        file_indice_merge_payload: Option<FileIndiceMergePayload>,
+        file_indice_merge_payload: IndexMergeMaintenanceStatus,
+        /// Payload used to trigger a data compaction.
+        data_compaction_payload: DataCompactionMaintenanceStatus,
         /// Evicted object storage cache to delete.
         evicted_data_files_to_delete: Vec<String>,
     },

@@ -349,7 +349,7 @@ impl TableHandler {
                             // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
                             if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
-                                if let Some(data_compaction_payload) = data_compaction_payload {
+                                if let Some(data_compaction_payload) = data_compaction_payload.take_payload() {
                                     table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_data_compaction(data_compaction_payload);
                                 }
@@ -359,7 +359,7 @@ impl TableHandler {
                             // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
                             // to simplify workflow we limit at most one ongoing.
                             if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
-                                if let Some(file_indice_merge_payload) = file_indice_merge_payload {
+                                if let Some(file_indice_merge_payload) = file_indice_merge_payload.take_payload() {
                                     assert_eq!(table_handler_state.table_maintenance_process_status, MaintenanceProcessStatus::Unrequested);
                                     table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InProcess;
                                     table.perform_index_merge(file_indice_merge_payload);

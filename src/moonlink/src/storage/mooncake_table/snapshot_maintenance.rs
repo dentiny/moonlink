@@ -7,6 +7,9 @@ use crate::storage::mooncake_table::{
     DataCompactionPayload, FileIndiceMergePayload, MaintenanceOption, SnapshotTask,
 };
 use crate::storage::storage_utils::{ProcessedDeletionRecord, TableId, TableUniqueFileId};
+use crate::table_notify::{
+    DataCompactionMaintenanceStatus, IndexMergeMaintenanceStatus, TableMainenanceStatus,
+};
 
 /// Remap single record location after compaction.
 /// Return if remap succeeds.
@@ -40,7 +43,11 @@ impl SnapshotTableState {
     pub(super) fn get_payload_to_compact(
         &self,
         data_compaction_option: &MaintenanceOption,
-    ) -> Option<DataCompactionPayload> {
+    ) -> DataCompactionMaintenanceStatus {
+        if *data_compaction_option == MaintenanceOption::Skip {
+            return DataCompactionMaintenanceStatus::Unknown;
+        }
+
         let data_compaction_file_num_threshold = match data_compaction_option {
             MaintenanceOption::Skip => usize::MAX,
             MaintenanceOption::ForceRegular => 2,
@@ -67,7 +74,7 @@ impl SnapshotTableState {
         // Fast-path: not enough data files to trigger compaction.
         let all_disk_files = &self.current_snapshot.disk_files;
         if all_disk_files.len() < data_compaction_file_num_threshold {
-            return None;
+            return DataCompactionMaintenanceStatus::Nothing;
         }
 
         // To simplify state management, only compact data files which have been persisted into iceberg table.
@@ -101,7 +108,7 @@ impl SnapshotTableState {
         }
 
         if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
-            return None;
+            return DataCompactionMaintenanceStatus::Nothing;
         }
 
         // Calculate related file indices to compact.
@@ -119,12 +126,13 @@ impl SnapshotTableState {
             }
         }
 
-        Some(DataCompactionPayload {
+        let payload = DataCompactionPayload {
             object_storage_cache: self.object_storage_cache.clone(),
             filesystem_accessor: self.filesystem_accessor.clone(),
             disk_files: tentative_data_files_to_compact,
             file_indices: file_indices_to_compact,
-        })
+        };
+        DataCompactionMaintenanceStatus::Payload(payload)
     }
 
     /// Util function to decide whether and what to merge index.
@@ -133,7 +141,10 @@ impl SnapshotTableState {
     pub(super) fn get_file_indices_to_merge(
         &self,
         index_merge_option: &MaintenanceOption,
-    ) -> Option<FileIndiceMergePayload> {
+    ) -> IndexMergeMaintenanceStatus {
+        if *index_merge_option == MaintenanceOption::Skip {
+            return IndexMergeMaintenanceStatus::Unknown;
+        }
         let index_merge_file_num_threshold = match index_merge_option {
             MaintenanceOption::Skip => usize::MAX,
             MaintenanceOption::ForceRegular => 2,
@@ -161,7 +172,7 @@ impl SnapshotTableState {
         let mut file_indices_to_merge = HashSet::new();
         let all_file_indices = &self.current_snapshot.indices.file_indices;
         if all_file_indices.len() < index_merge_file_num_threshold {
-            return None;
+            return IndexMergeMaintenanceStatus::Nothing;
         }
 
         // To simplify state management, only compact data files which have been persisted into iceberg table.
@@ -179,12 +190,13 @@ impl SnapshotTableState {
             assert!(file_indices_to_merge.insert(cur_file_index.clone()));
         }
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
-        if file_indices_to_merge.len() >= index_merge_file_num_threshold {
-            return Some(FileIndiceMergePayload {
-                file_indices: file_indices_to_merge,
-            });
+        if file_indices_to_merge.len() < index_merge_file_num_threshold {
+            return IndexMergeMaintenanceStatus::Nothing;
         }
-        None
+        let payload = FileIndiceMergePayload {
+            file_indices: file_indices_to_merge,
+        };
+        IndexMergeMaintenanceStatus::Payload(payload)
     }
 
     /// ===============================

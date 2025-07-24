@@ -1327,6 +1327,9 @@ async fn test_periodical_force_snapshot() {
 async fn test_index_merge_with_sufficient_file_indices() {
     let mut env = TestEnvironment::default().await;
 
+    // Force index merge when there's nothing to merge.
+    env.force_index_merge_and_sync().await.unwrap();
+
     // Append two rows to the table, and flush right afterwards.
     env.append_row(
         /*id=*/ 2, /*name=*/ "Bob", /*age=*/ 40, /*lsn=*/ 5,

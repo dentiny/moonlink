@@ -284,7 +284,7 @@ async fn test_3_index_merge() {
     let (_, _, index_merge_payload, _, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
-    let index_merge_payload = index_merge_payload.unwrap();
+    let index_merge_payload = index_merge_payload.take_payload().unwrap();
 
     // Get data files and old merged index block files.
     let disk_files = get_disk_files_for_table(&table).await;

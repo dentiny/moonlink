@@ -10,7 +10,9 @@ use crate::storage::mooncake_table::{
     FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult, MaintenanceOption,
     SnapshotOption, TableMetadata as MooncakeTableMetadata,
 };
-use crate::table_notify::TableEvent;
+use crate::table_notify::{
+    DataCompactionMaintenanceStatus, IndexMergeMaintenanceStatus, TableEvent,
+};
 use crate::{MooncakeTable, SnapshotReadOutput};
 use crate::{ReadState, Result};
 
@@ -125,8 +127,8 @@ pub(crate) async fn sync_mooncake_snapshot(
 ) -> (
     u64,
     Option<IcebergSnapshotPayload>,
-    Option<FileIndiceMergePayload>,
-    Option<DataCompactionPayload>,
+    IndexMergeMaintenanceStatus,
+    DataCompactionMaintenanceStatus,
     Vec<String>,
 ) {
     let notification = receiver.recv().await.unwrap();
@@ -192,8 +194,8 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
 ) -> (
     u64,
     Option<IcebergSnapshotPayload>,
-    Option<FileIndiceMergePayload>,
-    Option<DataCompactionPayload>,
+    IndexMergeMaintenanceStatus,
+    DataCompactionMaintenanceStatus,
     Vec<String>,
 ) {
     let mooncake_snapshot_created = table.create_snapshot(SnapshotOption {
@@ -322,7 +324,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
         .unwrap();
 
     assert!(iceberg_snapshot_payload.is_none());
-    let data_compaction_payload = data_compaction_payload.unwrap();
+    let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
 
     // Perform and block wait data compaction.
     table.perform_data_compaction(data_compaction_payload);
@@ -387,7 +389,7 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
         .unwrap();
 
     assert!(iceberg_snapshot_payload.is_none());
-    let file_indice_merge_payload = file_indice_merge_payload.unwrap();
+    let file_indice_merge_payload = file_indice_merge_payload.take_payload().unwrap();
 
     table.perform_index_merge(file_indice_merge_payload);
     let index_merge_result = sync_index_merge(receiver).await;
