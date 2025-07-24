@@ -474,7 +474,10 @@ impl TableHandlerState {
 
     /// We can have at most one table maintenance ongoing, only allow to start a new one when there's no ongoing operations, nor another requested ones.
     pub(crate) fn can_start_new_maintenance(&self) -> bool {
-        if self.table_maintenance_process_status.is_maintenance_ongoing() {
+        if self
+            .table_maintenance_process_status
+            .is_maintenance_ongoing()
+        {
             return false;
         }
         if self.index_merge_request_status.is_requested() {
