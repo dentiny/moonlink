@@ -183,8 +183,9 @@ impl ChaosState {
             ReadSnapshot,
             /// Foreground force snapshot only happens after commit operation, otherwise it gets blocked.
             ForegroundForceSnapshot,
-            /// Foreground force index merge only happens after commit operation, otherwise it gets blocked.
+            /// Foreground force table maintenance only happens after commit operation, otherwise it gets blocked.
             ForegroundForceIndexMerge,
+            ForegroundForceDataCompaction,
         }
 
         let mut choices = vec![];
@@ -197,6 +198,7 @@ impl ChaosState {
             {
                 choices.push(EventKind::ForegroundForceSnapshot);
                 choices.push(EventKind::ForegroundForceIndexMerge);
+                choices.push(EventKind::ForegroundForceDataCompaction);
             }
         }
         if !self.has_begun {
@@ -221,6 +223,9 @@ impl ChaosState {
             }
             EventKind::ForegroundForceIndexMerge => {
                 ChaosEvent::create_table_maintenance_event(TableEvent::ForceRegularIndexMerge)
+            }
+            EventKind::ForegroundForceDataCompaction => {
+                ChaosEvent::create_table_maintenance_event(TableEvent::ForceRegularDataCompaction)
             }
             EventKind::Begin => {
                 self.begin_transaction();
@@ -368,6 +373,11 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
             if let Some(TableEvent::ForceRegularIndexMerge) = &chaos_events.table_maintenance_event
             {
                 let mut rx = table_event_manager.initiate_index_merge().await;
+                rx.recv().await.unwrap().unwrap();
+            }
+            if let Some(TableEvent::ForceRegularDataCompaction) = &chaos_events.table_maintenance_event
+            {
+                let mut rx = table_event_manager.initiate_data_compaction().await;
                 rx.recv().await.unwrap().unwrap();
             }
 
