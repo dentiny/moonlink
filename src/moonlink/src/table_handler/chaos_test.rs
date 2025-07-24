@@ -33,8 +33,10 @@ fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
 }
 
 /// Events randomly selected for chaos test.
+#[derive(Debug)]
 struct ChaosEvent {
     table_events: Vec<TableEvent>,
+    table_maintenance_event: Option<TableEvent>,
     snapshot_read_lsn: Option<u64>,
     force_snapshot_lsn: Option<u64>,
 }
@@ -43,6 +45,15 @@ impl ChaosEvent {
     fn create_table_events(table_events: Vec<TableEvent>) -> Self {
         Self {
             table_events,
+            table_maintenance_event: None,
+            snapshot_read_lsn: None,
+            force_snapshot_lsn: None,
+        }
+    }
+    fn create_table_maintenance_event(table_event: TableEvent) -> Self {
+        Self {
+            table_events: vec![],
+            table_maintenance_event: Some(table_event),
             snapshot_read_lsn: None,
             force_snapshot_lsn: None,
         }
@@ -50,6 +61,7 @@ impl ChaosEvent {
     fn create_snapshot_read(lsn: u64) -> Self {
         Self {
             table_events: vec![],
+            table_maintenance_event: None,
             snapshot_read_lsn: Some(lsn),
             force_snapshot_lsn: None,
         }
@@ -57,6 +69,7 @@ impl ChaosEvent {
     fn create_force_snapshot(lsn: u64) -> Self {
         Self {
             table_events: vec![],
+            table_maintenance_event: None,
             snapshot_read_lsn: None,
             force_snapshot_lsn: Some(lsn),
         }
@@ -170,17 +183,20 @@ impl ChaosState {
             ReadSnapshot,
             /// Foreground force snapshot only happens after commit operation, otherwise it gets blocked.
             ForegroundForceSnapshot,
+            /// Foreground force index merge only happens after commit operation, otherwise it gets blocked.
+            ForegroundForceIndexMerge,
         }
 
         let mut choices = vec![];
 
         if self.last_commit_lsn.is_some() {
             choices.push(EventKind::ReadSnapshot);
-            // Foreground force snapshot happens after a commit operation.
+            // Foreground table maintenance operations happen after a commit operation.
             if self.uncommitted_inserted_rows.is_empty()
                 && self.uncommitted_inserted_rows.is_empty()
             {
                 choices.push(EventKind::ForegroundForceSnapshot);
+                choices.push(EventKind::ForegroundForceIndexMerge);
             }
         }
         if !self.has_begun {
@@ -202,6 +218,9 @@ impl ChaosState {
             }
             EventKind::ForegroundForceSnapshot => {
                 ChaosEvent::create_force_snapshot(self.last_commit_lsn.unwrap())
+            }
+            EventKind::ForegroundForceIndexMerge => {
+                ChaosEvent::create_table_maintenance_event(TableEvent::ForceRegularIndexMerge)
             }
             EventKind::Begin => {
                 self.begin_transaction();
@@ -332,6 +351,23 @@ async fn test_chaos() {
         // TODO(hjiang): Make iteration count a CLI configurable constant.
         for _ in 0..100 {
             let chaos_events = state.generate_random_events();
+
+            println!("event = {:?}", chaos_events);
+
+            // Perform table maintenance operations.
+            if let Some(cur_table_event) = chaos_events.table_maintenance_event {
+                match &cur_table_event {
+                    TableEvent::ForceRegularIndexMerge => {
+                        println!("before index merge");
+                        let mut rx = table_event_manager.initiate_index_merge().await;
+                        rx.recv().await.unwrap().unwrap();
+                        println!("after index merge");
+                    }
+                    _ => {}
+                }
+            }
+
+            // Perform table update operations.
             for cur_event in chaos_events.table_events.into_iter() {
                 // For commit events, need to set up corresponding replication and commit LSN.
                 if let TableEvent::Commit { lsn, .. } = cur_event {
