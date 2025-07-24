@@ -351,7 +351,7 @@ impl TableHandler {
                                 // Data compaction
                                 // ==========================
                                 //
-                                // Unlike snapshot, we can actually have multiple file index merge operations ongoing concurrently,
+                                // Unlike snapshot, we can actually have multiple data compaction operations ongoing concurrently,
                                 // to simplify workflow we limit at most one ongoing.
                                 //
                                 // If there's force compact request, and there's nothing to compact, directly ack back.
