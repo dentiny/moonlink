@@ -758,25 +758,23 @@ impl MooncakeTable {
     ) {
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
 
-        // Whether the iceberg snapshot result contains new write operations from mooncake table (append/delete).
-        let contains_new_writes = |res: &IcebergSnapshotResult| {
-            if !res.import_result.new_data_files.is_empty() {
-                assert!(!res.import_result.new_file_indices.is_empty());
+        // Whether the iceberg snapshot result contains table maintenance updates.
+        let contains_table_maintenance_res = |res: &IcebergSnapshotResult| {
+            if !res.index_merge_result.is_empty() {
                 return true;
             }
-            if !res.import_result.puffin_blob_ref.is_empty() {
+            if !res.data_compaction_result.is_empty() {
                 return true;
             }
-
             false
         };
 
         // There're two types of operations could trigger iceberg snapshot: (1) index merge / data compaction; (2) table writes, including append and delete.
         // The first type is safe to import to iceberg at any time, with no flush LSN advancement.
-        if contains_new_writes(iceberg_snapshot_res) {
+        if contains_table_maintenance_res(iceberg_snapshot_res) {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
+                    || self.last_iceberg_snapshot_lsn.unwrap() <= flush_lsn,
                 "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
                 self.last_iceberg_snapshot_lsn,
                 flush_lsn,
@@ -786,7 +784,7 @@ impl MooncakeTable {
         } else {
             assert!(
                 self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() <= flush_lsn,
+                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
                 "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
                 self.last_iceberg_snapshot_lsn,
                 flush_lsn,
