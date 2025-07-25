@@ -34,6 +34,7 @@ use crate::storage::mooncake_table::{
 };
 use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
+use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::storage::MooncakeTable;
@@ -41,6 +42,7 @@ use crate::FileSystemAccessor;
 use crate::ObjectStorageCache;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -59,27 +61,40 @@ use tokio::sync::mpsc;
 ///
 /// Create test batch deletion vector.
 fn test_committed_deletion_log_1(
-    data_filepath: MooncakeDataFileRef,
+    data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
     deletion_vector.delete_row(0);
 
     HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(
-        data_filepath.clone(),
+        data_file,
         deletion_vector,
     )])
 }
+/// Corresponds to [`test_committed_deletion_log_1`].
+fn test_committed_deletion_logs_to_persist_1(data_file: MooncakeDataFileRef) -> HashSet<(FileId, usize)> {
+    let mut committed_deletion_logs = HashSet::new();
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/0));
+    committed_deletion_logs
+}
 fn test_committed_deletion_log_2(
-    data_filepath: MooncakeDataFileRef,
+    data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
     deletion_vector.delete_row(1);
     deletion_vector.delete_row(2);
 
     HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(
-        data_filepath.clone(),
+        data_file.clone(),
         deletion_vector,
     )])
+}
+/// Corresponds to [`test_committed_deletion_log_2`].
+fn test_committed_deletion_logs_to_persist_2(data_file: MooncakeDataFileRef) -> HashSet<(FileId, usize)> {
+    let mut committed_deletion_logs = HashSet::new();
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/1));
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/2));
+    committed_deletion_logs
 }
 
 /// Test util function to create file indices.
@@ -316,6 +331,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         flush_lsn: 0,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: test_committed_deletion_logs_to_persist_1(data_file_1.clone()),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_1.clone()],
             new_deletion_vector: test_committed_deletion_log_1(data_file_1.clone()),
@@ -369,6 +385,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         flush_lsn: 1,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: test_committed_deletion_logs_to_persist_2(data_file_2.clone()),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_2.clone()],
             new_deletion_vector: test_committed_deletion_log_2(data_file_2.clone()),
@@ -448,6 +465,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             persisted_file_num: 10,
         }),
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -537,6 +555,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         flush_lsn: 3,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -607,6 +626,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         flush_lsn: 4,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -987,6 +1007,7 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
         flush_lsn: 0,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload::default(),
         index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
         data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),

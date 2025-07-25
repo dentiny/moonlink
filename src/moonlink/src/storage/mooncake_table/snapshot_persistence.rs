@@ -2,6 +2,7 @@ use crate::create_data_file;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+use crate::storage::mooncake_table::snapshot::CommittedDeletionToPersist;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::SnapshotTask;
@@ -32,16 +33,17 @@ impl SnapshotTableState {
         &self,
         flush_lsn: u64,
         wal_persistence_metadata: Option<WalPersistenceMetadata>,
-        new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
+        committed_deletion_to_persist: CommittedDeletionToPersist,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
             uuid: uuid::Uuid::new_v4(),
             flush_lsn,
             wal_persistence_metadata,
             new_table_schema: None,
+            committed_deletion_logs: committed_deletion_to_persist.committed_deletion_logs,
             import_payload: IcebergSnapshotImportPayload {
                 data_files: self.unpersisted_records.get_unpersisted_data_files(),
-                new_deletion_vector: new_committed_deletion_logs,
+                new_deletion_vector: committed_deletion_to_persist.new_deletions_to_persist,
                 file_indices: self.unpersisted_records.get_unpersisted_file_indices(),
             },
             index_merge_payload: IcebergSnapshotIndexMergePayload {

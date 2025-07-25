@@ -98,6 +98,14 @@ pub(crate) struct MooncakeSnapshotOutput {
     pub(crate) evicted_data_files_to_delete: Vec<String>,
 }
 
+/// Committed deletion record to persist.
+pub(super) struct CommittedDeletionToPersist {
+    /// Commit deletion log included in the current iceberg persistence operation, which is used to prune snapshot deletion record after persistence finished.
+    pub(super) committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
+    /// Maps from data file to its changed deletion vector (which only contains newly deleted rows).
+    pub(super) new_deletions_to_persist: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
+}
+
 impl SnapshotTableState {
     pub(super) async fn new(
         metadata: Arc<MooncakeTableMetadata>,
@@ -149,14 +157,16 @@ impl SnapshotTableState {
     }
 
     /// Aggregate committed deletion logs, which could be persisted into iceberg snapshot.
-    /// Return a mapping from local data filepath to its batch deletion vector.
+    /// Return a mapping from data filepath to its batch deletion vector.
     ///
     /// Precondition: all disk files have been integrated into snapshot.
     fn aggregate_committed_deletion_logs(
         &self,
         flush_lsn: u64,
-    ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
-        let mut aggregated_deletion_logs = HashMap::new();
+    ) -> CommittedDeletionToPersist {
+        let mut new_deletions_to_persist = HashMap::new();
+        let mut committed_deletion_logs = HashSet::new();
+
         for cur_deletion_log in self.committed_deletion_log.iter() {
             ma::assert_le!(cur_deletion_log.lsn, self.current_snapshot.snapshot_version);
             if cur_deletion_log.lsn >= flush_lsn {
@@ -174,13 +184,18 @@ impl SnapshotTableState {
                     .0
                     .clone();
 
-                let deletion_vector = aggregated_deletion_logs
+                let deletion_vector = new_deletions_to_persist
                     .entry(cur_data_file)
                     .or_insert_with(|| BatchDeletionVector::new(max_rows));
                 assert!(deletion_vector.delete_row(*row_idx));
+                assert!(committed_deletion_logs.insert((*file_id, *row_idx)));
             }
         }
-        aggregated_deletion_logs
+        
+        CommittedDeletionToPersist {
+            committed_deletion_logs,
+            new_deletions_to_persist,
+        }
     }
 
     /// Prune committed deletion logs for the given persisted records.
@@ -190,23 +205,28 @@ impl SnapshotTableState {
             return;
         }
 
+        // Committed deletion logs, which have been persisted into iceberg.
+        let committed_deletion_logs = &task.committed_deletion_logs;
+
         // Keep two types of committed logs: (1) in-memory committed deletion logs; (2) commit point after flush LSN.
         // All on-disk committed deletion logs, which are <= iceberg snapshot flush LSN could be pruned.
         let mut new_committed_deletion_log = vec![];
-        let flush_point_lsn = task.iceberg_persisted_records.flush_lsn.unwrap();
 
         let old_committed_deletion_logs = std::mem::take(&mut self.committed_deletion_log);
         for cur_deletion_log in old_committed_deletion_logs.into_iter() {
             ma::assert_le!(cur_deletion_log.lsn, self.current_snapshot.snapshot_version);
-            if cur_deletion_log.lsn >= flush_point_lsn {
-                new_committed_deletion_log.push(cur_deletion_log);
-                continue;
+            match &cur_deletion_log.pos {
+                // Keep memory batch based committed deletion logs.
+                RecordLocation::MemoryBatch(_, _) => {
+                    new_committed_deletion_log.push(cur_deletion_log);
+                }
+                // Check whether committed deletion logs have been persisted, and prune if persisted.
+                RecordLocation::DiskFile(file_id, row_idx) => {
+                    if !committed_deletion_logs.contains(&(*file_id, *row_idx)) {
+                        new_committed_deletion_log.push(cur_deletion_log);
+                    }
+                }
             }
-            if let RecordLocation::MemoryBatch(_, _) = &cur_deletion_log.pos {
-                new_committed_deletion_log.push(cur_deletion_log);
-                continue;
-            }
-            println!("prune commit {:?}", cur_deletion_log);
         }
 
         self.committed_deletion_log = new_committed_deletion_log;
@@ -509,18 +529,18 @@ impl SnapshotTableState {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
             let flush_lsn = self.current_snapshot.data_file_flush_lsn.unwrap_or(0);
-            let aggregated_committed_deletion_logs =
+            let committed_deletion_logs =
                 self.aggregate_committed_deletion_logs(flush_lsn);
 
             // Only create iceberg snapshot when there's something to import.
-            if !aggregated_committed_deletion_logs.is_empty()
+            if !committed_deletion_logs.new_deletions_to_persist.is_empty()
                 || flush_by_new_files_or_maintainence
                 || force_empty_iceberg_payload
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
                     self.current_snapshot.wal_persistence_metadata.clone(),
-                    aggregated_committed_deletion_logs,
+                    committed_deletion_logs,
                 ));
             }
         }

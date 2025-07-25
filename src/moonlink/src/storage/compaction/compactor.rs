@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use arrow_array::RecordBatch;
+use arrow_array::{Int32Array, RecordBatch};
 use arrow_schema::SchemaRef;
 use futures::TryStreamExt;
 use more_asserts as ma;
@@ -440,6 +440,10 @@ async fn load_one_arrow_batch(f: &MooncakeDataFileRef) {
     let mut reader = builder.build().unwrap();
     while let Some(cur_record_batch) = reader.try_next().await.unwrap() {
         let first_column = cur_record_batch.column(0);
-        println!("Content with file {:?}: {:?}", f, first_column);
+        if let Some(int_array) = first_column.as_any().downcast_ref::<Int32Array>() {
+            println!("Content with file {:?}: {:?}", f, int_array.values());
+        } else {
+            println!("First column is not an Int32Array");
+        }
     }
 }
