@@ -23,6 +23,9 @@ use tempfile::{tempdir, TempDir};
 use tokio::sync::mpsc;
 use tokio::sync::watch;
 
+/// To avoid excessive and continuous table maintenance operations, set an interval between each invocation for each non table update operation.
+const NON_UPDATE_COMMAND_INTERVAL_LSN: u64 = 5;
+
 /// Create a test moonlink row.
 fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
     MoonlinkRow::new(vec![
@@ -76,9 +79,38 @@ impl ChaosEvent {
     }
 }
 
+#[derive(Default)]
+struct NonTableUpdateCmdCall {
+    /// LSN (value of [`cur_lsn`]) for the last read snapshot invocation.
+    read_snapshot_lsn: u64,
+    /// LSN (value of [`cur_lsn`]) for the last force snapshot invocation.
+    force_snapshot_lsn: u64,
+    /// LSN (value of [`cur_lsn`]) for the last force index merge invocation.
+    force_index_merge_lsn: u64,
+    /// LSN (value of [`cur_lsn`]) for the last force data compaction invocation.
+    force_data_compaction_lsn: u64,
+}
+
+#[derive(Debug, Clone)]
+enum EventKind {
+    Begin,
+    Append,
+    Delete,
+    EndWithFlush,
+    EndNoFlush,
+    ReadSnapshot,
+    /// Foreground force snapshot only happens after commit operation, otherwise it gets blocked.
+    ForegroundForceSnapshot,
+    /// Foreground force table maintenance only happens after commit operation, otherwise it gets blocked.
+    ForegroundForceIndexMerge,
+    ForegroundForceDataCompaction,
+}
+
 struct ChaosState {
     /// Used to generate random events, with current timestamp as random seed.
     rng: StdRng,
+    /// Non table update operation invocation status.
+    non_table_update_cmd_call: NonTableUpdateCmdCall,
     /// Used to generate rows to insert.
     next_id: i32,
     /// Inserted rows in committed transactions.
@@ -106,6 +138,7 @@ impl ChaosState {
         let rng = StdRng::seed_from_u64(nanos as u64);
         Self {
             rng,
+            non_table_update_cmd_call: NonTableUpdateCmdCall::default(),
             has_begun: false,
             next_id: 0,
             committed_inserted_rows: VecDeque::new(),
@@ -172,35 +205,49 @@ impl ChaosState {
         (*id, row.clone())
     }
 
-    fn generate_random_events(&mut self) -> ChaosEvent {
-        #[derive(Debug, Clone)]
-        enum EventKind {
-            Begin,
-            Append,
-            Delete,
-            EndWithFlush,
-            EndNoFlush,
-            ReadSnapshot,
-            /// Foreground force snapshot only happens after commit operation, otherwise it gets blocked.
-            ForegroundForceSnapshot,
-            /// Foreground force table maintenance only happens after commit operation, otherwise it gets blocked.
-            ForegroundForceIndexMerge,
-            ForegroundForceDataCompaction,
+    /// Attempt to push non table update operations to choices.
+    fn try_push_read_snapshot_cmd(&mut self, choices: &mut Vec<EventKind>) {
+        if self.last_commit_lsn.is_some()
+            && self.cur_lsn - self.non_table_update_cmd_call.read_snapshot_lsn
+                >= NON_UPDATE_COMMAND_INTERVAL_LSN
+        {
+            choices.push(EventKind::ReadSnapshot);
+            self.non_table_update_cmd_call.read_snapshot_lsn = self.cur_lsn;
+        }
+    }
+    fn try_push_table_maintenance_cmd(&mut self, choices: &mut Vec<EventKind>) {
+        if self.last_commit_lsn.is_none() {
+            return;
         }
 
-        let mut choices = vec![];
-
-        if self.last_commit_lsn.is_some() {
-            choices.push(EventKind::ReadSnapshot);
-            // Foreground table maintenance operations happen after a commit operation.
-            if self.uncommitted_inserted_rows.is_empty()
-                && self.uncommitted_inserted_rows.is_empty()
+        // Foreground table maintenance operations happen after a commit operation.
+        if self.uncommitted_inserted_rows.is_empty() && self.uncommitted_inserted_rows.is_empty() {
+            if self.cur_lsn - self.non_table_update_cmd_call.force_snapshot_lsn
+                >= NON_UPDATE_COMMAND_INTERVAL_LSN
             {
                 choices.push(EventKind::ForegroundForceSnapshot);
+                self.non_table_update_cmd_call.force_snapshot_lsn = self.cur_lsn;
+            }
+            if self.cur_lsn - self.non_table_update_cmd_call.force_index_merge_lsn
+                >= NON_UPDATE_COMMAND_INTERVAL_LSN
+            {
                 choices.push(EventKind::ForegroundForceIndexMerge);
+                self.non_table_update_cmd_call.force_index_merge_lsn = self.cur_lsn;
+            }
+            if self.cur_lsn - self.non_table_update_cmd_call.force_data_compaction_lsn
+                >= NON_UPDATE_COMMAND_INTERVAL_LSN
+            {
                 choices.push(EventKind::ForegroundForceDataCompaction);
+                self.non_table_update_cmd_call.force_data_compaction_lsn = self.cur_lsn;
             }
         }
+    }
+
+    fn generate_random_events(&mut self) -> ChaosEvent {
+        let mut choices = vec![];
+
+        self.try_push_read_snapshot_cmd(&mut choices);
+        self.try_push_table_maintenance_cmd(&mut choices);
         if !self.has_begun {
             choices.push(EventKind::Begin);
         } else {
