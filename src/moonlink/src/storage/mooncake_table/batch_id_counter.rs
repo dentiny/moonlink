@@ -1,3 +1,4 @@
+use more_asserts as ma;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -33,15 +34,13 @@ impl BatchIdCounter {
 
         // Check limits before incrementing
         if self.is_streaming {
-            assert!(
-                current < (1u64 << 63),
+            ma::assert_lt!(
+                current,
+                (1u64 << 63),
                 "Streaming batch ID counter overflow: exceeded 2^63-1"
             );
         } else {
-            assert!(
-                current < u64::MAX,
-                "Non-streaming batch ID counter overflow"
-            );
+            ma::assert_lt!(current, u64::MAX, "Non-streaming batch ID counter overflow");
         }
 
         self.counter.fetch_add(1, Ordering::Relaxed)
