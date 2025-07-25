@@ -464,7 +464,15 @@ impl SnapshotTableState {
             .await;
         evicted_data_files_to_delete.extend(compaction_evicted_files);
 
+        // Remap uncommitted deletion logs.
+        self.remap_uncommitted_deletion_logs_after_compaction(&mut task);
+        // Extract remapped committed deletion logs, so they don't get pruned, because data compaction doesn't update flush LSN.
+        let remapped_committed_deletion_log =
+            self.extract_remapped_committed_deletion_log(&mut task);
+
         // Prune unpersisted records.
+        //
+        // Precondition: All remapping for old committed deletion logs should finish beforehand.
         self.prune_committed_deletion_logs(&task);
         self.unpersisted_records.prune_persisted_records(&task);
 
@@ -479,12 +487,12 @@ impl SnapshotTableState {
         evicted_data_files_to_delete.extend(stream_evicted_cache_files);
         evicted_data_files_to_delete.extend(batch_evicted_cache_files);
 
-        // Apply data compaction to committed deletion logs.
-        self.remap_and_prune_deletion_logs_after_compaction(&mut task);
-
         // After data compaction and index merge changes have been applied to snapshot, processed deletion record will point to the new record location.
         self.rows = take(&mut task.new_rows);
         self.process_deletion_log(&mut task).await;
+
+        // Re-queue unpersisted committed deletion logs.
+        self.requeue_committed_deletion_logs(remapped_committed_deletion_log);
 
         // Assert and update flush LSN.
         if let Some(new_flush_lsn) = task.new_flush_lsn {
