@@ -200,6 +200,8 @@ impl CompactionBuilder {
                 BatchDeletionVector::new(/*max_rows=*/ 0)
             };
 
+        println!("old data file {} with deletion {:?}", filepath, batch_deletion_vector);
+
         let get_filtered_record_batch = |record_batch: RecordBatch, start_row_idx: usize| {
             if batch_deletion_vector.is_empty() {
                 return record_batch;
@@ -382,6 +384,11 @@ impl CompactionBuilder {
         let (old_record_loc_to_new_mapping, evicted_files_to_delete, record_loc_to_data_file_index) =
             data_file_compaction_result.into_parts();
 
+        println!("\ncontent before compaction:\n");
+        for f in old_data_files.iter() {
+            load_one_arrow_batch(f).await;
+        }
+
         // All rows have been deleted.
         if old_record_loc_to_new_mapping.is_empty() {
             assert!(record_loc_to_data_file_index.is_empty());
@@ -410,6 +417,11 @@ impl CompactionBuilder {
             )
             .await;
 
+        println!("\ncontent after compaction:\n");
+        for f in self.new_data_files.iter() {
+            load_one_arrow_batch(&f.0).await;
+        }
+
         Ok(DataCompactionResult {
             uuid: self.compaction_payload.uuid,
             remapped_data_files: old_record_loc_to_new_mapping,
@@ -419,5 +431,15 @@ impl CompactionBuilder {
             new_file_indices: vec![new_file_indices],
             evicted_files_to_delete,
         })
+    }
+}
+
+async fn load_one_arrow_batch(f: &MooncakeDataFileRef) {
+    let file = tokio::fs::File::open(f.file_path()).await.unwrap();
+    let builder = ParquetRecordBatchStreamBuilder::new(file).await.unwrap();
+    let mut reader = builder.build().unwrap();
+    while let Some(cur_record_batch) = reader.try_next().await.unwrap() {
+        let first_column = cur_record_batch.column(0);
+        println!("Content with file {:?}: {:?}", f, first_column);
     }
 }

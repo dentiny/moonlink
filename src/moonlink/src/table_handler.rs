@@ -358,7 +358,7 @@ impl TableHandler {
                                 }
                             }
 
-                            // Only attempt new maintenance when there's no ongoing one.
+                            // Only attempt new maintenance when there's no other requests nor ongoing one.
                             if table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::Unrequested {
                                 // ==========================
                                 // Data compaction

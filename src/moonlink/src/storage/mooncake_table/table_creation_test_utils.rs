@@ -133,7 +133,7 @@ pub(crate) fn create_test_table_metadata_with_config(
     })
 }
 
-/// Test util function to create mooncake table metadata with index merge enable whenever there're two index blocks.
+/// Test util function to create mooncake table metadata with index merge enabled whenever there're two index blocks.
 pub(crate) fn create_test_table_metadata_with_index_merge(
     local_table_directory: String,
 ) -> Arc<MooncakeTableMetadata> {
@@ -145,7 +145,6 @@ pub(crate) fn create_test_table_metadata_with_index_merge(
     config.file_index_config = file_index_config;
     create_test_table_metadata_with_config(local_table_directory, config)
 }
-
 /// Test util function to create mooncake table metadata, with (1) index merge enabled whenever there're two index blocks; and (2) flush at commit is disabled.
 #[cfg(feature = "chaos-test")]
 pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
@@ -157,6 +156,21 @@ pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
     };
     let mut config = MooncakeTableConfig::new(local_table_directory.clone());
     config.file_index_config = file_index_config;
+    config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
+/// Test util function to create mooncake table metadata, with (1) data compaction enabled whenever there're two index blocks; and (2) flush at commit is disabled.
+#[cfg(feature = "chaos-test")]
+pub(crate) fn create_test_table_metadata_with_data_compaction_disable_flush(
+    local_table_directory: String,
+) -> Arc<MooncakeTableMetadata> {
+    let data_compaction_config = DataCompactionConfig {
+        data_file_to_compact: 2,
+        data_file_final_size: u64::MAX,
+    };
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.data_compaction_config = data_compaction_config;
     config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
     create_test_table_metadata_with_config(local_table_directory, config)
 }

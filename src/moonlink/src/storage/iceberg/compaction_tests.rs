@@ -25,9 +25,9 @@
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::iceberg::table_manager::TableManager;
-use crate::storage::iceberg::test_utils::*;
+use crate::storage::iceberg::{io_utils, test_utils::*};
 use crate::storage::index::{FileIndex, MooncakeIndex};
-use crate::storage::mooncake_table::table_accessor_test_utils::*;
+use crate::storage::mooncake_table::{table_accessor_test_utils::*, MaintenanceOption, SnapshotOption};
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
@@ -35,8 +35,8 @@ use crate::storage::mooncake_table::Snapshot;
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
-use crate::storage::MooncakeTable;
-use crate::{FileSystemAccessor, TableEvent};
+use crate::storage::{verify_files_and_deletions, MooncakeTable};
+use crate::{decode_read_state_for_testing, FileSystemAccessor, TableEvent};
 
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use iceberg::io::FileIOBuilder;
@@ -44,7 +44,7 @@ use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
 
 /// Test data.
-const ID_VALUES: [i32; 4] = [1, 2, 3, 4];
+const ID_VALUES: [i32; 4] = [0, 1, 2, 3];
 const NAME_VALUES: [&str; 4] = ["a", "b", "c", "d"];
 const AGE_VALUES: [i32; 4] = [10, 20, 30, 40];
 

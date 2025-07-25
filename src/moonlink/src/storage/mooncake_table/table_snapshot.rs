@@ -29,7 +29,11 @@ pub struct IcebergSnapshotImportPayload {
 
 impl std::fmt::Debug for IcebergSnapshotImportPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotImportPayload").finish()
+        f.debug_struct("IcebergSnapshotImportPayload")
+            .field("data files count", &self.data_files.len())
+            .field("new deletion vector count", &self.new_deletion_vector.len())
+            .field("file indices count", &self.file_indices.len())
+            .finish()
     }
 }
 
@@ -57,7 +61,10 @@ impl IcebergSnapshotIndexMergePayload {
 
 impl std::fmt::Debug for IcebergSnapshotIndexMergePayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotIndexMergePayload").finish()
+        f.debug_struct("IcebergSnapshotIndexMergePayload")
+            .field("new file indices to import count", &self.new_file_indices_to_import.len())
+            .field("old file indices to remove count", &self.old_file_indices_to_remove.len())
+            .finish()
     }
 }
 
@@ -77,6 +84,10 @@ pub struct IcebergSnapshotDataCompactionPayload {
 impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IcebergSnapshotDataCompactionPayload")
+            .field("new data files to import count", &self.new_data_files_to_import.len())
+            .field("old data files to remove count", &self.old_data_files_to_remove.len())
+            .field("new file indices to import count", &self.new_file_indices_to_import.len())
+            .field("old file indices to remove count", &self.old_file_indices_to_remove.len())
             .finish()
     }
 }
@@ -120,6 +131,9 @@ impl std::fmt::Debug for IcebergSnapshotPayload {
             .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .field("wal_persistence_metadata", &self.wal_persistence_metadata)
+            .field("import payload", &self.import_payload)
+            .field("index merge payload", &self.index_merge_payload)
+            .field("data compaction payload", &self.data_compaction_payload)
             .finish()
     }
 }
@@ -201,7 +215,10 @@ impl IcebergSnapshotIndexMergeResult {
 
 impl std::fmt::Debug for IcebergSnapshotIndexMergeResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotIndexMergeResult").finish()
+        f.debug_struct("IcebergSnapshotIndexMergeResult")
+            .field("new file indices imported number", &self.new_file_indices_imported.len())
+            .field("old file indices removed number", &self.old_file_indices_removed.len())
+            .finish()
     }
 }
 
@@ -236,6 +253,10 @@ impl IcebergSnapshotDataCompactionResult {
 impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IcebergSnapshotDataCompactionResult")
+            .field("new data files imported number", &self.new_data_files_imported.len())
+            .field("old data files removed number", &self.old_data_files_removed.len())
+            .field("new file indices imported number", &self.new_file_indices_imported.len())
+            .field("old file indices removed number", &self.old_file_indices_removed.len())
             .finish()
     }
 }
@@ -292,6 +313,9 @@ impl std::fmt::Debug for IcebergSnapshotResult {
         f.debug_struct("IcebergSnapshotResult")
             .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
+            .field("import_result", &self.import_result)
+            .field("index_merge_result", &self.index_merge_result)
+            .field("data_compaction_result", &self.data_compaction_result)
             .finish()
     }
 }

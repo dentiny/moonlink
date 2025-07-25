@@ -159,6 +159,7 @@ fn verify_files_and_deletions_impl(
     let mut res = vec![];
     for (i, path) in files.iter().enumerate() {
         let mut ids = read_ids_from_parquet(path);
+       // println!("file {} contains ids {:?}", path, ids);
         for deletion in deletions {
             if deletion.0 == i as u32 {
                 ids[deletion.1 as usize] = None;
@@ -207,12 +208,16 @@ pub async fn verify_files_and_deletions(
         load_blob_futures.push(get_blob_future);
     }
 
+    // println!("\n\n===============\n\n");
+    // println!("pure positional delete: {:?}", position_deletes);
+
     let load_blob_results = join_all(load_blob_futures).await;
     for (idx, cur_load_blob_res) in load_blob_results.into_iter().enumerate() {
         let blob = cur_load_blob_res.unwrap();
         let dv = DeletionVector::deserialize(blob).unwrap();
         let batch_deletion_vector = dv.take_as_batch_delete_vector();
         let deleted_rows = batch_deletion_vector.collect_deleted_rows();
+        //println!("puffin deletes: {:?}", deleted_rows);
         assert!(!deleted_rows.is_empty());
         position_deletes.append(
             &mut deleted_rows
