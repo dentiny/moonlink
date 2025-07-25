@@ -310,14 +310,18 @@ impl SnapshotTableState {
                     continue;
                 }
                 // Case-2: the deletion log exists in the compacted new data file, perform a remap.
+                //
+                // Committed deletion log only contains unpersisted records, so remap should succed.
                 let remap_succ =
                     remap_record_location_after_compaction(&mut cur_deletion_log, task);
-                if remap_succ {
-                    new_committed_deletion_log.push(cur_deletion_log);
-                    continue;
-                }
-                // Case-3: the deletion log doesn't exist in the compacted new file, directly remove it.
+                assert!(
+                    remap_succ,
+                    "Remap for deletion log {cur_deletion_log:?} on old data file should succeed"
+                );
+                new_committed_deletion_log.push(cur_deletion_log);
+                continue;
             } else {
+                // Keep deletion record for in-memory batches.
                 new_committed_deletion_log.push(cur_deletion_log);
             }
         }
