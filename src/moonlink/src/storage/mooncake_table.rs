@@ -369,6 +369,9 @@ pub struct SnapshotTask {
     /// Schema change.
     force_empty_iceberg_payload: bool,
 
+    /// Committed deletion records, which have been persisted into iceberg, and should be pruned from mooncake snapshot.
+    committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
+
     /// --- States related to WAL operation ---
     new_wal_persistence_metadata: Option<WalPersistenceMetadata>,
 
@@ -403,6 +406,8 @@ impl SnapshotTask {
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
             force_empty_iceberg_payload: false,
+            // Committed deletion logs which have been persisted, and should be pruned from mooncake snapshot.
+            committed_deletion_logs: HashSet::new(),
             // WAL related fields.
             new_wal_persistence_metadata: None,
             // Read request related fields.
@@ -814,6 +819,9 @@ impl MooncakeTable {
         self.iceberg_table_manager = Some(iceberg_snapshot_res.table_manager.unwrap());
 
         // ---- Buffer iceberg persisted content to next snapshot task ---
+        assert!(self.next_snapshot_task.committed_deletion_logs.is_empty());
+        self.next_snapshot_task.committed_deletion_logs = iceberg_snapshot_res.committed_deletion_logs;
+
         assert!(self
             .next_snapshot_task
             .iceberg_persisted_records
@@ -1160,10 +1168,11 @@ impl MooncakeTable {
         table_notify: Sender<TableEvent>,
         table_auto_incr_ids: std::ops::Range<u32>,
     ) {
+        let uuid = snapshot_payload.uuid;
         let flush_lsn = snapshot_payload.flush_lsn;
         let wal_persisted_metadata = snapshot_payload.wal_persistence_metadata.clone();
         let new_table_schema = snapshot_payload.new_table_schema.clone();
-        let uuid = snapshot_payload.uuid;
+        let committed_deletion_logs = snapshot_payload.committed_deletion_logs.clone();
 
         let new_imported_data_files_count = snapshot_payload.import_payload.data_files.len();
         let new_compacted_data_files_count = snapshot_payload
@@ -1241,6 +1250,7 @@ impl MooncakeTable {
             flush_lsn,
             wal_persisted_metadata,
             new_table_schema,
+            committed_deletion_logs,
             import_result: IcebergSnapshotImportResult {
                 new_data_files: iceberg_persistence_res.remote_data_files
                     [0..new_data_files_cutoff_index_1]

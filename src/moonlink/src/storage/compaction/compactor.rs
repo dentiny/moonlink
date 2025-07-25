@@ -3,7 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use arrow_array::RecordBatch;
+use arrow_array::{Int32Array, RecordBatch};
 use arrow_schema::SchemaRef;
 use futures::TryStreamExt;
 use more_asserts as ma;

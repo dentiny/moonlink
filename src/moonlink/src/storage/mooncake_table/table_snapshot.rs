@@ -104,6 +104,8 @@ pub struct IcebergSnapshotPayload {
     pub(crate) flush_lsn: u64,
     /// WAL persistence metadata.
     pub(crate) wal_persistence_metadata: Option<WalPersistenceMetadata>,
+    /// Committed deletion logs included in the current iceberg snapshot persistence operation, which is used to prune after persistence completion.
+    pub(crate) committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
     /// New mooncake table schema.
     pub(crate) new_table_schema: Option<Arc<MooncakeTableMetadata>>,
     /// Payload by import operations.
@@ -120,6 +122,10 @@ impl std::fmt::Debug for IcebergSnapshotPayload {
             .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .field("wal_persistence_metadata", &self.wal_persistence_metadata)
+            .field("committed deletion logs count", &self.committed_deletion_logs.len())
+            .field("import payload", &self.import_payload)
+            .field("index merge payload", &self.index_merge_payload)
+            .field("data compaction payload", &self.data_compaction_payload)
             .finish()
     }
 }
@@ -251,6 +257,8 @@ pub struct IcebergSnapshotResult {
     pub(crate) wal_persisted_metadata: Option<WalPersistenceMetadata>,
     /// Mooncake schema sync-ed to iceberg.
     pub(crate) new_table_schema: Option<Arc<MooncakeTableMetadata>>,
+    /// Committed deletion logs included in the current iceberg snapshot persistence operation, which is used to prune after persistence completion.
+    pub(crate) committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
     /// Iceberg import result.
     pub(crate) import_result: IcebergSnapshotImportResult,
     /// Iceberg index merge result.
@@ -267,6 +275,7 @@ impl Clone for IcebergSnapshotResult {
             flush_lsn: self.flush_lsn,
             wal_persisted_metadata: self.wal_persisted_metadata.clone(),
             new_table_schema: self.new_table_schema.clone(),
+            committed_deletion_logs: self.committed_deletion_logs.clone(),
             import_result: self.import_result.clone(),
             index_merge_result: self.index_merge_result.clone(),
             data_compaction_result: self.data_compaction_result.clone(),
