@@ -160,6 +160,21 @@ pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
     create_test_table_metadata_with_config(local_table_directory, config)
 }
 
+/// Test util function to create mooncake table metadata, with (1) data compaction enabled whenever there're two index blocks; and (2) flush at commit is disabled.
+#[cfg(feature = "chaos-test")]
+pub(crate) fn create_test_table_metadata_with_data_compaction_disable_flush(
+    local_table_directory: String,
+) -> Arc<MooncakeTableMetadata> {
+    let data_compaction_config = DataCompactionConfig {
+        data_file_to_compact: 2,
+        data_file_final_size: u64::MAX,
+    };
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.data_compaction_config = data_compaction_config;
+    config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
 /// Util function to create mooncake table and iceberg table manager; object storage cache will be created internally.
 ///
 /// Iceberg snapshot will be created whenever `create_snapshot` is called.

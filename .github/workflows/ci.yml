@@ -199,6 +199,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Start chaos test
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
-          cargo test test_chaos --features=chaos-test -p moonlink -- --nocapture
+          cargo test table_handler::chaos_test --features=chaos-test -p moonlink -- --nocapture
