@@ -29,7 +29,11 @@ pub struct IcebergSnapshotImportPayload {
 
 impl std::fmt::Debug for IcebergSnapshotImportPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotImportPayload").finish()
+        f.debug_struct("IcebergSnapshotImportPayload")
+            .field("data files count", &self.data_files.len())
+            .field("new deletion vector count", &self.new_deletion_vector.len())
+            .field("file indices count", &self.file_indices.len())
+            .finish()
     }
 }
 
@@ -57,7 +61,16 @@ impl IcebergSnapshotIndexMergePayload {
 
 impl std::fmt::Debug for IcebergSnapshotIndexMergePayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotIndexMergePayload").finish()
+        f.debug_struct("IcebergSnapshotIndexMergePayload")
+            .field(
+                "new file indices to import count",
+                &self.new_file_indices_to_import.len(),
+            )
+            .field(
+                "old file indices to remove count",
+                &self.old_file_indices_to_remove.len(),
+            )
+            .finish()
     }
 }
 
@@ -77,6 +90,22 @@ pub struct IcebergSnapshotDataCompactionPayload {
 impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IcebergSnapshotDataCompactionPayload")
+            .field(
+                "new data files to import count",
+                &self.new_data_files_to_import.len(),
+            )
+            .field(
+                "old data files to remove count",
+                &self.old_data_files_to_remove.len(),
+            )
+            .field(
+                "new file indices to import count",
+                &self.new_file_indices_to_import.len(),
+            )
+            .field(
+                "old file indices to remove count",
+                &self.old_file_indices_to_remove.len(),
+            )
             .finish()
     }
 }
