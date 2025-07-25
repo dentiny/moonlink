@@ -14,6 +14,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, mpsc::Sender, oneshot, watch};
 
+/// Default namespace for all iceberg tables.
+const DEFAULT_ICEBERG_NAMESPACE: &str = "default";
+
 /// Components required to replicate a single table.
 /// Components that the [`Sink`] needs for processing CDC events.
 pub struct TableComponents {
@@ -67,7 +70,7 @@ pub async fn build_table_components(
         });
 
     let iceberg_table_config = IcebergTableConfig {
-        namespace: vec![table_schema.table_name.schema.clone()],
+        namespace: vec![DEFAULT_ICEBERG_NAMESPACE.to_string()],
         table_name: mooncake_table_id,
         filesystem_config: iceberg_filesystem_config.clone(),
     };
