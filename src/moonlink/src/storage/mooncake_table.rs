@@ -752,27 +752,13 @@ impl MooncakeTable {
     }
 
     /// Assert flush LSN doesn't regress.
+    /// There're several cases for equal flush LSN, for example, force snapshot, table maintenance, etc.
     fn assert_flush_lsn_on_iceberg_snapshot_res(
         persistence_lsn: Option<u64>,
         iceberg_snapshot_res: &IcebergSnapshotResult,
     ) {
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
-
-        // Whether the iceberg snapshot result contains table maintenance updates.
-        let contains_table_maintenance_res = |res: &IcebergSnapshotResult| {
-            if !res.index_merge_result.is_empty() {
-                return true;
-            }
-            if !res.data_compaction_result.is_empty() {
-                return true;
-            }
-            false
-        };
-
-        // There're two types of operations could trigger iceberg snapshot: (1) index merge / data compaction; (2) table writes, including append and delete.
-        // The first type is safe to import to iceberg at any time, with no flush LSN advancement.
-        if contains_table_maintenance_res(iceberg_snapshot_res) {
-            assert!(
+        assert!(
                 persistence_lsn.is_none()
                     || persistence_lsn.unwrap() <= flush_lsn,
                 "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
@@ -781,17 +767,6 @@ impl MooncakeTable {
                 iceberg_snapshot_res.import_result.new_data_files.len(),
                 iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
             );
-        } else {
-            assert!(
-                persistence_lsn.is_none()
-                    || persistence_lsn.unwrap() < flush_lsn,
-                "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
-                persistence_lsn,
-                flush_lsn,
-                iceberg_snapshot_res.import_result.new_data_files.len(),
-                iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
-            );
-        }
     }
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
@@ -1382,7 +1357,7 @@ mod mooncake_tests {
         // Invalid snapshot result.
         let res_copy = iceberg_snapshot_result.clone();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(Some(1), &res_copy);
+            MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(Some(2), &res_copy);
         }));
         assert!(result.is_err());
 
