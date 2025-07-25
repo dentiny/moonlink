@@ -14,21 +14,13 @@ use crate::table_notify::{DataCompactionMaintenanceStatus, IndexMergeMaintenance
 fn remap_record_location_after_compaction(
     deletion_log: &mut ProcessedDeletionRecord,
     task: &mut SnapshotTask,
-) -> bool {
-    if task.data_compaction_result.is_empty() {
-        return false;
-    }
-
+) {
     let old_record_location = &deletion_log.pos;
     let remapped_data_files_after_compaction = &mut task.data_compaction_result;
     let new_record_location = remapped_data_files_after_compaction
         .remapped_data_files
         .remove(old_record_location);
-    if new_record_location.is_none() {
-        return false;
-    }
-    deletion_log.pos = new_record_location.unwrap().record_location;
-    true
+    deletion_log.pos = new_record_location.expect(&format!("Delete log {:?} not mapped after compaction", deletion_log)).record_location;
 }
 
 impl SnapshotTableState {
@@ -310,12 +302,9 @@ impl SnapshotTableState {
                     continue;
                 }
                 // Case-2: the deletion log exists in the compacted new data file, perform a remap.
-                let remap_succ =
-                    remap_record_location_after_compaction(&mut cur_deletion_log, task);
-                if remap_succ {
-                    new_committed_deletion_log.push(cur_deletion_log);
-                    continue;
-                }
+                remap_record_location_after_compaction(&mut cur_deletion_log, task);
+                new_committed_deletion_log.push(cur_deletion_log);
+                continue;
                 // Case-3: the deletion log doesn't exist in the compacted new file, directly remove it.
             } else {
                 new_committed_deletion_log.push(cur_deletion_log);

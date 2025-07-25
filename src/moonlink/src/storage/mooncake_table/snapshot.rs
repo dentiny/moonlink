@@ -204,7 +204,9 @@ impl SnapshotTableState {
             }
             if let RecordLocation::MemoryBatch(_, _) = &cur_deletion_log.pos {
                 new_committed_deletion_log.push(cur_deletion_log);
+                continue;
             }
+            println!("prune commit {:?}", cur_deletion_log);
         }
 
         self.committed_deletion_log = new_committed_deletion_log;
@@ -901,7 +903,7 @@ impl SnapshotTableState {
             // Then place puffin blob.
             if disk_deletion_vector.puffin_deletion_blob.is_none() {
 
-                println!("read: f: {}, puffin: {}, deletion vector: {:?}", f.file_path(), disk_deletion_vector.puffin_deletion_blob.is_some(), disk_deletion_vector.batch_deletion_vector);
+                println!("read: f: {}, puffin: {}, deletion vector: {:?}", f.file_path(), disk_deletion_vector.puffin_deletion_blob.is_some(), disk_deletion_vector.batch_deletion_vector.collect_deleted_rows());
 
                 continue;
             }
@@ -930,6 +932,7 @@ impl SnapshotTableState {
             });
         }
 
+        println!("committed deletion log len = {}", self.committed_deletion_log.len());
         for deletion in self.committed_deletion_log.iter() {
             if let RecordLocation::DiskFile(file_id, row_id) = &deletion.pos {
                 for (id, (file, _)) in self.current_snapshot.disk_files.iter().enumerate() {
