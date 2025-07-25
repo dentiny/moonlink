@@ -98,6 +98,8 @@ impl IcebergSnapshotDataCompactionPayload {
 
 #[derive(Clone)]
 pub struct IcebergSnapshotPayload {
+    /// UUID for the current persistence operation, used for observability purpose.
+    pub(crate) uuid: uuid::Uuid,
     /// Flush LSN.
     pub(crate) flush_lsn: u64,
     /// WAL persistence metadata.
@@ -115,6 +117,7 @@ pub struct IcebergSnapshotPayload {
 impl std::fmt::Debug for IcebergSnapshotPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IcebergSnapshotPayload")
+            .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .field("wal_persistence_metadata", &self.wal_persistence_metadata)
             .finish()
@@ -238,6 +241,8 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
 }
 
 pub struct IcebergSnapshotResult {
+    /// UUID for the current persistence operation, used for observability purpose.
+    pub(crate) uuid: uuid::Uuid,
     /// Table manager is (1) not `Sync` safe; (2) only used at iceberg snapshot creation, so we `move` it around every snapshot.
     pub(crate) table_manager: Option<Box<dyn TableManager>>,
     /// Iceberg flush LSN.
@@ -257,6 +262,7 @@ pub struct IcebergSnapshotResult {
 impl Clone for IcebergSnapshotResult {
     fn clone(&self) -> Self {
         IcebergSnapshotResult {
+            uuid: self.uuid,
             table_manager: None,
             flush_lsn: self.flush_lsn,
             wal_persisted_metadata: self.wal_persisted_metadata.clone(),
@@ -284,6 +290,7 @@ impl IcebergSnapshotResult {
 impl std::fmt::Debug for IcebergSnapshotResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IcebergSnapshotResult")
+            .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .finish()
     }
@@ -295,18 +302,24 @@ impl std::fmt::Debug for IcebergSnapshotResult {
 ///
 #[derive(Clone)]
 pub struct FileIndiceMergePayload {
+    /// UUID for current index merge operation, used for observability purpose.
+    pub(crate) uuid: uuid::Uuid,
     /// File indices to merge.
     pub(crate) file_indices: HashSet<GlobalIndex>,
 }
 
 impl std::fmt::Debug for FileIndiceMergePayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FileIndiceMergePayload").finish()
+        f.debug_struct("FileIndiceMergePayload")
+            .field("uuid", &self.uuid)
+            .finish()
     }
 }
 
 #[derive(Clone, Default)]
 pub struct FileIndiceMergeResult {
+    /// UUID for current index merge operation, used for observability purpose.
+    pub(crate) uuid: uuid::Uuid,
     /// Old file indices being merged.
     pub(crate) old_file_indices: HashSet<GlobalIndex>,
     /// New file indice merged.
@@ -326,7 +339,9 @@ impl FileIndiceMergeResult {
 
 impl std::fmt::Debug for FileIndiceMergeResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("FileIndiceMergeResult").finish()
+        f.debug_struct("FileIndiceMergeResult")
+            .field("uuid", &self.uuid)
+            .finish()
     }
 }
 
