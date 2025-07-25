@@ -24,7 +24,6 @@ use crate::storage::storage_utils::{
 use crate::table_notify::{
     DataCompactionMaintenanceStatus, IndexMergeMaintenanceStatus, TableEvent,
 };
-use crate::NonEvictableHandle;
 use more_asserts as ma;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -907,64 +906,5 @@ impl SnapshotTableState {
                 .await;
             self.add_processed_deletion(processed_deletions, task.new_commit_lsn);
         }
-    }
-
-    /// Get committed deletion record for current snapshot.
-    pub(super) async fn get_deletion_records(
-        &mut self,
-    ) -> (
-        Vec<NonEvictableHandle>,       /*puffin file cache handles*/
-        Vec<PuffinDeletionBlobAtRead>, /*deletion vector puffin*/
-        Vec<(
-            u32, /*index of disk file in snapshot*/
-            u32, /*row id*/
-        )>,
-    ) {
-        // Get puffin blobs for deletion vector.
-        let mut puffin_cache_handles = vec![];
-        let mut deletion_vector_blob_at_read = vec![];
-        for (idx, (_, disk_deletion_vector)) in self.current_snapshot.disk_files.iter().enumerate()
-        {
-            if disk_deletion_vector.puffin_deletion_blob.is_none() {
-                continue;
-            }
-            let puffin_deletion_blob = disk_deletion_vector.puffin_deletion_blob.as_ref().unwrap();
-
-            // Add one more reference for puffin cache handle.
-            // There'll be no IO operations during cache access, thus no failure or evicted files expected.
-            let (new_puffin_cache_handle, cur_evicted) = self
-                .object_storage_cache
-                .get_cache_entry(
-                    puffin_deletion_blob.puffin_file_cache_handle.file_id,
-                    /*remote_filepath=*/ "",
-                    /*filesystem_accessor*/ self.filesystem_accessor.as_ref(),
-                )
-                .await
-                .unwrap();
-            assert!(cur_evicted.is_empty());
-            puffin_cache_handles.push(new_puffin_cache_handle.unwrap());
-
-            let puffin_file_index = puffin_cache_handles.len() - 1;
-            deletion_vector_blob_at_read.push(PuffinDeletionBlobAtRead {
-                data_file_index: idx as u32,
-                puffin_file_index: puffin_file_index as u32,
-                start_offset: puffin_deletion_blob.start_offset,
-                blob_size: puffin_deletion_blob.blob_size,
-            });
-        }
-
-        // Get committed but un-persisted deletion vector.
-        let mut ret = Vec::new();
-        for deletion in self.committed_deletion_log.iter() {
-            if let RecordLocation::DiskFile(file_id, row_id) = &deletion.pos {
-                for (id, (file, _)) in self.current_snapshot.disk_files.iter().enumerate() {
-                    if file.file_id() == *file_id {
-                        ret.push((id as u32, *row_id as u32));
-                        break;
-                    }
-                }
-            }
-        }
-        (puffin_cache_handles, deletion_vector_blob_at_read, ret)
     }
 }
