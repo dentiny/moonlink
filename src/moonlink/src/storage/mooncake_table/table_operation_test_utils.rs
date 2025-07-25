@@ -71,6 +71,7 @@ pub(crate) async fn perform_index_merge_for_test(
 
     table.set_file_indices_merge_res(index_merge_result);
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::BestEffort,
@@ -102,6 +103,7 @@ pub(crate) async fn perform_data_compaction_for_test(
 
     table.set_data_compaction_res(data_compaction_result);
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::Skip,
@@ -135,6 +137,7 @@ pub(crate) async fn sync_mooncake_snapshot(
     table.mark_mooncake_snapshot_completed();
     if let TableEvent::MooncakeTableSnapshotResult {
         lsn,
+        uuid: _,
         iceberg_snapshot_payload,
         file_indice_merge_payload,
         data_compaction_payload,
@@ -199,6 +202,7 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
     Vec<String>,
 ) {
     let mooncake_snapshot_created = table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         data_compaction_option: MaintenanceOption::BestEffort,
@@ -249,6 +253,7 @@ async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
 
     // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::Skip,
@@ -293,6 +298,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
 ) {
     // Create mooncake snapshot.
     let force_snapshot_option = SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::Skip,
@@ -342,6 +348,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     // Set data compaction result and trigger another iceberg snapshot.
     table.set_data_compaction_res(data_compaction_result);
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::Skip,
@@ -358,6 +365,7 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
 ) {
     // Create mooncake snapshot.
     let force_snapshot_option = SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::BestEffort,
@@ -395,6 +403,7 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
     let index_merge_result = sync_index_merge(receiver).await;
     table.set_file_indices_merge_res(index_merge_result);
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: true,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::BestEffort,

@@ -537,6 +537,8 @@ pub enum MaintenanceOption {
 /// Options to create mooncake snapshot.
 #[derive(Clone, Debug)]
 pub struct SnapshotOption {
+    /// UUID for the current mooncake snapshot operation.
+    pub(crate) uuid: uuid::Uuid,
     /// Whether to force create snapshot.
     /// When specified, mooncake snapshot will be created with snapshot threshold ignored.
     pub(crate) force_create: bool,
@@ -551,6 +553,7 @@ pub struct SnapshotOption {
 impl SnapshotOption {
     pub fn default() -> SnapshotOption {
         Self {
+            uuid: uuid::Uuid::new_v4(),
             force_create: false,
             skip_iceberg_snapshot: false,
             index_merge_option: MaintenanceOption::BestEffort,
@@ -1302,9 +1305,10 @@ impl MooncakeTable {
     async fn create_snapshot_async(
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
-        opt: SnapshotOption,
+        mut opt: SnapshotOption,
         table_notify: Sender<TableEvent>,
     ) {
+        let uuid = std::mem::take(&mut opt.uuid);
         let snapshot_result = snapshot
             .write()
             .await
@@ -1312,6 +1316,7 @@ impl MooncakeTable {
             .await;
         table_notify
             .send(TableEvent::MooncakeTableSnapshotResult {
+                uuid,
                 lsn: snapshot_result.commit_lsn,
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,

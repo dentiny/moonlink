@@ -65,7 +65,7 @@ impl TableHandler {
                 tokio::select! {
                     // Sending to channel fails only happens when eventloop exits, directly exit timer events.
                     _ = periodic_snapshot_interval.tick() => {
-                        if event_sender_for_periodical_snapshot.send(TableEvent::PeriodicalMooncakeTableSnapshot).await.is_err() {
+                        if event_sender_for_periodical_snapshot.send(TableEvent::PeriodicalMooncakeTableSnapshot(uuid::Uuid::new_v4())).await.is_err() {
                            return;
                         }
                     }
@@ -277,6 +277,7 @@ impl TableHandler {
                             }
                             // Force create the snapshot with LSN 0
                             assert!(table.create_snapshot(SnapshotOption {
+                                uuid: uuid::Uuid::new_v4(),
                                 force_create: true,
                                 skip_iceberg_snapshot: true,
                                 index_merge_option: MaintenanceOption::Skip,
@@ -294,7 +295,7 @@ impl TableHandler {
                         // Table internal events
                         // ==============================
                         //
-                        TableEvent::PeriodicalMooncakeTableSnapshot => {
+                        TableEvent::PeriodicalMooncakeTableSnapshot(uuid) => {
                             // Only create a periodic snapshot if there isn't already one in progress
                             if table_handler_state.mooncake_snapshot_ongoing {
                                 continue;
@@ -308,7 +309,7 @@ impl TableHandler {
                                     if let SpecialTableState::AlterTable { .. } = table_handler_state.special_table_state {
                                         table.force_empty_iceberg_payload();
                                     }
-                                    assert!(table.create_snapshot(table_handler_state.get_mooncake_snapshot_option(/*request_force=*/true)));
+                                    assert!(table.create_snapshot(table_handler_state.get_mooncake_snapshot_option(/*request_force=*/true, uuid)));
                                     table_handler_state.mooncake_snapshot_ongoing = true;
                                     continue;
                                 }
@@ -316,9 +317,9 @@ impl TableHandler {
 
                             // Fallback to normal periodic snapshot.
                             table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
-                            table_handler_state.mooncake_snapshot_ongoing = table.create_snapshot(table_handler_state.get_mooncake_snapshot_option(/*request_force=*/false));
+                            table_handler_state.mooncake_snapshot_ongoing = table.create_snapshot(table_handler_state.get_mooncake_snapshot_option(/*request_force=*/false, uuid));
                         }
-                        TableEvent::MooncakeTableSnapshotResult { lsn, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
+                        TableEvent::MooncakeTableSnapshotResult { lsn, uuid: _, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
                             // Spawn a detached best-effort task to delete evicted object storage cache.
                             start_task_to_delete_evicted(evicted_data_files_to_delete);
 
@@ -655,7 +656,10 @@ impl TableHandler {
         if should_force_snapshot {
             table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
             assert!(table.create_snapshot(
-                table_handler_state.get_mooncake_snapshot_option(/*request_force=*/ true)
+                table_handler_state.get_mooncake_snapshot_option(
+                    /*request_force=*/ true,
+                    uuid::Uuid::new_v4()
+                )
             ));
             table_handler_state.mooncake_snapshot_ongoing = true;
         }

@@ -104,11 +104,13 @@ pub enum TableEvent {
     /// ==============================
     ///
     /// Periodical mooncake snapshot.
-    PeriodicalMooncakeTableSnapshot,
+    PeriodicalMooncakeTableSnapshot(uuid::Uuid),
     /// Mooncake snapshot completes.
     MooncakeTableSnapshotResult {
         /// Mooncake snapshot LSN.
         lsn: u64,
+        /// UUID for the current mooncake snapshot operation, used for observability purpose.
+        uuid: uuid::Uuid,
         /// Payload used to create an iceberg snapshot.
         iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
         /// Payload used to trigger an index merge.

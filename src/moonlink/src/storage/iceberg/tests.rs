@@ -265,6 +265,7 @@ async fn test_skip_iceberg_snapshot() {
 
     // Create mooncake snapshot.
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::BestEffort,

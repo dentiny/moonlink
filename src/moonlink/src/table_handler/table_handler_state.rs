@@ -176,7 +176,11 @@ impl TableHandlerState {
     /// # Arguments
     ///
     /// * request_force: request to force create a mooncake / iceberg snapshot.
-    pub(crate) fn get_mooncake_snapshot_option(&self, request_force: bool) -> SnapshotOption {
+    pub(crate) fn get_mooncake_snapshot_option(
+        &self,
+        request_force: bool,
+        uuid: uuid::Uuid,
+    ) -> SnapshotOption {
         let mut force_create = request_force;
         if self.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
             force_create = true;
@@ -192,6 +196,7 @@ impl TableHandlerState {
             force_create = true;
         }
         SnapshotOption {
+            uuid,
             force_create,
             skip_iceberg_snapshot: self.iceberg_snapshot_ongoing,
             index_merge_option: self.get_index_merge_maintenance_option(),
