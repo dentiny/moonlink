@@ -109,6 +109,15 @@ pub(super) struct CommittedDeletionToPersist {
     pub(super) new_deletions_to_persist: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
 }
 
+impl CommittedDeletionToPersist {
+    /// Validate it's valid.
+    fn validate(&self) {
+        let len1 = self.committed_deletion_logs.len();
+        let len2 = self.new_deletions_to_persist.len();
+        ma::assert_ge!(len1, len2);
+    }
+}
+
 impl SnapshotTableState {
     pub(super) async fn new(
         metadata: Arc<MooncakeTableMetadata>,
@@ -174,13 +183,10 @@ impl SnapshotTableState {
     }
 
     /// Aggregate committed deletion logs, which could be persisted into iceberg snapshot.
-    /// Return a mapping from data filepath to its batch deletion vector.
+    /// Return committed deletion records to delete.
     ///
     /// Precondition: all disk files have been integrated into snapshot.
-    fn aggregate_committed_deletion_logs(
-        &self,
-        flush_lsn: u64,
-    ) -> CommittedDeletionToPersist {
+    fn aggregate_committed_deletion_logs(&self, flush_lsn: u64) -> CommittedDeletionToPersist {
         let mut new_deletions_to_persist = HashMap::new();
         let mut committed_deletion_logs = HashSet::new();
 
@@ -208,7 +214,7 @@ impl SnapshotTableState {
                 assert!(committed_deletion_logs.insert((*file_id, *row_idx)));
             }
         }
-        
+
         CommittedDeletionToPersist {
             committed_deletion_logs,
             new_deletions_to_persist,
@@ -539,8 +545,8 @@ impl SnapshotTableState {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
             let flush_lsn = self.current_snapshot.data_file_flush_lsn.unwrap_or(0);
-            let committed_deletion_logs =
-                self.aggregate_committed_deletion_logs(flush_lsn);
+            let committed_deletion_logs = self.aggregate_committed_deletion_logs(flush_lsn);
+            committed_deletion_logs.validate();
 
             // Only create iceberg snapshot when there's something to import.
             if !committed_deletion_logs.new_deletions_to_persist.is_empty()

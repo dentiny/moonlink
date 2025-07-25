@@ -1,7 +1,6 @@
 use crate::create_data_file;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
-use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::snapshot::CommittedDeletionToPersist;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;

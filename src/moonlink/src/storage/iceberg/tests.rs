@@ -66,15 +66,14 @@ fn test_committed_deletion_log_1(
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
     deletion_vector.delete_row(0);
 
-    HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(
-        data_file,
-        deletion_vector,
-    )])
+    HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(data_file, deletion_vector)])
 }
 /// Corresponds to [`test_committed_deletion_log_1`].
-fn test_committed_deletion_logs_to_persist_1(data_file: MooncakeDataFileRef) -> HashSet<(FileId, usize)> {
+fn test_committed_deletion_logs_to_persist_1(
+    data_file: MooncakeDataFileRef,
+) -> HashSet<(FileId, usize)> {
     let mut committed_deletion_logs = HashSet::new();
-    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/0));
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/ 0));
     committed_deletion_logs
 }
 fn test_committed_deletion_log_2(
@@ -90,10 +89,12 @@ fn test_committed_deletion_log_2(
     )])
 }
 /// Corresponds to [`test_committed_deletion_log_2`].
-fn test_committed_deletion_logs_to_persist_2(data_file: MooncakeDataFileRef) -> HashSet<(FileId, usize)> {
+fn test_committed_deletion_logs_to_persist_2(
+    data_file: MooncakeDataFileRef,
+) -> HashSet<(FileId, usize)> {
     let mut committed_deletion_logs = HashSet::new();
-    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/1));
-    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/2));
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/ 1));
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/ 2));
     committed_deletion_logs
 }
 

@@ -122,7 +122,10 @@ impl std::fmt::Debug for IcebergSnapshotPayload {
             .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .field("wal_persistence_metadata", &self.wal_persistence_metadata)
-            .field("committed deletion logs count", &self.committed_deletion_logs.len())
+            .field(
+                "committed deletion logs count",
+                &self.committed_deletion_logs.len(),
+            )
             .field("import payload", &self.import_payload)
             .field("index merge payload", &self.index_merge_payload)
             .field("data compaction payload", &self.data_compaction_payload)

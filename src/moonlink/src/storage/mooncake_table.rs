@@ -820,7 +820,8 @@ impl MooncakeTable {
 
         // ---- Buffer iceberg persisted content to next snapshot task ---
         assert!(self.next_snapshot_task.committed_deletion_logs.is_empty());
-        self.next_snapshot_task.committed_deletion_logs = iceberg_snapshot_res.committed_deletion_logs;
+        self.next_snapshot_task.committed_deletion_logs =
+            iceberg_snapshot_res.committed_deletion_logs;
 
         assert!(self
             .next_snapshot_task
