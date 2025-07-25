@@ -386,7 +386,7 @@ impl CompactionBuilder {
 
         println!("\ncontent before compaction:\n");
         for f in old_data_files.iter() {
-            load_one_arrow_batch(&f.file_path()).await;
+            load_one_arrow_batch(f).await;
         }
 
         // All rows have been deleted.
@@ -419,7 +419,7 @@ impl CompactionBuilder {
 
         println!("\ncontent after compaction:\n");
         for f in self.new_data_files.iter() {
-            load_one_arrow_batch(&f.0.file_path()).await;
+            load_one_arrow_batch(&f.0).await;
         }
 
         Ok(DataCompactionResult {
@@ -434,12 +434,12 @@ impl CompactionBuilder {
     }
 }
 
-async fn load_one_arrow_batch(filepath: &str) {
-    let file = tokio::fs::File::open(filepath).await.unwrap();
+async fn load_one_arrow_batch(f: &MooncakeDataFileRef) {
+    let file = tokio::fs::File::open(f.file_path()).await.unwrap();
     let builder = ParquetRecordBatchStreamBuilder::new(file).await.unwrap();
     let mut reader = builder.build().unwrap();
     while let Some(cur_record_batch) = reader.try_next().await.unwrap() {
         let first_column = cur_record_batch.column(0);
-        println!("Content with file {}: {:?}", filepath, first_column);
+        println!("Content with file {:?}: {:?}", f, first_column);
     }
 }

@@ -14,13 +14,24 @@ use crate::table_notify::{DataCompactionMaintenanceStatus, IndexMergeMaintenance
 fn remap_record_location_after_compaction(
     deletion_log: &mut ProcessedDeletionRecord,
     task: &mut SnapshotTask,
-) {
+) -> bool {
     let old_record_location = &deletion_log.pos;
+
+    let old = old_record_location.clone();
+
     let remapped_data_files_after_compaction = &mut task.data_compaction_result;
     let new_record_location = remapped_data_files_after_compaction
         .remapped_data_files
         .remove(old_record_location);
-    deletion_log.pos = new_record_location.expect(&format!("Delete log {:?} not mapped after compaction", deletion_log)).record_location;
+    if new_record_location.is_none() {
+        return false;
+    }
+    deletion_log.pos = new_record_location.unwrap().record_location;
+
+    let new = deletion_log.pos.clone();
+    println!("compact map {:?} to {:?}", old, new);
+
+    true
 }
 
 impl SnapshotTableState {
@@ -277,17 +288,14 @@ impl SnapshotTableState {
         .await
     }
 
-    /// Data compaction might delete existing persisted files, which invalidates record locations and requires a record location remap.
-    pub(super) fn remap_and_prune_deletion_logs_after_compaction(
-        &mut self,
-        task: &mut SnapshotTask,
-    ) {
-        // No need to prune and remap if no compaction happening.
+    /// Get remapped committed deletion log after compaction.
+    pub(super) fn extract_remapped_committed_deletion_log(&mut self, task: &mut SnapshotTask) -> Vec<ProcessedDeletionRecord> {
+        // No need to remap if no compaction happening.
         if task.data_compaction_result.is_empty() {
-            return;
+            return vec![];
         }
 
-        // Remap and prune committed deletion log.
+        let mut remapped_committed_deletion_log = vec![];
         let mut new_committed_deletion_log = vec![];
         let old_committed_deletion_log = std::mem::take(&mut self.committed_deletion_log);
         for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
@@ -302,15 +310,53 @@ impl SnapshotTableState {
                     continue;
                 }
                 // Case-2: the deletion log exists in the compacted new data file, perform a remap.
-                remap_record_location_after_compaction(&mut cur_deletion_log, task);
-                new_committed_deletion_log.push(cur_deletion_log);
+                let remap_succ = remap_record_location_after_compaction(&mut cur_deletion_log, task);
+                assert!(remap_succ, "Deletion log {:?} fails to remap", cur_deletion_log);
+                remapped_committed_deletion_log.push(cur_deletion_log);
                 continue;
-                // Case-3: the deletion log doesn't exist in the compacted new file, directly remove it.
             } else {
                 new_committed_deletion_log.push(cur_deletion_log);
             }
         }
         self.committed_deletion_log = new_committed_deletion_log;
+
+        remapped_committed_deletion_log
+    }
+
+    /// Remap uncomitted deletion log after compaction.
+    pub(super) fn remap_uncommitted_deletion_logs_after_compaction(
+        &mut self,
+        task: &mut SnapshotTask,
+    ) {
+        // No need to remap if no compaction happening.
+        if task.data_compaction_result.is_empty() {
+            return;
+        }
+
+        // // Remap and prune committed deletion log.
+        // let mut new_committed_deletion_log = vec![];
+        // let old_committed_deletion_log = std::mem::take(&mut self.committed_deletion_log);
+        // for mut cur_deletion_log in old_committed_deletion_log.into_iter() {
+        //     if let Some(file_id) = cur_deletion_log.get_file_id() {
+        //         // Case-1: the deletion log doesn't indicate a compacted data file.
+        //         if !task
+        //             .data_compaction_result
+        //             .old_data_files
+        //             .contains(&file_id)
+        //         {
+        //             new_committed_deletion_log.push(cur_deletion_log);
+        //             continue;
+        //         }
+        //         // Case-2: the deletion log exists in the compacted new data file, perform a remap.
+        //         remap_record_location_after_compaction(&mut cur_deletion_log, task);
+        //         new_committed_deletion_log.push(cur_deletion_log);
+        //         continue;
+        //         // Case-3: the deletion log doesn't exist in the compacted new file, directly remove it.
+        //     } else {
+        //         new_committed_deletion_log.push(cur_deletion_log);
+        //     }
+        // }
+        // self.committed_deletion_log = new_committed_deletion_log;
 
         // Remap uncommitted deletion log.
         for cur_deletion_log in &mut self.uncommitted_deletion_log {
@@ -319,5 +365,9 @@ impl SnapshotTableState {
             }
             remap_record_location_after_compaction(cur_deletion_log.as_mut().unwrap(), task);
         }
+    }
+
+    pub(super) fn requeue_committed_deletion_logs(&mut self, committed_deletion_logs: Vec<ProcessedDeletionRecord>) {
+        self.committed_deletion_log.extend(committed_deletion_logs);
     }
 }

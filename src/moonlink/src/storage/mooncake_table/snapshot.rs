@@ -421,8 +421,15 @@ impl SnapshotTableState {
             .await;
         evicted_data_files_to_delete.extend(compaction_evicted_files);
 
+        // Remap uncommitted deletion logs.
+        self.remap_uncommitted_deletion_logs_after_compaction(&mut task);
+        // Extract remapped committed deletion logs, so they don't get pruned, because data compaction doesn't update flush LSN.
+        let remapped_committed_deletion_log = self.extract_remapped_committed_deletion_log(&mut task);
+
         // Prune unpersisted records.
-        self.prune_committed_deletion_logs(&task);
+        //
+        // WARNING: All remapping for old committed deletion logs should finish beforehand/
+        self.prune_committed_deletion_logs(&task); // <--- prune comitted deletion logs
         self.unpersisted_records.prune_persisted_records(&task);
 
         // Sync buffer snapshot states into unpersisted iceberg content.
@@ -436,12 +443,12 @@ impl SnapshotTableState {
         evicted_data_files_to_delete.extend(stream_evicted_cache_files);
         evicted_data_files_to_delete.extend(batch_evicted_cache_files);
 
-        // Apply data compaction to committed deletion logs.
-        self.remap_and_prune_deletion_logs_after_compaction(&mut task);
-
         // After data compaction and index merge changes have been applied to snapshot, processed deletion record will point to the new record location.
         self.rows = take(&mut task.new_rows);
         self.process_deletion_log(&mut task).await;
+
+        // Re-queue unpersisted committed deletion logs.
+        self.requeue_committed_deletion_logs(remapped_committed_deletion_log);
 
         // Assert and update flush LSN.
         if let Some(new_flush_lsn) = task.new_flush_lsn {
@@ -786,6 +793,9 @@ impl SnapshotTableState {
                 assert!(res);
             }
         }
+
+        println!("add committed deletion {:?}", deletion);
+
         self.committed_deletion_log.push(deletion);
     }
 
@@ -898,12 +908,13 @@ impl SnapshotTableState {
         // Get committed but un-persisted positional deletes.
         let mut positional_deletes = Vec::new();
 
+
         for (idx, (f, disk_deletion_vector)) in self.current_snapshot.disk_files.iter().enumerate()
         {
             // Then place puffin blob.
             if disk_deletion_vector.puffin_deletion_blob.is_none() {
 
-                println!("read: f: {}, puffin: {}, deletion vector: {:?}", f.file_path(), disk_deletion_vector.puffin_deletion_blob.is_some(), disk_deletion_vector.batch_deletion_vector.collect_deleted_rows());
+                println!("read: f: {:?}, puffin: {}, deletion vector: {:?}", f, disk_deletion_vector.puffin_deletion_blob.is_some(), disk_deletion_vector.batch_deletion_vector.collect_deleted_rows());
 
                 continue;
             }
@@ -932,7 +943,7 @@ impl SnapshotTableState {
             });
         }
 
-        println!("committed deletion log len = {}", self.committed_deletion_log.len());
+        println!("committed deletion log = {:?}", self.committed_deletion_log);
         for deletion in self.committed_deletion_log.iter() {
             if let RecordLocation::DiskFile(file_id, row_id) = &deletion.pos {
                 for (id, (file, _)) in self.current_snapshot.disk_files.iter().enumerate() {
