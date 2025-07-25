@@ -393,6 +393,7 @@ impl CompactionBuilder {
         if old_record_loc_to_new_mapping.is_empty() {
             assert!(record_loc_to_data_file_index.is_empty());
             return Ok(DataCompactionResult {
+                uuid: self.compaction_payload.uuid,
                 remapped_data_files: old_record_loc_to_new_mapping,
                 old_data_files,
                 old_file_indices,
@@ -422,6 +423,7 @@ impl CompactionBuilder {
         }
 
         Ok(DataCompactionResult {
+            uuid: self.compaction_payload.uuid,
             remapped_data_files: old_record_loc_to_new_mapping,
             old_data_files,
             old_file_indices,

@@ -1077,6 +1077,7 @@ impl MooncakeTable {
                 .build_from_merge(file_indice_merge_payload.file_indices.clone(), cur_file_id)
                 .await;
             let index_merge_result = FileIndiceMergeResult {
+                uuid: file_indice_merge_payload.uuid,
                 old_file_indices: file_indice_merge_payload.file_indices,
                 new_file_indices: vec![merged],
             };
@@ -1148,6 +1149,7 @@ impl MooncakeTable {
         let flush_lsn = snapshot_payload.flush_lsn;
         let wal_persisted_metadata = snapshot_payload.wal_persistence_metadata.clone();
         let new_table_schema = snapshot_payload.new_table_schema.clone();
+        let uuid = snapshot_payload.uuid;
 
         let new_imported_data_files_count = snapshot_payload.import_payload.data_files.len();
         let new_compacted_data_files_count = snapshot_payload
@@ -1220,6 +1222,7 @@ impl MooncakeTable {
         );
 
         let snapshot_result = IcebergSnapshotResult {
+            uuid,
             table_manager: Some(iceberg_table_manager),
             flush_lsn,
             wal_persisted_metadata,

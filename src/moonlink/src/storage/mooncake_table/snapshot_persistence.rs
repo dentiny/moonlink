@@ -35,6 +35,7 @@ impl SnapshotTableState {
         new_committed_deletion_logs: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
+            uuid: uuid::Uuid::new_v4(),
             flush_lsn,
             wal_persistence_metadata,
             new_table_schema: None,
