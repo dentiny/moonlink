@@ -474,3 +474,11 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
         panic!("Iceberg snapshot payload is not set");
     }
 }
+
+pub(crate) async fn alter_table(table: &mut MooncakeTable) {
+    let alter_table_request = AlterTableRequest {
+        new_columns: vec![],
+        dropped_columns: vec!["age".to_string()],
+    };
+    table.alter_table(alter_table_request);
+}

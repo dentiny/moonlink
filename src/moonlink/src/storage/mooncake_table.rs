@@ -753,7 +753,7 @@ impl MooncakeTable {
 
     /// Assert flush LSN doesn't regress.
     fn assert_flush_lsn_on_iceberg_snapshot_res(
-        &self,
+        persistence_lsn: Option<u64>,
         iceberg_snapshot_res: &IcebergSnapshotResult,
     ) {
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
@@ -773,20 +773,20 @@ impl MooncakeTable {
         // The first type is safe to import to iceberg at any time, with no flush LSN advancement.
         if contains_table_maintenance_res(iceberg_snapshot_res) {
             assert!(
-                self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() <= flush_lsn,
+                persistence_lsn.is_none()
+                    || persistence_lsn.unwrap() <= flush_lsn,
                 "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
-                self.last_iceberg_snapshot_lsn,
+                persistence_lsn,
                 flush_lsn,
                 iceberg_snapshot_res.import_result.new_data_files.len(),
                 iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
             );
         } else {
             assert!(
-                self.last_iceberg_snapshot_lsn.is_none()
-                    || self.last_iceberg_snapshot_lsn.unwrap() < flush_lsn,
+                persistence_lsn.is_none()
+                    || persistence_lsn.unwrap() < flush_lsn,
                 "Last iceberg snapshot LSN is {:?}, flush LSN is {:?}, imported data file number is {}, imported puffin file number is {}",
-                self.last_iceberg_snapshot_lsn,
+                persistence_lsn,
                 flush_lsn,
                 iceberg_snapshot_res.import_result.new_data_files.len(),
                 iceberg_snapshot_res.import_result.puffin_blob_ref.len(),
@@ -798,7 +798,10 @@ impl MooncakeTable {
     pub(crate) fn set_iceberg_snapshot_res(&mut self, iceberg_snapshot_res: IcebergSnapshotResult) {
         // ---- Update mooncake table fields ----
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
-        self.assert_flush_lsn_on_iceberg_snapshot_res(&iceberg_snapshot_res);
+        Self::assert_flush_lsn_on_iceberg_snapshot_res(
+            self.last_iceberg_snapshot_lsn,
+            &iceberg_snapshot_res,
+        );
         self.last_iceberg_snapshot_lsn = Some(flush_lsn);
 
         // Update mooncake table metadata if necessary.
@@ -1342,6 +1345,82 @@ impl MooncakeTable {
             })
             .await
             .unwrap();
+    }
+}
+
+#[cfg(test)]
+mod mooncake_tests {
+    use super::*;
+    use crate::storage::storage_utils::create_data_file;
+
+    #[test]
+    fn test_flush_lsn_assertion() {
+        // Only iceberg imported result.
+        let iceberg_snapshot_result = IcebergSnapshotResult {
+            uuid: uuid::Uuid::new_v4(),
+            table_manager: None,
+            flush_lsn: 1,
+            wal_persisted_metadata: None,
+            new_table_schema: None,
+            committed_deletion_logs: HashSet::new(),
+            import_result: IcebergSnapshotImportResult {
+                new_data_files: vec![create_data_file(
+                    /*file_id=*/ 0,
+                    "file_path".to_string(),
+                )],
+                puffin_blob_ref: HashMap::new(),
+                new_file_indices: vec![],
+            },
+            index_merge_result: IcebergSnapshotIndexMergeResult::default(),
+            data_compaction_result: IcebergSnapshotDataCompactionResult::default(),
+        };
+        // Valid snapshot result.
+        MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(
+            /*persistence_lsn=*/ None,
+            &iceberg_snapshot_result,
+        );
+        // Invalid snapshot result.
+        let res_copy = iceberg_snapshot_result.clone();
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(Some(1), &res_copy);
+        }));
+        assert!(result.is_err());
+
+        // Only data compaction result.
+        let mut res_copy = iceberg_snapshot_result.clone();
+        res_copy.import_result = IcebergSnapshotImportResult::default();
+        res_copy.data_compaction_result = IcebergSnapshotDataCompactionResult {
+            old_data_files_removed: vec![create_data_file(
+                /*file_id=*/ 0,
+                "file_path".to_string(),
+            )],
+            ..Default::default()
+        };
+        // Valid snapshot result.
+        MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(
+            /*persistence_lsn=*/ Some(1),
+            &res_copy,
+        );
+        // Invalid snapshot result.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(Some(2), &res_copy);
+        }));
+        assert!(result.is_err());
+
+        // Contain both import and data compaction result.
+        let mut res_copy = iceberg_snapshot_result.clone();
+        res_copy.data_compaction_result = IcebergSnapshotDataCompactionResult {
+            old_data_files_removed: vec![create_data_file(
+                /*file_id=*/ 0,
+                "file_path".to_string(),
+            )],
+            ..Default::default()
+        };
+        // Valid snapshot result.
+        MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(
+            /*persistence_lsn=*/ Some(1),
+            &res_copy,
+        );
     }
 }
 
