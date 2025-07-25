@@ -93,7 +93,8 @@ struct NonTableUpdateCmdCall {
 
 #[derive(Debug, Clone)]
 enum EventKind {
-    Begin,
+    BeginStreamingTxn,
+    BeginNonStreamingTxn,
     Append,
     Delete,
     EndWithFlush,
@@ -104,6 +105,16 @@ enum EventKind {
     /// Foreground force table maintenance only happens after commit operation, otherwise it gets blocked.
     ForegroundForceIndexMerge,
     ForegroundForceDataCompaction,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum TxnState {
+    /// No active transaction ongoing.
+    Empty,
+    /// Within a non-streaming transaction.
+    InNonStreaming,
+    /// Within a streaming transaction.
+    InStreaming,
 }
 
 struct ChaosState {
@@ -120,9 +131,11 @@ struct ChaosState {
     /// Deleted row ids in the current uncommitted transaction.
     uncommitted_deleted_rows: HashSet<i32>,
     /// Used to indicate whether there's an ongoing transaction.
-    has_begun: bool,
+    txn_state: TxnState,
     /// LSN to use for the next operation, including update operations and commits.
     cur_lsn: u64,
+    /// Txn id used for streaming transaction.
+    cur_xact_id: u32,
     /// Used to read snapshot.
     read_state_manager: ReadStateManager,
     /// Last commit LSN.
@@ -139,13 +152,14 @@ impl ChaosState {
         Self {
             rng,
             non_table_update_cmd_call: NonTableUpdateCmdCall::default(),
-            has_begun: false,
+            txn_state: TxnState::Empty,
             next_id: 0,
             committed_inserted_rows: VecDeque::new(),
             uncommitted_inserted_rows: VecDeque::new(),
             uncommitted_deleted_rows: HashSet::new(),
             read_state_manager,
             cur_lsn: 0,
+            cur_xact_id: 0,
             last_commit_lsn: None,
         }
     }
@@ -157,15 +171,26 @@ impl ChaosState {
         cur_lsn
     }
 
-    fn begin_transaction(&mut self) {
-        assert!(!self.has_begun);
-        self.has_begun = true;
+    /// Start a streaming transaction, and return xact id to use for current transaction.
+    fn begin_streaming_txn(&mut self) {
+        assert_eq!(self.txn_state, TxnState::Empty);
+        self.txn_state = TxnState::InStreaming;
+    }
+
+    fn begin_non_streaming_txn(&mut self) {
+        assert_eq!(self.txn_state, TxnState::Empty);
+        self.txn_state = TxnState::InNonStreaming;
     }
 
     fn commit_transaction(&mut self, lsn: u64) {
+        // Update transaction id if streaming one.
+        if self.txn_state == TxnState::InStreaming {
+            self.cur_xact_id += 1;
+        }
+
         // Set chaos test states.
-        assert!(self.has_begun);
-        self.has_begun = false;
+        assert_ne!(self.txn_state, TxnState::Empty);
+        self.txn_state = TxnState::Empty;
         self.last_commit_lsn = Some(lsn);
 
         // Set table states.
@@ -173,6 +198,15 @@ impl ChaosState {
             .retain(|(id, _)| !self.uncommitted_deleted_rows.contains(id));
         self.committed_inserted_rows
             .extend(self.uncommitted_inserted_rows.drain(..));
+    }
+
+    /// Get transaction id to set for both streaming and non-streaming transactions.
+    fn get_cur_xact_id(&self) -> Option<u32> {
+        if self.txn_state == TxnState::InStreaming {
+            Some(self.cur_xact_id)
+        } else {
+            None
+        }
     }
 
     fn get_next_row_to_append(&mut self) -> MoonlinkRow {
@@ -248,8 +282,9 @@ impl ChaosState {
 
         self.try_push_read_snapshot_cmd(&mut choices);
         self.try_push_table_maintenance_cmd(&mut choices);
-        if !self.has_begun {
-            choices.push(EventKind::Begin);
+        if self.txn_state == TxnState::Empty {
+            choices.push(EventKind::BeginStreamingTxn);
+            choices.push(EventKind::BeginNonStreamingTxn);
         } else {
             choices.push(EventKind::Append);
             if !self.committed_inserted_rows.is_empty()
@@ -274,12 +309,22 @@ impl ChaosState {
             EventKind::ForegroundForceDataCompaction => {
                 ChaosEvent::create_table_maintenance_event(TableEvent::ForceRegularDataCompaction)
             }
-            EventKind::Begin => {
-                self.begin_transaction();
+            EventKind::BeginStreamingTxn => {
+                self.begin_streaming_txn();
                 let row = self.get_next_row_to_append();
                 ChaosEvent::create_table_events(vec![TableEvent::Append {
                     row,
-                    xact_id: None,
+                    xact_id: self.get_cur_xact_id(),
+                    lsn: self.get_and_update_cur_lsn(),
+                    is_copied: false,
+                }])
+            }
+            EventKind::BeginNonStreamingTxn => {
+                self.begin_non_streaming_txn();
+                let row = self.get_next_row_to_append();
+                ChaosEvent::create_table_events(vec![TableEvent::Append {
+                    row,
+                    xact_id: self.get_cur_xact_id(),
                     lsn: self.get_and_update_cur_lsn(),
                     is_copied: false,
                 }])
@@ -288,7 +333,7 @@ impl ChaosState {
                 let row = self.get_next_row_to_append();
                 ChaosEvent::create_table_events(vec![TableEvent::Append {
                     row,
-                    xact_id: None,
+                    xact_id: self.get_cur_xact_id(),
                     lsn: self.get_and_update_cur_lsn(),
                     is_copied: false,
                 }])
@@ -298,28 +343,29 @@ impl ChaosState {
                 self.uncommitted_deleted_rows.insert(id);
                 ChaosEvent::create_table_events(vec![TableEvent::Delete {
                     row,
-                    xact_id: None,
+                    xact_id: self.get_cur_xact_id(),
                     lsn: self.get_and_update_cur_lsn(),
                 }])
             }
             EventKind::EndWithFlush => {
                 let lsn = self.get_and_update_cur_lsn();
+                let xact_id = self.get_cur_xact_id();
                 self.commit_transaction(lsn);
-                ChaosEvent::create_table_events(vec![TableEvent::CommitFlush {
-                    lsn,
-                    xact_id: None,
-                }])
+                ChaosEvent::create_table_events(vec![TableEvent::CommitFlush { lsn, xact_id }])
             }
             EventKind::EndNoFlush => {
                 let lsn = self.get_and_update_cur_lsn();
+                let xact_id = self.get_cur_xact_id();
                 self.commit_transaction(lsn);
-                ChaosEvent::create_table_events(vec![TableEvent::Commit { lsn, xact_id: None }])
+                ChaosEvent::create_table_events(vec![TableEvent::Commit { lsn, xact_id }])
             }
         }
     }
 }
 
 enum TestEnvConfig {
+    /// No table maintenance in background.
+    NoTableMaintenance,
     /// Index merge is enabled by default: merge take place as long as there're at least two index files.
     IndexMerge,
     /// Data compaction is enabled by default: compaction take place as long as there're at least two data files.
@@ -348,6 +394,9 @@ impl TestEnvironment {
 
         let table_temp_dir = tempdir().unwrap();
         let mooncake_table_metadata = match &config {
+            TestEnvConfig::NoTableMaintenance => create_test_table_metadata_disable_flush(
+                table_temp_dir.path().to_str().unwrap().to_string(),
+            ),
             TestEnvConfig::IndexMerge => create_test_table_metadata_with_index_merge_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
             ),
@@ -413,7 +462,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..1000 {
+        for _ in 0..3000 {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
@@ -484,6 +533,13 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
             std::panic::resume_unwind(panic);
         }
     }
+}
+
+/// Chaos test with no background table maintenance enabled.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_no_background_maintenance() {
+    let env = TestEnvironment::new(TestEnvConfig::NoTableMaintenance).await;
+    chaos_test_impl(env).await;
 }
 
 /// Chaos test with index merge enabled by default.
