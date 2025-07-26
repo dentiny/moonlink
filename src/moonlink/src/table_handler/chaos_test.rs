@@ -176,19 +176,22 @@ impl ChaosState {
         cur_lsn
     }
 
-    /// Start a streaming transaction, and return xact id to use for current transaction.
-    fn begin_streaming_txn(&mut self) {
+    /// Assert on preconditions to start a new transaction, whether it's streaming one or non-streaming one.
+    fn assert_txn_begin_precondition(&self) {
         assert_eq!(self.txn_state, TxnState::Empty);
-        self.txn_state = TxnState::InStreaming;
-
-        // Assert on uncommitted states.
         assert!(self.uncommitted_inserted_rows.is_empty());
         assert!(self.deleted_committed_row_ids.is_empty());
         assert!(self.deleted_uncommitted_row_ids.is_empty());
     }
 
+    /// Start a streaming transaction, and return xact id to use for current transaction.
+    fn begin_streaming_txn(&mut self) {
+        self.assert_txn_begin_precondition();
+        self.txn_state = TxnState::InStreaming;
+    }
+
     fn begin_non_streaming_txn(&mut self) {
-        assert_eq!(self.txn_state, TxnState::Empty);
+        self.assert_txn_begin_precondition();
         self.txn_state = TxnState::InNonStreaming;
     }
 
@@ -245,7 +248,7 @@ impl ChaosState {
         if !self.committed_inserted_rows.is_empty()
             && self.deleted_committed_row_ids.len() != self.committed_inserted_rows.len()
         {
-            ma::assert_le!(
+            ma::assert_lt!(
                 self.deleted_committed_row_ids.len(),
                 self.committed_inserted_rows.len()
             );
@@ -256,7 +259,7 @@ impl ChaosState {
         if self.txn_state == TxnState::InStreaming
             && self.deleted_uncommitted_row_ids.len() != self.uncommitted_inserted_rows.len()
         {
-            ma::assert_le!(
+            ma::assert_lt!(
                 self.deleted_uncommitted_row_ids.len(),
                 self.uncommitted_inserted_rows.len()
             );
