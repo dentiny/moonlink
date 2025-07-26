@@ -54,6 +54,8 @@ pub(crate) struct SnapshotTableState {
     // Type-3, committed but not yet persisted deletion logs.
     pub(crate) committed_deletion_log: Vec<ProcessedDeletionRecord>,
     // Type-1: uncommitted deletion logs.
+    //
+    // Invariant: all processed deletion records are valid, here we use `Option` simply for an easy way to `move` the record out.
     pub(crate) uncommitted_deletion_log: Vec<Option<ProcessedDeletionRecord>>,
 
     /// Last commit point
