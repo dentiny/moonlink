@@ -14,6 +14,7 @@ use crate::union_read::ReadStateManager;
 use crate::ObjectStorageCache;
 use crate::TableEventManager;
 
+use more_asserts as ma;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -128,8 +129,11 @@ struct ChaosState {
     committed_inserted_rows: VecDeque<(i32 /*id*/, MoonlinkRow)>,
     /// Inserted rows in the current uncommitted transaction.
     uncommitted_inserted_rows: VecDeque<(i32 /*id*/, MoonlinkRow)>,
-    /// Deleted row ids in the current uncommitted transaction.
-    uncommitted_deleted_rows: HashSet<i32>,
+    /// Deleted committed row ids in the current uncommitted transaction.
+    deleted_committed_row_ids: HashSet<i32>,
+    /// Deleted uncommitted row ids in the current uncommitted transaction.
+    /// Notice: only stream transactions are able to delete uncommitted rows.
+    deleted_uncommitted_row_ids: HashSet<i32>,
     /// Used to indicate whether there's an ongoing transaction.
     txn_state: TxnState,
     /// LSN to use for the next operation, including update operations and commits.
@@ -156,7 +160,8 @@ impl ChaosState {
             next_id: 0,
             committed_inserted_rows: VecDeque::new(),
             uncommitted_inserted_rows: VecDeque::new(),
-            uncommitted_deleted_rows: HashSet::new(),
+            deleted_committed_row_ids: HashSet::new(),
+            deleted_uncommitted_row_ids: HashSet::new(),
             read_state_manager,
             cur_lsn: 0,
             cur_xact_id: 0,
@@ -175,6 +180,11 @@ impl ChaosState {
     fn begin_streaming_txn(&mut self) {
         assert_eq!(self.txn_state, TxnState::Empty);
         self.txn_state = TxnState::InStreaming;
+
+        // Assert on uncommitted states.
+        assert!(self.uncommitted_inserted_rows.is_empty());
+        assert!(self.deleted_committed_row_ids.is_empty());
+        assert!(self.deleted_uncommitted_row_ids.is_empty());
     }
 
     fn begin_non_streaming_txn(&mut self) {
@@ -195,9 +205,13 @@ impl ChaosState {
 
         // Set table states.
         self.committed_inserted_rows
-            .retain(|(id, _)| !self.uncommitted_deleted_rows.contains(id));
-        self.committed_inserted_rows
             .extend(self.uncommitted_inserted_rows.drain(..));
+        self.committed_inserted_rows.retain(|(id, _)| {
+            !self.deleted_committed_row_ids.contains(id)
+                && !self.deleted_uncommitted_row_ids.contains(id)
+        });
+        self.deleted_committed_row_ids.clear();
+        self.deleted_uncommitted_row_ids.clear();
     }
 
     /// Get transaction id to set for both streaming and non-streaming transactions.
@@ -225,18 +239,64 @@ impl ChaosState {
             .collect::<Vec<_>>()
     }
 
+    /// Return whether we could delete a row in the next event.
+    fn can_delete(&self) -> bool {
+        // There're undeleted committed records.
+        if !self.committed_inserted_rows.is_empty()
+            && self.deleted_committed_row_ids.len() != self.committed_inserted_rows.len()
+        {
+            ma::assert_le!(
+                self.deleted_committed_row_ids.len(),
+                self.committed_inserted_rows.len()
+            );
+            return true;
+        }
+
+        // Streaming transactions are allowed to delete rows inserted in the current transaction.
+        if self.txn_state == TxnState::InStreaming
+            && self.deleted_uncommitted_row_ids.len() != self.uncommitted_inserted_rows.len()
+        {
+            ma::assert_le!(
+                self.deleted_uncommitted_row_ids.len(),
+                self.uncommitted_inserted_rows.len()
+            );
+            return true;
+        }
+
+        false
+    }
+
     /// Get a random row to delete.
-    fn get_random_row_to_delete(&mut self) -> (i32, MoonlinkRow) {
-        let candidates: Vec<_> = self
+    fn get_random_row_to_delete(&mut self) -> MoonlinkRow {
+        let mut candidates: Vec<(i32, MoonlinkRow, bool /*committed*/)> = self
             .committed_inserted_rows
             .iter()
-            .filter(|(id, _)| !self.uncommitted_deleted_rows.contains(id))
+            .filter(|(id, _)| !self.deleted_committed_row_ids.contains(id))
+            .map(|(id, row)| (*id, row.clone(), /*committed=*/ true))
             .collect();
+
+        // If within a streaming transaction, could also delete from uncommitted inserted rows.
+        if self.txn_state == TxnState::InStreaming {
+            candidates.extend(
+                self.uncommitted_inserted_rows
+                    .iter()
+                    .map(|(id, row)| (*id, row.clone(), /*committed=*/ false)),
+            );
+        }
         assert!(!candidates.is_empty());
 
+        // Randomly pick one row from the candidates.
         let random_idx = self.rng.random_range(0..candidates.len());
-        let (id, row) = candidates[random_idx];
-        (*id, row.clone())
+        let (id, row, is_committed) = candidates[random_idx].clone();
+
+        // Update deleted rows set.
+        if is_committed {
+            assert!(self.deleted_committed_row_ids.insert(id));
+        } else {
+            assert!(self.deleted_uncommitted_row_ids.insert(id));
+        }
+
+        row
     }
 
     /// Attempt to push non table update operations to choices.
@@ -287,9 +347,7 @@ impl ChaosState {
             choices.push(EventKind::BeginNonStreamingTxn);
         } else {
             choices.push(EventKind::Append);
-            if !self.committed_inserted_rows.is_empty()
-                && self.committed_inserted_rows.len() != self.uncommitted_deleted_rows.len()
-            {
+            if self.can_delete() {
                 choices.push(EventKind::Delete);
             }
             choices.push(EventKind::EndWithFlush);
@@ -329,24 +387,17 @@ impl ChaosState {
                     is_copied: false,
                 }])
             }
-            EventKind::Append => {
-                let row = self.get_next_row_to_append();
-                ChaosEvent::create_table_events(vec![TableEvent::Append {
-                    row,
-                    xact_id: self.get_cur_xact_id(),
-                    lsn: self.get_and_update_cur_lsn(),
-                    is_copied: false,
-                }])
-            }
-            EventKind::Delete => {
-                let (id, row) = self.get_random_row_to_delete();
-                self.uncommitted_deleted_rows.insert(id);
-                ChaosEvent::create_table_events(vec![TableEvent::Delete {
-                    row,
-                    xact_id: self.get_cur_xact_id(),
-                    lsn: self.get_and_update_cur_lsn(),
-                }])
-            }
+            EventKind::Append => ChaosEvent::create_table_events(vec![TableEvent::Append {
+                row: self.get_next_row_to_append(),
+                xact_id: self.get_cur_xact_id(),
+                lsn: self.get_and_update_cur_lsn(),
+                is_copied: false,
+            }]),
+            EventKind::Delete => ChaosEvent::create_table_events(vec![TableEvent::Delete {
+                row: self.get_random_row_to_delete(),
+                xact_id: self.get_cur_xact_id(),
+                lsn: self.get_and_update_cur_lsn(),
+            }]),
             EventKind::EndWithFlush => {
                 let lsn = self.get_and_update_cur_lsn();
                 let xact_id = self.get_cur_xact_id();
