@@ -98,6 +98,8 @@ enum EventKind {
     BeginNonStreamingTxn,
     Append,
     Delete,
+    StreamAbort,
+    StreamFlush,
     EndWithFlush,
     EndNoFlush,
     ReadSnapshot,
@@ -193,6 +195,16 @@ impl ChaosState {
     fn begin_non_streaming_txn(&mut self) {
         self.assert_txn_begin_precondition();
         self.txn_state = TxnState::InNonStreaming;
+    }
+
+    /// Abort the current stream transaction.
+    fn stream_abort_transaction(&mut self) {
+        assert_eq!(self.txn_state, TxnState::InStreaming);
+        self.txn_state = TxnState::Empty;
+        self.cur_xact_id += 1;
+        self.uncommitted_inserted_rows.clear();
+        self.deleted_committed_row_ids.clear();
+        self.deleted_uncommitted_row_ids.clear();
     }
 
     fn commit_transaction(&mut self, lsn: u64) {
@@ -353,6 +365,10 @@ impl ChaosState {
             if self.can_delete() {
                 choices.push(EventKind::Delete);
             }
+            if self.txn_state == TxnState::InStreaming {
+                choices.push(EventKind::StreamFlush);
+                choices.push(EventKind::StreamAbort);
+            }
             choices.push(EventKind::EndWithFlush);
             choices.push(EventKind::EndNoFlush);
         }
@@ -401,6 +417,16 @@ impl ChaosState {
                 xact_id: self.get_cur_xact_id(),
                 lsn: self.get_and_update_cur_lsn(),
             }]),
+            EventKind::StreamFlush => {
+                ChaosEvent::create_table_events(vec![TableEvent::StreamFlush {
+                    xact_id: self.get_cur_xact_id().unwrap(),
+                }])
+            }
+            EventKind::StreamAbort => {
+                let xact_id = self.get_cur_xact_id().unwrap();
+                self.stream_abort_transaction();
+                ChaosEvent::create_table_events(vec![TableEvent::StreamAbort { xact_id }])
+            }
             EventKind::EndWithFlush => {
                 let lsn = self.get_and_update_cur_lsn();
                 let xact_id = self.get_cur_xact_id();
