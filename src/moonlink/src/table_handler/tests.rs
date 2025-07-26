@@ -168,10 +168,15 @@ async fn test_streaming_abort() {
     .await;
     env.stream_abort(abort_xact_id).await;
 
-    // Now enable reading up to LSN 100 by setting replication_tx.
-    // The target_lsn for read is 100.
-    env.set_replication_lsn(100);
-    env.verify_snapshot(100, &[1]).await; // Should only see baseline data.
+    // Append one additional row to trigger a valid mooncake snapshot.
+    env.append_row(2, "NewRow", 40, /*lsn=*/ 140, /*xact_id=*/ None)
+        .await;
+    env.commit(/*lsn=*/ 140).await;
+
+    // Now enable reading up to LSN 140 by setting replication_tx.
+    // The target_lsn for read is 140.
+    env.set_readable_lsn(140);
+    env.verify_snapshot(140, &[1, 2]).await; // Aborted row shouldn't appear.
 
     env.shutdown().await;
 }

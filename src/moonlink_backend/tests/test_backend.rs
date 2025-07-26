@@ -145,7 +145,7 @@ mod tests {
             .tmp()
             .unwrap()
             .path()
-            .join("public")
+            .join("default")
             .join(format!("{}.{}", guard.database_id, TABLE_ID))
             .join("metadata");
         assert!(meta_dir.exists());
