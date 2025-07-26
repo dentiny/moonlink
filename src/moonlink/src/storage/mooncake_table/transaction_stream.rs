@@ -367,13 +367,9 @@ impl SnapshotTableState {
                     });
                 }
                 TransactionStreamOutput::Abort(xact_id) => {
-                    for row in self.uncommitted_deletion_log.iter_mut() {
-                        if let Some(deletion) = row {
-                            if deletion.lsn == get_lsn_for_pending_xact(xact_id) {
-                                *row = None;
-                            }
-                        }
-                    }
+                    self.uncommitted_deletion_log.retain(|deletion| {
+                        deletion.as_ref().unwrap().lsn != get_lsn_for_pending_xact(xact_id)
+                    });
                     task.new_deletions
                         .retain(|deletion| deletion.lsn != get_lsn_for_pending_xact(xact_id));
                 }
