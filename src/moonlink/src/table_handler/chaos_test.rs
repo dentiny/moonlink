@@ -283,6 +283,7 @@ impl ChaosState {
             candidates.extend(
                 self.uncommitted_inserted_rows
                     .iter()
+                    .filter(|(id, _)| !self.deleted_uncommitted_row_ids.contains(id))
                     .map(|(id, row)| (*id, row.clone(), /*committed=*/ false)),
             );
         }
