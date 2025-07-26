@@ -58,11 +58,21 @@ impl SnapshotTableState {
         self.assert_file_ids_no_duplicate();
         // Check index blocks are all cached.
         self.assert_index_blocks_cached().await;
+        // Check all uncommitted deletion logs are valid.
+        self.assert_uncommitted_deletion_logs_valid();
         // Check persistence buffer.
         self.unpersisted_records.validate_invariants();
     }
 
-    /// Test util function to validate data files and file indices match each other.
+    /// Util function to validate uncommitted deletion logs are valid.
+    #[cfg(any(test, debug_assertions))]
+    fn assert_uncommitted_deletion_logs_valid(&self) {
+        for cur_log in self.uncommitted_deletion_log.iter() {
+            assert!(cur_log.is_some());
+        }
+    }
+
+    /// Util function to validate data files and file indices match each other.
     #[cfg(any(test, debug_assertions))]
     fn assert_data_files_and_file_indices_match(&self) {
         let mut all_data_files_1 = HashSet::new();
@@ -78,7 +88,7 @@ impl SnapshotTableState {
         assert_eq!(all_data_files_1, all_data_files_2);
     }
 
-    /// Test util function to validate all index block files are cached, and cache handle filepath matches index file path.
+    /// Util function to validate all index block files are cached, and cache handle filepath matches index file path.
     #[cfg(any(test, debug_assertions))]
     async fn assert_index_blocks_cached(&self) {
         for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
@@ -101,7 +111,7 @@ impl SnapshotTableState {
         }
     }
 
-    /// Test util function to validate one data file is referenced by exactly one file index.
+    /// Util function to validate one data file is referenced by exactly one file index.
     #[cfg(any(test, debug_assertions))]
     fn assert_file_indices_no_duplicate(&self) {
         // Get referenced data files by file indices.
@@ -122,7 +132,7 @@ impl SnapshotTableState {
         assert_eq!(data_files, referenced_data_files);
     }
 
-    /// Test util function to validate file ids don't have duplicates.
+    /// Util function to validate file ids don't have duplicates.
     #[cfg(any(test, debug_assertions))]
     fn assert_file_ids_no_duplicate(&self) {
         let mut file_ids = HashSet::new();
