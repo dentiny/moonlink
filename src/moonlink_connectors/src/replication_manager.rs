@@ -2,7 +2,7 @@ use crate::pg_replicate::table::SrcTableId;
 use crate::ReplicationConnection;
 use crate::Result;
 use moonlink::FileSystemConfig;
-use moonlink::TableStateReader;
+use moonlink::TableStatusReader;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
 use std::hash::Hash;
@@ -54,10 +54,12 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     /// # Arguments
     ///
     /// * secret_entry: secret necessary to access object storage, use local filesystem if not assigned.
+    #[allow(clippy::too_many_arguments)]
     pub async fn add_table(
         &mut self,
         src_uri: &str,
         mooncake_table_id: T,
+        database_id: u32,
         table_id: u32,
         table_name: &str,
         filesystem_config: Option<FileSystemConfig>,
@@ -72,6 +74,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             let base_path = tokio::fs::canonicalize(&self.table_base_path).await?;
             let replication_connection = ReplicationConnection::new(
                 src_uri.to_string(),
+                database_id,
                 base_path.to_str().unwrap().to_string(),
                 self.table_temp_files_directory.clone(),
                 self.object_storage_cache.clone(),
@@ -123,7 +126,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         debug!(src_table_id, %table_uri, "dropping table through manager");
         let repl_conn = self.connections.get_mut(&table_uri).unwrap();
         repl_conn.drop_table(src_table_id).await?;
-        if repl_conn.table_readers_count() == 0 {
+        if repl_conn.table_count() == 0 {
             self.shutdown_connection(&table_uri);
         }
 
@@ -136,9 +139,17 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         connection.get_table_reader(src_table_id)
     }
 
-    pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStateReader {
+    pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStatusReader {
         let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
-        connection.get_table_state_reader(src_table_id)
+        connection.get_table_status_reader(src_table_id)
+    }
+
+    pub fn get_table_status_readers(&self) -> Vec<&TableStatusReader> {
+        let mut table_state_readers = vec![];
+        for (_, cur_repl_conn) in self.connections.iter() {
+            table_state_readers.extend(cur_repl_conn.get_table_status_readers());
+        }
+        table_state_readers
     }
 
     pub fn get_table_event_manager(&mut self, mooncake_table_id: &T) -> &mut TableEventManager {

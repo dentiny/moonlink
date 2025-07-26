@@ -5,6 +5,5 @@ CREATE TABLE tables (
     table_name text NOT NULL,     -- source table name
     uri text,                     -- source URI
     config json,                  -- mooncake and persistence configurations
-    cardinality bigint,           -- estimated row count or similar
     PRIMARY KEY (database_id, table_id)
 );

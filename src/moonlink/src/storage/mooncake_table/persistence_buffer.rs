@@ -283,7 +283,7 @@ impl UnpersistedRecords {
     /// ==================================
     ///
     /// Validate invariants for persistence buffer, panic if validation fails.
-    #[cfg(test)]
+    #[cfg(any(test, debug_assertions))]
     pub(super) fn validate_invariants(&self) {
         // Validate new data files and file indices.
         let new_data_files_empty = self.new_data_files.is_empty();

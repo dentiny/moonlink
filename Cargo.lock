@@ -1414,7 +1414,7 @@ checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
 dependencies = [
  "futures-core",
  "futures-sink",
- "spin",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -2008,7 +2008,7 @@ dependencies = [
 [[package]]
 name = "iceberg"
 version = "0.6.0"
-source = "git+https://github.com/apache/iceberg-rust.git?rev=560a1241c75471d5f7d695af265b3e8aad454faa#560a1241c75471d5f7d695af265b3e8aad454faa"
+source = "git+https://github.com/apache/iceberg-rust.git?rev=b3ea8d1fca14ddc23154615862a62d3e3e56a769#b3ea8d1fca14ddc23154615862a62d3e3e56a769"
 dependencies = [
  "anyhow",
  "apache-avro",
@@ -2041,6 +2041,7 @@ dependencies = [
  "ordered-float 4.6.0",
  "parquet",
  "rand 0.8.5",
+ "reqsign",
  "reqwest",
  "roaring",
  "rust_decimal",
@@ -2355,7 +2356,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
- "spin",
+ "spin 0.9.8",
 ]
 
 [[package]]
@@ -2797,6 +2798,8 @@ dependencies = [
 name = "moonlink_service"
 version = "0.0.1"
 dependencies = [
+ "arrow-ipc",
+ "arrow-schema",
  "clap",
  "moonlink_backend",
  "moonlink_metadata_store",
@@ -3460,9 +3463,9 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "pprof"
-version = "0.14.0"
+version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebbe2f8898beba44815fdc9e5a4ae9c929e21c5dc29b0c774a15555f7f58d6d0"
+checksum = "afad4d4df7b31280028245f152d5a575083e2abb822d05736f5e47653e77689f"
 dependencies = [
  "aligned-vec",
  "backtrace",
@@ -3474,8 +3477,8 @@ dependencies = [
  "log",
  "nix 0.26.4",
  "once_cell",
- "parking_lot",
  "smallvec",
+ "spin 0.10.0",
  "symbolic-demangle",
  "tempfile",
  "thiserror 1.0.69",
@@ -4542,6 +4545,15 @@ name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
+dependencies = [
+ "lock_api",
+]
+
+[[package]]
+name = "spin"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5fe4ccb98d9c292d56fec89a5e07da7fc4cf0dc11e156b41793132775d3e591"
 dependencies = [
  "lock_api",
 ]

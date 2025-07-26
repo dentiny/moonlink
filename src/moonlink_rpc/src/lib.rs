@@ -28,6 +28,8 @@ rpcs! {
     create_snapshot(database_id: u32, table_id: u32, lsn: u64) -> ();
     create_table(database_id: u32, table_id: u32, src: String, src_uri: String) -> ();
     drop_table(database_id: u32, table_id: u32) -> ();
+    get_table_schema(database_id: u32, table_id: u32) -> Vec<u8>;
+    list_tables() -> Vec<Table>;
     optimize_table(database_id: u32, table_id: u32, mode: String) -> ();
     scan_table_begin(database_id: u32, table_id: u32, lsn: u64) -> Vec<u8>;
     scan_table_end(database_id: u32, table_id: u32) -> ();
@@ -51,3 +53,12 @@ pub async fn read<R: AsyncRead + Unpin, D: for<'de> Deserialize<'de>>(reader: &m
 }
 
 const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard();
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Table {
+    pub database_id: u32,
+    pub table_id: u32,
+    pub commit_lsn: u64,
+    pub flush_lsn: Option<u64>,
+    pub iceberg_warehouse_location: String,
+}

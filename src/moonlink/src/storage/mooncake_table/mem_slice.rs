@@ -3,6 +3,7 @@ use crate::error::Result;
 use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::index::MemIndex;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
+use crate::storage::mooncake_table::BatchIdCounter;
 use crate::storage::storage_utils::{RawDeletionRecord, RecordLocation};
 use arrow_array::RecordBatch;
 use arrow_schema::Schema;
@@ -31,9 +32,10 @@ impl MemSlice {
         schema: Arc<Schema>,
         max_rows_per_buffer: usize,
         identity: IdentityProp,
+        batch_id_counter: Arc<BatchIdCounter>,
     ) -> Self {
         Self {
-            column_store: ColumnStoreBuffer::new(schema, max_rows_per_buffer),
+            column_store: ColumnStoreBuffer::new(schema, max_rows_per_buffer, batch_id_counter),
             mem_index: MemIndex::new(identity),
         }
     }
@@ -158,7 +160,9 @@ mod tests {
                 "3".to_string(),
             )])),
         ]);
-        let mut mem_table = MemSlice::new(Arc::new(schema), 4, identity);
+        let counter = BatchIdCounter::new(false);
+        let start = counter.load();
+        let mut mem_table = MemSlice::new(Arc::new(schema), 4, identity, Arc::new(counter));
 
         // Create arrays properly
         mem_table
@@ -208,7 +212,7 @@ mod tests {
                     &IdentityProp::SinglePrimitiveKey(0)
                 )
                 .await,
-            Some((0, 1))
+            Some((start, 1))
         );
         assert_eq!(
             mem_table
@@ -222,7 +226,7 @@ mod tests {
                     &IdentityProp::SinglePrimitiveKey(0)
                 )
                 .await,
-            Some((0, 2))
+            Some((start, 2))
         );
         assert_eq!(
             mem_table
@@ -236,7 +240,7 @@ mod tests {
                     &IdentityProp::SinglePrimitiveKey(0)
                 )
                 .await,
-            Some((0, 0))
+            Some((start, 0))
         );
     }
 }

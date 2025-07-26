@@ -1343,13 +1343,13 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     let (_, _, _, data_compaction_payload, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
-    assert!(data_compaction_payload.is_some());
+    assert!(data_compaction_payload.has_payload());
 
     // Perform data compaction: use pinned local cache file and unreference.
     let mut evicted_files_to_delete = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     evicted_files_to_delete.sort();
@@ -1462,13 +1462,13 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
     assert_eq!(files_to_delete, local_index_blocks);
-    assert!(data_compaction_payload.is_some());
+    assert!(data_compaction_payload.has_payload());
 
     // Perform data compaction: use pinned local cache file and unreference.
     let evicted_files_to_delete = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     assert!(evicted_files_to_delete.is_empty());
@@ -1582,13 +1582,13 @@ async fn test_3_compact_1_5_without_local_filesystem_optimization() {
     let (_, _, _, data_compaction_payload, files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     assert!(files_to_delete.is_empty());
-    assert!(data_compaction_payload.is_some());
+    assert!(data_compaction_payload.has_payload());
 
     // Perform data compaction: use pinned local cache file and unreference.
     let mut evicted_files_to_delete = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     evicted_files_to_delete.sort();
@@ -1674,13 +1674,13 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
     assert_eq!(files_to_delete, old_compacted_index_block_files);
-    assert!(data_compaction_payload.is_some());
+    assert!(data_compaction_payload.has_payload());
 
     // Perform data compaction: use pinned local cache file and unreference.
     let evicted_files_to_delete = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     assert!(evicted_files_to_delete.is_empty());
@@ -1751,7 +1751,7 @@ async fn test_1_compact_1_5_without_local_optimization() {
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
     assert!(files_to_delete.is_empty());
-    assert!(data_compaction_payload.is_some());
+    assert!(data_compaction_payload.has_payload());
 
     // Import second data file into cache, so the cached entry will be evicted.
     let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut cache).await;
@@ -1762,7 +1762,7 @@ async fn test_1_compact_1_5_without_local_optimization() {
     let evicted_files_to_delete = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     // It contains one fake file, and two downloaded local file and their file indices.
@@ -1827,7 +1827,7 @@ async fn test_1_compact_1_5_with_local_optimization() {
         create_mooncake_snapshot_for_test(&mut table, &mut table_notify).await;
     files_to_delete.sort();
     assert_eq!(files_to_delete, local_data_files_and_index_blocks);
-    assert!(data_compaction_payload.is_some());
+    assert!(data_compaction_payload.has_payload());
 
     // Import second data file into cache, so the cached entry will be evicted.
     let mut fake_cache_handle = import_fake_cache_entry(&temp_dir, &mut cache).await;
@@ -1838,7 +1838,7 @@ async fn test_1_compact_1_5_with_local_optimization() {
     let evicted_files_to_delete = perform_data_compaction_for_test(
         &mut table,
         &mut table_notify,
-        data_compaction_payload.unwrap(),
+        data_compaction_payload.take_payload().unwrap(),
     )
     .await;
     // It contains one fake file.

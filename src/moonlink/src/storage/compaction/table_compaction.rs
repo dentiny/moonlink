@@ -23,8 +23,10 @@ pub struct SingleFileToCompact {
 }
 
 /// Payload to trigger a compaction operation.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct DataCompactionPayload {
+    /// UUID for current compaction operation, used for observability purpose.
+    pub(crate) uuid: uuid::Uuid,
     /// Object storage cache.
     pub(crate) object_storage_cache: ObjectStorageCache,
     /// Filesystem accessor.
@@ -33,6 +35,18 @@ pub struct DataCompactionPayload {
     pub(crate) disk_files: Vec<SingleFileToCompact>,
     /// File indices to compact and rewrite.
     pub(crate) file_indices: Vec<FileIndex>,
+}
+
+impl std::fmt::Debug for DataCompactionPayload {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DataCompactionPayload")
+            .field("uuid", &self.uuid)
+            .field("object_storage_cache", &self.object_storage_cache)
+            .field("filesystem_accessor", &self.filesystem_accessor)
+            .field("disk file number", &self.disk_files.len())
+            .field("file indices number", &self.file_indices.len())
+            .finish()
+    }
 }
 
 impl DataCompactionPayload {
@@ -60,8 +74,10 @@ pub(crate) struct RemappedRecordLocation {
 }
 
 /// Result for a compaction operation.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default, PartialEq)]
 pub struct DataCompactionResult {
+    /// UUID for current compaction operation, used for observability purpose.
+    pub(crate) uuid: uuid::Uuid,
     /// Data files which get compacted, maps from old record location to new one.
     pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
     /// Old compacted data files, which maps to their corresponding compacted data file.
@@ -93,5 +109,18 @@ impl DataCompactionResult {
         // If all rows have been deleted after compaction, there'll be no new data files, file indices and remaps.
         assert!(!self.old_file_indices.is_empty());
         false
+    }
+}
+
+impl std::fmt::Debug for DataCompactionResult {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DataCompactionResult")
+            .field("uuid", &self.uuid)
+            .field("remapped data files count", &self.remapped_data_files.len())
+            .field("old data files count", &self.old_data_files.len())
+            .field("old file indices count", &self.old_file_indices.len())
+            .field("new data files count", &self.new_data_files.len())
+            .field("new file indices count", &self.new_file_indices.len())
+            .finish()
     }
 }

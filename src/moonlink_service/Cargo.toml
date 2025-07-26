@@ -5,6 +5,8 @@ edition = { workspace = true }
 license = { workspace = true }
 
 [dependencies]
+arrow-ipc = { workspace = true }
+arrow-schema = { workspace = true }
 clap = { workspace = true }
 moonlink_backend = { path = "../moonlink_backend" }
 moonlink_metadata_store = { path = "../moonlink_metadata_store" }

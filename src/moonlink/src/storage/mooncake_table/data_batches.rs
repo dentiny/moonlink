@@ -2,6 +2,7 @@ use crate::error::Result;
 use crate::row::ColumnArrayBuilder;
 use crate::row::IdentityProp;
 use crate::row::MoonlinkRow;
+use crate::storage::mooncake_table::batch_id_counter::BatchIdCounter;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::shared_array::SharedRowBuffer;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
@@ -61,31 +62,38 @@ pub(super) struct ColumnStoreBuffer {
     current_rows: SharedRowBuffer,
     /// Current row count in the current buffer
     current_row_count: usize,
-    /// Next batch id, each batch is assigned a unique id
-    next_batch_id: u64,
+    /// Batch ID allocator counter
+    batch_id_counter: Arc<BatchIdCounter>,
 }
 
 impl ColumnStoreBuffer {
     /// Initialize a new column store buffer with the given schema and buffer size.
     ///
-    pub(super) fn new(schema: Arc<Schema>, max_rows_per_buffer: usize) -> Self {
+    pub(super) fn new(
+        schema: Arc<Schema>,
+        max_rows_per_buffer: usize,
+        batch_id_counter: Arc<BatchIdCounter>,
+    ) -> Self {
         let current_batch_builder = schema
             .fields()
             .iter()
             .map(|field| ColumnArrayBuilder::new(field.data_type(), max_rows_per_buffer, false))
             .collect();
 
+        // Get the initial batch ID from the counter
+        let initial_id = batch_id_counter.load();
+
         Self {
             schema,
             max_rows_per_buffer,
             in_memory_batches: vec![BatchEntry {
-                id: 0,
+                id: initial_id,
                 batch: InMemoryBatch::new(max_rows_per_buffer),
             }],
             current_batch_builder,
             current_rows: SharedRowBuffer::new(max_rows_per_buffer),
             current_row_count: 0,
-            next_batch_id: 0,
+            batch_id_counter,
         }
     }
 
@@ -97,7 +105,7 @@ impl ColumnStoreBuffer {
         &mut self,
         row: MoonlinkRow,
     ) -> Result<(u64, usize, Option<(u64, Arc<RecordBatch>)>)> {
-        let mut new_batch = None;
+        let mut new_batch: Option<(u64, Arc<RecordBatch>)> = None;
         // Check if we need to finalize the current batch
         if self.current_row_count >= self.max_rows_per_buffer {
             new_batch = self.finalize_current_batch()?;
@@ -138,16 +146,16 @@ impl ColumnStoreBuffer {
         let batch = Arc::new(RecordBatch::try_new(Arc::clone(&self.schema), columns)?);
         let last_batch = self.in_memory_batches.last_mut();
         last_batch.unwrap().batch.data = Some(batch.clone());
-        self.next_batch_id += 1;
+        let next_batch_id = self.batch_id_counter.next() + 1;
         self.in_memory_batches.push(BatchEntry {
-            id: self.next_batch_id,
+            id: next_batch_id,
             batch: InMemoryBatch::new(self.max_rows_per_buffer),
         });
         // Reset the current batch
         self.current_row_count = 0;
         self.current_rows = SharedRowBuffer::new(self.max_rows_per_buffer);
 
-        Ok(Some((self.next_batch_id - 1, batch)))
+        Ok(Some((next_batch_id - 1, batch)))
     }
 
     #[inline]
@@ -344,7 +352,9 @@ mod tests {
             )])),
         ]);
 
-        let mut buffer = ColumnStoreBuffer::new(Arc::new(schema.clone()), 2);
+        let counter = BatchIdCounter::new(false);
+        let start = counter.load();
+        let mut buffer = ColumnStoreBuffer::new(Arc::new(schema.clone()), 2, Arc::new(counter));
 
         let row1 = MoonlinkRow::new(vec![
             RowValue::Int32(1),
@@ -379,7 +389,7 @@ mod tests {
 
         // Check batch entry 1.
         let first_batch = &batches[0];
-        assert_eq!(first_batch.id, 0);
+        assert_eq!(first_batch.id, start);
         assert!(first_batch
             .batch
             .deletions
@@ -430,7 +440,7 @@ mod tests {
 
         // Check batch entry 2.
         let second_batch = &batches[1];
-        assert_eq!(second_batch.id, 1);
+        assert_eq!(second_batch.id, start + 1);
         assert!(second_batch
             .batch
             .deletions

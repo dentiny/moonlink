@@ -87,11 +87,11 @@ pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {
 }
 
 /// Test util function to create an arrow schema for schema evolution.
-pub(crate) fn create_test_updated_arrow_schema() -> Arc<ArrowSchema> {
+pub(crate) fn create_test_updated_arrow_schema_remove_age() -> Arc<ArrowSchema> {
     Arc::new(ArrowSchema::new(vec![
-        Field::new("a_new_id", DataType::Int32, false).with_metadata(HashMap::from([(
+        Field::new("id", DataType::Int32, false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
-            "3".to_string(),
+            "0".to_string(),
         )])),
         Field::new("name", DataType::Utf8, true).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
@@ -115,22 +115,6 @@ pub(crate) fn create_test_table_metadata(
 ) -> Arc<MooncakeTableMetadata> {
     let config = MooncakeTableConfig::new(local_table_directory.clone());
     create_test_table_metadata_with_config(local_table_directory, config)
-}
-
-/// Test util function to create mooncake table metadata with schema.
-pub(crate) fn create_test_table_metadata_with_schema(
-    local_table_directory: String,
-    arrow_schema: Arc<ArrowSchema>,
-) -> Arc<MooncakeTableMetadata> {
-    let config = MooncakeTableConfig::new(local_table_directory.clone());
-    Arc::new(MooncakeTableMetadata {
-        name: ICEBERG_TEST_TABLE.to_string(),
-        table_id: 0,
-        schema: arrow_schema,
-        config,
-        path: std::path::PathBuf::from(local_table_directory),
-        identity: RowIdentity::FullRow,
-    })
 }
 
 /// Test util function to create mooncake table metadata with mooncake table config.
@@ -158,6 +142,46 @@ pub(crate) fn create_test_table_metadata_with_index_merge(
     };
     let mut config = MooncakeTableConfig::new(local_table_directory.clone());
     config.file_index_config = file_index_config;
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
+/// Test util function to create mooncake table metadata, which disables flush at commit.
+#[cfg(feature = "chaos-test")]
+pub(crate) fn create_test_table_metadata_disable_flush(
+    local_table_directory: String,
+) -> Arc<MooncakeTableMetadata> {
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
+/// Test util function to create mooncake table metadata, with (1) index merge enabled whenever there're two index blocks; and (2) flush at commit is disabled.
+#[cfg(feature = "chaos-test")]
+pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
+    local_table_directory: String,
+) -> Arc<MooncakeTableMetadata> {
+    let file_index_config = FileIndexMergeConfig {
+        file_indices_to_merge: 2,
+        index_block_final_size: u64::MAX,
+    };
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.file_index_config = file_index_config;
+    config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
+/// Test util function to create mooncake table metadata, with (1) data compaction enabled whenever there're two index blocks; and (2) flush at commit is disabled.
+#[cfg(feature = "chaos-test")]
+pub(crate) fn create_test_table_metadata_with_data_compaction_disable_flush(
+    local_table_directory: String,
+) -> Arc<MooncakeTableMetadata> {
+    let data_compaction_config = DataCompactionConfig {
+        data_file_to_compact: 2,
+        data_file_final_size: u64::MAX,
+    };
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.data_compaction_config = data_compaction_config;
+    config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
     create_test_table_metadata_with_config(local_table_directory, config)
 }
 
@@ -272,13 +296,13 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
     (table, notify_rx)
 }
 
-/// Test util function to create mooncake table and table notify.
-pub(crate) async fn create_mooncake_table_and_notify(
+/// Test util function to create mooncake table.
+pub(crate) async fn create_mooncake_table(
     mooncake_table_metadata: Arc<MooncakeTableMetadata>,
     iceberg_table_config: IcebergTableConfig,
     object_storage_cache: ObjectStorageCache,
-) -> (MooncakeTable, Receiver<TableEvent>) {
-    let mut table = MooncakeTable::new(
+) -> MooncakeTable {
+    let table = MooncakeTable::new(
         create_test_arrow_schema().as_ref().clone(),
         ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
@@ -292,6 +316,21 @@ pub(crate) async fn create_mooncake_table_and_notify(
     .await
     .unwrap();
 
+    table
+}
+
+/// Test util function to create mooncake table and table notify.
+pub(crate) async fn create_mooncake_table_and_notify(
+    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
+    object_storage_cache: ObjectStorageCache,
+) -> (MooncakeTable, Receiver<TableEvent>) {
+    let mut table = create_mooncake_table(
+        mooncake_table_metadata,
+        iceberg_table_config,
+        object_storage_cache,
+    )
+    .await;
     let (notify_tx, notify_rx) = mpsc::channel(100);
     table.register_table_notify(notify_tx).await;
 

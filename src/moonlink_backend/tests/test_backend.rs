@@ -6,6 +6,7 @@ mod tests {
         current_wal_lsn, ids_from_state, smoke_create_and_insert, DatabaseId, TableId, TestGuard,
         TestGuardMode, TABLE_ID,
     };
+    use moonlink::TableStatus;
     use moonlink_backend::MoonlinkBackend;
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, SqliteMetadataStore};
 
@@ -144,11 +145,22 @@ mod tests {
             .tmp()
             .unwrap()
             .path()
-            .join("public")
+            .join("default")
             .join(format!("{}.{}", guard.database_id, TABLE_ID))
             .join("metadata");
         assert!(meta_dir.exists());
         assert!(meta_dir.read_dir().unwrap().next().is_some());
+
+        // Check table status.
+        let table_statuses = backend.list_tables().await.unwrap();
+        let expected_table_status = TableStatus {
+            database_id: guard.database_id,
+            table_id: TABLE_ID as u32,
+            commit_lsn: lsn,
+            flush_lsn: Some(lsn),
+            iceberg_warehouse_location: guard.tmp().unwrap().path().to_str().unwrap().to_string(),
+        };
+        assert_eq!(table_statuses, vec![expected_table_status]);
     }
 
     /// Test that replication connections are properly cleaned up and can be recreated.

@@ -63,9 +63,14 @@ impl TransactionStreamCommit {
 }
 
 impl TransactionStreamState {
-    fn new(schema: Arc<Schema>, batch_size: usize, identity: IdentityProp) -> Self {
+    fn new(
+        schema: Arc<Schema>,
+        batch_size: usize,
+        identity: IdentityProp,
+        streaming_counter: Arc<BatchIdCounter>,
+    ) -> Self {
         Self {
-            mem_slice: MemSlice::new(schema, batch_size, identity),
+            mem_slice: MemSlice::new(schema, batch_size, identity, streaming_counter),
             local_deletions: Vec::new(),
             pending_deletions_in_main_mem_slice: Vec::new(),
             index_bloom_filter: BloomFilter::with_num_bits(1 << 24).expected_items(1_000_000),
@@ -85,18 +90,19 @@ fn get_lsn_for_pending_xact(xact_id: u32) -> u64 {
 }
 
 impl MooncakeTable {
-    fn get_or_create_stream_state<'a>(
-        transaction_stream_states: &'a mut HashMap<u32, TransactionStreamState>,
-        metadata: &Arc<TableMetadata>,
-        xact_id: u32,
-    ) -> &'a mut TransactionStreamState {
-        transaction_stream_states.entry(xact_id).or_insert_with(|| {
-            TransactionStreamState::new(
-                metadata.schema.clone(),
-                metadata.config.batch_size,
-                metadata.identity.clone(),
-            )
-        })
+    fn get_or_create_stream_state(&mut self, xact_id: u32) -> &mut TransactionStreamState {
+        let metadata = self.metadata.clone();
+
+        self.transaction_stream_states
+            .entry(xact_id)
+            .or_insert_with(|| {
+                TransactionStreamState::new(
+                    metadata.schema.clone(),
+                    metadata.config.batch_size,
+                    metadata.identity.clone(),
+                    Arc::clone(&self.streaming_batch_id_counter),
+                )
+            })
     }
 
     pub fn should_transaction_flush(&self, xact_id: u32) -> bool {
@@ -109,14 +115,10 @@ impl MooncakeTable {
     }
 
     pub fn append_in_stream_batch(&mut self, row: MoonlinkRow, xact_id: u32) -> Result<()> {
-        let stream_state = Self::get_or_create_stream_state(
-            &mut self.transaction_stream_states,
-            &self.metadata,
-            xact_id,
-        );
-
         let lookup_key = self.metadata.identity.get_lookup_key(&row);
         let identity_for_key = self.metadata.identity.extract_identity_for_key(&row);
+
+        let stream_state = self.get_or_create_stream_state(xact_id);
         stream_state
             .mem_slice
             .append(lookup_key, row, identity_for_key)?;
@@ -126,18 +128,15 @@ impl MooncakeTable {
 
     pub async fn delete_in_stream_batch(&mut self, row: MoonlinkRow, xact_id: u32) {
         let lookup_key = self.metadata.identity.get_lookup_key(&row);
+        let metadata_identity = self.metadata.identity.clone();
         let mut record = RawDeletionRecord {
             lookup_key,
             lsn: get_lsn_for_pending_xact(xact_id), // at commit time we will update this with the actual lsn
             pos: None,
-            row_identity: self.metadata.identity.extract_identity_columns(row),
+            row_identity: metadata_identity.extract_identity_columns(row),
         };
 
-        let stream_state = Self::get_or_create_stream_state(
-            &mut self.transaction_stream_states,
-            &self.metadata,
-            xact_id,
-        );
+        let stream_state = self.get_or_create_stream_state(xact_id);
 
         // it is very unlikely to delete a row in current transaction,
         // only very weird query shape could do it.
@@ -148,7 +147,7 @@ impl MooncakeTable {
             // Delete from stream mem slice
             if stream_state
                 .mem_slice
-                .delete(&record, &self.metadata.identity)
+                .delete(&record, &metadata_identity)
                 .await
                 .is_some()
             {
@@ -173,11 +172,7 @@ impl MooncakeTable {
                             .row_identity
                             .as_ref()
                             .unwrap()
-                            .equals_parquet_at_offset(
-                                file.file_path(),
-                                row_id,
-                                &self.metadata.identity,
-                            )
+                            .equals_parquet_at_offset(file.file_path(), row_id, &metadata_identity)
                             .await
                     {
                         stream_state.local_deletions.push(ProcessedDeletionRecord {
@@ -191,11 +186,14 @@ impl MooncakeTable {
             }
         }
 
-        // Delete from main table
-        record.pos = self
-            .mem_slice
-            .find_non_deleted_position(&record, &self.metadata.identity)
-            .await;
+        // Scope the main table deletion lookup
+        record.pos = {
+            self.mem_slice
+                .find_non_deleted_position(&record, &metadata_identity)
+                .await
+        };
+
+        let stream_state = self.get_or_create_stream_state(xact_id);
         if record.pos.is_some() {
             stream_state
                 .pending_deletions_in_main_mem_slice
@@ -369,13 +367,9 @@ impl SnapshotTableState {
                     });
                 }
                 TransactionStreamOutput::Abort(xact_id) => {
-                    for row in self.uncommitted_deletion_log.iter_mut() {
-                        if let Some(deletion) = row {
-                            if deletion.lsn == get_lsn_for_pending_xact(xact_id) {
-                                *row = None;
-                            }
-                        }
-                    }
+                    self.uncommitted_deletion_log.retain(|deletion| {
+                        deletion.as_ref().unwrap().lsn != get_lsn_for_pending_xact(xact_id)
+                    });
                     task.new_deletions
                         .retain(|deletion| deletion.lsn != get_lsn_for_pending_xact(xact_id));
                 }

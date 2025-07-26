@@ -1,7 +1,7 @@
 /// Table state reader is a class, which fetches current table status.
 use std::sync::Arc;
 
-use crate::storage::mooncake_table::table_state::TableState;
+use crate::storage::mooncake_table::table_status::TableStatus;
 use crate::storage::IcebergTableConfig;
 use crate::storage::MooncakeTable;
 use crate::storage::SnapshotTableState;
@@ -10,7 +10,9 @@ use crate::Result;
 use arrow_schema::Schema;
 use tokio::sync::RwLock;
 
-pub struct TableStateReader {
+pub struct TableStatusReader {
+    /// Database id.
+    database_id: u32,
     /// Mooncake table id.
     table_id: u32,
     /// Iceberg warehouse location.
@@ -19,14 +21,16 @@ pub struct TableStateReader {
     table_snapshot: Arc<RwLock<SnapshotTableState>>,
 }
 
-impl TableStateReader {
+impl TableStatusReader {
     pub fn new(
+        database_id: u32,
         table_id: u32,
         iceberg_table_config: &IcebergTableConfig,
         table: &MooncakeTable,
     ) -> Self {
         let (table_snapshot, _) = table.get_state_for_reader();
         Self {
+            database_id,
             table_id,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
             table_snapshot,
@@ -34,15 +38,16 @@ impl TableStateReader {
     }
 
     /// Get current table state.
-    pub async fn get_current_table_state(&self) -> Result<TableState> {
+    pub async fn get_current_table_state(&self) -> Result<TableStatus> {
         let table_snapshot_state = {
             let snapshot_guard = self.table_snapshot.read().await;
             snapshot_guard.get_table_snapshot_states()?
         };
-        Ok(TableState {
+        Ok(TableStatus {
+            database_id: self.database_id,
             table_id: self.table_id,
-            table_commit_lsn: table_snapshot_state.table_commit_lsn,
-            iceberg_flush_lsn: table_snapshot_state.iceberg_flush_lsn,
+            commit_lsn: table_snapshot_state.commit_lsn,
+            flush_lsn: table_snapshot_state.flush_lsn,
             iceberg_warehouse_location: self.iceberg_warehouse_location.clone(),
         })
     }
@@ -66,7 +71,8 @@ mod tests {
     use crate::storage::mooncake_table::table_creation_test_utils::*;
     use crate::storage::mooncake_table::table_operation_test_utils::*;
 
-    /// Fake mooncake table id.
+    /// Fake mooncake database and table id.
+    const FAKE_DATABASE_ID: u32 = 0;
     const FAKE_TABLE_ID: u32 = 100;
 
     /// Test util function to get moonlink row to append.
@@ -89,16 +95,21 @@ mod tests {
         let iceberg_table_config = get_iceberg_table_config(&temp_dir);
 
         let (table, _, _) = create_table_and_iceberg_manager(&temp_dir).await;
-        let table_state_reader =
-            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+        let table_state_reader = TableStatusReader::new(
+            FAKE_DATABASE_ID,
+            FAKE_TABLE_ID,
+            &iceberg_table_config,
+            &table,
+        );
 
         // Get table state and check.
         let actual_table_state = table_state_reader.get_current_table_state().await.unwrap();
-        let expected_table_state = TableState {
+        let expected_table_state = TableStatus {
+            database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 0,
-            iceberg_flush_lsn: None,
+            commit_lsn: 0,
+            flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -110,19 +121,24 @@ mod tests {
         let iceberg_table_config = get_iceberg_table_config(&temp_dir);
 
         let (mut table, _, _) = create_table_and_iceberg_manager(&temp_dir).await;
-        let table_state_reader =
-            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+        let table_state_reader = TableStatusReader::new(
+            FAKE_DATABASE_ID,
+            FAKE_TABLE_ID,
+            &iceberg_table_config,
+            &table,
+        );
 
         // Write to the mooncake table.
         table.append(get_test_row()).unwrap();
 
         // Get table state and check.
         let actual_table_state = table_state_reader.get_current_table_state().await.unwrap();
-        let expected_table_state = TableState {
+        let expected_table_state = TableStatus {
+            database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 0,
-            iceberg_flush_lsn: None,
+            commit_lsn: 0,
+            flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -134,8 +150,12 @@ mod tests {
         let iceberg_table_config = get_iceberg_table_config(&temp_dir);
 
         let (mut table, _, mut notifier) = create_table_and_iceberg_manager(&temp_dir).await;
-        let table_state_reader =
-            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+        let table_state_reader = TableStatusReader::new(
+            FAKE_DATABASE_ID,
+            FAKE_TABLE_ID,
+            &iceberg_table_config,
+            &table,
+        );
 
         // Write to the mooncake table.
         table.append(get_test_row()).unwrap();
@@ -146,11 +166,12 @@ mod tests {
 
         // Get table state and check.
         let actual_table_state = table_state_reader.get_current_table_state().await.unwrap();
-        let expected_table_state = TableState {
+        let expected_table_state = TableStatus {
+            database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 10,
-            iceberg_flush_lsn: None,
+            commit_lsn: 10,
+            flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -162,8 +183,12 @@ mod tests {
         let iceberg_table_config = get_iceberg_table_config(&temp_dir);
 
         let (mut table, _, mut notifier) = create_table_and_iceberg_manager(&temp_dir).await;
-        let table_state_reader =
-            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+        let table_state_reader = TableStatusReader::new(
+            FAKE_DATABASE_ID,
+            FAKE_TABLE_ID,
+            &iceberg_table_config,
+            &table,
+        );
 
         // Write to the mooncake table.
         table.append(get_test_row()).unwrap();
@@ -175,11 +200,12 @@ mod tests {
 
         // Get table state and check.
         let actual_table_state = table_state_reader.get_current_table_state().await.unwrap();
-        let expected_table_state = TableState {
+        let expected_table_state = TableStatus {
+            database_id: FAKE_DATABASE_ID,
             table_id: FAKE_TABLE_ID,
             iceberg_warehouse_location: iceberg_table_config.filesystem_config.get_root_path(),
-            table_commit_lsn: 10,
-            iceberg_flush_lsn: Some(10),
+            commit_lsn: 10,
+            flush_lsn: Some(10),
         };
         assert_eq!(actual_table_state, expected_table_state);
     }
@@ -195,8 +221,12 @@ mod tests {
         let iceberg_table_config = get_iceberg_table_config(&temp_dir);
 
         let (table, _, _) = create_table_and_iceberg_manager(&temp_dir).await;
-        let table_state_reader =
-            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+        let table_state_reader = TableStatusReader::new(
+            FAKE_DATABASE_ID,
+            FAKE_TABLE_ID,
+            &iceberg_table_config,
+            &table,
+        );
 
         // Get table state and check.
         let actual_table_schema = table_state_reader.get_current_table_schema().await.unwrap();
@@ -211,22 +241,19 @@ mod tests {
         let iceberg_table_config = get_iceberg_table_config(&temp_dir);
 
         let (mut table, _, mut notifier) = create_table_and_iceberg_manager(&temp_dir).await;
-        let table_state_reader =
-            TableStateReader::new(FAKE_TABLE_ID, &iceberg_table_config, &table);
+        let table_state_reader = TableStatusReader::new(
+            FAKE_DATABASE_ID,
+            FAKE_TABLE_ID,
+            &iceberg_table_config,
+            &table,
+        );
 
         // Perform an schema update.
-        let updated_mooncake_table_metadata = create_test_table_metadata_with_schema(
-            temp_dir.path().to_str().unwrap().to_string(),
-            create_test_updated_arrow_schema(),
-        );
-        table.alter_table_schema(updated_mooncake_table_metadata.clone());
-
-        // Trigger a mooncake and iceberg snapshot, so schema update gets reflected to snapshot.
-        create_mooncake_and_persist_for_test(&mut table, &mut notifier).await;
+        let _ = alter_table_and_persist_to_iceberg(&mut table, &mut notifier).await;
 
         // Get table state and check.
         let actual_table_schema = table_state_reader.get_current_table_schema().await.unwrap();
-        let expected_table_schema = create_test_updated_arrow_schema();
+        let expected_table_schema = create_test_updated_arrow_schema_remove_age();
         assert_eq!(actual_table_schema, expected_table_schema);
     }
 }

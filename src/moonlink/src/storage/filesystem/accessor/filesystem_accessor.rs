@@ -27,7 +27,6 @@ const IO_BLOCK_SIZE: usize = 2 * 1024 * 1024;
 /// Max number of ongoing parallel sub IO operations for one single upload and download operation.
 const MAX_SUB_IO_OPERATION: usize = 8;
 
-#[derive(Debug)]
 pub struct FileSystemAccessor {
     /// Root path.
     root_path: String,
@@ -35,6 +34,15 @@ pub struct FileSystemAccessor {
     operator: OnceCell<Operator>,
     /// Filesystem configuration.
     config: FileSystemConfig,
+}
+
+impl std::fmt::Debug for FileSystemAccessor {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FileSystemAccessor")
+            .field("root_path", &self.root_path)
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl FileSystemAccessor {
@@ -172,7 +180,7 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 
     #[cfg(not(feature = "storage-gcs"))]
     async fn remove_directory(&self, directory: &str) -> Result<()> {
-        let sanitized_directory = self.sanitize_path(&directory);
+        let sanitized_directory = self.sanitize_path(directory);
         let op = self.get_operator().await?.clone();
         op.remove_all(sanitized_directory).await?;
         Ok(())

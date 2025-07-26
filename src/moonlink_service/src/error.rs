@@ -1,5 +1,7 @@
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    #[error("Arrow schema error: {0}")]
+    ArrowSchema(#[from] arrow_schema::ArrowError),
     #[error("Backend error: {0}")]
     Backend(#[from] moonlink_backend::Error),
     #[error("IO error: {0}")]

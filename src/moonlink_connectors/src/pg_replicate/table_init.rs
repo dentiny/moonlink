@@ -7,12 +7,15 @@ use moonlink::{
     EventSyncReceiver, EventSyncSender, FileSystemAccessor, FileSystemConfig, IcebergTableConfig,
     MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
     MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, TableEvent, TableEventManager,
-    TableHandler, TableStateReader,
+    TableHandler, TableStatusReader,
 };
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, mpsc::Sender, oneshot, watch};
+
+/// Default namespace for all iceberg tables.
+const DEFAULT_ICEBERG_NAMESPACE: &str = "default";
 
 /// Components required to replicate a single table.
 /// Components that the [`Sink`] needs for processing CDC events.
@@ -25,7 +28,7 @@ pub struct TableResources {
     pub event_sender: Sender<TableEvent>,
     pub read_state_manager: ReadStateManager,
     pub table_event_manager: TableEventManager,
-    pub table_state_reader: TableStateReader,
+    pub table_status_reader: TableStatusReader,
     pub commit_lsn_tx: watch::Sender<u64>,
     pub flush_lsn_rx: watch::Receiver<u64>,
 }
@@ -49,6 +52,7 @@ async fn recreate_directory(dir: &PathBuf) -> Result<()> {
 /// Build all components needed to replicate `table_schema`.
 pub async fn build_table_components(
     mooncake_table_id: String,
+    database_id: u32,
     table_id: u32,
     table_schema: &TableSchema,
     base_path: &String,
@@ -66,7 +70,7 @@ pub async fn build_table_components(
         });
 
     let iceberg_table_config = IcebergTableConfig {
-        namespace: vec![table_schema.table_name.schema.clone()],
+        namespace: vec![DEFAULT_ICEBERG_NAMESPACE.to_string()],
         table_name: mooncake_table_id,
         filesystem_config: iceberg_filesystem_config.clone(),
     };
@@ -87,10 +91,16 @@ pub async fn build_table_components(
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
-    let table_state_reader = TableStateReader::new(table_id, &iceberg_table_config, &table);
+    let table_status_reader =
+        TableStatusReader::new(database_id, table_id, &iceberg_table_config, &table);
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();
-    let table_handler =
-        TableHandler::new(table, event_sync_sender, replication_state.subscribe()).await;
+    let table_handler = TableHandler::new(
+        table,
+        event_sync_sender,
+        replication_state.subscribe(),
+        /*event_replay_tx=*/ None,
+    )
+    .await;
     let flush_lsn_rx = event_sync_receiver.flush_lsn_rx.clone();
     let table_event_manager =
         TableEventManager::new(table_handler.get_event_sender(), event_sync_receiver);
@@ -99,7 +109,7 @@ pub async fn build_table_components(
     let table_resource = TableResources {
         event_sender,
         read_state_manager,
-        table_state_reader,
+        table_status_reader,
         table_event_manager,
         commit_lsn_tx,
         flush_lsn_rx,

@@ -34,6 +34,7 @@ use crate::storage::mooncake_table::{
 };
 use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
+use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
 use crate::storage::MooncakeTable;
@@ -41,6 +42,7 @@ use crate::FileSystemAccessor;
 use crate::ObjectStorageCache;
 
 use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -59,27 +61,41 @@ use tokio::sync::mpsc;
 ///
 /// Create test batch deletion vector.
 fn test_committed_deletion_log_1(
-    data_filepath: MooncakeDataFileRef,
+    data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
     deletion_vector.delete_row(0);
 
-    HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(
-        data_filepath.clone(),
-        deletion_vector,
-    )])
+    HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(data_file, deletion_vector)])
+}
+/// Corresponds to [`test_committed_deletion_log_1`].
+fn test_committed_deletion_logs_to_persist_1(
+    data_file: MooncakeDataFileRef,
+) -> HashSet<(FileId, usize)> {
+    let mut committed_deletion_logs = HashSet::new();
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/ 0));
+    committed_deletion_logs
 }
 fn test_committed_deletion_log_2(
-    data_filepath: MooncakeDataFileRef,
+    data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
     deletion_vector.delete_row(1);
     deletion_vector.delete_row(2);
 
     HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(
-        data_filepath.clone(),
+        data_file.clone(),
         deletion_vector,
     )])
+}
+/// Corresponds to [`test_committed_deletion_log_2`].
+fn test_committed_deletion_logs_to_persist_2(
+    data_file: MooncakeDataFileRef,
+) -> HashSet<(FileId, usize)> {
+    let mut committed_deletion_logs = HashSet::new();
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/ 1));
+    committed_deletion_logs.insert((data_file.file_id(), /*row_idx=*/ 2));
+    committed_deletion_logs
 }
 
 /// Test util function to create file indices.
@@ -249,6 +265,7 @@ async fn test_skip_iceberg_snapshot() {
 
     // Create mooncake snapshot.
     assert!(table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
         force_create: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::BestEffort,
@@ -312,9 +329,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let file_index_1 = create_file_index(vec![data_file_1.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: test_committed_deletion_logs_to_persist_1(data_file_1.clone()),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_1.clone()],
             new_deletion_vector: test_committed_deletion_log_1(data_file_1.clone()),
@@ -364,9 +383,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let file_index_2 = create_file_index(vec![data_file_2.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: test_committed_deletion_logs_to_persist_2(data_file_2.clone()),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![data_file_2.clone()],
             new_deletion_vector: test_committed_deletion_log_2(data_file_2.clone()),
@@ -440,11 +461,13 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Write third snapshot to iceberg table, with file indices to add and remove.
     let merged_file_index = create_file_index(remote_data_files.clone());
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
         flush_lsn: 2,
         wal_persistence_metadata: Some(WalPersistenceMetadata {
             persisted_file_num: 10,
         }),
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -530,9 +553,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     //
     // Attempt a fourth snapshot persistence, which goes after data file compaction.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
         flush_lsn: 3,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -599,9 +624,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     //
     // Remove all existing data files and file indices.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
         flush_lsn: 4,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload {
             data_files: vec![],
             new_deletion_vector: HashMap::new(),
@@ -978,9 +1005,11 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
     )
     .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         wal_persistence_metadata: None,
         new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
         import_payload: IcebergSnapshotImportPayload::default(),
         index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
         data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),
@@ -1919,15 +1948,8 @@ async fn test_schema_update_with_no_table_write_impl(iceberg_table_config: Icebe
     )
     .await;
 
-    // Perform an schema update.
-    let updated_mooncake_table_metadata = create_test_table_metadata_with_schema(
-        local_table_directory,
-        create_test_updated_arrow_schema(),
-    );
-    table.alter_table_schema(updated_mooncake_table_metadata.clone());
-
-    // Create a mooncake and iceberg snapshot to reflect both data files and schema changes.
-    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+    let updated_mooncake_table_metadata =
+        alter_table_and_persist_to_iceberg(&mut table, &mut notify_rx).await;
 
     // Now the iceberg table has been created, create an iceberg table manager and check table status.
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
@@ -2063,14 +2085,8 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
         .unwrap();
 
     // Perform an schema update.
-    let updated_mooncake_table_metadata = create_test_table_metadata_with_schema(
-        local_table_directory,
-        create_test_updated_arrow_schema(),
-    );
-    table.alter_table_schema(updated_mooncake_table_metadata.clone());
-
-    // Create a mooncake and iceberg snapshot to reflect both data files and schema changes.
-    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+    let updated_mooncake_table_metadata =
+        alter_table_and_persist_to_iceberg(&mut table, &mut notify_rx).await;
 
     // Now the iceberg table has been created, create an iceberg table manager and check table status.
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);

@@ -262,7 +262,7 @@ mod tests {
     use crate::row::{IdentityProp, MoonlinkRow, RowValue};
     use crate::storage::index::persisted_bucket_hash_map::test_get_hashes_for_index;
     use crate::storage::mooncake_table::mem_slice::MemSlice;
-    use crate::storage::mooncake_table::MooncakeTableConfig;
+    use crate::storage::mooncake_table::{BatchIdCounter, MooncakeTableConfig};
     use crate::storage::storage_utils::RawDeletionRecord;
     use arrow::datatypes::{DataType, Field};
     use arrow_array::{Int32Array, StringArray};
@@ -293,7 +293,12 @@ mod tests {
 
         let identity = IdentityProp::SinglePrimitiveKey(0);
         // Create a MemSlice with test data
-        let mut mem_slice = MemSlice::new(schema.clone(), 100, identity);
+        let mut mem_slice = MemSlice::new(
+            schema.clone(),
+            100,
+            identity,
+            Arc::new(BatchIdCounter::new(false)),
+        );
 
         // Add some test rows
         let row1 = MoonlinkRow::new(vec![
@@ -361,7 +366,12 @@ mod tests {
         let identity = IdentityProp::SinglePrimitiveKey(0);
 
         // Create a MemSlice with test data - more rows this time
-        let mut mem_slice = MemSlice::new(schema.clone(), 3, identity);
+        let mut mem_slice = MemSlice::new(
+            schema.clone(),
+            3,
+            identity,
+            Arc::new(BatchIdCounter::new(false)),
+        );
 
         // Add several test rows
         let rows = [
