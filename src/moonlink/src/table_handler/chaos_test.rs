@@ -7,18 +7,19 @@
 /// - LSN always increases
 use crate::event_sync::create_table_event_syncer;
 use crate::row::{MoonlinkRow, RowValue};
-use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
-use crate::ObjectStorageCache;
 use crate::TableEventManager;
+use crate::{IcebergTableConfig, ObjectStorageCache};
 
 use more_asserts as ma;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::collections::{HashSet, VecDeque};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
 use tokio::sync::mpsc;
@@ -474,6 +475,8 @@ struct TestEnvironment {
     event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
     last_commit_lsn_tx: watch::Sender<u64>,
     replication_lsn_tx: watch::Sender<u64>,
+    mooncake_table_metadata: Arc<TableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
 }
 
 impl TestEnvironment {
@@ -502,8 +505,8 @@ impl TestEnvironment {
 
         // Create mooncake table and table event notification receiver.
         let table = create_mooncake_table(
-            mooncake_table_metadata,
-            iceberg_table_config,
+            mooncake_table_metadata.clone(),
+            iceberg_table_config.clone(),
             object_storage_cache.clone(),
         )
         .await;
@@ -536,8 +539,45 @@ impl TestEnvironment {
             event_replay_rx,
             replication_lsn_tx,
             last_commit_lsn_tx,
+            mooncake_table_metadata,
+            iceberg_table_config,
         }
     }
+}
+
+/// Test util function to check whether iceberg snapshot contains expected content.
+async fn validate_persisted_iceberg_table(
+    mooncake_table_metadata: Arc<TableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
+    object_storage_cache: ObjectStorageCache,
+    snapshot_lsn: u64,
+    expected_ids: Vec<i32>,
+) {
+    let (event_sender, _event_receiver) = mpsc::channel(100);
+    let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
+    let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
+    replication_lsn_tx.send(snapshot_lsn).unwrap();
+    last_commit_lsn_tx.send(snapshot_lsn).unwrap();
+
+    let mut mooncake_table = create_mooncake_table(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+        object_storage_cache.clone(),
+    )
+    .await;
+    mooncake_table.register_table_notify(event_sender).await;
+
+    let read_state_manager = ReadStateManager::new(
+        &mooncake_table,
+        replication_lsn_rx.clone(),
+        last_commit_lsn_rx,
+    );
+    check_read_snapshot(
+        &read_state_manager,
+        Some(snapshot_lsn),
+        /*expected_ids=*/ &expected_ids,
+    )
+    .await;
 }
 
 async fn chaos_test_impl(mut env: TestEnvironment) {
@@ -546,6 +586,11 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
     let mut table_event_manager = env.table_event_manager;
     let last_commit_lsn_tx = env.last_commit_lsn_tx.clone();
     let replication_lsn_tx = env.replication_lsn_tx.clone();
+
+    // Fields used to recreate a new mooncake table.
+    let mooncake_table_metadata = env.mooncake_table_metadata.clone();
+    let iceberg_table_config = env.iceberg_table_config.clone();
+    let object_storage_cache = env.object_storage_cache.clone();
 
     let task = tokio::spawn(async move {
         let mut state = ChaosState::new(read_state_manager);
@@ -598,6 +643,16 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
                 TableEventManager::synchronize_force_snapshot_request(rx, snapshot_lsn)
                     .await
                     .unwrap();
+
+                // Now iceberg snapshot content should be exactly the same as moooncake table, recover states from persistence layer and perform another read.
+                validate_persisted_iceberg_table(
+                    mooncake_table_metadata.clone(),
+                    iceberg_table_config.clone(),
+                    object_storage_cache.clone(),
+                    snapshot_lsn,
+                    state.get_valid_ids(),
+                )
+                .await;
             }
         }
 
