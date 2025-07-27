@@ -118,6 +118,9 @@ impl MemSlice {
     pub(super) fn drain(
         &mut self,
     ) -> Result<(Option<(u64, Arc<RecordBatch>)>, Vec<BatchEntry>, MemIndex)> {
+
+        println!("mem slice drain");
+
         let batch = self.column_store.finalize_current_batch()?;
         let entries = self.column_store.drain();
         let mut index = MemIndex::new_like(&self.mem_index);

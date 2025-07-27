@@ -592,6 +592,8 @@ impl SnapshotTableState {
             return;
         }
 
+        println!("finalize batch");
+
         let incoming = take(&mut task.new_record_batches);
         // close previously‐open batch
         assert!(self.batches.values().last().unwrap().data.is_none());
