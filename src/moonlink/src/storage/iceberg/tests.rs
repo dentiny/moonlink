@@ -2233,3 +2233,54 @@ async fn test_persist_snapshot_property() {
         wal_persistence_metadata
     );
 }
+
+#[tokio::test]
+async fn test_batch_id() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let path = temp_dir.path().to_path_buf();
+    let warehouse_uri = path.clone().to_str().unwrap().to_string();
+    let mooncake_table_metadata = create_test_table_metadata_with_batch_size(
+        temp_dir.path().to_str().unwrap().to_string(),
+        /*batch_size=*/ 1,
+    );
+    let identity_property = mooncake_table_metadata.identity.clone();
+
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+    let schema = create_test_arrow_schema();
+    let mut table = MooncakeTable::new(
+        schema.as_ref().clone(),
+        "test_table".to_string(),
+        /*table_id=*/ 1,
+        path,
+        identity_property,
+        iceberg_table_config.clone(),
+        MooncakeTableConfig::default(),
+        ObjectStorageCache::default_for_test(&temp_dir),
+        create_test_filesystem_accessor(&iceberg_table_config),
+    )
+    .await
+    .unwrap();
+    let (notify_tx, mut notify_rx) = mpsc::channel(100);
+    table.register_table_notify(notify_tx).await;
+
+    // First append and commit.
+    let row = test_row_1();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 10);
+
+    // Second append and commit.
+    let row = test_row_2();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 20);
+
+    // Flush for snapshot creation.
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 20)
+        .await
+        .unwrap();
+
+    // Create mooncake and iceberg snapshot.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Check persisted table properties.
+    assert_eq!(table.get_iceberg_snapshot_lsn().unwrap(), 20);
+}
