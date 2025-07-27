@@ -592,6 +592,8 @@ impl SnapshotTableState {
             return;
         }
 
+        println!("finalize batch");
+
         let incoming = take(&mut task.new_record_batches);
         // close previously‐open batch
         assert!(self.batches.values().last().unwrap().data.is_none());
@@ -600,7 +602,8 @@ impl SnapshotTableState {
         // start a fresh empty batch after the newest data
         let batch_size = self.current_snapshot.metadata.config.batch_size;
         // Use the ID from the incoming batches rather than the counter, since the counter may have been further advanced elsewhere.
-        let next_id = incoming.last().unwrap().0 + 1;
+        // let next_id = incoming.last().unwrap().0 + 1;
+        let next_id = self.non_streaming_batch_id_counter.next();
 
         // Add to batch and assert that the batch is not already in the map.
         assert!(self

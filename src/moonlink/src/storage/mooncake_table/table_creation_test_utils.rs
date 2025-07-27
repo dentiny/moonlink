@@ -117,6 +117,16 @@ pub(crate) fn create_test_table_metadata(
     create_test_table_metadata_with_config(local_table_directory, config)
 }
 
+/// Test util function to create a mooncake table metadata with the given mem slice batch size.
+pub(crate) fn create_test_table_metadata_with_batch_size(
+    local_table_directory: String,
+    batch_size: usize,
+) -> Arc<MooncakeTableMetadata> {
+    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
+    config.batch_size = batch_size;
+    create_test_table_metadata_with_config(local_table_directory, config)
+}
+
 /// Test util function to create mooncake table metadata with mooncake table config.
 pub(crate) fn create_test_table_metadata_with_config(
     local_table_directory: String,
