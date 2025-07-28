@@ -169,10 +169,9 @@ impl SnapshotTableState {
             object_storage_cache: self.object_storage_cache.clone(),
             filesystem_accessor: self.filesystem_accessor.clone(),
             disk_files: tentative_data_files_to_compact
-                .iter()
-                .cloned()
+                .into_iter()
                 .collect::<Vec<_>>(),
-            file_indices: file_indices_to_compact.iter().cloned().collect::<Vec<_>>(),
+            file_indices: file_indices_to_compact.into_iter().collect::<Vec<_>>(),
         };
 
         #[cfg(any(test, debug_assertions))]
