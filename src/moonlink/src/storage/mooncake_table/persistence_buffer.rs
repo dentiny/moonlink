@@ -98,11 +98,6 @@ impl UnpersistedRecords {
     /// Get unpersisted file indices as hash set for lookup.
     #[allow(clippy::mutable_key_type)]
     pub(crate) fn get_unpersisted_file_indices_set(&self) -> HashSet<GlobalIndex> {
-        println!("\n\ncompacted file indices to add\n\n");
-        for cur_file_index in self.compacted_file_indices_to_add.iter() {
-            println!("ref data file = {:?}", cur_file_index.files);
-        }
-
         let expected_len = self.new_file_indices.len() + self.merged_file_indices_to_add.len() + self.compacted_data_files_to_add.len();
         let mut unpersisted_file_indices = HashSet::new();
         unpersisted_file_indices.extend(self.new_file_indices.iter().cloned());
@@ -122,20 +117,10 @@ impl UnpersistedRecords {
     }
     fn buffer_unpersisted_iceberg_new_file_indices(&mut self, task: &SnapshotTask) {
         let new_file_indices = task.get_new_file_indices();
-
-        for cur_file_index in new_file_indices.iter() {
-            println!("cur new file index data files = {:?}", cur_file_index.files);
-        }
-
         self.new_file_indices.extend(new_file_indices);
     }
     fn buffer_unpersisted_iceberg_merged_file_indices(&mut self, task: &SnapshotTask) {
         let index_merge_result = &task.index_merge_result;
-
-        for cur_file_index in index_merge_result.new_file_indices.iter() {
-            println!("cur new merged file index data files = {:?}", cur_file_index.files);
-        }
-
         self.merged_file_indices_to_add
             .extend(index_merge_result.new_file_indices.to_owned());
         self.merged_file_indices_to_remove
@@ -232,6 +217,12 @@ impl UnpersistedRecords {
 
     fn prune_persisted_compacted_data(&mut self, task: &SnapshotTask) {
         let persisted_compaction_res = &task.iceberg_persisted_records.data_compaction_result;
+
+        println!("\n\n\npersisted compaction imported file indices\n\n");
+        for cur_file_index in persisted_compaction_res.new_file_indices_imported.iter() {
+            println!("persisted compaction imported file indices data files = {:?}", cur_file_index.files);
+        }
+
         ma::assert_ge!(
             self.compacted_data_files_to_add.len(),
             persisted_compaction_res.new_data_files_imported.len()

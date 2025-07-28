@@ -161,6 +161,11 @@ impl SnapshotTableState {
         // - file path pointing to remote path
         // - cache handle pinned and refers to local cache file path
         for cur_file_index in new_file_indices.iter_mut() {
+            // Validate all referenced data files points to remote.
+            for cur_data_file in cur_file_index.files.iter() {
+                assert!(cur_data_file.file_path().starts_with(&self.iceberg_warehouse_location));
+            }
+
             for cur_index_block in cur_file_index.index_blocks.iter_mut() {
                 // All index block files have their cache handle pinned in cache.
                 let cur_evicted_files = cur_index_block
@@ -253,6 +258,8 @@ impl SnapshotTableState {
         let old_data_files_count = self.current_snapshot.disk_files.len();
         let old_file_indices_count = self.current_snapshot.indices.file_indices.len();
 
+        let old_file_indices = self.current_snapshot.indices.file_indices.clone();
+
         // Step-1: Handle persisted data files.
         let cur_evicted_files = self
             .update_data_files_to_persisted(persisted_data_files)
@@ -280,6 +287,20 @@ impl SnapshotTableState {
         let new_data_files_count = self.current_snapshot.disk_files.len();
         let new_file_indices_count = self.current_snapshot.indices.file_indices.len();
         assert_eq!(old_data_files_count, new_data_files_count);
+
+
+        let new_file_indices = self.current_snapshot.indices.file_indices.clone();
+        if old_file_indices_count != new_file_indices_count {
+            println!("\n\ncheck indices!!!\n\n");
+            for cur_old_file_index in old_file_indices.iter() {
+                println!("old file index refs to {:?}", cur_old_file_index.files);
+            }
+            for cur_new_file_index in new_file_indices.iter() {
+                println!("new file index refs to {:?}", cur_new_file_index.files);
+            }
+        }
+        
+
         assert_eq!(old_file_indices_count, new_file_indices_count);
 
         evicted_files_to_delete
