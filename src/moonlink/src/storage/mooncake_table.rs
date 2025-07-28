@@ -189,6 +189,7 @@ pub struct TableMetadata {
     /// function to get lookup key from row
     pub(crate) identity: IdentityProp,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlterTableRequest {
     pub(crate) new_columns: Vec<arrow_schema::FieldRef>,
@@ -340,6 +341,17 @@ impl IcebergPersistedRecords {
             .map(|f| f.file_id())
             .collect::<HashSet<_>>();
         (index_blocks_to_delete, persisted_file_indices)
+    }
+
+    /// Validate all imported file indices and index blocks point to remote files.
+    pub fn validate_import_file_indices_remote(&self, warehouse_uri: &str) {
+        let import_result = &self.import_result;
+        for cur_file_index in import_result.new_file_indices.iter() {
+            let referenced_data_files = &cur_file_index.files;
+            for cur_data_file in referenced_data_files.iter() {
+                assert!(cur_data_file.file_path().starts_with(warehouse_uri));
+            }
+        }
     }
 }
 
@@ -685,6 +697,7 @@ impl MooncakeTable {
             metadata: table_metadata.clone(),
             snapshot: Arc::new(RwLock::new(
                 SnapshotTableState::new(
+                    table_manager.get_warehouse_location(),
                     table_metadata.clone(),
                     object_storage_cache,
                     filesystem_accessor,

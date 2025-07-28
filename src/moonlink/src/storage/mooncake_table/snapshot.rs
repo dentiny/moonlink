@@ -31,6 +31,9 @@ use std::mem::take;
 use std::sync::Arc;
 use tokio::sync::mpsc::Sender;
 pub(crate) struct SnapshotTableState {
+    /// Iceberg warehouse location.
+    pub(super) iceberg_warehouse_location: String,
+
     /// Mooncake table metadata.
     pub(super) mooncake_table_metadata: Arc<MooncakeTableMetadata>,
 
@@ -122,6 +125,7 @@ impl CommittedDeletionToPersist {
 
 impl SnapshotTableState {
     pub(super) async fn new(
+        iceberg_warehouse_location: String,
         metadata: Arc<MooncakeTableMetadata>,
         object_storage_cache: ObjectStorageCache,
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
@@ -138,6 +142,7 @@ impl SnapshotTableState {
 
         let table_config = metadata.config.clone();
         Ok(Self {
+            iceberg_warehouse_location,
             mooncake_table_metadata: metadata.clone(),
             current_snapshot,
             batches,

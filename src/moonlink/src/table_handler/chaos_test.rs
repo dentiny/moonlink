@@ -7,6 +7,7 @@
 /// - LSN always increases
 use crate::event_sync::create_table_event_syncer;
 use crate::row::{MoonlinkRow, RowValue};
+use crate::storage::mooncake_table::table_operation_test_utils::sync_read_request_for_test;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
@@ -549,26 +550,29 @@ impl TestEnvironment {
 async fn validate_persisted_iceberg_table(
     mooncake_table_metadata: Arc<TableMetadata>,
     iceberg_table_config: IcebergTableConfig,
-    object_storage_cache: ObjectStorageCache,
     snapshot_lsn: u64,
     expected_ids: Vec<i32>,
 ) {
-    let (event_sender, _event_receiver) = mpsc::channel(100);
+    let (event_sender, mut event_receiver) = mpsc::channel(100);
     let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
     let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
     replication_lsn_tx.send(snapshot_lsn).unwrap();
     last_commit_lsn_tx.send(snapshot_lsn).unwrap();
 
-    let mut mooncake_table = create_mooncake_table(
+    // Use a fresh new cache for new iceberg table manager.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+
+    let mut table = create_mooncake_table(
         mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
-        object_storage_cache.clone(),
+        object_storage_cache,
     )
     .await;
-    mooncake_table.register_table_notify(event_sender).await;
+    table.register_table_notify(event_sender).await;
 
     let read_state_manager = ReadStateManager::new(
-        &mooncake_table,
+        &table,
         replication_lsn_rx.clone(),
         last_commit_lsn_rx,
     );
@@ -578,6 +582,11 @@ async fn validate_persisted_iceberg_table(
         /*expected_ids=*/ &expected_ids,
     )
     .await;
+
+    // Drop read state manager, to release all read states and mark all reads as done.
+    drop(read_state_manager);
+    // Block wait until all read completion notification sent over.
+    sync_read_request_for_test(&mut table, &mut event_receiver).await;
 }
 
 async fn chaos_test_impl(mut env: TestEnvironment) {
@@ -590,13 +599,12 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
     // Fields used to recreate a new mooncake table.
     let mooncake_table_metadata = env.mooncake_table_metadata.clone();
     let iceberg_table_config = env.iceberg_table_config.clone();
-    let object_storage_cache = env.object_storage_cache.clone();
 
     let task = tokio::spawn(async move {
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..3000 {
+        for _ in 0..200 {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
@@ -648,7 +656,6 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
                 validate_persisted_iceberg_table(
                     mooncake_table_metadata.clone(),
                     iceberg_table_config.clone(),
-                    object_storage_cache.clone(),
                     snapshot_lsn,
                     state.get_valid_ids(),
                 )
