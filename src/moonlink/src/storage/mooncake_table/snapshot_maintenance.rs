@@ -38,6 +38,7 @@ impl SnapshotTableState {
     ///
     /// Util function to decide whether and what to compact data files.
     /// To simplify states (aka, avoid data compaction already in iceberg with those not), only merge those already persisted.
+    #[allow(clippy::mutable_key_type)]
     pub(super) fn get_payload_to_compact(
         &self,
         data_compaction_option: &MaintenanceOption,

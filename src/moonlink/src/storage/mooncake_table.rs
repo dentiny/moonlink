@@ -365,7 +365,7 @@ impl IcebergPersistedRecords {
         let referenced_data_files = &file_index.files;
         for cur_data_file in referenced_data_files.iter() {
             if !cur_data_file.file_path().starts_with(warehouse_uri) {
-                println!("issue data file = {:?}", cur_data_file);
+                println!("issue data file = {cur_data_file:?}");
             }
             assert!(cur_data_file.file_path().starts_with(warehouse_uri));
         }
