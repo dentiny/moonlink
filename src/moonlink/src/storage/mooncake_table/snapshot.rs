@@ -435,6 +435,9 @@ impl SnapshotTableState {
     ) -> MooncakeSnapshotOutput {
         // Validate mooncake table operation invariants.
         self.validate_mooncake_table_invariants(&task, &opt);
+        // Validate persistence results.
+        task.iceberg_persisted_records
+            .validate_imported_files_remote(&self.iceberg_warehouse_location);
 
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];

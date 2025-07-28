@@ -1576,6 +1576,10 @@ async fn test_discard_duplicate_writes() {
     mock_mooncake_snapshot.data_file_flush_lsn = Some(10);
     let mut mock_table_manager = MockTableManager::new();
     mock_table_manager
+        .expect_get_warehouse_location()
+        .times(1)
+        .returning(|| "".to_string());
+    mock_table_manager
         .expect_load_snapshot_from_table()
         .times(1)
         .returning(move || {
