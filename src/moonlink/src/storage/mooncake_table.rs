@@ -333,8 +333,18 @@ impl IcebergPersistedRecords {
     pub fn get_file_indices_to_reflect_persistence(&self) -> (HashSet<FileId>, Vec<FileIndex>) {
         let mut persisted_file_indices = vec![];
         persisted_file_indices.extend(self.import_result.new_file_indices.iter().cloned());
-        persisted_file_indices.extend(self.index_merge_result.new_file_indices_imported.iter().cloned());
-        persisted_file_indices.extend(self.data_compaction_result.new_file_indices_imported.iter().cloned());
+        persisted_file_indices.extend(
+            self.index_merge_result
+                .new_file_indices_imported
+                .iter()
+                .cloned(),
+        );
+        persisted_file_indices.extend(
+            self.data_compaction_result
+                .new_file_indices_imported
+                .iter()
+                .cloned(),
+        );
 
         let mut index_blocks_to_delete = HashSet::new();
         for cur_file_index in self.import_result.new_file_indices.iter() {
@@ -346,7 +356,7 @@ impl IcebergPersistedRecords {
         for cur_file_index in self.data_compaction_result.new_file_indices_imported.iter() {
             index_blocks_to_delete.extend(cur_file_index.files.iter().map(|f| f.file_id()));
         }
-        
+
         (index_blocks_to_delete, persisted_file_indices)
     }
 

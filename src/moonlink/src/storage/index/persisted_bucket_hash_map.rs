@@ -523,8 +523,6 @@ impl GlobalIndexBuilder {
         indices: HashSet<GlobalIndex>,
         file_id: u64,
     ) -> GlobalIndex {
-        println!("\n\n============\n\n");
-
         self.num_rows = indices.iter().map(|index| index.num_rows).sum();
         self.files = indices
             .iter()
@@ -533,8 +531,6 @@ impl GlobalIndexBuilder {
         let file_id_remaps = Self::create_file_id_remap_at_merge(indices.iter());
         let mut iters = Vec::with_capacity(indices.len());
         for (idx, index) in indices.iter().enumerate() {
-            println!("for file index to megre, data file is {:?}", index.files);
-
             iters.push(index.create_iterator(&file_id_remaps[idx]).await);
         }
         let merge_iter = GlobalIndexMergingIterator::new(iters).await;
@@ -561,9 +557,6 @@ impl GlobalIndexBuilder {
         let mut index_blocks = Vec::new();
         index_blocks.push(index_block_builder.build(&global_index, file_id).await);
         global_index.index_blocks = index_blocks;
-
-        println!("on index merge, referenced data files = {:?}", global_index.files);
-
         global_index
     }
 

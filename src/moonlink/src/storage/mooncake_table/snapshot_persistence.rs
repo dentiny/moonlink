@@ -163,7 +163,9 @@ impl SnapshotTableState {
         for cur_file_index in new_file_indices.iter_mut() {
             // Validate all referenced data files points to remote.
             for cur_data_file in cur_file_index.files.iter() {
-                assert!(cur_data_file.file_path().starts_with(&self.iceberg_warehouse_location));
+                assert!(cur_data_file
+                    .file_path()
+                    .starts_with(&self.iceberg_warehouse_location));
             }
 
             for cur_index_block in cur_file_index.index_blocks.iter_mut() {
@@ -288,7 +290,6 @@ impl SnapshotTableState {
         let new_file_indices_count = self.current_snapshot.indices.file_indices.len();
         assert_eq!(old_data_files_count, new_data_files_count);
 
-
         let new_file_indices = self.current_snapshot.indices.file_indices.clone();
         if old_file_indices_count != new_file_indices_count {
             println!("\n\ncheck indices!!!\n\n");
@@ -299,7 +300,6 @@ impl SnapshotTableState {
                 println!("new file index refs to {:?}", cur_new_file_index.files);
             }
         }
-        
 
         assert_eq!(old_file_indices_count, new_file_indices_count);
 

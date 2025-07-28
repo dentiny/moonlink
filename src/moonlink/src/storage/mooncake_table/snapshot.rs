@@ -548,7 +548,7 @@ impl SnapshotTableState {
         let mut file_indices_merge_payload = IndexMergeMaintenanceStatus::Unknown;
         if !data_compaction_payload.has_payload() {
             file_indices_merge_payload = self.get_file_indices_to_merge(&opt.index_merge_option);
-        }/// <------
+        }
 
         let flush_by_table_write = self.current_snapshot.data_file_flush_lsn.is_some()
             && (flush_by_new_files_or_maintainence || flush_by_deletion);

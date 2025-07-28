@@ -9,8 +9,8 @@ use crate::ObjectStorageCache;
 use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::sync::Arc;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 
 /// Single disk file and its deletion vector to apply.
 #[derive(Clone, Debug)]
