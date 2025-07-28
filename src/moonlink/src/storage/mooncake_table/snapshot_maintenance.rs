@@ -77,7 +77,7 @@ impl SnapshotTableState {
 
         // To simplify state management, only compact data files which have been persisted into iceberg table.
         let unpersisted_data_files = self.unpersisted_records.get_unpersisted_data_files_set();
-        let mut tentative_data_files_to_compact = vec![];
+        let mut tentative_data_files_to_compact = HashSet::new();
 
         // Number of data files rejected to merge due to unpersistence.
         let mut reject_by_unpersistence = 0;
@@ -106,7 +106,7 @@ impl SnapshotTableState {
                 filepath: cur_data_file.file_path().to_string(),
                 deletion_vector: disk_file_entry.puffin_deletion_blob.clone(),
             };
-            tentative_data_files_to_compact.push(single_file_to_compact);
+            assert!(tentative_data_files_to_compact.insert(single_file_to_compact));
         }
 
         if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
@@ -124,7 +124,7 @@ impl SnapshotTableState {
         }
 
         // Calculate related file indices to compact.
-        let mut file_indices_to_compact = vec![];
+        let mut file_indices_to_compact = HashSet::new();
         let file_ids_to_compact = tentative_data_files_to_compact
             .iter()
             .map(|single_file_to_compact| single_file_to_compact.file_id.file_id)
@@ -132,18 +132,56 @@ impl SnapshotTableState {
         for cur_file_index in self.current_snapshot.indices.file_indices.iter() {
             for cur_file in cur_file_index.files.iter() {
                 if file_ids_to_compact.contains(&cur_file.file_id()) {
-                    file_indices_to_compact.push(cur_file_index.clone());
+                    assert!(file_indices_to_compact.insert(cur_file_index.clone()));
                     break;
                 }
             }
         }
 
+        // Skip data files to compact if their corresponding file indices haven't been persisted.
+        let mut file_indices_to_remove = vec![];
+        let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+        for cur_file_index in file_indices_to_compact.iter() {
+            if unpersisted_file_indices.contains(cur_file_index) {
+                file_indices_to_remove.push(cur_file_index.clone());
+            }
+        }
+        for cur_file_index in file_indices_to_remove.iter() {
+            for cur_data_file in cur_file_index.files.iter() {
+                let table_unique_file_idfile_id = TableUniqueFileId {
+                    table_id: TableId(self.mooncake_table_metadata.table_id),
+                    file_id: cur_data_file.file_id(),
+                };
+                assert!(tentative_data_files_to_compact.remove(&table_unique_file_idfile_id));
+                reject_by_unpersistence += 1;
+            }
+            assert!(file_indices_to_compact.remove(cur_file_index));
+        }
+
+        for cur_file_index in file_indices_to_compact.iter() {
+            let data_files = &cur_file_index.files;
+            for cur_data_file in data_files.iter() {
+                if !cur_data_file.file_path().starts_with(&self.iceberg_warehouse_location) {
+                    println!("final debug message, file index data is {:?}", data_files);
+                    println!("what!!! still doesn't work");
+                    panic!("???");
+                }
+            }
+        }
+
+
+        // Check again whether need to compact.
+        if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
+            return DataCompactionMaintenanceStatus::Unknown;
+        }
+
+        // TODO(hjiang): Add validation on data file and file indices consistency.
         let payload = DataCompactionPayload {
             uuid: uuid::Uuid::new_v4(),
             object_storage_cache: self.object_storage_cache.clone(),
             filesystem_accessor: self.filesystem_accessor.clone(),
-            disk_files: tentative_data_files_to_compact,
-            file_indices: file_indices_to_compact,
+            disk_files: tentative_data_files_to_compact.iter().cloned().collect::<Vec<_>>(),
+            file_indices: file_indices_to_compact.iter().cloned().collect::<Vec<_>>(),
         };
         DataCompactionMaintenanceStatus::Payload(payload)
     }
@@ -190,6 +228,13 @@ impl SnapshotTableState {
 
         // To simplify state management, only compact data files which have been persisted into iceberg table.
         let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+
+        println!("\n\n------ unpersisted file indices --------\n\n");
+        for cur_file_index in unpersisted_file_indices.iter() {
+            println!("unpersisted indices ref to {:?}", cur_file_index.files);
+        }
+
+
         // Number of index blocks rejected to merge due to unpersistence.
         let mut reject_by_unpersistence = 0;
         for cur_file_index in all_file_indices.iter() {
@@ -204,6 +249,21 @@ impl SnapshotTableState {
             }
 
             assert!(file_indices_to_merge.insert(cur_file_index.clone()));
+        }
+
+        for cur_file_index in file_indices_to_merge.iter() {
+            let data_files = &cur_file_index.files;
+            for cur_data_file in data_files.iter() {
+                if !cur_data_file.file_path().starts_with(&self.iceberg_warehouse_location) {
+                    for cur_unpersisted_file_index in unpersisted_file_indices.iter() {
+                        println!("unpersisted file index, data files = {:?}", cur_unpersisted_file_index.files);
+                    }
+
+                    println!("index merge: final debug message, file index data is {:?}", data_files);
+                    println!("what!!! still doesn't work");
+                    panic!("???");
+                }
+            }
         }
 
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.

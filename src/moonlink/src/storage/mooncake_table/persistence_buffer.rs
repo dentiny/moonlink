@@ -88,15 +88,28 @@ impl UnpersistedRecords {
 
     /// Get unpersisted data files as hash set for lookup.
     pub(crate) fn get_unpersisted_data_files_set(&self) -> HashSet<MooncakeDataFileRef> {
-        self.new_data_files.iter().cloned().collect::<HashSet<_>>()
+        let expected_len = self.new_data_files.len() + self.compacted_data_files_to_add.len();
+        let mut unpersisted_data_files = HashSet::new();
+        unpersisted_data_files.extend(self.new_data_files.iter().cloned());
+        unpersisted_data_files.extend(self.compacted_data_files_to_add.iter().cloned());
+        assert_eq!(expected_len, unpersisted_data_files.len());
+        unpersisted_data_files
     }
     /// Get unpersisted file indices as hash set for lookup.
     #[allow(clippy::mutable_key_type)]
     pub(crate) fn get_unpersisted_file_indices_set(&self) -> HashSet<GlobalIndex> {
-        self.new_file_indices
-            .iter()
-            .cloned()
-            .collect::<HashSet<_>>()
+        println!("\n\ncompacted file indices to add\n\n");
+        for cur_file_index in self.compacted_file_indices_to_add.iter() {
+            println!("ref data file = {:?}", cur_file_index.files);
+        }
+
+        let expected_len = self.new_file_indices.len() + self.merged_file_indices_to_add.len() + self.compacted_data_files_to_add.len();
+        let mut unpersisted_file_indices = HashSet::new();
+        unpersisted_file_indices.extend(self.new_file_indices.iter().cloned());
+        unpersisted_file_indices.extend(self.merged_file_indices_to_add.iter().cloned());
+        unpersisted_file_indices.extend(self.compacted_file_indices_to_add.iter().cloned());
+        assert_eq!(expected_len, unpersisted_file_indices.len());
+        unpersisted_file_indices
     }
 
     /// ==================================
@@ -109,10 +122,20 @@ impl UnpersistedRecords {
     }
     fn buffer_unpersisted_iceberg_new_file_indices(&mut self, task: &SnapshotTask) {
         let new_file_indices = task.get_new_file_indices();
+
+        for cur_file_index in new_file_indices.iter() {
+            println!("cur new file index data files = {:?}", cur_file_index.files);
+        }
+
         self.new_file_indices.extend(new_file_indices);
     }
     fn buffer_unpersisted_iceberg_merged_file_indices(&mut self, task: &SnapshotTask) {
         let index_merge_result = &task.index_merge_result;
+
+        for cur_file_index in index_merge_result.new_file_indices.iter() {
+            println!("cur new merged file index data files = {:?}", cur_file_index.files);
+        }
+
         self.merged_file_indices_to_add
             .extend(index_merge_result.new_file_indices.to_owned());
         self.merged_file_indices_to_remove
@@ -133,6 +156,10 @@ impl UnpersistedRecords {
             new_compacted_data_files.push(new_data_file.clone());
         }
 
+        for cur_file_index in data_compaction_res.new_file_indices.iter() {
+            println!("cur new compacted file index data files = {:?}", cur_file_index.files);
+        }
+
         self.compacted_data_files_to_add
             .extend(new_compacted_data_files);
         self.compacted_data_files_to_remove
@@ -145,6 +172,9 @@ impl UnpersistedRecords {
 
     /// Buffer unpersisted records.
     pub(crate) fn buffer_unpersisted_records(&mut self, task: &SnapshotTask) {
+
+        println!("==== buffer unpersisted records ====");
+
         self.buffer_unpersisted_iceberg_new_data_files(task);
         self.buffer_unpersisted_iceberg_new_file_indices(task);
         self.buffer_unpersisted_iceberg_merged_file_indices(task);

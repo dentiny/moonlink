@@ -6,9 +6,11 @@ use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::ObjectStorageCache;
 
+use std::borrow::Borrow;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
+use std::hash::{Hash, Hasher};
 
 /// Single disk file and its deletion vector to apply.
 #[derive(Clone, Debug)]
@@ -21,6 +23,24 @@ pub struct SingleFileToCompact {
     /// If assigned, the puffin file has been pinned so later accesses are valid.
     pub(crate) deletion_vector: Option<PuffinBlobRef>,
 }
+
+impl Borrow<TableUniqueFileId> for SingleFileToCompact {
+    fn borrow(&self) -> &TableUniqueFileId {
+        &self.file_id
+    }
+}
+
+impl Hash for SingleFileToCompact {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.file_id.hash(state);
+    }
+}
+impl PartialEq for SingleFileToCompact {
+    fn eq(&self, other: &Self) -> bool {
+        self.file_id == other.file_id
+    }
+}
+impl Eq for SingleFileToCompact {}
 
 /// Payload to trigger a compaction operation.
 #[derive(Clone)]

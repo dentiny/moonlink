@@ -487,6 +487,12 @@ impl SnapshotTableState {
         // Sync buffer snapshot states into unpersisted iceberg content.
         self.unpersisted_records.buffer_unpersisted_records(&task);
 
+        println!("\n\n====precheck===\n\n");
+        let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+        for cur_file_index in unpersisted_file_indices.iter() {
+            println!("precheck 0 for data files: {:?}", cur_file_index.files);
+        }
+
         // Apply buffered change to current mooncake snapshot.
         let stream_evicted_cache_files = self.apply_transaction_stream(&mut task).await;
         self.merge_mem_indices(&mut task);
@@ -495,9 +501,21 @@ impl SnapshotTableState {
         evicted_data_files_to_delete.extend(stream_evicted_cache_files);
         evicted_data_files_to_delete.extend(batch_evicted_cache_files);
 
+        println!("\n\n====precheck===\n\n");
+        let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+        for cur_file_index in unpersisted_file_indices.iter() {
+            println!("precheck 2 for data files: {:?}", cur_file_index.files);
+        }
+
         // After data compaction and index merge changes have been applied to snapshot, processed deletion record will point to the new record location.
         self.rows = take(&mut task.new_rows);
         self.process_deletion_log(&mut task).await;
+
+        println!("\n\n====precheck===\n\n");
+        let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+        for cur_file_index in unpersisted_file_indices.iter() {
+            println!("precheck 4 for data files: {:?}", cur_file_index.files);
+        }
 
         // Assert and update flush LSN.
         if let Some(new_flush_lsn) = task.new_flush_lsn {
@@ -524,6 +542,12 @@ impl SnapshotTableState {
             self.last_commit = cp;
         }
 
+        println!("\n\n====precheck===\n\n");
+        let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+        for cur_file_index in unpersisted_file_indices.iter() {
+            println!("precheck 3 for data files: {:?}", cur_file_index.files);
+        }
+
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
         // To reduce iceberg persistence overhead, there're certain cases an iceberg snapshot will be triggered:
         // (1) there're persisted data files
@@ -537,6 +561,12 @@ impl SnapshotTableState {
             .if_persist_by_new_files_or_maintainence(opt.force_create);
         let force_empty_iceberg_payload = task.force_empty_iceberg_payload;
 
+        println!("\n\n====precheck===\n\n");
+        let unpersisted_file_indices = self.unpersisted_records.get_unpersisted_file_indices_set();
+        for cur_file_index in unpersisted_file_indices.iter() {
+            println!("precheck 1 for data files: {:?}", cur_file_index.files);
+        }
+
         // Decide whether to perform a data compaction.
         //
         // No need to pin puffin file during compaction:
@@ -548,7 +578,7 @@ impl SnapshotTableState {
         let mut file_indices_merge_payload = IndexMergeMaintenanceStatus::Unknown;
         if !data_compaction_payload.has_payload() {
             file_indices_merge_payload = self.get_file_indices_to_merge(&opt.index_merge_option);
-        }
+        }/// <------
 
         let flush_by_table_write = self.current_snapshot.data_file_flush_lsn.is_some()
             && (flush_by_new_files_or_maintainence || flush_by_deletion);
