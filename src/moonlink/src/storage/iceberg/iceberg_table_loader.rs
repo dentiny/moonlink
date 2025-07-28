@@ -57,8 +57,6 @@ impl IcebergTableManager {
             });
         }
 
-        println!("before load file indices, remote data fie to file id = {:?}", self.remote_data_file_to_file_id);
-
         // Load mooncake file indices from iceberg file index blobs.
         let file_index_blob =
             FileIndexBlob::load_from_index_blob(file_io.clone(), entry.data_file()).await?;

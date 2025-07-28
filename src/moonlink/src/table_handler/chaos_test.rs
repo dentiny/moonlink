@@ -571,11 +571,8 @@ async fn validate_persisted_iceberg_table(
     .await;
     table.register_table_notify(event_sender).await;
 
-    let read_state_manager = ReadStateManager::new(
-        &table,
-        replication_lsn_rx.clone(),
-        last_commit_lsn_rx,
-    );
+    let read_state_manager =
+        ReadStateManager::new(&table, replication_lsn_rx.clone(), last_commit_lsn_rx);
     check_read_snapshot(
         &read_state_manager,
         Some(snapshot_lsn),
@@ -604,7 +601,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         let mut state = ChaosState::new(read_state_manager);
 
         // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..200 {
+        for _ in 0..3000 {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.

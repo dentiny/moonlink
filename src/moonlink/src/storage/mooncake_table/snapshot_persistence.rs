@@ -237,9 +237,6 @@ impl SnapshotTableState {
         &mut self,
         task: &SnapshotTask,
     ) -> Vec<String> {
-        // Validate persisted file indices all point to remote data files.
-        task.iceberg_persisted_records.validate_import_file_indices_remote(&self.iceberg_warehouse_location);
-
         // Aggregate evicted files to delete.
         let mut evicted_files_to_delete = vec![];
 

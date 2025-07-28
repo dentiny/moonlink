@@ -64,8 +64,6 @@ impl FileIndex {
                 .files
                 .iter()
                 .map(|cur_data_file| {
-                    println!("on building index, data file path = {}", cur_data_file.file_path());
-
                     // It's possible to have multiple newly imported file indices pointing to remote filepath.
                     // One example is file index merge.
                     if let Some(remote_data_file) =
@@ -159,9 +157,6 @@ impl FileIndex {
                 .data_files
                 .iter()
                 .map(|path| {
-
-                    println!("try lookup for {}", path);
-
                     let file_id = data_file_to_id.get(path).unwrap();
                     create_data_file(file_id.0, path.to_string())
                 })
@@ -204,9 +199,6 @@ impl FileIndexBlob {
         local_index_file_to_remote: &HashMap<String, String>,
         local_data_file_to_remote: &HashMap<String, String>,
     ) -> Self {
-
-        println!("local data file to remote = {:?}", local_data_file_to_remote);
-
         Self {
             file_indices: file_indices
                 .into_iter()
