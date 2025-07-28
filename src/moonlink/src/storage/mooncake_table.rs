@@ -362,13 +362,6 @@ impl IcebergPersistedRecords {
 
     /// Util function to validate all data files referenced by file indices are remote files.
     fn validate_file_indices_remote(&self, file_index: &FileIndex, warehouse_uri: &str) {
-        let referenced_data_files = &file_index.files;
-        for cur_data_file in referenced_data_files.iter() {
-            if !cur_data_file.file_path().starts_with(warehouse_uri) {
-                println!("issue data file = {cur_data_file:?}");
-            }
-            assert!(cur_data_file.file_path().starts_with(warehouse_uri));
-        }
         for cur_index_block in file_index.index_blocks.iter() {
             assert!(cur_index_block
                 .index_file

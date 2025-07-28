@@ -149,11 +149,8 @@ impl SnapshotTableState {
         }
         for cur_file_index in file_indices_to_remove.iter() {
             for cur_data_file in cur_file_index.files.iter() {
-                let table_unique_file_idfile_id = TableUniqueFileId {
-                    table_id: TableId(self.mooncake_table_metadata.table_id),
-                    file_id: cur_data_file.file_id(),
-                };
-                assert!(tentative_data_files_to_compact.remove(&table_unique_file_idfile_id));
+                let table_unique_file_id = self.get_table_unique_file_id(cur_data_file.file_id());
+                assert!(tentative_data_files_to_compact.remove(&table_unique_file_id));
                 reject_by_unpersistence += 1;
             }
             assert!(file_indices_to_compact.remove(cur_file_index));
@@ -164,7 +161,9 @@ impl SnapshotTableState {
             return DataCompactionMaintenanceStatus::Unknown;
         }
 
-        // TODO(hjiang): Add validation on data file and file indices consistency.
+        // TODO(hjiang):
+        // 1. Add validation on data file and file indices consistency.
+        // 2. Could be optimized away a few copies.
         let payload = DataCompactionPayload {
             uuid: uuid::Uuid::new_v4(),
             object_storage_cache: self.object_storage_cache.clone(),
