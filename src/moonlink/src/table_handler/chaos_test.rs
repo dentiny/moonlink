@@ -7,12 +7,20 @@
 /// - LSN always increases
 use crate::event_sync::create_table_event_syncer;
 use crate::row::{MoonlinkRow, RowValue};
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::gcs_test_utils::*;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::s3_test_utils::*;
+#[cfg(feature = "storage-s3")]
+use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::mooncake_table::table_operation_test_utils::sync_read_request_for_test;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
-use crate::TableEventManager;
+use crate::{FileSystemConfig, TableEventManager};
 use crate::{IcebergTableConfig, ObjectStorageCache};
 
 use more_asserts as ma;
@@ -472,12 +480,13 @@ struct TestEnvConfig {
     event_count: usize,
     /// Whether error injection is enabled.
     error_injection_enabled: bool,
+    /// Filesystem config for persistence.
+    filesystem_config: FileSystemConfig,
 }
 
 #[allow(dead_code)]
 struct TestEnvironment {
     test_env_config: TestEnvConfig,
-    iceberg_temp_dir: TempDir,
     cache_temp_dir: TempDir,
     table_temp_dir: TempDir,
     object_storage_cache: ObjectStorageCache,
@@ -516,11 +525,10 @@ impl TestEnvironment {
         let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
 
         // Create mooncake table and table event notification receiver.
-        let iceberg_temp_dir = tempdir().unwrap();
         let iceberg_table_config = if config.error_injection_enabled {
-            get_iceberg_table_config_with_chaos_injection(&iceberg_temp_dir)
+            get_iceberg_table_config_with_chaos_injection(config.filesystem_config.clone())
         } else {
-            get_iceberg_table_config(&iceberg_temp_dir)
+            get_iceberg_table_config_with_filesystem_config(config.filesystem_config.clone())
         };
         let table = create_mooncake_table(
             mooncake_table_metadata.clone(),
@@ -547,7 +555,6 @@ impl TestEnvironment {
 
         Self {
             test_env_config: config,
-            iceberg_temp_dir,
             cache_temp_dir,
             table_temp_dir,
             object_storage_cache,
@@ -701,13 +708,20 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
     }
 }
 
+/// ============================
+/// Local filesystem persistence
+/// ============================
+///
 /// Chaos test with no background table maintenance enabled.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_no_background_maintenance() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -716,10 +730,13 @@ async fn test_chaos_with_no_background_maintenance() {
 /// Chaos test with index merge enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_index_merge() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -728,22 +745,142 @@ async fn test_chaos_with_index_merge() {
 /// Chaos test with data compaction enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_data_compaction() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }
 
+/// ============================
+/// S3 persistence
+/// ============================
+///
+/// Chaos test with no background table maintenance enabled.
+#[cfg(feature = "storage-s3")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_s3_chaos_with_no_background_maintenance() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = S3TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: false,
+        event_count: 2500,
+        filesystem_config: s3_filesystem_config,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with index merge enabled by default.
+#[cfg(feature = "storage-s3")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_s3_chaos_with_index_merge() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = S3TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: false,
+        event_count: 2500,
+        filesystem_config: s3_filesystem_config,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with data compaction enabled by default.
+#[cfg(feature = "storage-s3")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_s3_chaos_with_data_compaction() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = S3TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: false,
+        event_count: 2500,
+        filesystem_config: s3_filesystem_config,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// ============================
+/// GCS persistence
+/// ============================
+///
+/// Chaos test with no background table maintenance enabled.
+#[cfg(feature = "storage-gcs")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_gcs_chaos_with_no_background_maintenance() {
+    let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
+    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
+    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: false,
+        event_count: 2500,
+        filesystem_config: gcs_filesystem_config,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with index merge enabled by default.
+#[cfg(feature = "storage-gcs")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_gcs_chaos_with_index_merge() {
+    let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
+    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
+    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: false,
+        event_count: 2500,
+        filesystem_config: gcs_filesystem_config,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with data compaction enabled by default.
+#[cfg(feature = "storage-gcs")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_gcs_chaos_with_data_compaction() {
+    let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
+    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
+    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: false,
+        event_count: 2500,
+        filesystem_config: gcs_filesystem_config,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// ============================
+/// Delay and error injection
+/// ============================
+///
 /// Chaos test with no background table maintenance enabled.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: true,
         event_count: 100,
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -752,10 +889,13 @@ async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
 /// Chaos test with index merge enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_index_merge_with_chaos_injection() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: true,
         event_count: 100,
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -764,10 +904,13 @@ async fn test_chaos_with_index_merge_with_chaos_injection() {
 /// Chaos test with data compaction enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_data_compaction_with_chaos_injection() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: true,
         event_count: 100,
+        filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
