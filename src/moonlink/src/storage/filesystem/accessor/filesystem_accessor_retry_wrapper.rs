@@ -32,7 +32,7 @@ impl FileSystemRetryWrapper {
     {
         let policy = ExponentialBuilder::default()
             .with_max_times(MAX_RETRY_COUNT)
-            //.with_jitter()
+            .with_jitter()
             .with_factor(RETRY_DELAY_FACTOR)
             .with_min_delay(MIN_RETRY_DELAY)
             .with_max_delay(MAX_RETRY_DELAY);
