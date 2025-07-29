@@ -3,9 +3,10 @@ use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::Fil
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use crate::MoonlinkSecretType;
 use crate::MoonlinkTableSecret;
+use serde::{Deserialize, Serialize};
 
 /// FileSystemConfig contains configuration for multiple storage backends.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, Deserialize, PartialEq, Serialize)]
 pub enum FileSystemConfig {
     #[cfg(feature = "storage-fs")]
     FileSystem { root_directory: String },

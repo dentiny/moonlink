@@ -15,8 +15,6 @@ use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableEvent;
-#[cfg(feature = "chaos-test")]
-use crate::Error;
 use crate::FileSystemConfig;
 use crate::ObjectStorageCache;
 
@@ -61,10 +59,7 @@ pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     let chaos_option = FileSystemChaosOption {
         min_latency: std::time::Duration::from_secs(0),
         max_latency: std::time::Duration::from_secs(1),
-        injected_error: Some(Error::from(
-            opendal::Error::new(opendal::ErrorKind::Unexpected, "Injected error").set_temporary(),
-        )),
-        prob: 5, // 5% error probability, a few retry attempts should work
+        err_prob: 5, // 5% error probability, a few retry attempts should work
     };
     IcebergTableConfig {
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],

@@ -11,32 +11,19 @@ use futures::Stream;
 use more_asserts as ma;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct FileSystemChaosOption {
     /// Min and max latency introduced to all operation access, both inclusive.
     pub min_latency: std::time::Duration,
     pub max_latency: std::time::Duration,
 
-    /// Specified error for the given probability, which ranges [0, prob].
-    pub injected_error: Option<Error>,
-    pub prob: usize,
-}
-
-impl PartialEq for FileSystemChaosOption {
-    fn eq(&self, other: &Self) -> bool {
-        self.min_latency == other.min_latency
-            && self.max_latency == other.max_latency
-            && self.prob == other.prob
-            && match (&self.injected_error, &other.injected_error) {
-                (Some(e1), Some(e2)) => e1.to_string() == e2.to_string(),
-                (None, None) => true,
-                _ => false,
-            }
-    }
+    /// Probability ranges from [0, err_prob]; if not 0, will return retriable opendal error randomly.
+    pub err_prob: usize,
 }
 
 impl FileSystemChaosOption {
@@ -44,7 +31,7 @@ impl FileSystemChaosOption {
     #[allow(dead_code)]
     fn validate(&self) {
         ma::assert_le!(self.min_latency, self.max_latency);
-        ma::assert_le!(self.prob, 100);
+        ma::assert_le!(self.err_prob, 100);
     }
 }
 
@@ -87,12 +74,18 @@ impl FileSystemChaosWrapper {
 
     /// Get random error.
     async fn get_random_error(&self) -> Result<()> {
-        if let Some(err) = &self.option.injected_error {
-            let mut rng = self.rng.lock().await;
-            let rand_val: usize = rng.random_range(0..=100);
-            if rand_val <= self.option.prob {
-                return Err(err.clone());
-            }
+        if self.option.err_prob == 0 {
+            return Ok(());
+        }
+
+        let mut rng = self.rng.lock().await;
+        let rand_val: usize = rng.random_range(0..=100);
+        if rand_val <= self.option.err_prob {
+            let err = Error::from(
+                opendal::Error::new(opendal::ErrorKind::Unexpected, "Injected error")
+                    .set_temporary(),
+            );
+            return Err(err);
         }
 
         Ok(())
@@ -196,7 +189,6 @@ impl BaseFileSystemAccess for FileSystemChaosWrapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use iceberg::Error as IcebergError;
     use std::time::Duration;
     use tempfile::tempdir;
 
@@ -211,8 +203,7 @@ mod tests {
             FileSystemChaosOption {
                 min_latency: Duration::from_millis(10),
                 max_latency: Duration::from_millis(100),
-                injected_error: None,
-                prob: 0,
+                err_prob: 0,
             },
         );
 
@@ -236,17 +227,12 @@ mod tests {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
         };
 
-        let injected_error = IcebergError::new(
-            iceberg::ErrorKind::CatalogCommitConflicts,
-            "commit confliction",
-        );
         let wrapper = FileSystemChaosWrapper::new(
             config,
             FileSystemChaosOption {
                 min_latency: Duration::from_millis(0),
                 max_latency: Duration::from_millis(0),
-                injected_error: Some(Error::from(injected_error)),
-                prob: 100,
+                err_prob: 100,
             },
         );
 
