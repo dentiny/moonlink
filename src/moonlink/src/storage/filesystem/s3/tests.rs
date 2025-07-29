@@ -80,6 +80,16 @@ async fn test_conditional_write() {
     // Read object and check.
     let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
     assert_eq!(actual_content, random_content.as_bytes().to_vec());
+
+    // Write object conditionally, with no etag filled in.
+    let res = filesystem_accessor
+        .conditional_write_object(
+            DST_FILENAME,
+            random_content.as_bytes().to_vec(),
+            /*etag=*/ None,
+        )
+        .await;
+    assert!(res.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
