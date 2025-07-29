@@ -15,7 +15,8 @@ use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableEvent;
-use crate::FileSystemAccessor;
+#[cfg(feature = "chaos-test")]
+use crate::Error;
 use crate::FileSystemConfig;
 use crate::ObjectStorageCache;
 
@@ -34,6 +35,33 @@ pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
         filesystem_config: FileSystemConfig::FileSystem { root_directory },
+    }
+}
+
+/// Test util function with error injection at filesystem layer.
+#[cfg(feature = "chaos-test")]
+pub(crate) fn get_iceberg_table_config_with_error_injection(
+    temp_dir: &TempDir,
+) -> IcebergTableConfig {
+    use crate::storage::filesystem::accessor::filesystem_accessor_wrapper::FileSystemWrapperOption;
+
+    let root_directory = temp_dir.path().to_str().unwrap().to_string();
+    let inner_config = Box::new(FileSystemConfig::FileSystem { root_directory });
+    let wrapper_option = FileSystemWrapperOption {
+        min_latency: std::time::Duration::from_secs(0),
+        max_latency: std::time::Duration::from_secs(1),
+        injected_error: Some(Error::from(
+            opendal::Error::new(opendal::ErrorKind::Unexpected, "Injected error").set_temporary(),
+        )),
+        prob: 5, // 5% error probability, a few retry attempts should work
+    };
+    IcebergTableConfig {
+        namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
+        table_name: ICEBERG_TEST_TABLE.to_string(),
+        filesystem_config: FileSystemConfig::Wrapper {
+            wrapper_option,
+            inner_config,
+        },
     }
 }
 
@@ -317,8 +345,6 @@ pub(crate) async fn create_mooncake_table(
 
     table
 }
-
-/// Test util function
 
 /// Test util function to create mooncake table and table notify.
 pub(crate) async fn create_mooncake_table_and_notify(

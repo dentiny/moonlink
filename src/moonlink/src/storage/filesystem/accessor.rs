@@ -3,6 +3,7 @@ pub(crate) mod base_unbuffered_stream_writer;
 pub(crate) mod configs;
 pub(crate) mod factory;
 pub(crate) mod filesystem_accessor;
+pub(crate) mod filesystem_accessor_retry_wrapper;
 pub(crate) mod filesystem_accessor_wrapper;
 pub(crate) mod metadata;
 pub(crate) mod operator_utils;

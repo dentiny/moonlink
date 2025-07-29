@@ -1,9 +1,8 @@
+#[cfg(feature = "chaos-test")]
+use crate::storage::filesystem::accessor::filesystem_accessor_wrapper::FileSystemWrapperOption;
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use crate::MoonlinkSecretType;
-use crate::{
-    storage::filesystem::accessor::filesystem_accessor_wrapper::FileSystemWrapperOption,
-    MoonlinkTableSecret,
-};
+use crate::MoonlinkTableSecret;
 
 /// FileSystemConfig contains configuration for multiple storage backends.
 #[derive(Clone, PartialEq)]

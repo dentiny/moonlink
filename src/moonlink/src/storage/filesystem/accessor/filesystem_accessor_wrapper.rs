@@ -18,12 +18,12 @@ use tokio::sync::Mutex;
 #[derive(Clone, Debug)]
 pub struct FileSystemWrapperOption {
     /// Min and max latency introduced to all operation access, both inclusive.
-    min_latency: std::time::Duration,
-    max_latency: std::time::Duration,
+    pub min_latency: std::time::Duration,
+    pub max_latency: std::time::Duration,
 
     /// Specified error for the given probability, which ranges [0, prob].
-    injected_error: Option<Error>,
-    prob: usize,
+    pub injected_error: Option<Error>,
+    pub prob: usize,
 }
 
 impl PartialEq for FileSystemWrapperOption {

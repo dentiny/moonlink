@@ -452,7 +452,8 @@ impl ChaosState {
     }
 }
 
-enum TestEnvConfig {
+#[derive(Clone, Debug)]
+enum TableMainenanceOption {
     /// No table maintenance in background.
     NoTableMaintenance,
     /// Index merge is enabled by default: merge take place as long as there're at least two index files.
@@ -461,8 +462,19 @@ enum TestEnvConfig {
     DataCompaction,
 }
 
+#[derive(Clone, Debug)]
+struct TestEnvConfig {
+    /// Table background maintenance option.
+    maintenance_option: TableMainenanceOption,
+    /// Event count.
+    event_count: usize,
+    /// Whether error injection is enabled.
+    error_injection_enabled: bool,
+}
+
 #[allow(dead_code)]
 struct TestEnvironment {
+    test_env_config: TestEnvConfig,
     iceberg_temp_dir: TempDir,
     cache_temp_dir: TempDir,
     table_temp_dir: TempDir,
@@ -479,14 +491,16 @@ struct TestEnvironment {
 impl TestEnvironment {
     async fn new(config: TestEnvConfig) -> Self {
         let table_temp_dir = tempdir().unwrap();
-        let mooncake_table_metadata = match &config {
-            TestEnvConfig::NoTableMaintenance => create_test_table_metadata_disable_flush(
+        let mooncake_table_metadata = match &config.maintenance_option {
+            TableMainenanceOption::NoTableMaintenance => create_test_table_metadata_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
             ),
-            TestEnvConfig::IndexMerge => create_test_table_metadata_with_index_merge_disable_flush(
-                table_temp_dir.path().to_str().unwrap().to_string(),
-            ),
-            TestEnvConfig::DataCompaction => {
+            TableMainenanceOption::IndexMerge => {
+                create_test_table_metadata_with_index_merge_disable_flush(
+                    table_temp_dir.path().to_str().unwrap().to_string(),
+                )
+            }
+            TableMainenanceOption::DataCompaction => {
                 create_test_table_metadata_with_data_compaction_disable_flush(
                     table_temp_dir.path().to_str().unwrap().to_string(),
                 )
@@ -499,7 +513,11 @@ impl TestEnvironment {
 
         // Create mooncake table and table event notification receiver.
         let iceberg_temp_dir = tempdir().unwrap();
-        let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+        let iceberg_table_config = if config.error_injection_enabled {
+            get_iceberg_table_config_with_error_injection(&iceberg_temp_dir)
+        } else {
+            get_iceberg_table_config(&iceberg_temp_dir)
+        };
         let table = create_mooncake_table(
             mooncake_table_metadata,
             iceberg_table_config,
@@ -524,6 +542,7 @@ impl TestEnvironment {
         let event_sender = table_handler.get_event_sender();
 
         Self {
+            test_env_config: config,
             iceberg_temp_dir,
             cache_temp_dir,
             table_temp_dir,
@@ -540,6 +559,7 @@ impl TestEnvironment {
 }
 
 async fn chaos_test_impl(mut env: TestEnvironment) {
+    let test_env_config = env.test_env_config.clone();
     let event_sender = env.event_sender.clone();
     let read_state_manager = env.read_state_manager;
     let mut table_event_manager = env.table_event_manager;
@@ -549,8 +569,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
     let task = tokio::spawn(async move {
         let mut state = ChaosState::new(read_state_manager);
 
-        // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..3000 {
+        for _ in 0..test_env_config.event_count {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
@@ -626,20 +645,71 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
 /// Chaos test with no background table maintenance enabled.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_no_background_maintenance() {
-    let env = TestEnvironment::new(TestEnvConfig::NoTableMaintenance).await;
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: false,
+        event_count: 3000,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }
 
 /// Chaos test with index merge enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_index_merge() {
-    let env = TestEnvironment::new(TestEnvConfig::IndexMerge).await;
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: false,
+        event_count: 3000,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }
 
 /// Chaos test with data compaction enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_data_compaction() {
-    let env = TestEnvironment::new(TestEnvConfig::DataCompaction).await;
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: false,
+        event_count: 3000,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with no background table maintenance enabled.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_no_background_maintenance_with_error_injection() {
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: true,
+        event_count: 100,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with index merge enabled by default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_index_merge_with_error_injection() {
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: true,
+        event_count: 100,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with data compaction enabled by default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_data_compaction_with_error_injection() {
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: true,
+        event_count: 100,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }
