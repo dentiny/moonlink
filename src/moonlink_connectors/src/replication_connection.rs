@@ -8,8 +8,7 @@ use crate::pg_replicate::postgres_source::{
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
 use moonlink::{
-    FileSystemConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
-    TableStatusReader,
+    MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager, TableStatusReader,
 };
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -55,7 +54,6 @@ pub struct ReplicationConnection {
     uri: String,
     database_id: u32,
     table_base_path: String,
-    table_temp_files_directory: String,
     postgres_client: Client,
     handle: Option<JoinHandle<Result<()>>>,
     table_states: HashMap<SrcTableId, TableState>,
@@ -76,7 +74,6 @@ impl ReplicationConnection {
         uri: String,
         database_id: u32,
         table_base_path: String,
-        table_temp_files_directory: String,
         object_storage_cache: ObjectStorageCache,
     ) -> Result<Self> {
         debug!(%uri, "initializing replication connection");
@@ -129,7 +126,6 @@ impl ReplicationConnection {
             uri,
             database_id,
             table_base_path,
-            table_temp_files_directory,
             postgres_client,
             handle: None,
             table_states: HashMap::new(),

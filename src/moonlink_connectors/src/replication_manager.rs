@@ -1,7 +1,6 @@
 use crate::pg_replicate::table::SrcTableId;
 use crate::ReplicationConnection;
 use crate::Result;
-use moonlink::FileSystemConfig;
 use moonlink::TableStatusReader;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
@@ -22,8 +21,6 @@ pub struct ReplicationManager<T: Clone + Eq + Hash + std::fmt::Display> {
     table_info: HashMap<T, (String, SrcTableId)>,
     /// Base directory for mooncake tables.
     table_base_path: String,
-    /// Base directory for temporary files used in union read.
-    table_temp_files_directory: String,
     /// Object storage cache.
     object_storage_cache: ObjectStorageCache,
     /// Background shutdown handles.
@@ -31,16 +28,11 @@ pub struct ReplicationManager<T: Clone + Eq + Hash + std::fmt::Display> {
 }
 
 impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
-    pub fn new(
-        table_base_path: String,
-        table_temp_files_directory: String,
-        object_storage_cache: ObjectStorageCache,
-    ) -> Self {
+    pub fn new(table_base_path: String, object_storage_cache: ObjectStorageCache) -> Self {
         Self {
             connections: HashMap::new(),
             table_info: HashMap::new(),
             table_base_path,
-            table_temp_files_directory,
             object_storage_cache,
             shutdown_handles: Vec::new(),
         }
@@ -76,7 +68,6 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 src_uri.to_string(),
                 database_id,
                 base_path.to_str().unwrap().to_string(),
-                self.table_temp_files_directory.clone(),
                 self.object_storage_cache.clone(),
             )
             .await?;

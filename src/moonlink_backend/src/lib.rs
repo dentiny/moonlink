@@ -56,7 +56,6 @@ where
 
         let mut replication_manager = ReplicationManager::new(
             base_path_str.to_string(),
-            temp_files_dir.to_str().unwrap().to_string(),
             file_utils::create_default_object_storage_cache(read_cache_files_dir),
         );
         recovery_utils::recover_all_tables(&*metadata_store_accessor, &mut replication_manager)
@@ -105,10 +104,10 @@ where
 
         // Add mooncake table to replication, and create corresponding mooncake table.
         let moonlink_table_config = table_creation_config
-            .get_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
+            .take_as_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
         {
             let mut manager = self.replication_manager.write().await;
-            let table_config = manager
+            manager
                 .add_table(
                     &src_uri,
                     mooncake_table_id,
@@ -120,7 +119,6 @@ where
                 )
                 .await?;
             manager.start_replication(&src_uri).await?;
-            table_config
         };
 
         // Create metadata store entry.
