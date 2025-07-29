@@ -34,6 +34,9 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     /// Return whether the given object exists.
     async fn object_exists(&self, object: &str) -> Result<bool>;
 
+    /// Return the object metadata.
+    async fn stats_object(&self, object: &str) -> Result<opendal::Metadata>;
+
     /// Return the object size.
     async fn get_object_size(&self, object: &str) -> Result<u64>;
 

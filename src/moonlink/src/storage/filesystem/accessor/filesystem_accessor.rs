@@ -28,6 +28,7 @@ const IO_BLOCK_SIZE: usize = 2 * 1024 * 1024;
 /// Max number of ongoing parallel sub IO operations for one single upload and download operation.
 const MAX_SUB_IO_OPERATION: usize = 8;
 
+// TODO(hjiang): Add stats cache for exists, get file size, etc invocation.
 pub struct FileSystemAccessor {
     /// Root path.
     root_path: String,
@@ -200,6 +201,14 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         match self.get_operator().await?.stat(sanitized_object).await {
             Ok(_) => Ok(true),
             Err(e) if e.kind() == opendal::ErrorKind::NotFound => Ok(false),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    async fn stats_object(&self, object: &str) -> Result<opendal::Metadata> {
+        let sanitized_object = self.sanitize_path(object);
+        match self.get_operator().await?.stat(sanitized_object).await {
+            Ok(metadata) => Ok(metadata),
             Err(e) => Err(e.into()),
         }
     }
@@ -434,6 +443,33 @@ mod tests {
     use crate::storage::filesystem::accessor::test_utils::*;
     use crate::storage::filesystem::test_utils::writer_test_utils::test_unbuffered_stream_writer_impl;
     use rstest::rstest;
+
+    #[tokio::test]
+    async fn test_stats_object() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root_directory = temp_dir.path().to_str().unwrap().to_string();
+        let filesystem_config = FileSystemConfig::FileSystem {
+            root_directory: root_directory.clone(),
+        };
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+
+        const DST_FILENAME: &str = "target";
+        const TARGET_FILESIZE: usize = 10;
+
+        // Write object.
+        let random_content = create_random_string(TARGET_FILESIZE);
+        filesystem_accessor
+            .write_object(DST_FILENAME, random_content.as_bytes().to_vec())
+            .await
+            .unwrap();
+
+        // Stats object.
+        let metadata = filesystem_accessor
+            .stats_object(DST_FILENAME)
+            .await
+            .unwrap();
+        assert_eq!(metadata.content_length(), TARGET_FILESIZE as u64);
+    }
 
     // Local filesystem doesn't support conditional write, which should behave the same as [`write_object`].
     #[tokio::test]

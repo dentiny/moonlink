@@ -71,6 +71,8 @@ pub struct FileCatalog {
     warehouse_location: String,
     /// Used to overwrite iceberg metadata at table creation.
     iceberg_schema: IcebergSchema,
+    /// Used for conditional write at transaction commit.
+    etag: Option<String>,
     /// Used to record puffin blob metadata in one transaction, and cleaned up after transaction commits.
     ///
     /// Maps from "puffin filepath" to "puffin blob metadata".
@@ -91,6 +93,7 @@ impl FileCatalog {
             file_io,
             warehouse_location,
             iceberg_schema,
+            etag: None,
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
             data_files_to_remove: HashSet::new(),
@@ -109,6 +112,7 @@ impl FileCatalog {
             filesystem_accessor,
             file_io,
             iceberg_schema,
+            etag: None,
             warehouse_location: String::new(),
             puffin_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),

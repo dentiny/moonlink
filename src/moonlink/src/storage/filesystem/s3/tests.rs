@@ -10,11 +10,36 @@ use futures::StreamExt;
 use rstest::rstest;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_stats_object() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
+
+    const DST_FILENAME: &str = "target";
+    const TARGET_FILESIZE: usize = 10;
+
+    // Write object.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    filesystem_accessor
+        .write_object(DST_FILENAME, random_content.as_bytes().to_vec())
+        .await
+        .unwrap();
+
+    // Stats object.
+    let metadata = filesystem_accessor
+        .stats_object(DST_FILENAME)
+        .await
+        .unwrap();
+    assert_eq!(metadata.content_length(), TARGET_FILESIZE as u64);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_conditional_write() {
     let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
     let _test_guard = TestGuard::new(bucket.clone()).await;
-    let gcs_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
-    let filesystem_accessor = create_filesystem_accessor(gcs_filesystem_config);
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
 
     const DST_FILENAME: &str = "target";
     const TARGET_FILESIZE: usize = 10;

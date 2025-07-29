@@ -66,6 +66,11 @@ impl BaseFileSystemAccess for FileSystemRetryWrapper {
             .await
     }
 
+    async fn stats_object(&self, object: &str) -> Result<opendal::Metadata> {
+        self.retry_async(|| async { self.inner.stats_object(object).await })
+            .await
+    }
+
     async fn get_object_size(&self, object: &str) -> Result<u64> {
         self.retry_async(|| async { self.inner.get_object_size(object).await })
             .await

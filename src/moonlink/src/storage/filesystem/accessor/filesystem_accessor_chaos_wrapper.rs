@@ -127,6 +127,11 @@ impl BaseFileSystemAccess for FileSystemChaosWrapper {
         self.inner.object_exists(object).await
     }
 
+    async fn stats_object(&self, object: &str) -> Result<opendal::Metadata> {
+        self.perform_wrapper_function().await?;
+        self.inner.stats_object(object).await
+    }
+
     async fn get_object_size(&self, object: &str) -> Result<u64> {
         self.perform_wrapper_function().await?;
         self.inner.get_object_size(object).await
