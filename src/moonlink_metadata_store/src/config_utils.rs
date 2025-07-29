@@ -119,7 +119,7 @@ pub(crate) fn deserialze_moonlink_table_config(
     let parsed: MoonlinkTableConfigForPersistence = serde_json::from_value(serialized_config)?;
     let filesystem_config = recover_filesystem_config(&parsed, secret_entry);
 
-    // TODO(hjiang): Need to recover iceberg table config from metadata.
+    // TODO(hjiang): Need to persist and recovery mooncake table config.
     let moonlink_table_config = MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
             namespace: vec![parsed.iceberg_table_config.namespace],

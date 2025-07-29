@@ -57,8 +57,17 @@ pub async fn build_table_components(
     object_storage_cache: ObjectStorageCache,
     moonlink_table_config: MoonlinkTableConfig,
 ) -> Result<TableResources> {
+    // Recreate write-through cache directory.
     let write_cache_path = PathBuf::from(base_path).join(&mooncake_table_id);
     recreate_directory(&write_cache_path).await?;
+    // Make sure temporary directory exists.
+    tokio::fs::create_dir_all(
+        &moonlink_table_config
+            .mooncake_table_config
+            .temp_files_directory,
+    )
+    .await?;
+
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
     let table = MooncakeTable::new(
         arrow_schema,

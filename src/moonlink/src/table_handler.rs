@@ -156,7 +156,10 @@ impl TableHandler {
             }
             tokio::task::spawn(async move {
                 if let Err(err) = io_utils::delete_local_files(&evicted_file_to_delete).await {
-                    error!("Failed to delete object storage cache: {:?}", err);
+                    error!(
+                        "Failed to delete object storage cache {:?}: {:?}",
+                        evicted_file_to_delete, err
+                    );
                 }
             });
         };
