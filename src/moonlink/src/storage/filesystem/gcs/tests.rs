@@ -1,5 +1,4 @@
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::accessor::operator_utils;
 use crate::storage::filesystem::accessor::test_utils::*;
 use crate::storage::filesystem::accessor::unbuffered_stream_writer::UnbufferedStreamWriter;
