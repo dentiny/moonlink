@@ -57,6 +57,7 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
         content: Vec<u8>,
     ) -> Result<opendal::Metadata>;
     /// Write the whole content with conditional write and put-if-absent semantics support.
+    /// If if-match feature is not supported for the current storage backend, fallback to [`write_object`].
     ///
     /// # Arguments
     ///
