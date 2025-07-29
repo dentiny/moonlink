@@ -134,6 +134,11 @@ pub enum TableEvent {
         /// Evicted object storage cache to delete.
         evicted_data_files_to_delete: Vec<String>,
     },
+    /// Regular iceberg persistence.
+    RegularIcebergSnapshot {
+        /// Payload used to create a new iceberg snapshot.
+        iceberg_snapshot_payload: IcebergSnapshotPayload,
+    },
     /// Iceberg snapshot completes.
     IcebergSnapshotResult {
         /// Result for iceberg snapshot.

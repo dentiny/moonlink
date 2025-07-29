@@ -54,6 +54,7 @@ impl TableHandler {
         table.register_table_notify(event_sender.clone()).await;
 
         // Spawn the task to notify periodical events.
+        let table_handler_event_sender = event_sender.clone();
         let event_sender_for_periodical_snapshot = event_sender.clone();
         let event_sender_for_periodical_force_snapshot = event_sender.clone();
         let periodic_event_handle = tokio::spawn(async move {
@@ -85,6 +86,7 @@ impl TableHandler {
         let event_handle = Some(tokio::spawn(
             async move {
                 Self::event_loop(
+                    table_handler_event_sender,
                     event_sync_sender,
                     event_receiver,
                     replication_lsn_rx,
@@ -112,6 +114,7 @@ impl TableHandler {
     /// Main event processing loop
     #[tracing::instrument(name = "table_event_loop", skip_all)]
     async fn event_loop(
+        table_handler_event_sender: Sender<TableEvent>,
         event_sync_sender: EventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
         replication_lsn_rx: watch::Receiver<u64>,
@@ -319,6 +322,25 @@ impl TableHandler {
                             table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
                             table_handler_state.mooncake_snapshot_ongoing = table.create_snapshot(table_handler_state.get_mooncake_snapshot_option(/*request_force=*/false, uuid));
                         }
+                        TableEvent::RegularIcebergSnapshot { mut iceberg_snapshot_payload } => {
+                            // Update table maintainence status.
+                            if iceberg_snapshot_payload.contains_table_maintenance_payload() && table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
+                                table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InPersist;
+                            }
+                            table_handler_state.iceberg_snapshot_ongoing = true;
+                            if table_handler_state.should_complete_alter_table(iceberg_snapshot_payload.flush_lsn) {
+                                if let SpecialTableState::AlterTable { ref mut alter_table_request, .. } = table_handler_state.special_table_state {
+                                    let new_table_metadata = table.alter_table(alter_table_request.take().unwrap());
+                                    iceberg_snapshot_payload.new_table_schema = Some(new_table_metadata);
+                                }
+                                else {
+                                    unreachable!("alter table request is not set");
+                                }
+                                table_handler_state.finish_alter_table();
+                                Self::process_blocked_events(&mut table, &mut table_handler_state).await;
+                            }
+                            table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+                        }
                         TableEvent::MooncakeTableSnapshotResult { lsn, uuid: _, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
                             // Spawn a detached best-effort task to delete evicted object storage cache.
                             start_task_to_delete_evicted(evicted_data_files_to_delete);
@@ -338,24 +360,10 @@ impl TableHandler {
 
                             // Process iceberg snapshot and trigger iceberg snapshot if necessary.
                             if table_handler_state.can_initiate_iceberg_snapshot() {
-                                if let Some(mut iceberg_snapshot_payload) = iceberg_snapshot_payload {
-                                    // Update table maintainence status.
-                                    if iceberg_snapshot_payload.contains_table_maintenance_payload() && table_handler_state.table_maintenance_process_status == MaintenanceProcessStatus::ReadyToPersist {
-                                        table_handler_state.table_maintenance_process_status = MaintenanceProcessStatus::InPersist;
-                                    }
-                                    table_handler_state.iceberg_snapshot_ongoing = true;
-                                    if table_handler_state.should_complete_alter_table(iceberg_snapshot_payload.flush_lsn) {
-                                        if let SpecialTableState::AlterTable { ref mut alter_table_request, .. } = table_handler_state.special_table_state {
-                                            let new_table_metadata = table.alter_table(alter_table_request.take().unwrap());
-                                            iceberg_snapshot_payload.new_table_schema = Some(new_table_metadata);
-                                        }
-                                        else {
-                                            unreachable!("alter table request is not set");
-                                        }
-                                        table_handler_state.finish_alter_table();
-                                        Self::process_blocked_events(&mut table, &mut table_handler_state).await;
-                                    }
-                                    table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+                                if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+                                    table_handler_event_sender.send(TableEvent::RegularIcebergSnapshot {
+                                        iceberg_snapshot_payload,
+                                    }).await.unwrap();
                                 }
                             }
 
