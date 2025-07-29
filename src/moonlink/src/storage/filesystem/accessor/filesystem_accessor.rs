@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use futures::TryStreamExt;
 use futures::{Stream, StreamExt};
 use opendal::options::WriteOptions;
+use opendal::Metadata;
 use opendal::Operator;
 #[cfg(test)]
 use tempfile::TempDir;
@@ -264,13 +265,13 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         Ok(Box::pin(stream))
     }
 
-    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
+    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<Metadata> {
         let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
         let expected_len = content.len();
         let metadata = operator.write(sanitized_object, content).await?;
         assert_eq!(metadata.content_length(), expected_len as u64);
-        Ok(())
+        Ok(metadata)
     }
 
     async fn conditional_write_object(
@@ -282,6 +283,12 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         let sanitized_object = self.sanitize_path(object);
         let operator = self.get_operator().await?;
         let expected_len = content.len();
+
+        // Conditional write is not supported for all storage backends, if not supported, fallback to [`write_object`].
+        if !operator.info().full_capability().write_with_if_match {
+            return self.write_object(object, content).await;
+        }
+
         let mut write_option = WriteOptions::default();
         if let Some(etag) = etag {
             write_option.if_match = Some(etag);

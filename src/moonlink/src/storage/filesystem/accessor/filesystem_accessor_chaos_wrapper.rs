@@ -150,7 +150,7 @@ impl BaseFileSystemAccess for FileSystemChaosWrapper {
         self.inner.stream_read(object).await
     }
 
-    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
+    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<opendal::Metadata> {
         self.perform_wrapper_function().await?;
         self.inner.write_object(object, content).await
     }
