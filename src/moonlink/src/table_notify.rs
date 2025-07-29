@@ -38,6 +38,20 @@ impl<T> TableMainenanceStatus<T> {
     }
 }
 
+#[derive(Clone)]
+pub struct EvictedFiles {
+    /// Evicted files by object storage cache to delete.
+    pub files: Vec<String>,
+}
+
+impl std::fmt::Debug for EvictedFiles {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EvictedFiles")
+            .field("evicted files count", &self.files.len())
+            .finish()
+    }
+}
+
 /// Completion notifications for mooncake table, including snapshot creation and compaction, etc.
 ///
 /// TODO(hjiang): Revisit whether we need to place the payload into box.
@@ -140,10 +154,10 @@ pub enum TableEvent {
         /// Cache handles, which are pinned before query.
         cache_handles: Vec<NonEvictableHandle>,
     },
-    /// Evicted data files to delete.
-    EvictedDataFilesToDelete {
+    /// Evicted files to delete.
+    EvictedFilesToDelete {
         /// Evicted data files by object storage cache.
-        evicted_data_files: Vec<String>,
+        evicted_files: EvictedFiles,
     },
 }
 

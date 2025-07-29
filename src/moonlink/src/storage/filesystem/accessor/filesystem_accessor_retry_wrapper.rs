@@ -89,7 +89,7 @@ impl BaseFileSystemAccess for FileSystemRetryWrapper {
             .await
     }
 
-    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<()> {
+    async fn write_object(&self, object: &str, content: Vec<u8>) -> Result<opendal::Metadata> {
         self.retry_async(|| {
             let content = content.clone();
             async move { self.inner.write_object(object, content).await }
@@ -169,7 +169,9 @@ mod tests {
         mock_filesystem_access
             .expect_write_object()
             .times(1)
-            .returning(|_, _| Box::pin(async move { Ok(()) }));
+            .returning(|_, _| {
+                Box::pin(async move { Ok(opendal::Metadata::new(opendal::EntryMode::FILE)) })
+            });
 
         let retry_wrapper = FileSystemRetryWrapper::new(Arc::new(mock_filesystem_access));
         retry_wrapper

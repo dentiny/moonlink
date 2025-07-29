@@ -51,8 +51,13 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     ) -> Result<Pin<Box<dyn Stream<Item = Result<Vec<u8>>> + Send>>>;
 
     /// Write the whole content to the given object.
-    async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()>;
+    async fn write_object(
+        &self,
+        object_filepath: &str,
+        content: Vec<u8>,
+    ) -> Result<opendal::Metadata>;
     /// Write the whole content with conditional write and put-if-absent semantics support.
+    /// If if-match feature is not supported for the current storage backend, fallback to [`write_object`].
     ///
     /// # Arguments
     ///

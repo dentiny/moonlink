@@ -42,10 +42,8 @@ pub(crate) async fn sync_delete_evicted_files(
     mut expected_files_to_delete: Vec<String>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::EvictedDataFilesToDelete {
-        mut evicted_data_files,
-    } = notification
-    {
+    if let TableEvent::EvictedFilesToDelete { evicted_files } = notification {
+        let mut evicted_data_files = evicted_files.files;
         evicted_data_files.sort();
         expected_files_to_delete.sort();
         assert_eq!(evicted_data_files, expected_files_to_delete);
