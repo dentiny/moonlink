@@ -3,7 +3,7 @@ pub mod file_utils;
 mod logging;
 pub mod mooncake_table_id;
 mod recovery_utils;
-pub mod table_config;
+pub mod table_creation_config;
 
 use arrow_schema::Schema;
 pub use error::{Error, Result};
@@ -16,7 +16,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::table_config::TableCreationConfig;
+use crate::table_creation_config::TableCreationConfig;
 
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,

@@ -2801,6 +2801,7 @@ dependencies = [
  "arrow-ipc",
  "arrow-schema",
  "clap",
+ "moonlink",
  "moonlink_backend",
  "moonlink_metadata_store",
  "moonlink_rpc",

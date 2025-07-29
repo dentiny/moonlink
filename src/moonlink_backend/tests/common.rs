@@ -1,5 +1,5 @@
 use arrow_array::Int64Array;
-use moonlink_backend::table_config::{TableConfig, TableCreationConfig};
+use moonlink_backend::table_creation_config::{TableConfig, TableCreationConfig};
 use moonlink_metadata_store::SqliteMetadataStore;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::sync::Arc;
@@ -62,10 +62,7 @@ impl TestGuard {
             mooncake_creation_config: TableConfig {
                 enable_index_merge: false,
             },
-            storage_creation_config:
-                moonlink_backend::table_config::IcebergStorageConfig::FsStorageConfig(
-                    root_directory,
-                ),
+            storage_creation_config: moonlink::FileSystemConfig::FileSystem { root_directory },
         }
     }
 
@@ -264,8 +261,7 @@ fn get_table_creation_config(tmp_dir: &TempDir) -> TableCreationConfig {
         mooncake_creation_config: TableConfig {
             enable_index_merge: false,
         },
-        storage_creation_config:
-            moonlink_backend::table_config::IcebergStorageConfig::FsStorageConfig(root_directory),
+        storage_creation_config: moonlink::FileSystemConfig::FileSystem { root_directory },
     }
 }
 
