@@ -72,11 +72,7 @@ async fn test_conditional_write() {
 
     // Write object conditionally, with the matching etag filled in.
     let random_content = create_random_string(TARGET_FILESIZE);
-    let etag = if let Some(etag) = metadata.etag() {
-        Some(etag.to_string())
-    } else {
-        None
-    };
+    let etag = metadata.etag().map(|etag| etag.to_string());
     filesystem_accessor
         .conditional_write_object(DST_FILENAME, random_content.as_bytes().to_vec(), etag)
         .await
