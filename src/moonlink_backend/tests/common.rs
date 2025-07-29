@@ -1,4 +1,5 @@
 use arrow_array::Int64Array;
+use moonlink_backend::table_config::{TableConfig, TableCreationConfig};
 use moonlink_metadata_store::SqliteMetadataStore;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::sync::Arc;
@@ -46,6 +47,26 @@ impl TestGuard {
 
     pub fn backend(&self) -> &Arc<MoonlinkBackend<DatabaseId, TableId>> {
         &self.backend
+    }
+
+    pub fn get_table_creation_config(&self) -> TableCreationConfig {
+        let root_directory = self
+            .tmp
+            .as_ref()
+            .unwrap()
+            .path()
+            .to_str()
+            .unwrap()
+            .to_string();
+        TableCreationConfig {
+            mooncake_creation_config: TableConfig {
+                enable_index_merge: false,
+            },
+            storage_creation_config:
+                moonlink_backend::table_config::IcebergStorageConfig::FsStorageConfig(
+                    root_directory,
+                ),
+        }
     }
 
     #[allow(dead_code)]
@@ -236,6 +257,18 @@ fn apply_position_deletes_to_files(
     result
 }
 
+/// Util function to create a table creation config by directory.
+fn get_table_creation_config(tmp_dir: &TempDir) -> TableCreationConfig {
+    let root_directory = tmp_dir.path().to_str().unwrap().to_string();
+    TableCreationConfig {
+        mooncake_creation_config: TableConfig {
+            enable_index_merge: false,
+        },
+        storage_creation_config:
+            moonlink_backend::table_config::IcebergStorageConfig::FsStorageConfig(root_directory),
+    }
+}
+
 /// Spin up a backend + scratch TempDir + psql client, and guarantee
 /// a **fresh table** named `table_name` exists and is registered with
 /// Moonlink.
@@ -294,6 +327,7 @@ async fn setup_backend(
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
+                get_table_creation_config(&temp_dir),
             )
             .await
             .unwrap();
@@ -344,6 +378,7 @@ pub async fn smoke_create_and_insert(
             TABLE_ID,
             "public.test".to_string(),
             uri.to_string(),
+            get_table_creation_config(tmp_dir),
         )
         .await
         .unwrap();

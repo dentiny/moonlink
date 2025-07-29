@@ -39,16 +39,7 @@ impl ObjectStorageConfig {
                 bucket: self.bucket.clone(),
                 endpoint: self.endpoint.clone(),
             },
-            #[cfg(feature = "storage-gcs")]
-            "gcs" => FileSystemConfig::Gcs {
-                project: self.project.as_ref().unwrap().to_string(),
-                region: self.region.as_ref().unwrap().to_string(),
-                bucket: self.bucket.clone(),
-                access_key_id: self.key_id.clone(),
-                secret_access_key: self.secret.clone(),
-                endpoint: self.endpoint.clone(),
-                disable_auth: false,
-            },
+            // TODO(hjiang): Add GCS config later.
             _ => panic!("Unrecognizable object storage config {:?}", &self),
         }
     }
