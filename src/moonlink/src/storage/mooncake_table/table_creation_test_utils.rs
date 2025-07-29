@@ -2,6 +2,7 @@
 use crate::row::IdentityProp as RowIdentity;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
@@ -104,9 +105,7 @@ pub(crate) fn create_test_updated_arrow_schema_remove_age() -> Arc<ArrowSchema> 
 pub(crate) fn create_test_filesystem_accessor(
     iceberg_table_config: &IcebergTableConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
-    Arc::new(FileSystemAccessor::new(
-        iceberg_table_config.filesystem_config.clone(),
-    ))
+    create_filesystem_accessor(&iceberg_table_config.filesystem_config)
 }
 
 /// Test util function to create mooncake table metadata.
@@ -318,6 +317,8 @@ pub(crate) async fn create_mooncake_table(
 
     table
 }
+
+/// Test util function
 
 /// Test util function to create mooncake table and table notify.
 pub(crate) async fn create_mooncake_table_and_notify(

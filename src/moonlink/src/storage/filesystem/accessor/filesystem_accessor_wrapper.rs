@@ -26,6 +26,19 @@ pub struct FileSystemWrapperOption {
     prob: usize,
 }
 
+impl PartialEq for FileSystemWrapperOption {
+    fn eq(&self, other: &Self) -> bool {
+        self.min_latency == other.min_latency
+            && self.max_latency == other.max_latency
+            && self.prob == other.prob
+            && match (&self.injected_error, &other.injected_error) {
+                (Some(e1), Some(e2)) => e1.to_string() == e2.to_string(),
+                (None, None) => true,
+                _ => false,
+            }
+    }
+}
+
 impl FileSystemWrapperOption {
     /// Validate whether the given option is valid.
     #[allow(dead_code)]

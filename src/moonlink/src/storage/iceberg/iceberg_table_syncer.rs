@@ -44,10 +44,7 @@ pub struct DataFileImportResult {
 
 impl IcebergTableManager {
     /// Validate schema consistency at store operation.
-    async fn validate_schema_consistency_at_store(
-        &self,
-        _snapshot_payload: &IcebergSnapshotPayload,
-    ) {
+    async fn validate_schema_consistency_at_store(&self) {
         schema_utils::assert_table_schema_id(self.iceberg_table.as_ref().unwrap());
     }
 
@@ -444,8 +441,7 @@ impl IcebergTableManager {
         self.initialize_iceberg_table_for_once().await?;
 
         // Validate schema consistency before persistence operation.
-        self.validate_schema_consistency_at_store(&snapshot_payload)
-            .await;
+        self.validate_schema_consistency_at_store().await;
 
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
         let old_data_files = take_data_files_to_remove(&mut snapshot_payload);

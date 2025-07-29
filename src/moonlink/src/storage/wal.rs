@@ -1,7 +1,7 @@
 pub mod wal_persistence_metadata;
 use crate::row::MoonlinkRow;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::table_notify::TableEvent;
 use crate::Result;
@@ -186,7 +186,7 @@ impl WalManager {
             active_transactions: HashMap::new(),
             main_transaction_tracker: Vec::new(),
             // TODO(Paul): Implement object storage
-            file_system_accessor: Arc::new(FileSystemAccessor::new(config)),
+            file_system_accessor: create_filesystem_accessor(&config),
         }
     }
 

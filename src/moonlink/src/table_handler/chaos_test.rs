@@ -478,9 +478,6 @@ struct TestEnvironment {
 
 impl TestEnvironment {
     async fn new(config: TestEnvConfig) -> Self {
-        let iceberg_temp_dir = tempdir().unwrap();
-        let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
-
         let table_temp_dir = tempdir().unwrap();
         let mooncake_table_metadata = match &config {
             TestEnvConfig::NoTableMaintenance => create_test_table_metadata_disable_flush(
@@ -501,6 +498,8 @@ impl TestEnvironment {
         let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
 
         // Create mooncake table and table event notification receiver.
+        let iceberg_temp_dir = tempdir().unwrap();
+        let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
         let table = create_mooncake_table(
             mooncake_table_metadata,
             iceberg_table_config,

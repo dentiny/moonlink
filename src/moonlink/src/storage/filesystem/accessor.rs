@@ -1,6 +1,7 @@
 pub(crate) mod base_filesystem_accessor;
 pub(crate) mod base_unbuffered_stream_writer;
 pub(crate) mod configs;
+pub(crate) mod factory;
 pub(crate) mod filesystem_accessor;
 pub(crate) mod filesystem_accessor_wrapper;
 pub(crate) mod metadata;
