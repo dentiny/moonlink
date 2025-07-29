@@ -475,8 +475,8 @@ impl TableHandler {
                         TableEvent::ReadRequestCompletion { cache_handles } => {
                             table.set_read_request_res(cache_handles);
                         }
-                        TableEvent::EvictedDataFilesToDelete { evicted_data_files } => {
-                            start_task_to_delete_evicted(evicted_data_files);
+                        TableEvent::EvictedFilesToDelete { evicted_files } => {
+                            start_task_to_delete_evicted(evicted_files.files);
                         }
                         // ==============================
                         // Replication events
