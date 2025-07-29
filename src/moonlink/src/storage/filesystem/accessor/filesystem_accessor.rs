@@ -3,6 +3,7 @@ use async_trait::async_trait;
 #[cfg(feature = "storage-gcs")]
 use futures::TryStreamExt;
 use futures::{Stream, StreamExt};
+use opendal::options::WriteOptions;
 use opendal::Operator;
 #[cfg(test)]
 use tempfile::TempDir;
@@ -274,6 +275,28 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         Ok(())
     }
 
+    async fn conditional_write_object(
+        &self,
+        object: &str,
+        content: Vec<u8>,
+        etag: Option<String>,
+    ) -> Result<opendal::Metadata> {
+        let sanitized_object = self.sanitize_path(object);
+        let operator = self.get_operator().await?;
+        let expected_len = content.len();
+        let mut write_option = WriteOptions::default();
+        if let Some(etag) = etag {
+            write_option.if_match = Some(etag);
+        } else {
+            write_option.if_not_exists = true;
+        }
+        let metadata = operator
+            .write_options(sanitized_object, content, write_option)
+            .await?;
+        assert_eq!(metadata.content_length(), expected_len as u64);
+        Ok(metadata)
+    }
+
     async fn create_unbuffered_stream_writer(
         &self,
         object_filepath: &str,
@@ -411,6 +434,49 @@ mod tests {
     use crate::storage::filesystem::accessor::test_utils::*;
     use crate::storage::filesystem::test_utils::writer_test_utils::test_unbuffered_stream_writer_impl;
     use rstest::rstest;
+
+    // Local filesystem doesn't support conditional write, which should behave the same as [`write_object`].
+    #[tokio::test]
+    async fn test_conditional_write() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root_directory = temp_dir.path().to_str().unwrap().to_string();
+        let filesystem_config = FileSystemConfig::FileSystem {
+            root_directory: root_directory.clone(),
+        };
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+
+        const DST_FILENAME: &str = "target";
+        const TARGET_FILESIZE: usize = 10;
+        const ETAG: &str = "etag";
+
+        // Write object conditionally, with destination file doesn't exist.
+        let random_content = create_random_string(TARGET_FILESIZE);
+        filesystem_accessor
+            .conditional_write_object(
+                DST_FILENAME,
+                random_content.as_bytes().to_vec(),
+                /*etag=*/ None,
+            )
+            .await
+            .unwrap();
+        // Read object and check.
+        let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+        assert_eq!(actual_content, random_content.as_bytes().to_vec());
+
+        // Write object conditionally, with destination file already exists; for local filesystem the semantics is overwrite without check.
+        let random_content = create_random_string(TARGET_FILESIZE);
+        filesystem_accessor
+            .conditional_write_object(
+                DST_FILENAME,
+                random_content.as_bytes().to_vec(),
+                /*etag=*/ Some(ETAG.to_string()),
+            )
+            .await
+            .unwrap();
+        // Read object and check.
+        let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+        assert_eq!(actual_content, random_content.as_bytes().to_vec());
+    }
 
     #[tokio::test]
     #[rstest]

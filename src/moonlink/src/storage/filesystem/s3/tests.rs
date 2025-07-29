@@ -10,6 +10,58 @@ use futures::StreamExt;
 use rstest::rstest;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_conditional_write() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
+    let gcs_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let filesystem_accessor = create_filesystem_accessor(gcs_filesystem_config);
+
+    const DST_FILENAME: &str = "target";
+    const TARGET_FILESIZE: usize = 10;
+    const FAKE_ETAG: &str = "etag";
+
+    // Write object conditionally, with destination file doesn't exist.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    let metadata = filesystem_accessor
+        .conditional_write_object(
+            DST_FILENAME,
+            random_content.as_bytes().to_vec(),
+            /*etag=*/ None,
+        )
+        .await
+        .unwrap();
+    // Read object and check.
+    let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+    assert_eq!(actual_content, random_content.as_bytes().to_vec());
+
+    // Write object conditionally, with a fake etag value which doesn't match.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    let res = filesystem_accessor
+        .conditional_write_object(
+            DST_FILENAME,
+            random_content.as_bytes().to_vec(),
+            /*etag=*/ Some(FAKE_ETAG.to_string()),
+        )
+        .await;
+    assert!(res.is_err());
+
+    // Write object conditionally, with the matching etag filled in.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    let etag = if let Some(etag) = metadata.etag() {
+        Some(etag.to_string())
+    } else {
+        None
+    };
+    filesystem_accessor
+        .conditional_write_object(DST_FILENAME, random_content.as_bytes().to_vec(), etag)
+        .await
+        .unwrap();
+    // Read object and check.
+    let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+    assert_eq!(actual_content, random_content.as_bytes().to_vec());
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[rstest]
 #[case(10)]
 #[case(18 * 1024 * 1024)]

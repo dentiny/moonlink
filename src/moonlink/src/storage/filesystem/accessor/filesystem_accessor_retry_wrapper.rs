@@ -97,6 +97,24 @@ impl BaseFileSystemAccess for FileSystemRetryWrapper {
         .await
     }
 
+    async fn conditional_write_object(
+        &self,
+        object: &str,
+        content: Vec<u8>,
+        etag: Option<String>,
+    ) -> Result<opendal::Metadata> {
+        self.retry_async(|| {
+            let content = content.clone();
+            let etag = etag.clone();
+            async move {
+                self.inner
+                    .conditional_write_object(object, content, etag)
+                    .await
+            }
+        })
+        .await
+    }
+
     async fn create_unbuffered_stream_writer(
         &self,
         object_filepath: &str,

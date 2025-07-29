@@ -52,6 +52,13 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
 
     /// Write the whole content to the given object.
     async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()>;
+    /// Write the whole content with conditional write and put-if-absent semantics support.
+    async fn conditional_write_object(
+        &self,
+        object_filepath: &str,
+        content: Vec<u8>,
+        etag: Option<String>,
+    ) -> Result<opendal::Metadata>;
 
     /// Return a writer, which used for stream writer.
     /// Notice: no IO operation is performed under the hood.

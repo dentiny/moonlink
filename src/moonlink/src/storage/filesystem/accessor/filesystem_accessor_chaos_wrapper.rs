@@ -155,6 +155,18 @@ impl BaseFileSystemAccess for FileSystemChaosWrapper {
         self.inner.write_object(object, content).await
     }
 
+    async fn conditional_write_object(
+        &self,
+        object_filepath: &str,
+        content: Vec<u8>,
+        etag: Option<String>,
+    ) -> Result<opendal::Metadata> {
+        self.perform_wrapper_function().await?;
+        self.inner
+            .conditional_write_object(object_filepath, content, etag)
+            .await
+    }
+
     async fn create_unbuffered_stream_writer(
         &self,
         object_filepath: &str,
