@@ -771,7 +771,7 @@ async fn test_s3_chaos_with_no_background_maintenance() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3000,
         filesystem_config: s3_filesystem_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -788,7 +788,7 @@ async fn test_s3_chaos_with_index_merge() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3000,
         filesystem_config: s3_filesystem_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -805,7 +805,7 @@ async fn test_s3_chaos_with_data_compaction() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3000,
         filesystem_config: s3_filesystem_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -826,7 +826,7 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3000,
         filesystem_config: gcs_filesystem_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -843,7 +843,7 @@ async fn test_gcs_chaos_with_index_merge() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3000,
         filesystem_config: gcs_filesystem_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -860,7 +860,7 @@ async fn test_gcs_chaos_with_data_compaction() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3000,
         filesystem_config: gcs_filesystem_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
