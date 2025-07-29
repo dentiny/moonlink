@@ -129,5 +129,9 @@ pub(crate) fn create_file_io(config: &FileSystemConfig) -> IcebergResult<FileIO>
             }
             file_io_builder.build()
         }
+        #[cfg(feature = "chaos-test")]
+        FileSystemConfig::ChaosWrapper { inner_config, .. } => {
+            create_file_io(inner_config.as_ref())
+        }
     }
 }

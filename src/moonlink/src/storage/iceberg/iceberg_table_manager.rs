@@ -190,6 +190,10 @@ impl IcebergTableManager {
 /// TODO(hjiang): Parallelize all IO operations.
 #[async_trait]
 impl TableManager for IcebergTableManager {
+    fn get_warehouse_location(&self) -> String {
+        self.config.filesystem_config.get_root_path()
+    }
+
     async fn sync_snapshot(
         &mut self,
         mut snapshot_payload: IcebergSnapshotPayload,

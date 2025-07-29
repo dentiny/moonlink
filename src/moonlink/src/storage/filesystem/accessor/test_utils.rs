@@ -6,7 +6,7 @@ use rand::Rng;
 use tokio::io::AsyncWriteExt;
 
 /// Test util function to generate random string with the requested size.
-fn create_random_string(size: usize) -> String {
+pub(crate) fn create_random_string(size: usize) -> String {
     const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = rand::rng();
     let random_string: String = (0..size)

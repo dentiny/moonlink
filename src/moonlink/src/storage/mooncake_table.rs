@@ -70,7 +70,9 @@ use tracing::Instrument;
 use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
 /// Special transaction id used for initial copy append operation.
-pub(crate) const INITIAL_COPY_XACT_ID: u32 = u32::MAX - 1;
+/// `0` is designated as `InvalidTransactionId` in the postgres implementation, so we can be sure this will never collide with a valid transaction id.
+/// [https://github.com/postgres/postgres/blob/d5b9b2d40262f57f58322ad49f8928fd4a492adb/src/include/access/transam.h#L31]
+pub(crate) const INITIAL_COPY_XACT_ID: u32 = 0;
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct IcebergPersistenceConfig {
@@ -189,6 +191,7 @@ pub struct TableMetadata {
     /// function to get lookup key from row
     pub(crate) identity: IdentityProp,
 }
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlterTableRequest {
     pub(crate) new_columns: Vec<arrow_schema::FieldRef>,
@@ -332,14 +335,82 @@ impl IcebergPersistedRecords {
     pub fn get_file_indices_to_reflect_persistence(&self) -> (HashSet<FileId>, Vec<FileIndex>) {
         let mut persisted_file_indices = vec![];
         persisted_file_indices.extend(self.import_result.new_file_indices.iter().cloned());
+        persisted_file_indices.extend(
+            self.index_merge_result
+                .new_file_indices_imported
+                .iter()
+                .cloned(),
+        );
+        persisted_file_indices.extend(
+            self.data_compaction_result
+                .new_file_indices_imported
+                .iter()
+                .cloned(),
+        );
 
-        let index_blocks_to_delete = self
-            .import_result
-            .new_data_files
-            .iter()
-            .map(|f| f.file_id())
-            .collect::<HashSet<_>>();
+        let mut index_blocks_to_delete = HashSet::new();
+        for cur_file_index in self.import_result.new_file_indices.iter() {
+            index_blocks_to_delete.extend(cur_file_index.files.iter().map(|f| f.file_id()));
+        }
+        for cur_file_index in self.index_merge_result.new_file_indices_imported.iter() {
+            index_blocks_to_delete.extend(cur_file_index.files.iter().map(|f| f.file_id()));
+        }
+        for cur_file_index in self.data_compaction_result.new_file_indices_imported.iter() {
+            index_blocks_to_delete.extend(cur_file_index.files.iter().map(|f| f.file_id()));
+        }
+
         (index_blocks_to_delete, persisted_file_indices)
+    }
+
+    /// Util function to validate all data files referenced by file indices are remote files.
+    fn validate_file_indices_remote(&self, file_index: &FileIndex, warehouse_uri: &str) {
+        for cur_index_block in file_index.index_blocks.iter() {
+            assert!(cur_index_block
+                .index_file
+                .file_path()
+                .starts_with(warehouse_uri));
+        }
+    }
+
+    /// Validate all imported data files, file indices and index blocks point to remote files.
+    pub fn validate_imported_files_remote(&self, warehouse_uri: &str) {
+        #[cfg(any(test, debug_assertions))]
+        {
+            let import_result = &self.import_result;
+
+            // Validate persisted data files point to remote.
+            for cur_data_file in import_result.new_data_files.iter() {
+                assert!(cur_data_file.file_path().starts_with(warehouse_uri));
+            }
+
+            // Validate persisted file indices and index blocks point to remote.
+            for cur_file_index in import_result.new_file_indices.iter() {
+                self.validate_file_indices_remote(cur_file_index, warehouse_uri);
+            }
+        }
+
+        #[cfg(any(test, debug_assertions))]
+        {
+            let index_merge_results = &self.index_merge_result;
+            for cur_file_index in index_merge_results.new_file_indices_imported.iter() {
+                self.validate_file_indices_remote(cur_file_index, warehouse_uri);
+            }
+        }
+
+        #[cfg(any(test, debug_assertions))]
+        {
+            let data_compaction_results = &self.data_compaction_result;
+
+            // Validate persisted data files point to remote.
+            for cur_data_file in data_compaction_results.new_data_files_imported.iter() {
+                assert!(cur_data_file.file_path().starts_with(warehouse_uri));
+            }
+
+            // Validate persisted file indices and index blocks point to remote.
+            for cur_file_index in data_compaction_results.new_file_indices_imported.iter() {
+                self.validate_file_indices_remote(cur_file_index, warehouse_uri);
+            }
+        }
     }
 }
 
@@ -685,6 +756,7 @@ impl MooncakeTable {
             metadata: table_metadata.clone(),
             snapshot: Arc::new(RwLock::new(
                 SnapshotTableState::new(
+                    table_manager.get_warehouse_location(),
                     table_metadata.clone(),
                     object_storage_cache,
                     filesystem_accessor,

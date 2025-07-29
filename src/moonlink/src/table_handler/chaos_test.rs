@@ -7,18 +7,20 @@
 /// - LSN always increases
 use crate::event_sync::create_table_event_syncer;
 use crate::row::{MoonlinkRow, RowValue};
-use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::table_operation_test_utils::sync_read_request_for_test;
+use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
-use crate::ObjectStorageCache;
 use crate::TableEventManager;
+use crate::{IcebergTableConfig, ObjectStorageCache};
 
 use more_asserts as ma;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::collections::{HashSet, VecDeque};
+use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
 use tokio::sync::mpsc;
@@ -452,7 +454,8 @@ impl ChaosState {
     }
 }
 
-enum TestEnvConfig {
+#[derive(Clone, Debug)]
+enum TableMainenanceOption {
     /// No table maintenance in background.
     NoTableMaintenance,
     /// Index merge is enabled by default: merge take place as long as there're at least two index files.
@@ -461,8 +464,19 @@ enum TestEnvConfig {
     DataCompaction,
 }
 
+#[derive(Clone, Debug)]
+struct TestEnvConfig {
+    /// Table background maintenance option.
+    maintenance_option: TableMainenanceOption,
+    /// Event count.
+    event_count: usize,
+    /// Whether error injection is enabled.
+    error_injection_enabled: bool,
+}
+
 #[allow(dead_code)]
 struct TestEnvironment {
+    test_env_config: TestEnvConfig,
     iceberg_temp_dir: TempDir,
     cache_temp_dir: TempDir,
     table_temp_dir: TempDir,
@@ -474,22 +488,23 @@ struct TestEnvironment {
     event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
     last_commit_lsn_tx: watch::Sender<u64>,
     replication_lsn_tx: watch::Sender<u64>,
+    mooncake_table_metadata: Arc<TableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
 }
 
 impl TestEnvironment {
     async fn new(config: TestEnvConfig) -> Self {
-        let iceberg_temp_dir = tempdir().unwrap();
-        let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
-
         let table_temp_dir = tempdir().unwrap();
-        let mooncake_table_metadata = match &config {
-            TestEnvConfig::NoTableMaintenance => create_test_table_metadata_disable_flush(
+        let mooncake_table_metadata = match &config.maintenance_option {
+            TableMainenanceOption::NoTableMaintenance => create_test_table_metadata_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
             ),
-            TestEnvConfig::IndexMerge => create_test_table_metadata_with_index_merge_disable_flush(
-                table_temp_dir.path().to_str().unwrap().to_string(),
-            ),
-            TestEnvConfig::DataCompaction => {
+            TableMainenanceOption::IndexMerge => {
+                create_test_table_metadata_with_index_merge_disable_flush(
+                    table_temp_dir.path().to_str().unwrap().to_string(),
+                )
+            }
+            TableMainenanceOption::DataCompaction => {
                 create_test_table_metadata_with_data_compaction_disable_flush(
                     table_temp_dir.path().to_str().unwrap().to_string(),
                 )
@@ -501,9 +516,15 @@ impl TestEnvironment {
         let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
 
         // Create mooncake table and table event notification receiver.
+        let iceberg_temp_dir = tempdir().unwrap();
+        let iceberg_table_config = if config.error_injection_enabled {
+            get_iceberg_table_config_with_chaos_injection(&iceberg_temp_dir)
+        } else {
+            get_iceberg_table_config(&iceberg_temp_dir)
+        };
         let table = create_mooncake_table(
-            mooncake_table_metadata,
-            iceberg_table_config,
+            mooncake_table_metadata.clone(),
+            iceberg_table_config.clone(),
             object_storage_cache.clone(),
         )
         .await;
@@ -525,6 +546,7 @@ impl TestEnvironment {
         let event_sender = table_handler.get_event_sender();
 
         Self {
+            test_env_config: config,
             iceberg_temp_dir,
             cache_temp_dir,
             table_temp_dir,
@@ -536,22 +558,68 @@ impl TestEnvironment {
             event_replay_rx,
             replication_lsn_tx,
             last_commit_lsn_tx,
+            mooncake_table_metadata,
+            iceberg_table_config,
         }
     }
 }
 
+/// Test util function to check whether iceberg snapshot contains expected content.
+async fn validate_persisted_iceberg_table(
+    mooncake_table_metadata: Arc<TableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
+    snapshot_lsn: u64,
+    expected_ids: Vec<i32>,
+) {
+    let (event_sender, mut event_receiver) = mpsc::channel(100);
+    let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
+    let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
+    replication_lsn_tx.send(snapshot_lsn).unwrap();
+    last_commit_lsn_tx.send(snapshot_lsn).unwrap();
+
+    // Use a fresh new cache for new iceberg table manager.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+
+    let mut table = create_mooncake_table(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+        object_storage_cache,
+    )
+    .await;
+    table.register_table_notify(event_sender).await;
+
+    let read_state_manager =
+        ReadStateManager::new(&table, replication_lsn_rx.clone(), last_commit_lsn_rx);
+    check_read_snapshot(
+        &read_state_manager,
+        Some(snapshot_lsn),
+        /*expected_ids=*/ &expected_ids,
+    )
+    .await;
+
+    // Drop read state manager, to release all read states and mark all reads as done.
+    drop(read_state_manager);
+    // Block wait until all read completion notification sent over.
+    sync_read_request_for_test(&mut table, &mut event_receiver).await;
+}
+
 async fn chaos_test_impl(mut env: TestEnvironment) {
+    let test_env_config = env.test_env_config.clone();
     let event_sender = env.event_sender.clone();
     let read_state_manager = env.read_state_manager;
     let mut table_event_manager = env.table_event_manager;
     let last_commit_lsn_tx = env.last_commit_lsn_tx.clone();
     let replication_lsn_tx = env.replication_lsn_tx.clone();
 
+    // Fields used to recreate a new mooncake table.
+    let mooncake_table_metadata = env.mooncake_table_metadata.clone();
+    let iceberg_table_config = env.iceberg_table_config.clone();
+
     let task = tokio::spawn(async move {
         let mut state = ChaosState::new(read_state_manager);
 
-        // TODO(hjiang): Make iteration count a CLI configurable constant.
-        for _ in 0..3000 {
+        for _ in 0..test_env_config.event_count {
             let chaos_events = state.generate_random_events();
 
             // Perform table maintenance operations.
@@ -598,6 +666,15 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
                 TableEventManager::synchronize_force_snapshot_request(rx, snapshot_lsn)
                     .await
                     .unwrap();
+
+                // Now iceberg snapshot content should be exactly the same as moooncake table, recover states from persistence layer and perform another read.
+                validate_persisted_iceberg_table(
+                    mooncake_table_metadata.clone(),
+                    iceberg_table_config.clone(),
+                    snapshot_lsn,
+                    state.get_valid_ids(),
+                )
+                .await;
             }
         }
 
@@ -627,20 +704,71 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
 /// Chaos test with no background table maintenance enabled.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_no_background_maintenance() {
-    let env = TestEnvironment::new(TestEnvConfig::NoTableMaintenance).await;
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: false,
+        event_count: 3000,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }
 
 /// Chaos test with index merge enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_index_merge() {
-    let env = TestEnvironment::new(TestEnvConfig::IndexMerge).await;
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: false,
+        event_count: 3000,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }
 
 /// Chaos test with data compaction enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_data_compaction() {
-    let env = TestEnvironment::new(TestEnvConfig::DataCompaction).await;
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: false,
+        event_count: 3000,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with no background table maintenance enabled.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: true,
+        event_count: 100,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with index merge enabled by default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_index_merge_with_chaos_injection() {
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: true,
+        event_count: 100,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with data compaction enabled by default.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_chaos_with_data_compaction_with_chaos_injection() {
+    let test_env_config = TestEnvConfig {
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: true,
+        event_count: 100,
+    };
+    let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
 }

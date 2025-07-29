@@ -1,6 +1,6 @@
 use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::{PuffinWrite, SchemaUpdate};
@@ -87,7 +87,7 @@ impl FileCatalog {
         let file_io = iceberg_io_utils::create_file_io(&config)?;
         let warehouse_location = config.get_root_path();
         Ok(Self {
-            filesystem_accessor: Arc::new(FileSystemAccessor::new(config)),
+            filesystem_accessor: create_filesystem_accessor(config),
             file_io,
             warehouse_location,
             iceberg_schema,

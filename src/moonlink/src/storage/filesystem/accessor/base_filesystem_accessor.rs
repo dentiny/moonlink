@@ -34,8 +34,8 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     /// Return whether the given object exists.
     async fn object_exists(&self, object: &str) -> Result<bool>;
 
-    /// Return the object size.
-    async fn get_object_size(&self, object: &str) -> Result<u64>;
+    /// Return the object metadata.
+    async fn stats_object(&self, object: &str) -> Result<opendal::Metadata>;
 
     /// Read the whole content for the given object.
     /// Notice, it's not suitable to read large files; as of now it's made for metadata files.
@@ -52,6 +52,17 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
 
     /// Write the whole content to the given object.
     async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()>;
+    /// Write the whole content with conditional write and put-if-absent semantics support.
+    ///
+    /// # Arguments
+    ///
+    /// * etag: if unspecified, attempt put-if-absent logic.
+    async fn conditional_write_object(
+        &self,
+        object_filepath: &str,
+        content: Vec<u8>,
+        etag: Option<String>,
+    ) -> Result<opendal::Metadata>;
 
     /// Return a writer, which used for stream writer.
     /// Notice: no IO operation is performed under the hood.

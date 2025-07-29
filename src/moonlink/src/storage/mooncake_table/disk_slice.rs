@@ -188,7 +188,11 @@ impl DiskSliceWriter {
             }
             // Write the batch
             writer.as_mut().unwrap().write(batch).await?;
-            if writer.as_ref().unwrap().memory_size() > self.parquet_flush_threshold_size {
+            let estimated_total_size = {
+                let cur_writer = writer.as_ref().unwrap();
+                cur_writer.in_progress_size() + cur_writer.bytes_written()
+            };
+            if estimated_total_size > self.parquet_flush_threshold_size {
                 // Finalize the writer
                 writer.as_mut().unwrap().finish().await?;
                 let file_size = writer.as_ref().unwrap().bytes_written();

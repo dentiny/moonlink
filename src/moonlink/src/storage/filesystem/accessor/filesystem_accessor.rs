@@ -3,6 +3,7 @@ use async_trait::async_trait;
 #[cfg(feature = "storage-gcs")]
 use futures::TryStreamExt;
 use futures::{Stream, StreamExt};
+use opendal::options::WriteOptions;
 use opendal::Operator;
 #[cfg(test)]
 use tempfile::TempDir;
@@ -27,6 +28,7 @@ const IO_BLOCK_SIZE: usize = 2 * 1024 * 1024;
 /// Max number of ongoing parallel sub IO operations for one single upload and download operation.
 const MAX_SUB_IO_OPERATION: usize = 8;
 
+// TODO(hjiang): Add stats cache for exists, get file size, etc invocation.
 pub struct FileSystemAccessor {
     /// Root path.
     root_path: String,
@@ -47,6 +49,8 @@ impl std::fmt::Debug for FileSystemAccessor {
 
 impl FileSystemAccessor {
     pub fn new(config: FileSystemConfig) -> Self {
+        #[cfg(feature = "chaos-test")]
+        assert!(!matches!(config, FileSystemConfig::ChaosWrapper { .. }));
         Self {
             root_path: config.get_root_path(),
             operator: OnceCell::new(),
@@ -55,11 +59,13 @@ impl FileSystemAccessor {
     }
 
     #[cfg(test)]
-    pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<Self> {
+    pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<dyn BaseFileSystemAccess> {
+        use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
+
         let config = FileSystemConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
         };
-        std::sync::Arc::new(FileSystemAccessor::new(config))
+        create_filesystem_accessor(config)
     }
 
     /// Sanitize given path.
@@ -199,15 +205,12 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         }
     }
 
-    async fn get_object_size(&self, object: &str) -> Result<u64> {
-        let operator = self.get_operator().await?;
-        let sanitized = self.sanitize_path(object);
-        let meta = operator
-            .stat(sanitized)
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        let file_size = meta.content_length();
-        Ok(file_size)
+    async fn stats_object(&self, object: &str) -> Result<opendal::Metadata> {
+        let sanitized_object = self.sanitize_path(object);
+        match self.get_operator().await?.stat(sanitized_object).await {
+            Ok(metadata) => Ok(metadata),
+            Err(e) => Err(e.into()),
+        }
     }
 
     async fn read_object(&self, object: &str) -> Result<Vec<u8>> {
@@ -268,6 +271,28 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         let metadata = operator.write(sanitized_object, content).await?;
         assert_eq!(metadata.content_length(), expected_len as u64);
         Ok(())
+    }
+
+    async fn conditional_write_object(
+        &self,
+        object: &str,
+        content: Vec<u8>,
+        etag: Option<String>,
+    ) -> Result<opendal::Metadata> {
+        let sanitized_object = self.sanitize_path(object);
+        let operator = self.get_operator().await?;
+        let expected_len = content.len();
+        let mut write_option = WriteOptions::default();
+        if let Some(etag) = etag {
+            write_option.if_match = Some(etag);
+        } else {
+            write_option.if_not_exists = true;
+        }
+        let metadata = operator
+            .write_options(sanitized_object, content, write_option)
+            .await?;
+        assert_eq!(metadata.content_length(), expected_len as u64);
+        Ok(metadata)
     }
 
     async fn create_unbuffered_stream_writer(
@@ -344,7 +369,7 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 
     async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
         let sanitized_src = self.sanitize_path(src).to_string();
-        let file_size = self.get_object_size(&sanitized_src).await?;
+        let file_size = self.stats_object(&sanitized_src).await?.content_length();
 
         // For small objects, no need to parallelize IO operation and pre-allocate buffer.
         if file_size <= IO_BLOCK_SIZE as u64 {
@@ -403,10 +428,80 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::filesystem::{
-        accessor::test_utils::*, test_utils::writer_test_utils::test_unbuffered_stream_writer_impl,
-    };
+    use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
+    use crate::storage::filesystem::accessor::test_utils::*;
+    use crate::storage::filesystem::test_utils::writer_test_utils::test_unbuffered_stream_writer_impl;
     use rstest::rstest;
+
+    #[tokio::test]
+    async fn test_stats_object() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root_directory = temp_dir.path().to_str().unwrap().to_string();
+        let filesystem_config = FileSystemConfig::FileSystem {
+            root_directory: root_directory.clone(),
+        };
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+
+        const DST_FILENAME: &str = "target";
+        const TARGET_FILESIZE: usize = 10;
+
+        // Write object.
+        let random_content = create_random_string(TARGET_FILESIZE);
+        filesystem_accessor
+            .write_object(DST_FILENAME, random_content.as_bytes().to_vec())
+            .await
+            .unwrap();
+
+        // Stats object.
+        let metadata = filesystem_accessor
+            .stats_object(DST_FILENAME)
+            .await
+            .unwrap();
+        assert_eq!(metadata.content_length(), TARGET_FILESIZE as u64);
+    }
+
+    // Local filesystem doesn't support conditional write, which should behave the same as [`write_object`].
+    #[tokio::test]
+    async fn test_conditional_write() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let root_directory = temp_dir.path().to_str().unwrap().to_string();
+        let filesystem_config = FileSystemConfig::FileSystem {
+            root_directory: root_directory.clone(),
+        };
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+
+        const DST_FILENAME: &str = "target";
+        const TARGET_FILESIZE: usize = 10;
+        const ETAG: &str = "etag";
+
+        // Write object conditionally, with destination file doesn't exist.
+        let random_content = create_random_string(TARGET_FILESIZE);
+        filesystem_accessor
+            .conditional_write_object(
+                DST_FILENAME,
+                random_content.as_bytes().to_vec(),
+                /*etag=*/ None,
+            )
+            .await
+            .unwrap();
+        // Read object and check.
+        let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+        assert_eq!(actual_content, random_content.as_bytes().to_vec());
+
+        // Write object conditionally, with destination file already exists; for local filesystem the semantics is overwrite without check.
+        let random_content = create_random_string(TARGET_FILESIZE);
+        filesystem_accessor
+            .conditional_write_object(
+                DST_FILENAME,
+                random_content.as_bytes().to_vec(),
+                /*etag=*/ Some(ETAG.to_string()),
+            )
+            .await
+            .unwrap();
+        // Read object and check.
+        let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+        assert_eq!(actual_content, random_content.as_bytes().to_vec());
+    }
 
     #[tokio::test]
     #[rstest]
@@ -418,7 +513,7 @@ mod tests {
         let filesystem_config = FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
 
         // Prepare src file.
         let remote_filepath = format!("{}/remote", &root_directory);
@@ -449,7 +544,7 @@ mod tests {
     async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_accessor = FileSystemAccessor::new(FileSystemConfig::FileSystem {
+        let filesystem_accessor = create_filesystem_accessor(FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         });
 
@@ -483,7 +578,7 @@ mod tests {
         let filesystem_config = FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
 
         // Prepare src file.
         let src_filepath = format!("{}/src", &root_directory);
@@ -512,7 +607,7 @@ mod tests {
         let filesystem_config = FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
 
         let dst_filename = "dst".to_string();
         let dst_filepath = format!("{}/{}", &root_directory, dst_filename);

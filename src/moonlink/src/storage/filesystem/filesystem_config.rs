@@ -1,3 +1,5 @@
+#[cfg(feature = "chaos-test")]
+use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use crate::MoonlinkSecretType;
 use crate::MoonlinkTableSecret;
@@ -30,6 +32,11 @@ pub enum FileSystemConfig {
         endpoint: Option<String>,
         /// Used for fake GCS server.
         disable_auth: bool,
+    },
+    #[cfg(feature = "chaos-test")]
+    ChaosWrapper {
+        chaos_option: FileSystemChaosOption,
+        inner_config: Box<FileSystemConfig>,
     },
 }
 
@@ -77,6 +84,16 @@ impl std::fmt::Debug for FileSystemConfig {
                 .field("access key id", &"xxxxx")
                 .field("secret access key", &"xxxxx")
                 .finish(),
+
+            #[cfg(feature = "chaos-test")]
+            FileSystemConfig::ChaosWrapper {
+                chaos_option,
+                inner_config,
+            } => f
+                .debug_struct("filesystem wrapper")
+                .field("option", chaos_option)
+                .field("inner_config", inner_config)
+                .finish(),
         }
     }
 }
@@ -91,6 +108,8 @@ impl FileSystemConfig {
             FileSystemConfig::Gcs { bucket, .. } => format!("gs://{bucket}"),
             #[cfg(feature = "storage-s3")]
             FileSystemConfig::S3 { bucket, .. } => format!("s3://{bucket}"),
+            #[cfg(feature = "chaos-test")]
+            FileSystemConfig::ChaosWrapper { inner_config, .. } => inner_config.get_root_path(),
         }
     }
 
@@ -130,6 +149,10 @@ impl FileSystemConfig {
                 endpoint: endpoint.clone(),
                 region: Some(region.clone()),
             }),
+            #[cfg(feature = "chaos-test")]
+            FileSystemConfig::ChaosWrapper { inner_config, .. } => {
+                inner_config.extract_security_metadata_entry()
+            }
         }
     }
 }

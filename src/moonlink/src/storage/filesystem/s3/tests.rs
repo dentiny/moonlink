@@ -1,5 +1,4 @@
-use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::accessor::operator_utils;
 use crate::storage::filesystem::accessor::test_utils::*;
 use crate::storage::filesystem::accessor::unbuffered_stream_writer::UnbufferedStreamWriter;
@@ -9,6 +8,89 @@ use crate::storage::filesystem::test_utils::writer_test_utils::*;
 
 use futures::StreamExt;
 use rstest::rstest;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_stats_object() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
+
+    const DST_FILENAME: &str = "target";
+    const TARGET_FILESIZE: usize = 10;
+
+    // Write object.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    filesystem_accessor
+        .write_object(DST_FILENAME, random_content.as_bytes().to_vec())
+        .await
+        .unwrap();
+
+    // Stats object.
+    let metadata = filesystem_accessor
+        .stats_object(DST_FILENAME)
+        .await
+        .unwrap();
+    assert_eq!(metadata.content_length(), TARGET_FILESIZE as u64);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_conditional_write() {
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = TestGuard::new(bucket.clone()).await;
+    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
+
+    const DST_FILENAME: &str = "target";
+    const TARGET_FILESIZE: usize = 10;
+    const FAKE_ETAG: &str = "etag";
+
+    // Write object conditionally, with destination file doesn't exist.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    let metadata = filesystem_accessor
+        .conditional_write_object(
+            DST_FILENAME,
+            random_content.as_bytes().to_vec(),
+            /*etag=*/ None,
+        )
+        .await
+        .unwrap();
+    // Read object and check.
+    let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+    assert_eq!(actual_content, random_content.as_bytes().to_vec());
+
+    // Write object conditionally, with a fake etag value which doesn't match.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    let res = filesystem_accessor
+        .conditional_write_object(
+            DST_FILENAME,
+            random_content.as_bytes().to_vec(),
+            /*etag=*/ Some(FAKE_ETAG.to_string()),
+        )
+        .await;
+    assert!(res.is_err());
+
+    // Write object conditionally, with the matching etag filled in.
+    let random_content = create_random_string(TARGET_FILESIZE);
+    let etag = metadata.etag().map(|etag| etag.to_string());
+    filesystem_accessor
+        .conditional_write_object(DST_FILENAME, random_content.as_bytes().to_vec(), etag)
+        .await
+        .unwrap();
+    // Read object and check.
+    let actual_content = filesystem_accessor.read_object(DST_FILENAME).await.unwrap();
+    assert_eq!(actual_content, random_content.as_bytes().to_vec());
+
+    // Write object conditionally, with no etag filled in.
+    let res = filesystem_accessor
+        .conditional_write_object(
+            DST_FILENAME,
+            random_content.as_bytes().to_vec(),
+            /*etag=*/ None,
+        )
+        .await;
+    assert!(res.is_err());
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[rstest]
@@ -26,7 +108,7 @@ async fn test_stream_read(#[case] file_size: usize) {
 
     // Stream read from destination path.
     let mut actual_content = vec![];
-    let filesystem_accessor = FileSystemAccessor::new(gcs_filesystem_config);
+    let filesystem_accessor = create_filesystem_accessor(gcs_filesystem_config);
     let mut read_stream = filesystem_accessor
         .stream_read(&remote_filepath)
         .await
@@ -58,7 +140,7 @@ async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
     let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
 
     // Copy from src to dst.
-    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
     let dst_filepath = format!("{warehouse_uri}/dst");
     filesystem_accessor
         .copy_from_local_to_remote(&src_filepath, &dst_filepath)
@@ -92,7 +174,7 @@ async fn test_copy_from_remote_to_local(#[case] file_size: usize) {
         create_remote_file(&src_filepath, s3_filesystem_config.clone(), file_size).await;
 
     // Copy from src to dst.
-    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
     filesystem_accessor
         .copy_from_remote_to_local(&src_filepath, &dst_filepath)
         .await
@@ -122,7 +204,7 @@ async fn test_unbuffered_stream_write_with_filesystem_accessor() {
     let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
     let _test_guard = TestGuard::new(bucket.clone()).await;
     let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
-    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config.clone());
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config.clone());
 
     let dst_filename = "dst".to_string();
     let dst_filepath = format!("{}/{}", &warehouse_uri, dst_filename);
