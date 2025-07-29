@@ -53,6 +53,10 @@ pub trait BaseFileSystemAccess: std::fmt::Debug + Send + Sync {
     /// Write the whole content to the given object.
     async fn write_object(&self, object_filepath: &str, content: Vec<u8>) -> Result<()>;
     /// Write the whole content with conditional write and put-if-absent semantics support.
+    ///
+    /// # Arguments
+    ///
+    /// * etag: if unspecified, attempt put-if-absent logic.
     async fn conditional_write_object(
         &self,
         object_filepath: &str,
