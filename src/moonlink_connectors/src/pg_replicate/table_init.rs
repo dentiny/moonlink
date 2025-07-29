@@ -14,9 +14,6 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, mpsc::Sender, oneshot, watch};
 
-/// Default namespace for all iceberg tables.
-const DEFAULT_ICEBERG_NAMESPACE: &str = "default";
-
 /// Components required to replicate a single table.
 /// Components that the [`Sink`] needs for processing CDC events.
 pub struct TableComponents {
@@ -56,43 +53,40 @@ pub async fn build_table_components(
     table_id: u32,
     table_schema: &TableSchema,
     base_path: &String,
-    table_temp_files_directory: String,
     replication_state: &ReplicationState,
     object_storage_cache: ObjectStorageCache,
-    iceberg_filesystem_config: Option<FileSystemConfig>,
-) -> Result<(TableResources, MoonlinkTableConfig)> {
+    moonlink_table_config: MoonlinkTableConfig,
+) -> Result<TableResources> {
     let write_cache_path = PathBuf::from(base_path).join(&mooncake_table_id);
     recreate_directory(&write_cache_path).await?;
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
-    let iceberg_filesystem_config =
-        iceberg_filesystem_config.unwrap_or(FileSystemConfig::FileSystem {
-            root_directory: base_path.to_string(),
-        });
-
-    let iceberg_table_config = IcebergTableConfig {
-        namespace: vec![DEFAULT_ICEBERG_NAMESPACE.to_string()],
-        table_name: mooncake_table_id,
-        filesystem_config: iceberg_filesystem_config.clone(),
-    };
-    let mooncake_table_config = MooncakeTableConfig::new(table_temp_files_directory);
     let table = MooncakeTable::new(
         arrow_schema,
         table_schema.table_name.to_string(),
         table_id,
         write_cache_path,
         identity,
-        iceberg_table_config.clone(),
-        mooncake_table_config.clone(),
+        moonlink_table_config.iceberg_table_config.clone(),
+        moonlink_table_config.mooncake_table_config.clone(),
         object_storage_cache,
-        Arc::new(FileSystemAccessor::new(iceberg_filesystem_config)),
+        Arc::new(FileSystemAccessor::new(
+            moonlink_table_config
+                .iceberg_table_config
+                .filesystem_config
+                .clone(),
+        )),
     )
     .await?;
 
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
-    let table_status_reader =
-        TableStatusReader::new(database_id, table_id, &iceberg_table_config, &table);
+    let table_status_reader = TableStatusReader::new(
+        database_id,
+        table_id,
+        &moonlink_table_config.iceberg_table_config,
+        &table,
+    );
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();
     let table_handler = TableHandler::new(
         table,
@@ -114,10 +108,5 @@ pub async fn build_table_components(
         commit_lsn_tx,
         flush_lsn_rx,
     };
-    let moonlink_table_config = MoonlinkTableConfig {
-        mooncake_table_config,
-        iceberg_table_config,
-    };
-
-    Ok((table_resource, moonlink_table_config))
+    Ok(table_resource)
 }

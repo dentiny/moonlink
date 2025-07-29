@@ -62,9 +62,9 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         database_id: u32,
         table_id: u32,
         table_name: &str,
-        filesystem_config: Option<FileSystemConfig>,
+        moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
-    ) -> Result<MoonlinkTableConfig> {
+    ) -> Result<()> {
         debug!(%src_uri, table_name, "adding table through manager");
         if !self.connections.contains_key(src_uri) {
             debug!(%src_uri, "creating replication connection");
@@ -85,12 +85,12 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         }
         let replication_connection = self.connections.get_mut(src_uri).unwrap();
 
-        let (src_table_id, moonlink_table_config) = replication_connection
+        let src_table_id = replication_connection
             .add_table(
                 table_name,
                 &mooncake_table_id,
                 table_id,
-                filesystem_config,
+                moonlink_table_config,
                 is_recovery,
             )
             .await?;
@@ -99,7 +99,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
 
         debug!(src_table_id, "table added through manager");
 
-        Ok(moonlink_table_config)
+        Ok(())
     }
 
     pub async fn start_replication(&mut self, src_uri: &str) -> Result<()> {

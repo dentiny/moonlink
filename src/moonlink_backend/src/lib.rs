@@ -22,6 +22,10 @@ pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 > {
+    // Base directory for all tables.
+    base_path: String,
+    // Directory used to store union read temporary files.
+    temp_files_dir: String,
     // Metadata storage accessor.
     metadata_store_accessor: Box<dyn MetadataStoreTrait>,
     // Could be either relative or absolute path.
@@ -59,6 +63,8 @@ where
             .await?;
 
         Ok(Self {
+            base_path: base_path_str.to_string(),
+            temp_files_dir: temp_files_dir.to_str().unwrap().to_string(),
             replication_manager: RwLock::new(replication_manager),
             metadata_store_accessor,
         })
@@ -88,7 +94,7 @@ where
         table_id: T,
         src_table_name: String,
         src_uri: String,
-        _mooncake_table_config: TableCreationConfig,
+        table_creation_config: TableCreationConfig,
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
             database_id: database_id.clone(),
@@ -98,9 +104,10 @@ where
         let table_id = mooncake_table_id.get_table_id_value();
 
         // Add mooncake table to replication, and create corresponding mooncake table.
-        let moonlink_table_config = {
+        let moonlink_table_config = table_creation_config
+            .get_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
+        {
             let mut manager = self.replication_manager.write().await;
-            // TODO(hjiang): Should pass real secrets into the mooncake table.
             let table_config = manager
                 .add_table(
                     &src_uri,
@@ -108,7 +115,7 @@ where
                     database_id,
                     table_id,
                     &src_table_name,
-                    /*override_iceberg_filesystem_config=*/ None,
+                    moonlink_table_config.clone(),
                     /*is_recovery=*/ false,
                 )
                 .await?;
@@ -150,6 +157,11 @@ where
             .delete_table_metadata(database_id, table_id)
             .await
             .unwrap()
+    }
+
+    /// Get the base directory for all mooncake tables.
+    pub fn get_base_path(&self) -> String {
+        self.base_path.clone()
     }
 
     /// Get the current mooncake table schema.

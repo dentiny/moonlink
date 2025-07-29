@@ -287,21 +287,20 @@ impl ReplicationConnection {
         schema: &TableSchema,
         mooncake_table_id: &T,
         table_id: u32,
-        iceberg_filesystem_config: Option<FileSystemConfig>,
+        moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
-    ) -> Result<MoonlinkTableConfig> {
+    ) -> Result<()> {
         let src_table_id = schema.src_table_id;
         debug!(src_table_id, "adding table to replication");
-        let (table_resources, moonlink_table_config) = build_table_components(
+        let table_resources = build_table_components(
             mooncake_table_id.to_string(),
             self.database_id,
             table_id,
             schema,
             &self.table_base_path,
-            self.table_temp_files_directory.clone(),
             &self.replication_state,
             self.object_storage_cache.clone(),
-            iceberg_filesystem_config,
+            moonlink_table_config,
         )
         .await?;
 
@@ -385,7 +384,7 @@ impl ReplicationConnection {
 
         debug!(table_id, "table added to replication");
 
-        Ok(moonlink_table_config)
+        Ok(())
     }
 
     async fn remove_table_from_replication(&mut self, src_table_id: SrcTableId) -> Result<()> {
@@ -424,9 +423,9 @@ impl ReplicationConnection {
         table_name: &str,
         mooncake_table_id: &T,
         table_id: u32,
-        iceberg_filesystem_config: Option<FileSystemConfig>,
+        moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
-    ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
+    ) -> Result<SrcTableId> {
         debug!(table_name, "adding table");
         // TODO: We should not naively alter the replica identity of a table. We should only do this if we are sure that the table does not already have a FULL replica identity. [https://github.com/Mooncake-Labs/moonlink/issues/104]
         self.alter_table_replica_identity(table_name).await?;
@@ -435,19 +434,18 @@ impl ReplicationConnection {
             .fetch_table_schema(None, Some(table_name), None)
             .await?;
 
-        let moonlink_table_config = self
-            .add_table_to_replication(
-                &table_schema,
-                mooncake_table_id,
-                table_id,
-                iceberg_filesystem_config,
-                is_recovery,
-            )
-            .await?;
+        self.add_table_to_replication(
+            &table_schema,
+            mooncake_table_id,
+            table_id,
+            moonlink_table_config,
+            is_recovery,
+        )
+        .await?;
 
         debug!(src_table_id = table_schema.src_table_id, "table added");
 
-        Ok((table_schema.src_table_id, moonlink_table_config))
+        Ok(table_schema.src_table_id)
     }
 
     /// Remove the given table from connection.
