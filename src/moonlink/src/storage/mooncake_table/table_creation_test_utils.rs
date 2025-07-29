@@ -133,7 +133,7 @@ pub(crate) fn create_test_updated_arrow_schema_remove_age() -> Arc<ArrowSchema> 
 pub(crate) fn create_test_filesystem_accessor(
     iceberg_table_config: &IcebergTableConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
-    create_filesystem_accessor(&iceberg_table_config.filesystem_config)
+    create_filesystem_accessor(iceberg_table_config.filesystem_config.clone())
 }
 
 /// Test util function to create mooncake table metadata.

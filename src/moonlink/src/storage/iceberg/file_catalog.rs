@@ -87,7 +87,7 @@ impl FileCatalog {
         let file_io = iceberg_io_utils::create_file_io(&config)?;
         let warehouse_location = config.get_root_path();
         Ok(Self {
-            filesystem_accessor: create_filesystem_accessor(&config),
+            filesystem_accessor: create_filesystem_accessor(config),
             file_io,
             warehouse_location,
             iceberg_schema,

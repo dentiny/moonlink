@@ -1,4 +1,5 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::filesystem::accessor::operator_utils;
 use crate::storage::filesystem::accessor::test_utils::*;
@@ -26,7 +27,7 @@ async fn test_stream_read(#[case] file_size: usize) {
 
     // Stream read from destination path.
     let mut actual_content = vec![];
-    let filesystem_accessor = FileSystemAccessor::new(gcs_filesystem_config);
+    let filesystem_accessor = create_filesystem_accessor(gcs_filesystem_config);
     let mut read_stream = filesystem_accessor
         .stream_read(&remote_filepath)
         .await
@@ -58,7 +59,7 @@ async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
     let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
 
     // Copy from src to dst.
-    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
     let dst_filepath = format!("{warehouse_uri}/dst");
     filesystem_accessor
         .copy_from_local_to_remote(&src_filepath, &dst_filepath)
@@ -92,7 +93,7 @@ async fn test_copy_from_remote_to_local(#[case] file_size: usize) {
         create_remote_file(&src_filepath, s3_filesystem_config.clone(), file_size).await;
 
     // Copy from src to dst.
-    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config);
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config);
     filesystem_accessor
         .copy_from_remote_to_local(&src_filepath, &dst_filepath)
         .await
@@ -122,7 +123,7 @@ async fn test_unbuffered_stream_write_with_filesystem_accessor() {
     let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
     let _test_guard = TestGuard::new(bucket.clone()).await;
     let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
-    let filesystem_accessor = FileSystemAccessor::new(s3_filesystem_config.clone());
+    let filesystem_accessor = create_filesystem_accessor(s3_filesystem_config.clone());
 
     let dst_filename = "dst".to_string();
     let dst_filepath = format!("{}/{}", &warehouse_uri, dst_filename);

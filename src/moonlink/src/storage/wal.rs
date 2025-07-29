@@ -186,7 +186,7 @@ impl WalManager {
             active_transactions: HashMap::new(),
             main_transaction_tracker: Vec::new(),
             // TODO(Paul): Implement object storage
-            file_system_accessor: create_filesystem_accessor(&config),
+            file_system_accessor: create_filesystem_accessor(config),
         }
     }
 

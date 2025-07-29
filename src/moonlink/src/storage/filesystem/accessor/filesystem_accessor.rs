@@ -57,11 +57,13 @@ impl FileSystemAccessor {
     }
 
     #[cfg(test)]
-    pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<Self> {
+    pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<dyn BaseFileSystemAccess> {
+        use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
+
         let config = FileSystemConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
         };
-        std::sync::Arc::new(FileSystemAccessor::new(config))
+        create_filesystem_accessor(config)
     }
 
     /// Sanitize given path.
@@ -405,9 +407,9 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::filesystem::{
-        accessor::test_utils::*, test_utils::writer_test_utils::test_unbuffered_stream_writer_impl,
-    };
+    use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
+    use crate::storage::filesystem::accessor::test_utils::*;
+    use crate::storage::filesystem::test_utils::writer_test_utils::test_unbuffered_stream_writer_impl;
     use rstest::rstest;
 
     #[tokio::test]
@@ -420,7 +422,7 @@ mod tests {
         let filesystem_config = FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
 
         // Prepare src file.
         let remote_filepath = format!("{}/remote", &root_directory);
@@ -451,7 +453,7 @@ mod tests {
     async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_accessor = FileSystemAccessor::new(FileSystemConfig::FileSystem {
+        let filesystem_accessor = create_filesystem_accessor(FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         });
 
@@ -485,7 +487,7 @@ mod tests {
         let filesystem_config = FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
 
         // Prepare src file.
         let src_filepath = format!("{}/src", &root_directory);
@@ -514,7 +516,7 @@ mod tests {
         let filesystem_config = FileSystemConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = FileSystemAccessor::new(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
 
         let dst_filename = "dst".to_string();
         let dst_filepath = format!("{}/{}", &root_directory, dst_filename);

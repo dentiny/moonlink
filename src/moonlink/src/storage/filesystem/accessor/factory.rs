@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 /// A factory function to create a filesystem accessor based on the given [`config`].
 pub(crate) fn create_filesystem_accessor(
-    config: &FileSystemConfig,
+    config: FileSystemConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
     let inner: Arc<dyn BaseFileSystemAccess> = match config {
         #[cfg(feature = "chaos-test")]
@@ -20,7 +20,7 @@ pub(crate) fn create_filesystem_accessor(
             inner_config.as_ref().clone(),
             chaos_option.clone(),
         )),
-        _ => Arc::new(FileSystemAccessor::new(config.clone())),
+        _ => Arc::new(FileSystemAccessor::new(config)),
     };
     Arc::new(FileSystemRetryWrapper::new(inner))
 }
