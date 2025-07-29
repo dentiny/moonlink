@@ -132,11 +132,6 @@ impl BaseFileSystemAccess for FileSystemChaosWrapper {
         self.inner.stats_object(object).await
     }
 
-    async fn get_object_size(&self, object: &str) -> Result<u64> {
-        self.perform_wrapper_function().await?;
-        self.inner.get_object_size(object).await
-    }
-
     async fn read_object(&self, object: &str) -> Result<Vec<u8>> {
         self.perform_wrapper_function().await?;
         self.inner.read_object(object).await
@@ -228,10 +223,6 @@ mod tests {
             .write_object(&filename, content.clone())
             .await
             .unwrap();
-
-        // Get file size.
-        let size = wrapper.get_object_size(&filename).await.unwrap();
-        assert_eq!(size, content.len() as u64);
 
         // Read object.
         let read_content = wrapper.read_object(&filename).await.unwrap();

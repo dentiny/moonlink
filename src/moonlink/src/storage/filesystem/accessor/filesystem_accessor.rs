@@ -213,17 +213,6 @@ impl BaseFileSystemAccess for FileSystemAccessor {
         }
     }
 
-    async fn get_object_size(&self, object: &str) -> Result<u64> {
-        let operator = self.get_operator().await?;
-        let sanitized = self.sanitize_path(object);
-        let meta = operator
-            .stat(sanitized)
-            .await
-            .map_err(|e| std::io::Error::other(e.to_string()))?;
-        let file_size = meta.content_length();
-        Ok(file_size)
-    }
-
     async fn read_object(&self, object: &str) -> Result<Vec<u8>> {
         let sanitized_object = self.sanitize_path(object);
         let content = self.get_operator().await?.read(sanitized_object).await?;
@@ -380,7 +369,7 @@ impl BaseFileSystemAccess for FileSystemAccessor {
 
     async fn copy_from_remote_to_local(&self, src: &str, dst: &str) -> Result<ObjectMetadata> {
         let sanitized_src = self.sanitize_path(src).to_string();
-        let file_size = self.get_object_size(&sanitized_src).await?;
+        let file_size = self.stats_object(&sanitized_src).await?.content_length();
 
         // For small objects, no need to parallelize IO operation and pre-allocate buffer.
         if file_size <= IO_BLOCK_SIZE as u64 {
