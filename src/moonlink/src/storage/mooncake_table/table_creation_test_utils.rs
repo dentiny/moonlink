@@ -40,14 +40,14 @@ pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
 
 /// Test util function with error injection at filesystem layer.
 #[cfg(feature = "chaos-test")]
-pub(crate) fn get_iceberg_table_config_with_error_injection(
+pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     temp_dir: &TempDir,
 ) -> IcebergTableConfig {
-    use crate::storage::filesystem::accessor::filesystem_accessor_wrapper::FileSystemWrapperOption;
+    use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
 
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
     let inner_config = Box::new(FileSystemConfig::FileSystem { root_directory });
-    let wrapper_option = FileSystemWrapperOption {
+    let chaos_option = FileSystemChaosOption {
         min_latency: std::time::Duration::from_secs(0),
         max_latency: std::time::Duration::from_secs(1),
         injected_error: Some(Error::from(
@@ -58,8 +58,8 @@ pub(crate) fn get_iceberg_table_config_with_error_injection(
     IcebergTableConfig {
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
-        filesystem_config: FileSystemConfig::Wrapper {
-            wrapper_option,
+        filesystem_config: FileSystemConfig::ChaosWrapper {
+            chaos_option,
             inner_config,
         },
     }

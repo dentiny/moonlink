@@ -1,5 +1,5 @@
 #[cfg(feature = "chaos-test")]
-use crate::storage::filesystem::accessor::filesystem_accessor_wrapper::FileSystemWrapperOption;
+use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use crate::MoonlinkSecretType;
 use crate::MoonlinkTableSecret;
@@ -34,8 +34,8 @@ pub enum FileSystemConfig {
         disable_auth: bool,
     },
     #[cfg(feature = "chaos-test")]
-    Wrapper {
-        wrapper_option: FileSystemWrapperOption,
+    ChaosWrapper {
+        chaos_option: FileSystemChaosOption,
         inner_config: Box<FileSystemConfig>,
     },
 }
@@ -86,12 +86,12 @@ impl std::fmt::Debug for FileSystemConfig {
                 .finish(),
 
             #[cfg(feature = "chaos-test")]
-            FileSystemConfig::Wrapper {
-                wrapper_option,
+            FileSystemConfig::ChaosWrapper {
+                chaos_option,
                 inner_config,
             } => f
                 .debug_struct("filesystem wrapper")
-                .field("option", wrapper_option)
+                .field("option", chaos_option)
                 .field("inner_config", inner_config)
                 .finish(),
         }
@@ -109,7 +109,7 @@ impl FileSystemConfig {
             #[cfg(feature = "storage-s3")]
             FileSystemConfig::S3 { bucket, .. } => format!("s3://{bucket}"),
             #[cfg(feature = "chaos-test")]
-            FileSystemConfig::Wrapper { inner_config, .. } => inner_config.get_root_path(),
+            FileSystemConfig::ChaosWrapper { inner_config, .. } => inner_config.get_root_path(),
         }
     }
 
@@ -150,7 +150,7 @@ impl FileSystemConfig {
                 region: Some(region.clone()),
             }),
             #[cfg(feature = "chaos-test")]
-            FileSystemConfig::Wrapper { inner_config, .. } => {
+            FileSystemConfig::ChaosWrapper { inner_config, .. } => {
                 inner_config.extract_security_metadata_entry()
             }
         }

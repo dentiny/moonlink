@@ -66,7 +66,7 @@ pub(crate) fn create_opendal_operator(filesystem_config: &FileSystemConfig) -> R
             Ok(op)
         }
         #[cfg(feature = "chaos-test")]
-        FileSystemConfig::Wrapper { inner_config, .. } => {
+        FileSystemConfig::ChaosWrapper { inner_config, .. } => {
             create_opendal_operator(inner_config.as_ref())
         }
     }

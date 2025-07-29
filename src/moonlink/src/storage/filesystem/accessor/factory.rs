@@ -1,8 +1,8 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
-use crate::storage::filesystem::accessor::filesystem_accessor_retry_wrapper::FileSystemRetryWrapper;
 #[cfg(feature = "chaos-test")]
-use crate::storage::filesystem::accessor::filesystem_accessor_wrapper::FileSystemWrapper;
+use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosWrapper;
+use crate::storage::filesystem::accessor::filesystem_accessor_retry_wrapper::FileSystemRetryWrapper;
 use crate::storage::filesystem::filesystem_config::FileSystemConfig;
 
 use std::sync::Arc;
@@ -13,12 +13,12 @@ pub(crate) fn create_filesystem_accessor(
 ) -> Arc<dyn BaseFileSystemAccess> {
     let inner: Arc<dyn BaseFileSystemAccess> = match config {
         #[cfg(feature = "chaos-test")]
-        FileSystemConfig::Wrapper {
-            wrapper_option,
+        FileSystemConfig::ChaosWrapper {
+            chaos_option,
             inner_config,
-        } => Arc::new(FileSystemWrapper::new(
+        } => Arc::new(FileSystemChaosWrapper::new(
             inner_config.as_ref().clone(),
-            wrapper_option.clone(),
+            chaos_option.clone(),
         )),
         _ => Arc::new(FileSystemAccessor::new(config.clone())),
     };

@@ -514,7 +514,7 @@ impl TestEnvironment {
         // Create mooncake table and table event notification receiver.
         let iceberg_temp_dir = tempdir().unwrap();
         let iceberg_table_config = if config.error_injection_enabled {
-            get_iceberg_table_config_with_error_injection(&iceberg_temp_dir)
+            get_iceberg_table_config_with_chaos_injection(&iceberg_temp_dir)
         } else {
             get_iceberg_table_config(&iceberg_temp_dir)
         };
@@ -680,7 +680,7 @@ async fn test_chaos_with_data_compaction() {
 
 /// Chaos test with no background table maintenance enabled.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_chaos_with_no_background_maintenance_with_error_injection() {
+async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: true,
@@ -692,7 +692,7 @@ async fn test_chaos_with_no_background_maintenance_with_error_injection() {
 
 /// Chaos test with index merge enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_chaos_with_index_merge_with_error_injection() {
+async fn test_chaos_with_index_merge_with_chaos_injection() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: true,
@@ -704,7 +704,7 @@ async fn test_chaos_with_index_merge_with_error_injection() {
 
 /// Chaos test with data compaction enabled by default.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_chaos_with_data_compaction_with_error_injection() {
+async fn test_chaos_with_data_compaction_with_chaos_injection() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: true,

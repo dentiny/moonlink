@@ -16,7 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
 #[derive(Clone, Debug)]
-pub struct FileSystemWrapperOption {
+pub struct FileSystemChaosOption {
     /// Min and max latency introduced to all operation access, both inclusive.
     pub min_latency: std::time::Duration,
     pub max_latency: std::time::Duration,
@@ -26,7 +26,7 @@ pub struct FileSystemWrapperOption {
     pub prob: usize,
 }
 
-impl PartialEq for FileSystemWrapperOption {
+impl PartialEq for FileSystemChaosOption {
     fn eq(&self, other: &Self) -> bool {
         self.min_latency == other.min_latency
             && self.max_latency == other.max_latency
@@ -39,7 +39,7 @@ impl PartialEq for FileSystemWrapperOption {
     }
 }
 
-impl FileSystemWrapperOption {
+impl FileSystemChaosOption {
     /// Validate whether the given option is valid.
     #[allow(dead_code)]
     fn validate(&self) {
@@ -50,18 +50,18 @@ impl FileSystemWrapperOption {
 
 /// A wrapper that delegates all operations to an inner [`FileSystemAccessor`].
 #[derive(Debug)]
-pub struct FileSystemWrapper {
+pub struct FileSystemChaosWrapper {
     /// Randomness.
     rng: Mutex<StdRng>,
     /// Internal filesystem accessor.
     inner: FileSystemAccessor,
     /// Filesystem wrapper option.
-    option: FileSystemWrapperOption,
+    option: FileSystemChaosOption,
 }
 
-impl FileSystemWrapper {
+impl FileSystemChaosWrapper {
     #[allow(dead_code)]
-    pub fn new(config: FileSystemConfig, option: FileSystemWrapperOption) -> Self {
+    pub fn new(config: FileSystemConfig, option: FileSystemChaosOption) -> Self {
         option.validate();
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -111,7 +111,7 @@ impl FileSystemWrapper {
 }
 
 #[async_trait]
-impl BaseFileSystemAccess for FileSystemWrapper {
+impl BaseFileSystemAccess for FileSystemChaosWrapper {
     async fn list_direct_subdirectories(&self, folder: &str) -> Result<Vec<String>> {
         self.perform_wrapper_function().await?;
         self.inner.list_direct_subdirectories(folder).await
@@ -194,9 +194,9 @@ mod tests {
         let config = FileSystemConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
         };
-        let wrapper = FileSystemWrapper::new(
+        let wrapper = FileSystemChaosWrapper::new(
             config,
-            FileSystemWrapperOption {
+            FileSystemChaosOption {
                 min_latency: Duration::from_millis(10),
                 max_latency: Duration::from_millis(100),
                 injected_error: None,
@@ -232,9 +232,9 @@ mod tests {
             iceberg::ErrorKind::CatalogCommitConflicts,
             "commit confliction",
         );
-        let wrapper = FileSystemWrapper::new(
+        let wrapper = FileSystemChaosWrapper::new(
             config,
-            FileSystemWrapperOption {
+            FileSystemChaosOption {
                 min_latency: Duration::from_millis(0),
                 max_latency: Duration::from_millis(0),
                 injected_error: Some(Error::from(injected_error)),
