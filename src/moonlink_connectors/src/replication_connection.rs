@@ -8,7 +8,12 @@ use crate::pg_replicate::postgres_source::{
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
 use moonlink::{
+<<<<<<< HEAD
     MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager, TableStatusReader,
+=======
+    AccessorConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
+    TableStatusReader,
+>>>>>>> main
 };
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;
@@ -283,7 +288,11 @@ impl ReplicationConnection {
         schema: &TableSchema,
         mooncake_table_id: &T,
         table_id: u32,
+<<<<<<< HEAD
         moonlink_table_config: MoonlinkTableConfig,
+=======
+        iceberg_accessor_config: Option<AccessorConfig>,
+>>>>>>> main
         is_recovery: bool,
     ) -> Result<()> {
         let src_table_id = schema.src_table_id;
@@ -296,7 +305,11 @@ impl ReplicationConnection {
             &self.table_base_path,
             &self.replication_state,
             self.object_storage_cache.clone(),
+<<<<<<< HEAD
             moonlink_table_config,
+=======
+            iceberg_accessor_config,
+>>>>>>> main
         )
         .await?;
 
@@ -419,7 +432,11 @@ impl ReplicationConnection {
         table_name: &str,
         mooncake_table_id: &T,
         table_id: u32,
+<<<<<<< HEAD
         moonlink_table_config: MoonlinkTableConfig,
+=======
+        iceberg_accessor_config: Option<AccessorConfig>,
+>>>>>>> main
         is_recovery: bool,
     ) -> Result<SrcTableId> {
         debug!(table_name, "adding table");
@@ -430,6 +447,7 @@ impl ReplicationConnection {
             .fetch_table_schema(None, Some(table_name), None)
             .await?;
 
+<<<<<<< HEAD
         self.add_table_to_replication(
             &table_schema,
             mooncake_table_id,
@@ -438,6 +456,17 @@ impl ReplicationConnection {
             is_recovery,
         )
         .await?;
+=======
+        let moonlink_table_config = self
+            .add_table_to_replication(
+                &table_schema,
+                mooncake_table_id,
+                table_id,
+                iceberg_accessor_config,
+                is_recovery,
+            )
+            .await?;
+>>>>>>> main
 
         debug!(src_table_id = table_schema.src_table_id, "table added");
 

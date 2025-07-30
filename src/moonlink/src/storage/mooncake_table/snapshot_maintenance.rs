@@ -47,7 +47,7 @@ impl SnapshotTableState {
             return DataCompactionMaintenanceStatus::Unknown;
         }
 
-        let data_compaction_file_num_threshold = match data_compaction_option {
+        let min_data_compaction_file_num_threshold = match data_compaction_option {
             MaintenanceOption::Skip => usize::MAX,
             MaintenanceOption::ForceRegular => 2,
             MaintenanceOption::ForceFull => 2,
@@ -55,9 +55,26 @@ impl SnapshotTableState {
                 self.mooncake_table_metadata
                     .config
                     .data_compaction_config
-                    .data_file_to_compact as usize
+                    .min_data_file_to_compact as usize
             }
         };
+        let max_data_compaction_file_num_threshold = match data_compaction_option {
+            MaintenanceOption::Skip => usize::MAX,
+            MaintenanceOption::ForceRegular => {
+                self.mooncake_table_metadata
+                    .config
+                    .data_compaction_config
+                    .max_data_file_to_compact as usize
+            }
+            MaintenanceOption::ForceFull => usize::MAX,
+            MaintenanceOption::BestEffort => {
+                self.mooncake_table_metadata
+                    .config
+                    .data_compaction_config
+                    .max_data_file_to_compact as usize
+            }
+        };
+
         let default_final_file_size = self
             .mooncake_table_metadata
             .config
@@ -72,7 +89,7 @@ impl SnapshotTableState {
 
         // Fast-path: not enough data files to trigger compaction.
         let all_disk_files = &self.current_snapshot.disk_files;
-        if all_disk_files.len() < data_compaction_file_num_threshold {
+        if all_disk_files.len() < min_data_compaction_file_num_threshold {
             return DataCompactionMaintenanceStatus::Nothing;
         }
 
@@ -90,6 +107,11 @@ impl SnapshotTableState {
                 && disk_file_entry.batch_deletion_vector.is_empty()
             {
                 continue;
+            }
+
+            // Break early if tentative data files to compact already reaches upper limit.
+            if tentative_data_files_to_compact.len() >= max_data_compaction_file_num_threshold {
+                break;
             }
 
             // Doesn't compact those unpersisted files.
@@ -110,11 +132,11 @@ impl SnapshotTableState {
             assert!(tentative_data_files_to_compact.insert(single_file_to_compact));
         }
 
-        if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
+        if tentative_data_files_to_compact.len() < min_data_compaction_file_num_threshold {
             // There're two possibilities here:
             // 1. If due to unpersistence, data compaction should wait until persistence completion.
             if tentative_data_files_to_compact.len() + reject_by_unpersistence
-                >= data_compaction_file_num_threshold
+                >= min_data_compaction_file_num_threshold
             {
                 return DataCompactionMaintenanceStatus::Unknown;
             }
@@ -157,13 +179,10 @@ impl SnapshotTableState {
         }
 
         // Check again whether need to compact.
-        if tentative_data_files_to_compact.len() < data_compaction_file_num_threshold {
+        if tentative_data_files_to_compact.len() < min_data_compaction_file_num_threshold {
             return DataCompactionMaintenanceStatus::Unknown;
         }
 
-        // TODO(hjiang):
-        // 1. Add validation on data file and file indices consistency.
-        // 2. Could be optimized away a few copies.
         let payload = DataCompactionPayload {
             uuid: uuid::Uuid::new_v4(),
             object_storage_cache: self.object_storage_cache.clone(),

@@ -4,10 +4,10 @@ use crate::pg_replicate::util::postgres_schema_to_moonlink_schema;
 use crate::{Error, Result};
 use moonlink::event_sync::create_table_event_syncer;
 use moonlink::{
-    EventSyncReceiver, EventSyncSender, FileSystemAccessor, FileSystemConfig, IcebergTableConfig,
+    AccessorConfig, EventSyncReceiver, EventSyncSender, FileSystemAccessor, IcebergTableConfig,
     MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
-    MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, TableEvent, TableEventManager,
-    TableHandler, TableStatusReader,
+    MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, StorageConfig, TableEvent,
+    TableEventManager, TableHandler, TableStatusReader,
 };
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -78,12 +78,7 @@ pub async fn build_table_components(
         moonlink_table_config.iceberg_table_config.clone(),
         moonlink_table_config.mooncake_table_config.clone(),
         object_storage_cache,
-        Arc::new(FileSystemAccessor::new(
-            moonlink_table_config
-                .iceberg_table_config
-                .filesystem_config
-                .clone(),
-        )),
+        Arc::new(FileSystemAccessor::new(iceberg_accessor_config)),
     )
     .await?;
 

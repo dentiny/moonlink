@@ -1,7 +1,7 @@
 use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
-use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::filesystem::accessor_config::AccessorConfig;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::{PuffinWrite, SchemaUpdate};
 use crate::storage::iceberg::puffin_writer_proxy::{
@@ -87,11 +87,14 @@ pub struct FileCatalog {
 
 impl FileCatalog {
     /// Create a file catalog, which gets initialized lazily.
-    pub fn new(config: FileSystemConfig, iceberg_schema: IcebergSchema) -> IcebergResult<Self> {
-        let file_io = iceberg_io_utils::create_file_io(&config)?;
-        let warehouse_location = config.get_root_path();
+    pub fn new(
+        accessor_config: AccessorConfig,
+        iceberg_schema: IcebergSchema,
+    ) -> IcebergResult<Self> {
+        let file_io = iceberg_io_utils::create_file_io(&accessor_config)?;
+        let warehouse_location = accessor_config.get_root_path();
         Ok(Self {
-            filesystem_accessor: create_filesystem_accessor(config),
+            filesystem_accessor: create_filesystem_accessor(accessor_config),
             file_io,
             warehouse_location,
             iceberg_schema,

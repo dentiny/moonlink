@@ -1,7 +1,7 @@
 use crate::storage::mooncake_table::test_utils::TestContext;
 use crate::storage::wal::test_utils::*;
 use crate::storage::wal::WalManager;
-use crate::FileSystemConfig;
+use crate::StorageConfig;
 use crate::{assert_wal_file_does_not_exist, assert_wal_file_exists, assert_wal_logs_equal};
 use tokio::fs;
 
@@ -27,7 +27,7 @@ async fn test_wal_insert_persist_files() {
 #[tokio::test]
 async fn test_wal_empty_persist() {
     let context = TestContext::new("wal_empty_persist");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -41,7 +41,7 @@ async fn test_wal_empty_persist() {
 #[tokio::test]
 async fn test_wal_file_numbering_sequence() {
     let context = TestContext::new("wal_file_numbering");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -69,7 +69,7 @@ async fn test_wal_file_numbering_sequence() {
 #[tokio::test]
 async fn test_wal_truncation_deletes_files() {
     let context = TestContext::new("wal_truncation");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -121,7 +121,7 @@ async fn test_wal_truncation_deletes_files() {
 #[tokio::test]
 async fn test_wal_truncation_with_no_files() {
     let context = TestContext::new("wal_truncation_no_files");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -132,7 +132,7 @@ async fn test_wal_truncation_with_no_files() {
 #[tokio::test]
 async fn test_wal_truncation_deletes_all_files() {
     let context = TestContext::new("wal_truncation_delete_all");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
     let mut events = Vec::new();
@@ -155,7 +155,7 @@ async fn test_wal_truncation_deletes_all_files() {
 #[tokio::test]
 async fn test_wal_truncate_incomplete_main_xact() {
     let context = TestContext::new("wal_persist_truncate");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -180,7 +180,7 @@ async fn test_wal_truncate_incomplete_main_xact() {
 #[tokio::test]
 async fn test_wal_truncate_unfinished_main_xact_multiple_commits() {
     let context = TestContext::new("wal_persist_truncate");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -221,7 +221,7 @@ async fn test_wal_truncate_unfinished_main_xact_multiple_commits() {
 async fn test_wal_truncate_main_and_streaming_xact_interleave() {
     // Testing case: main xact and streaming xact are interleaving and streaming xact prevents file cleanup
     let context = TestContext::new("wal_truncate_main_and_streaming_xact_interleave");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -267,7 +267,7 @@ async fn test_wal_truncate_main_and_streaming_xact_interleave() {
 async fn test_wal_multiple_interleaved_truncations() {
     // multiple truncations should behave
     let context = TestContext::new("wal_multiple_interleaved_truncations");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 
@@ -324,7 +324,7 @@ async fn test_wal_multiple_interleaved_truncations() {
 async fn test_wal_stream_abort() {
     // Testing case: streaming xact is not finished and prevents file cleanup
     let context = TestContext::new("wal_stream_abort");
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
 

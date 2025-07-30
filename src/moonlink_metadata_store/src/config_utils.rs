@@ -1,8 +1,8 @@
 use crate::error::Result;
 use moonlink::{
-    DataCompactionConfig, FileIndexMergeConfig, FileSystemConfig, IcebergPersistenceConfig,
+    AccessorConfig, DataCompactionConfig, FileIndexMergeConfig, IcebergPersistenceConfig,
     IcebergTableConfig, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
-    MoonlinkTableSecret,
+    MoonlinkTableSecret, StorageConfig,
 };
 /// This module contains util functions related to moonlink config.
 use serde::{Deserialize, Serialize};
@@ -90,7 +90,7 @@ pub(crate) fn parse_moonlink_table_config(
     let mooncake_config = moonlink_table_config.mooncake_table_config;
     let persisted = MoonlinkTableConfigForPersistence {
         iceberg_table_config: IcebergTableConfigForPersistence {
-            warehouse_uri: iceberg_config.filesystem_config.get_root_path(),
+            warehouse_uri: iceberg_config.accessor_config.get_root_path(),
             namespace: iceberg_config.namespace[0].to_string(),
             table_name: iceberg_config.table_name,
         },
@@ -108,22 +108,22 @@ pub(crate) fn parse_moonlink_table_config(
 
     // Extract table secret entry.
     let security_metadata_entry = iceberg_config
-        .filesystem_config
+        .accessor_config
         .extract_security_metadata_entry();
 
     Ok((config_json, security_metadata_entry))
 }
 
 /// Recover filesystem config from persisted config and secret.
-fn recover_filesystem_config(
+fn recover_storage_config(
     persisted_config: &MoonlinkTableConfigForPersistence,
     secret_entry: Option<MoonlinkTableSecret>,
-) -> FileSystemConfig {
+) -> StorageConfig {
     if let Some(secret_entry) = secret_entry {
         match &secret_entry.secret_type {
             #[cfg(feature = "storage-gcs")]
             MoonlinkSecretType::Gcs => {
-                return FileSystemConfig::Gcs {
+                return StorageConfig::Gcs {
                     project: secret_entry.project.unwrap(),
                     region: secret_entry.region.unwrap(),
                     bucket: persisted_config
@@ -138,7 +138,7 @@ fn recover_filesystem_config(
             }
             #[cfg(feature = "storage-s3")]
             MoonlinkSecretType::S3 => {
-                return FileSystemConfig::S3 {
+                return StorageConfig::S3 {
                     access_key_id: secret_entry.key_id,
                     secret_access_key: secret_entry.secret,
                     region: secret_entry.region.unwrap(),
@@ -151,13 +151,13 @@ fn recover_filesystem_config(
             }
             #[cfg(feature = "storage-fs")]
             MoonlinkSecretType::FileSystem => {
-                return FileSystemConfig::FileSystem {
+                return StorageConfig::FileSystem {
                     root_directory: persisted_config.iceberg_table_config.warehouse_uri.clone(),
                 };
             }
         }
     }
-    FileSystemConfig::FileSystem {
+    StorageConfig::FileSystem {
         root_directory: persisted_config.iceberg_table_config.warehouse_uri.clone(),
     }
 }
@@ -168,14 +168,14 @@ pub(crate) fn deserialze_moonlink_table_config(
     secret_entry: Option<MoonlinkTableSecret>,
 ) -> Result<MoonlinkTableConfig> {
     let parsed: MoonlinkTableConfigForPersistence = serde_json::from_value(serialized_config)?;
-    let filesystem_config = recover_filesystem_config(&parsed, secret_entry);
+    let storage_config = recover_storage_config(&parsed, secret_entry);
     let mooncake_table_config = parsed.get_mooncake_table_config();
 
     let moonlink_table_config = MoonlinkTableConfig {
         iceberg_table_config: IcebergTableConfig {
             namespace: vec![parsed.iceberg_table_config.namespace],
             table_name: parsed.iceberg_table_config.table_name,
-            filesystem_config,
+            accessor_config: AccessorConfig::new_with_storage_config(storage_config),
         },
         mooncake_table_config,
     };

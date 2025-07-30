@@ -3,6 +3,7 @@ use crate::row::IdentityProp as RowIdentity;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
+use crate::storage::filesystem::accessor_config::AccessorConfig;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
@@ -16,8 +17,8 @@ use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::MooncakeTable;
 use crate::table_notify::TableEvent;
-use crate::FileSystemConfig;
 use crate::ObjectStorageCache;
+use crate::StorageConfig;
 
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow::datatypes::{DataType, Field};
@@ -30,54 +31,59 @@ use tokio::sync::mpsc::Receiver;
 /// Test util function to get iceberg table config for local filesystem.
 pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
+    let storage_config = StorageConfig::FileSystem { root_directory };
+    let accessor_config = AccessorConfig::new_with_storage_config(storage_config);
     IcebergTableConfig {
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        accessor_config,
     }
 }
 
 /// Test util function to get iceberg table cofig from filesystem config.
 #[cfg(feature = "chaos-test")]
-pub(crate) fn get_iceberg_table_config_with_filesystem_config(
-    filesystem_config: FileSystemConfig,
+pub(crate) fn get_iceberg_table_config_with_storage_config(
+    storage_config: StorageConfig,
 ) -> IcebergTableConfig {
+    let accessor_config = AccessorConfig::new_with_storage_config(storage_config);
     IcebergTableConfig {
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
-        filesystem_config,
+        accessor_config,
     }
 }
 
 /// Test util function with error injection at filesystem layer.
 #[cfg(feature = "chaos-test")]
 pub(crate) fn get_iceberg_table_config_with_chaos_injection(
-    filesystem_config: FileSystemConfig,
+    storage_config: StorageConfig,
 ) -> IcebergTableConfig {
-    use crate::storage::filesystem::accessor::chaos_generator::FileSystemChaosOption;
+    use crate::storage::filesystem::accessor_config::{ChaosConfig, RetryConfig, TimeoutConfig};
 
-    let inner_config = Box::new(filesystem_config);
-    let chaos_option = FileSystemChaosOption {
+    let chaos_config = ChaosConfig {
         min_latency: std::time::Duration::from_secs(0),
         max_latency: std::time::Duration::from_secs(1),
         err_prob: 5, // 5% error probability, a few retry attempts should work
     };
+    let accessor_config = AccessorConfig {
+        storage_config,
+        retry_config: RetryConfig::default(),
+        timeout_config: TimeoutConfig::default(),
+        chaos_config: Some(chaos_config),
+    };
     IcebergTableConfig {
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
         table_name: ICEBERG_TEST_TABLE.to_string(),
-        filesystem_config: FileSystemConfig::ChaosWrapper {
-            chaos_option,
-            inner_config,
-        },
+        accessor_config,
     }
 }
 
 /// Test util function to create iceberg table config.
 pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
-    let filesystem_config = if warehouse_uri.starts_with("s3://") {
+    let accessor_config = if warehouse_uri.starts_with("s3://") {
         #[cfg(feature = "storage-s3")]
         {
-            s3_test_utils::create_s3_filesystem_config(&warehouse_uri)
+            s3_test_utils::create_s3_storage_config(&warehouse_uri)
         }
         #[cfg(not(feature = "storage-s3"))]
         {
@@ -86,20 +92,21 @@ pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTable
     } else if warehouse_uri.starts_with("gs://") {
         #[cfg(feature = "storage-gcs")]
         {
-            gcs_test_utils::create_gcs_filesystem_config(&warehouse_uri)
+            gcs_test_utils::create_gcs_storage_config(&warehouse_uri)
         }
         #[cfg(not(feature = "storage-gcs"))]
         {
             panic!("GCS support not enabled. Enable `storage-gcs` feature.");
         }
     } else {
-        FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: warehouse_uri.clone(),
-        }
+        };
+        AccessorConfig::new_with_storage_config(storage_config)
     };
 
     IcebergTableConfig {
-        filesystem_config,
+        accessor_config,
         ..Default::default()
     }
 }
@@ -140,7 +147,7 @@ pub(crate) fn create_test_updated_arrow_schema_remove_age() -> Arc<ArrowSchema> 
 pub(crate) fn create_test_filesystem_accessor(
     iceberg_table_config: &IcebergTableConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
-    create_filesystem_accessor(iceberg_table_config.filesystem_config.clone())
+    create_filesystem_accessor(iceberg_table_config.accessor_config.clone())
 }
 
 /// Test util function to create mooncake table metadata.
@@ -198,7 +205,8 @@ pub(crate) fn create_test_table_metadata_with_data_compaction_disable_flush(
     local_table_directory: String,
 ) -> Arc<MooncakeTableMetadata> {
     let data_compaction_config = DataCompactionConfig {
-        data_file_to_compact: 2,
+        min_data_file_to_compact: 2,
+        max_data_file_to_compact: u32::MAX,
         data_file_final_size: u64::MAX,
     };
     let mut config = MooncakeTableConfig::new(local_table_directory.clone());
@@ -293,7 +301,8 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
         // Trigger compaction as long as there're two data files.
         data_compaction_config: DataCompactionConfig {
             data_file_final_size: u64::MAX,
-            data_file_to_compact: 2,
+            min_data_file_to_compact: 2,
+            max_data_file_to_compact: u32::MAX,
         },
         ..Default::default()
     };
