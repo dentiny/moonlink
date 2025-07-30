@@ -78,7 +78,7 @@ fn create_retry_layer(retry_config: &RetryConfig) -> RetryLayer {
 
 /// Util function to create opendal operator from filesystem config.
 pub(crate) fn create_opendal_operator(accessor_config: &AccessorConfig) -> Result<Operator> {
-    let inner = match accessor_config.storage_config {
+    let mut op = match accessor_config.storage_config {
         #[cfg(feature = "storage-fs")]
         StorageConfig::FileSystem { .. } => {
             create_opendal_operator_impl(&accessor_config.storage_config)?
@@ -89,12 +89,12 @@ pub(crate) fn create_opendal_operator(accessor_config: &AccessorConfig) -> Resul
         StorageConfig::S3 { .. } => create_opendal_operator_impl(&accessor_config.storage_config)?,
     };
 
-    let retry_layer = create_retry_layer(&accessor_config.retry_config);
-    let mut op = inner.layer(retry_layer);
     if let Some(chaos_config) = &accessor_config.chaos_config {
         let chaos_layer = ChaosLayer::new(chaos_config.clone());
         op = op.layer(chaos_layer);
     }
+    let retry_layer = create_retry_layer(&accessor_config.retry_config);
+    op = op.layer(retry_layer);
 
     Ok(op)
 }
