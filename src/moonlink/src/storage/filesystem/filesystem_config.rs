@@ -34,6 +34,7 @@ pub enum FileSystemConfig {
         /// Used for fake GCS server.
         disable_auth: bool,
     },
+    // TODO(hjiang): Provide retry related configs.
     #[cfg(feature = "chaos-test")]
     ChaosWrapper {
         chaos_option: FileSystemChaosOption,

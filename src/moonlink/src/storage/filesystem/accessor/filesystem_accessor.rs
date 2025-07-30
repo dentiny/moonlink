@@ -50,8 +50,6 @@ impl std::fmt::Debug for FileSystemAccessor {
 
 impl FileSystemAccessor {
     pub fn new(config: FileSystemConfig) -> Self {
-        #[cfg(feature = "chaos-test")]
-        assert!(!matches!(config, FileSystemConfig::ChaosWrapper { .. }));
         Self {
             root_path: config.get_root_path(),
             operator: OnceCell::new(),
