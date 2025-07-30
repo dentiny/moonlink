@@ -145,8 +145,8 @@ pub enum TableEvent {
         file_indice_merge_payload: IndexMergeMaintenanceStatus,
         /// Payload used to trigger a data compaction.
         data_compaction_payload: DataCompactionMaintenanceStatus,
-        /// Evicted object storage cache to delete.
-        evicted_data_files_to_delete: Vec<String>,
+        /// Evicted files to delete.
+        evicted_files_to_delete: EvictedFiles,
     },
     /// Regular iceberg persistence.
     RegularIcebergSnapshot {

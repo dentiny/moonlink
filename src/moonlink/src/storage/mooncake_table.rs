@@ -49,7 +49,7 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
 };
 use crate::storage::storage_utils::{FileId, TableId};
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
-use crate::table_notify::TableEvent;
+use crate::table_notify::{EvictedFiles, TableEvent};
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
@@ -1396,7 +1396,9 @@ impl MooncakeTable {
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,
                 file_indice_merge_payload: snapshot_result.file_indices_merge_payload,
-                evicted_data_files_to_delete: snapshot_result.evicted_data_files_to_delete,
+                evicted_files_to_delete: EvictedFiles {
+                    files: snapshot_result.evicted_data_files_to_delete,
+                },
             })
             .await
             .unwrap();
