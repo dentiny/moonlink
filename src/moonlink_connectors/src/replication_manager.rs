@@ -1,6 +1,7 @@
 use crate::pg_replicate::table::SrcTableId;
 use crate::ReplicationConnection;
-use crate::Result;
+use crate::{Error, Result};
+use moonlink::AccessorConfig;
 use moonlink::TableStatusReader;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
@@ -125,14 +126,14 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         Ok(true)
     }
 
-    pub fn get_table_reader(&self, mooncake_table_id: &T) -> &ReadStateManager {
-        let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
-        connection.get_table_reader(src_table_id)
+    pub fn get_table_reader(&self, mooncake_table_id: &T) -> Result<&ReadStateManager> {
+        let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id)?;
+        Ok(connection.get_table_reader(src_table_id))
     }
 
-    pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> &TableStatusReader {
-        let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id);
-        connection.get_table_status_reader(src_table_id)
+    pub fn get_table_state_reader(&self, mooncake_table_id: &T) -> Result<&TableStatusReader> {
+        let (src_table_id, connection) = self.get_replication_connection(mooncake_table_id)?;
+        Ok(connection.get_table_status_reader(src_table_id))
     }
 
     pub fn get_table_status_readers(&self) -> Vec<&TableStatusReader> {
@@ -143,16 +144,20 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         table_state_readers
     }
 
-    pub fn get_table_event_manager(&mut self, mooncake_table_id: &T) -> &mut TableEventManager {
+    pub fn get_table_event_manager(
+        &mut self,
+        mooncake_table_id: &T,
+    ) -> Result<&mut TableEventManager> {
         let (uri, src_table_id) = self
             .table_info
             .get(mooncake_table_id)
-            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
+            .ok_or_else(|| Error::TableNotFound(mooncake_table_id.to_string()))?;
         let connection = self
             .connections
             .get_mut(uri)
+            // Directly panic: table connection uri existence here is an invariant.
             .unwrap_or_else(|| panic!("connection {uri} not found"));
-        connection.get_table_event_manager(*src_table_id)
+        Ok(connection.get_table_event_manager(*src_table_id))
     }
 
     /// Gracefully shutdown a replication connection by its URI.
@@ -171,16 +176,17 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     fn get_replication_connection(
         &self,
         mooncake_table_id: &T,
-    ) -> (SrcTableId, &ReplicationConnection) {
+    ) -> Result<(SrcTableId, &ReplicationConnection)> {
         let (uri, src_table_id) = self
             .table_info
             .get(mooncake_table_id)
-            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
+            .ok_or_else(|| Error::TableNotFound(mooncake_table_id.to_string()))?;
         let connection = self
             .connections
             .get(uri)
+            // Directly panic: table connection uri existence here is an invariant.
             .unwrap_or_else(|| panic!("connection {uri} not found"));
-        (*src_table_id, connection)
+        Ok((*src_table_id, connection))
     }
 
     /// Clean up completed shutdown handles.

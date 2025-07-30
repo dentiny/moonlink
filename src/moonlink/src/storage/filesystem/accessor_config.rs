@@ -90,10 +90,13 @@ pub struct AccessorConfig {
     /// Internal storage config.
     pub storage_config: StorageConfig,
     /// Retry config.
+    #[serde(default)]
     pub retry_config: RetryConfig,
     /// Timeout config.
+    #[serde(default)]
     pub timeout_config: TimeoutConfig,
     /// Chaos config.
+    #[serde(default)]
     pub chaos_config: Option<ChaosConfig>,
 }
 
@@ -113,5 +116,37 @@ impl AccessorConfig {
 
     pub fn extract_security_metadata_entry(&self) -> Option<MoonlinkTableSecret> {
         self.storage_config.extract_security_metadata_entry()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::StorageConfig;
+    use serde_json::json;
+
+    /// Testing scenario: deserialize accessor config with only storage config populated.
+    #[test]
+    fn test_deserialize_accessor_config_with_only_storage_config() {
+        let input = json!({
+            "storage_config": {
+                "FileSystem": {
+                    "root_directory": "/tmp"
+                }
+            }
+        });
+
+        let config: AccessorConfig = serde_json::from_value(input).unwrap();
+        assert_eq!(
+            config,
+            AccessorConfig {
+                storage_config: StorageConfig::FileSystem {
+                    root_directory: "/tmp".to_string()
+                },
+                retry_config: RetryConfig::default(),
+                timeout_config: TimeoutConfig::default(),
+                chaos_config: None,
+            }
+        );
     }
 }
