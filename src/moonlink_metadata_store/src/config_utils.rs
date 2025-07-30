@@ -50,8 +50,6 @@ struct MooncakeTableConfigForPersistence {
     file_index_config: FileIndexMergeConfig,
     /// Config for iceberg persistence config.
     persistence_config: IcebergPersistenceConfig,
-    /// Filesystem directory to store temporary files, used for union read.
-    temp_files_directory: String,
 }
 
 /// Struct for moonlink table config.
@@ -77,7 +75,7 @@ impl MoonlinkTableConfigForPersistence {
             persistence_config: self.mooncake_table_config.persistence_config.clone(),
             data_compaction_config: self.mooncake_table_config.data_compaction_config.clone(),
             file_index_config: self.mooncake_table_config.file_index_config.clone(),
-            temp_files_directory: self.mooncake_table_config.temp_files_directory.clone(),
+            temp_files_directory: MooncakeTableConfig::DEFAULT_TEMP_FILE_DIRECTORY.to_string(),
         }
     }
 }
@@ -104,7 +102,6 @@ pub(crate) fn parse_moonlink_table_config(
             data_compaction_config: mooncake_config.data_compaction_config.clone(),
             file_index_config: mooncake_config.file_index_config.clone(),
             persistence_config: mooncake_config.persistence_config.clone(),
-            temp_files_directory: mooncake_config.temp_files_directory.clone(),
         },
     };
     let config_json = serde_json::to_value(&persisted)?;
