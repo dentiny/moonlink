@@ -152,16 +152,20 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         table_state_readers
     }
 
-    pub fn get_table_event_manager(&mut self, mooncake_table_id: &T) -> &mut TableEventManager {
+    pub fn get_table_event_manager(
+        &mut self,
+        mooncake_table_id: &T,
+    ) -> Result<&mut TableEventManager> {
         let (uri, src_table_id) = self
             .table_info
             .get(mooncake_table_id)
-            .unwrap_or_else(|| panic!("table {mooncake_table_id} not found"));
+            .ok_or_else(|| Error::TableNotFound(mooncake_table_id.to_string()))?;
         let connection = self
             .connections
             .get_mut(uri)
+            // Directly panic: table connection uri existence here is an invariant.
             .unwrap_or_else(|| panic!("connection {uri} not found"));
-        connection.get_table_event_manager(*src_table_id)
+        Ok(connection.get_table_event_manager(*src_table_id))
     }
 
     /// Gracefully shutdown a replication connection by its URI.
@@ -188,7 +192,8 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         let connection = self
             .connections
             .get(uri)
-            .ok_or_else(|| Error::ConnectionNotFound(uri.clone()))?;
+            // Directly panic: table connection uri existence here is an invariant.
+            .unwrap_or_else(|| panic!("connection {uri} not found"));
         Ok((*src_table_id, connection))
     }
 

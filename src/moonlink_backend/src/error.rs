@@ -28,8 +28,6 @@ pub enum Error {
     TokioWatchRecvError {
         source: tokio::sync::watch::error::RecvError,
     },
-    #[error("Table {0} not found")]
-    TableNotFound(String),
 }
 
 pub type Result<T> = result::Result<T, Error>;

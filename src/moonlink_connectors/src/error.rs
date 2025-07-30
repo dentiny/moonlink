@@ -30,10 +30,6 @@ pub enum Error {
     // Requested database table not found.
     #[error("Table {0} not found")]
     TableNotFound(String),
-
-    // Requested connection string not found.
-    #[error("Connection {0} not found")]
-    ConnectionNotFound(String),
 }
 
 pub type Result<T> = result::Result<T, Error>;
