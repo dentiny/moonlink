@@ -1,7 +1,6 @@
 use crate::pg_replicate::table::SrcTableId;
 use crate::ReplicationConnection;
 use crate::{Error, Result};
-use moonlink::AccessorConfig;
 use moonlink::TableStatusReader;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use std::collections::HashMap;
