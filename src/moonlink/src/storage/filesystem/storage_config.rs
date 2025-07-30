@@ -138,13 +138,12 @@ impl StorageConfig {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "storage-gcs"))]
 mod tests {
     use crate::StorageConfig;
 
     /// Testing scenario: deserialize storage config with partial GCS field populated.
     #[test]
-    #[cfg(feature = "storage-gcs")]
     fn test_deserialize_storage_config_with_only_necessary() {
         let json = r#"
         {
