@@ -16,8 +16,8 @@ use std::hash::Hash;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use crate::table_creation_config::TableCreationConfig;
 use crate::recovery_utils::BackendAttributes;
+use crate::table_creation_config::TableCreationConfig;
 
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
