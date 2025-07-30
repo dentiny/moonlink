@@ -167,6 +167,7 @@ impl MooncakeTableConfig {
     }
     pub fn validate(&self) {
         self.file_index_config.validate();
+        self.data_compaction_config.validate();
     }
     pub fn batch_size(&self) -> usize {
         self.batch_size

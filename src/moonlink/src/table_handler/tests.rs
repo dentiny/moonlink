@@ -1478,7 +1478,8 @@ async fn test_full_maintenance_with_sufficient_data_files() {
     // Setup mooncake config, which won't trigger any data compaction or index merge, if not full table maintaince.
     let mooncake_table_config = MooncakeTableConfig {
         data_compaction_config: DataCompactionConfig {
-            data_file_to_compact: u32::MAX,
+            min_data_file_to_compact: 2,
+            max_data_file_to_compact: u32::MAX,
             data_file_final_size: u64::MAX,
         },
         file_index_config: FileIndexMergeConfig {

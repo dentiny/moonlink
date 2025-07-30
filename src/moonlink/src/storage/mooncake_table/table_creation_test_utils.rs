@@ -198,7 +198,8 @@ pub(crate) fn create_test_table_metadata_with_data_compaction_disable_flush(
     local_table_directory: String,
 ) -> Arc<MooncakeTableMetadata> {
     let data_compaction_config = DataCompactionConfig {
-        data_file_to_compact: 2,
+        min_data_file_to_compact: 2,
+        max_data_file_to_compact: u32::MAX,
         data_file_final_size: u64::MAX,
     };
     let mut config = MooncakeTableConfig::new(local_table_directory.clone());
@@ -293,7 +294,8 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
         // Trigger compaction as long as there're two data files.
         data_compaction_config: DataCompactionConfig {
             data_file_final_size: u64::MAX,
-            data_file_to_compact: 2,
+            min_data_file_to_compact: 2,
+            max_data_file_to_compact: u32::MAX,
         },
         ..Default::default()
     };

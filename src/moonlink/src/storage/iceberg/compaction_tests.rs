@@ -91,7 +91,8 @@ fn extract_value_from_row(row: MoonlinkRow) -> RecordBatch {
 fn get_data_compaction_config() -> DataCompactionConfig {
     // Perform compaction as long as there're two data files.
     DataCompactionConfig {
-        data_file_to_compact: 2,
+        min_data_file_to_compact: 2,
+        max_data_file_to_compact: u32::MAX,
         data_file_final_size: 1000000,
     }
 }
