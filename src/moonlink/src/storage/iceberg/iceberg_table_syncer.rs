@@ -326,6 +326,8 @@ impl IcebergTableManager {
     }
 
     /// Process file indices to import.
+    /// One mooncake file index correspond to one puffin file, with one blob inside of it.
+    /// 
     /// [`local_data_file_to_remote`] should contain all local data filepath to remote data filepath mapping.
     /// Return the mapping from local index files to remote index files.
     async fn import_file_indices(
@@ -333,22 +335,22 @@ impl IcebergTableManager {
         file_indices_to_import: &[MooncakeFileIndex],
         local_data_file_to_remote: &HashMap<String, String>,
     ) -> IcebergResult<HashMap<String, String>> {
-        let puffin_filepath = self.get_unique_hash_index_v1_filepath();
-        let mut puffin_writer = puffin_utils::create_puffin_writer(
-            self.iceberg_table.as_ref().unwrap().file_io(),
-            &puffin_filepath,
-        )
-        .await?;
-
         // TODO(hjiang): Maps from local filepath to remote filepath.
         // After sync, file index still stores local index file location.
         // After cache design, we should be able to provide a "handle" abstraction, which could be either local or remote.
         // The hash map here is merely a workaround to pass remote path to iceberg file index structure.
         let mut local_index_file_to_remote = HashMap::new();
 
-        let mut new_file_indices: Vec<&MooncakeFileIndex> =
-            Vec::with_capacity(file_indices_to_import.len());
         for cur_file_index in file_indices_to_import.iter() {
+            // Create one puffin file (with one puffin blob inside of it) for each mooncake file index.
+            let mut new_file_indices: Vec<&MooncakeFileIndex> = vec![];
+            let puffin_filepath = self.get_unique_hash_index_v1_filepath();
+            let mut puffin_writer = puffin_utils::create_puffin_writer(
+                self.iceberg_table.as_ref().unwrap().file_io(),
+                &puffin_filepath,
+            )
+            .await?;
+
             new_file_indices.push(cur_file_index);
             // Upload new index file to iceberg table.
             for cur_index_block in cur_file_index.index_blocks.iter() {
@@ -365,20 +367,21 @@ impl IcebergTableManager {
             }
             self.persisted_file_indices
                 .insert(cur_file_index.clone(), puffin_filepath.clone());
-        }
 
-        let file_index_blob = FileIndexBlob::new(
-            new_file_indices,
-            &local_index_file_to_remote,
-            local_data_file_to_remote,
-        );
-        let puffin_blob = file_index_blob.as_blob()?;
-        puffin_writer
-            .add(puffin_blob, iceberg::puffin::CompressionCodec::None)
-            .await?;
-        self.catalog
-            .record_puffin_metadata_and_close(puffin_filepath, puffin_writer)
-            .await?;
+            // Persist the puffin file and record in file catalog.
+            let file_index_blob = FileIndexBlob::new(
+                new_file_indices,
+                &local_index_file_to_remote,
+                local_data_file_to_remote,
+            );
+            let puffin_blob = file_index_blob.as_blob()?;
+            puffin_writer
+                .add(puffin_blob, iceberg::puffin::CompressionCodec::None)
+                .await?;
+            self.catalog
+                .record_puffin_metadata_and_close(puffin_filepath, puffin_writer)
+                .await?;
+        }
 
         Ok(local_index_file_to_remote)
     }

@@ -433,6 +433,8 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
+        println!("persisted new file indices = {}, old = {}", task.index_merge_result.new_file_indices.len(), task.index_merge_result.old_file_indices.len());
+
         // Validate mooncake table operation invariants.
         self.validate_mooncake_table_invariants(&task, &opt);
         // Validate persistence results.

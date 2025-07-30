@@ -186,6 +186,7 @@ impl FileIndex {
     }
 }
 
+/// TODO(hjiang): One [`FileIndexBlob`] should contain only one file index.
 /// In-memory structure for one file index blob in the puffin file, which contains multiple `FileIndex` structs.
 #[derive(Deserialize, Serialize)]
 pub(crate) struct FileIndexBlob {
