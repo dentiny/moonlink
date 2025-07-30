@@ -72,8 +72,8 @@ async fn handle_stream(
                 // TODO: currently by default use filesystem config.
                 let table_config = TableConfig {
                     mooncake_config: MooncakeConfig {
-                        enable_index_merge: true,
-                        enable_data_compaction: true,
+                        skip_index_merge: false,
+                        skip_data_compaction: false,
                     },
                     iceberg_config: moonlink::AccessorConfig::new_with_storage_config(
                         moonlink::StorageConfig::FileSystem {

@@ -60,8 +60,8 @@ impl TestGuard {
             .to_string();
         let table_config = TableConfig {
             mooncake_config: MooncakeConfig {
-                enable_index_merge: false,
-                enable_data_compaction: false,
+                skip_index_merge: true,
+                skip_data_compaction: true,
             },
             iceberg_config: AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
                 root_directory,
@@ -263,8 +263,8 @@ fn get_serialized_table_config(tmp_dir: &TempDir) -> String {
     let root_directory = tmp_dir.path().to_str().unwrap().to_string();
     let table_config = TableConfig {
         mooncake_config: MooncakeConfig {
-            enable_index_merge: false,
-            enable_data_compaction: false,
+            skip_index_merge: true,
+            skip_data_compaction: true,
         },
         iceberg_config: AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
             root_directory,

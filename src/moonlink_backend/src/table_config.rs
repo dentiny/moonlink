@@ -13,9 +13,11 @@ const DEFAULT_ICEBERG_NAMESPACE: &str = "default";
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 pub struct MooncakeConfig {
     /// Whether background regular index merge is enabled.
-    pub enable_index_merge: bool,
+    #[serde(default)]
+    pub skip_index_merge: bool,
     /// Whether background regular data compaction is enabled.
-    pub enable_data_compaction: bool,
+    #[serde(default)]
+    pub skip_data_compaction: bool,
 }
 
 impl MooncakeConfig {
@@ -24,15 +26,15 @@ impl MooncakeConfig {
         self,
         temp_files_dir: String,
     ) -> MooncakeTableConfig {
-        let index_merge_config = if self.enable_index_merge {
-            FileIndexMergeConfig::enabled()
-        } else {
+        let index_merge_config = if self.skip_index_merge {
             FileIndexMergeConfig::disabled()
-        };
-        let data_compaction_config = if self.enable_data_compaction {
-            DataCompactionConfig::enabled()
         } else {
+            FileIndexMergeConfig::enabled()
+        };
+        let data_compaction_config = if self.skip_data_compaction {
             DataCompactionConfig::disabled()
+        } else {
+            DataCompactionConfig::enabled()
         };
 
         let mut mooncake_table_config = MooncakeTableConfig::new(temp_files_dir);
@@ -89,10 +91,27 @@ mod tests {
 
     #[test]
     fn test_table_config_from_valid_json() {
-        let table_config = TableConfig {
+        let serialized = r#"
+            {
+                "mooncake_config": {
+                    "skip_index_merge": true
+                },
+                "iceberg_config": {
+                    "storage_config": {
+                        "FileSystem": {
+                            "root_directory": "/tmp"
+                        }
+                    }
+                } 
+            }
+        "#;
+
+        // Deserialize and check.
+        let actual_table_config = TableConfig::from_json(serialized).unwrap();
+        let expected_table_config = TableConfig {
             mooncake_config: MooncakeConfig {
-                enable_index_merge: true,
-                enable_data_compaction: true,
+                skip_index_merge: true,
+                skip_data_compaction: false,
             },
             iceberg_config: IcebergConfig::new_with_storage_config(
                 moonlink::StorageConfig::FileSystem {
@@ -100,10 +119,6 @@ mod tests {
                 },
             ),
         };
-        let serialized = serde_json::to_string(&table_config).unwrap();
-
-        // Deserialize and check.
-        let parsed = TableConfig::from_json(&serialized).unwrap();
-        assert_eq!(parsed, table_config);
+        assert_eq!(expected_table_config, actual_table_config);
     }
 }
