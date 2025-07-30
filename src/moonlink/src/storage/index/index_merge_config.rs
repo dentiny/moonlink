@@ -49,7 +49,7 @@ impl Default for FileIndexMergeConfig {
     fn default() -> Self {
         Self {
             min_file_indices_to_merge: Self::DEFAULT_MIN_FILE_INDICES_TO_MERGE,
-            max_file_indices_to_merge: Self::DEFAULT_MIN_FILE_INDICES_TO_MERGE,
+            max_file_indices_to_merge: Self::DEFAULT_MAX_FILE_INDICES_TO_MERGE,
             index_block_final_size: Self::DEFAULT_INDEX_BLOCK_FINAL_SIZE,
         }
     }
