@@ -1,46 +1,25 @@
 /// A customized opendal layer, which provides chaos features like injected delay, intended errors, etc.
-use more_asserts as ma;
 use opendal::raw::{
     Access, Layer, LayeredAccess, OpList, OpRead, OpWrite, RpDelete, RpList, RpRead, RpWrite,
 };
+use opendal::Metadata;
 use opendal::Result;
-use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
-use serde::{Deserialize, Serialize};
-use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::Mutex;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct FileSystemChaosOption {
-    /// Min and max latency introduced to all operation access, both inclusive.
-    pub min_latency: std::time::Duration,
-    pub max_latency: std::time::Duration,
-
-    /// Probability ranges from [0, err_prob]; if not 0, will return retriable opendal error randomly.
-    pub err_prob: usize,
-}
-
-impl FileSystemChaosOption {
-    /// Validate whether the given option is valid.
-    #[allow(dead_code)]
-    fn validate(&self) {
-        ma::assert_le!(self.min_latency, self.max_latency);
-        ma::assert_le!(self.err_prob, 100);
-    }
-}
+use crate::storage::filesystem::accessor::chaos_generator::ChaosGenerator;
+use crate::storage::filesystem::accessor::chaos_generator::FileSystemChaosOption;
 
 /// A wrapper that delegates all operations to an inner [`FileSystemAccessor`].
 #[derive(Debug)]
 pub struct ChaosLayer {
-    /// Filesystem wrapper option.
-    option: FileSystemChaosOption,
+    /// Chaos generator.
+    chaos_generator: ChaosGenerator,
 }
 
 impl ChaosLayer {
-    #[allow(dead_code)]
     pub fn new(option: FileSystemChaosOption) -> Self {
-        option.validate();
-        Self { option }
+        Self {
+            chaos_generator: ChaosGenerator::new(option),
+        }
     }
 }
 
@@ -48,74 +27,25 @@ impl<A: Access> Layer<A> for ChaosLayer {
     type LayeredAccess = ChaosAccessor<A>;
 
     fn layer(&self, inner: A) -> Self::LayeredAccess {
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let rng = Mutex::new(StdRng::seed_from_u64(nanos as u64));
         ChaosAccessor {
-            rng,
+            chaos_generator: self.chaos_generator.clone(),
             inner,
-            option: self.option.clone(),
         }
     }
 }
 
 #[derive(Debug)]
 pub struct ChaosAccessor<A> {
-    /// Randomness.
-    rng: Mutex<StdRng>,
-    /// Chao layer option.
-    option: FileSystemChaosOption,
+    /// Chaos generator.
+    chaos_generator: ChaosGenerator,
     /// Inner accessor.
     inner: A,
 }
 
-impl<A: Access> ChaosAccessor<A> {
-    /// Get random latency.
-    async fn get_random_duration(&self) -> std::time::Duration {
-        let mut rng = self.rng.lock().await;
-        let min_ns = self.option.min_latency.as_nanos();
-        let max_ns = self.option.max_latency.as_nanos();
-        let sampled_ns = rng.random_range(min_ns..=max_ns);
-        std::time::Duration::from_nanos(sampled_ns as u64)
-    }
-
-    /// Get random error.
-    async fn get_random_error(&self) -> Result<()> {
-        if self.option.err_prob == 0 {
-            return Ok(());
-        }
-
-        let mut rng = self.rng.lock().await;
-        let rand_val: usize = rng.random_range(0..=100);
-        if rand_val <= self.option.err_prob {
-            let err = opendal::Error::new(opendal::ErrorKind::Unexpected, "Injected error")
-                .set_temporary();
-            return Err(err);
-        }
-
-        Ok(())
-    }
-
-    /// Attempt injected delay and error.
-    async fn perform_wrapper_function(&self) -> Result<()> {
-        // Introduce latency for IO operations.
-        let latency = self.get_random_duration().await;
-        tokio::time::sleep(latency).await;
-
-        // Get injected error status.
-        self.get_random_error().await?;
-
-        Ok(())
-    }
-}
-
-// TODO(hjiang): Provide own reader and writer, so we could inject chaos ourselves.
 impl<A: Access> LayeredAccess for ChaosAccessor<A> {
     type Inner = A;
-    type Reader = A::Reader;
-    type Writer = A::Writer;
+    type Reader = ChaosReader<A::Reader>;
+    type Writer = ChaosWriter<A::Writer>;
     type Lister = A::Lister;
     type Deleter = A::Deleter;
 
@@ -124,23 +54,93 @@ impl<A: Access> LayeredAccess for ChaosAccessor<A> {
     }
 
     async fn read(&self, path: &str, args: OpRead) -> Result<(RpRead, Self::Reader)> {
-        self.perform_wrapper_function().await?;
-        self.inner.read(path, args).await
+        self.chaos_generator.perform_wrapper_function().await?;
+        self.inner
+            .read(path, args)
+            .await
+            .map(|(rp, r)| (rp, ChaosReader::new(r, self.chaos_generator.clone())))
     }
 
     async fn write(&self, path: &str, args: OpWrite) -> Result<(RpWrite, Self::Writer)> {
-        self.perform_wrapper_function().await?;
-        self.inner.write(path, args).await
+        self.chaos_generator.perform_wrapper_function().await?;
+        self.inner
+            .write(path, args)
+            .await
+            .map(|(rp, w)| (rp, ChaosWriter::new(w, self.chaos_generator.clone())))
     }
 
     async fn list(&self, path: &str, args: OpList) -> Result<(RpList, Self::Lister)> {
-        self.perform_wrapper_function().await?;
+        self.chaos_generator.perform_wrapper_function().await?;
         self.inner.list(path, args).await
     }
 
     async fn delete(&self) -> Result<(RpDelete, Self::Deleter)> {
-        self.perform_wrapper_function().await?;
+        self.chaos_generator.perform_wrapper_function().await?;
         self.inner.delete().await
+    }
+}
+
+/// ==========================
+/// Chaos reader
+/// ==========================
+///
+pub struct ChaosReader<R> {
+    /// Chaos generator.
+    chaos_generator: ChaosGenerator,
+    /// Inner reader.
+    inner: R,
+}
+
+impl<R> ChaosReader<R> {
+    fn new(inner: R, chaos_generator: ChaosGenerator) -> Self {
+        Self {
+            chaos_generator,
+            inner,
+        }
+    }
+}
+
+impl<R: opendal::raw::oio::Read> opendal::raw::oio::Read for ChaosReader<R> {
+    async fn read(&mut self) -> Result<opendal::Buffer> {
+        self.chaos_generator.perform_wrapper_function().await?;
+        self.inner.read().await
+    }
+}
+
+/// ==========================
+/// Chaos write
+/// ==========================
+///
+pub struct ChaosWriter<W> {
+    /// Chaos generator.
+    chaos_generator: ChaosGenerator,
+    /// Inner writer.
+    inner: W,
+}
+
+impl<W> ChaosWriter<W> {
+    fn new(inner: W, chaos_generator: ChaosGenerator) -> Self {
+        Self {
+            chaos_generator,
+            inner,
+        }
+    }
+}
+
+impl<W: opendal::raw::oio::Write> opendal::raw::oio::Write for ChaosWriter<W> {
+    async fn write(&mut self, bs: opendal::Buffer) -> Result<()> {
+        self.chaos_generator.perform_wrapper_function().await?;
+        self.inner.write(bs).await
+    }
+
+    async fn abort(&mut self) -> Result<()> {
+        self.chaos_generator.perform_wrapper_function().await?;
+        self.inner.abort().await
+    }
+
+    async fn close(&mut self) -> Result<Metadata> {
+        self.chaos_generator.perform_wrapper_function().await?;
+        self.inner.close().await
     }
 }
 

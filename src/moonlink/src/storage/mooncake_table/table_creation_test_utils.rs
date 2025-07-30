@@ -53,7 +53,7 @@ pub(crate) fn get_iceberg_table_config_with_filesystem_config(
 pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     filesystem_config: FileSystemConfig,
 ) -> IcebergTableConfig {
-    use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
+    use crate::storage::filesystem::accessor::chaos_generator::FileSystemChaosOption;
 
     let inner_config = Box::new(filesystem_config);
     let chaos_option = FileSystemChaosOption {

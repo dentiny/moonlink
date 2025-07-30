@@ -1,5 +1,5 @@
 #[cfg(feature = "chaos-test")]
-use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
+use crate::storage::filesystem::accessor::chaos_generator::FileSystemChaosOption;
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use crate::MoonlinkSecretType;
 use crate::MoonlinkTableSecret;
