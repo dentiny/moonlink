@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Retry config
 /// ========================
 ///
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct RetryConfig {
     pub max_count: usize,
     pub min_delay: std::time::Duration,
@@ -62,7 +62,7 @@ impl ChaosConfig {
 /// ========================
 ///
 /// TODO(hjiang): Allow finer-granularity timeout control.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct TimeoutConfig {
     /// Timeout for all attempts for an IO operations, including retry.
     pub timeout: std::time::Duration,
@@ -85,7 +85,7 @@ impl Default for TimeoutConfig {
 /// Accessor config
 /// ========================
 ///
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct AccessorConfig {
     /// Internal storage config.
     pub storage_config: StorageConfig,

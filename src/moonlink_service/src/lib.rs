@@ -74,9 +74,11 @@ async fn handle_stream(
                     mooncake_creation_config: TableConfig {
                         enable_index_merge: true,
                     },
-                    storage_creation_config: moonlink::FileSystemConfig::FileSystem {
-                        root_directory: backend.get_base_path(),
-                    },
+                    storage_creation_config: moonlink::AccessorConfig::new_with_storage_config(
+                        moonlink::StorageConfig::FileSystem {
+                            root_directory: backend.get_base_path(),
+                        },
+                    ),
                 };
                 backend
                     .create_table(database_id, table_id, src, src_uri, table_creation_config)

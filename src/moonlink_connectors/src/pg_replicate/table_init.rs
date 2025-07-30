@@ -78,7 +78,12 @@ pub async fn build_table_components(
         moonlink_table_config.iceberg_table_config.clone(),
         moonlink_table_config.mooncake_table_config.clone(),
         object_storage_cache,
-        Arc::new(FileSystemAccessor::new(iceberg_accessor_config)),
+        Arc::new(FileSystemAccessor::new(
+            moonlink_table_config
+                .iceberg_table_config
+                .accessor_config
+                .clone(),
+        )),
     )
     .await?;
 

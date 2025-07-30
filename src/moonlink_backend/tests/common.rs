@@ -8,7 +8,7 @@ use tokio_postgres::{connect, types::PgLsn, Client, NoTls};
 
 use std::{collections::HashSet, fs::File};
 
-use moonlink::decode_read_state_for_testing;
+use moonlink::{decode_read_state_for_testing, AccessorConfig, StorageConfig};
 use moonlink_backend::file_utils::{recreate_directory, DEFAULT_MOONLINK_TEMP_FILE_PATH};
 use moonlink_backend::{MoonlinkBackend, ReadState};
 
@@ -62,7 +62,9 @@ impl TestGuard {
             mooncake_creation_config: TableConfig {
                 enable_index_merge: false,
             },
-            storage_creation_config: moonlink::FileSystemConfig::FileSystem { root_directory },
+            storage_creation_config: AccessorConfig::new_with_storage_config(
+                StorageConfig::FileSystem { root_directory },
+            ),
         }
     }
 
@@ -261,7 +263,9 @@ fn get_table_creation_config(tmp_dir: &TempDir) -> TableCreationConfig {
         mooncake_creation_config: TableConfig {
             enable_index_merge: false,
         },
-        storage_creation_config: moonlink::FileSystemConfig::FileSystem { root_directory },
+        storage_creation_config: AccessorConfig::new_with_storage_config(
+            StorageConfig::FileSystem { root_directory },
+        ),
     }
 }
 

@@ -8,8 +8,7 @@ use crate::pg_replicate::postgres_source::{
 use crate::pg_replicate::table_init::build_table_components;
 use crate::Result;
 use moonlink::{
-    AccessorConfig, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
-    TableStatusReader,
+    MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager, TableStatusReader,
 };
 use std::io::{Error, ErrorKind};
 use std::sync::Arc;

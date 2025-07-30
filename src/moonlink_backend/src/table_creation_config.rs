@@ -1,5 +1,5 @@
 use moonlink::{
-    FileIndexMergeConfig, FileSystemConfig, IcebergTableConfig, MooncakeTableConfig,
+    AccessorConfig, FileIndexMergeConfig, IcebergTableConfig, MooncakeTableConfig,
     MoonlinkTableConfig,
 };
 /// Configuration on table creation.
@@ -39,7 +39,7 @@ pub struct TableCreationConfig {
     /// Mooncake table configuration.
     pub mooncake_creation_config: TableConfig,
     /// Iceberg filesystem config.
-    pub storage_creation_config: FileSystemConfig,
+    pub storage_creation_config: AccessorConfig,
 }
 
 impl TableCreationConfig {
@@ -56,7 +56,7 @@ impl TableCreationConfig {
             iceberg_table_config: IcebergTableConfig {
                 namespace: vec![DEFAULT_ICEBERG_NAMESPACE.to_string()],
                 table_name: mooncake_table_id,
-                filesystem_config: self.storage_creation_config,
+                accessor_config: self.storage_creation_config,
             },
         }
     }
