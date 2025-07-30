@@ -24,6 +24,7 @@ more-asserts = { workspace = true }
 nix = { workspace = true }
 parquet = { workspace = true, features = ["arrow"] }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tracing-subscriber = { workspace = true }
