@@ -2,7 +2,6 @@ mod error;
 
 use arrow_ipc::writer::StreamWriter;
 pub use error::{Error, Result};
-use moonlink_backend::table_config::{MooncakeConfig, TableConfig};
 use moonlink_backend::MoonlinkBackend;
 use moonlink_metadata_store::SqliteMetadataStore;
 use moonlink_rpc::{read, write, Request, Table};
@@ -69,27 +68,10 @@ async fn handle_stream(
                 src,
                 src_uri,
             } => {
-                // TODO: currently by default use filesystem config.
-                let table_config = TableConfig {
-                    mooncake_config: MooncakeConfig {
-                        skip_index_merge: false,
-                        skip_data_compaction: false,
-                    },
-                    iceberg_config: moonlink::AccessorConfig::new_with_storage_config(
-                        moonlink::StorageConfig::FileSystem {
-                            root_directory: backend.get_base_path(),
-                        },
-                    ),
-                };
-                let serialized_table_config = serde_json::to_string(&table_config).unwrap();
+                // Use default mooncake config, and local filesystem for storage layer.
+                let serialized_table_config = "";
                 backend
-                    .create_table(
-                        database_id,
-                        table_id,
-                        src,
-                        src_uri,
-                        &serialized_table_config,
-                    )
+                    .create_table(database_id, table_id, src, src_uri, serialized_table_config)
                     .await
                     .unwrap();
                 write(&mut stream, &()).await?;

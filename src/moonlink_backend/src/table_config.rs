@@ -1,7 +1,7 @@
 use crate::Result;
 use moonlink::{
     AccessorConfig as IcebergConfig, DataCompactionConfig, FileIndexMergeConfig,
-    IcebergTableConfig, MooncakeTableConfig, MoonlinkTableConfig,
+    IcebergTableConfig, MooncakeTableConfig, MoonlinkTableConfig, StorageConfig,
 };
 /// Configuration on table creation.
 use serde::{Deserialize, Serialize};
@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 const DEFAULT_ICEBERG_NAMESPACE: &str = "default";
 
 /// Mooncake table config.
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
 pub struct MooncakeConfig {
     /// Whether background regular index merge is enabled.
     #[serde(default)]
@@ -49,16 +49,24 @@ impl MooncakeConfig {
 pub struct TableConfig {
     /// Mooncake table configuration.
     #[serde(rename = "mooncake")]
+    #[serde(default)]
     pub mooncake_config: MooncakeConfig,
     /// Iceberg storage config.
     #[serde(rename = "iceberg")]
-    pub iceberg_config: IcebergConfig,
+    #[serde(default)]
+    pub iceberg_config: Option<IcebergConfig>,
 }
 
 impl TableConfig {
     /// Convert table config from serialized plain json string.
-    pub fn from_json(json: &str) -> Result<Self> {
-        let config = serde_json::from_str(json)?;
+    pub fn from_json_or_default(json: &str, default_table_directory: &str) -> Result<Self> {
+        let mut config: TableConfig = serde_json::from_str(json)?;
+        if config.iceberg_config.is_none() {
+            let storage_config = StorageConfig::FileSystem {
+                root_directory: default_table_directory.to_string(),
+            };
+            config.iceberg_config = Some(IcebergConfig::new_with_storage_config(storage_config));
+        }
         Ok(config)
     }
 
@@ -75,7 +83,7 @@ impl TableConfig {
             iceberg_table_config: IcebergTableConfig {
                 namespace: vec![DEFAULT_ICEBERG_NAMESPACE.to_string()],
                 table_name: mooncake_table_id,
-                accessor_config: self.iceberg_config,
+                accessor_config: self.iceberg_config.unwrap(),
             },
         }
     }
@@ -87,8 +95,21 @@ mod tests {
 
     #[test]
     fn test_table_config_from_empty_json() {
-        let res = TableConfig::from_json("");
-        assert!(res.is_err());
+        let actual_table_config =
+            TableConfig::from_json_or_default("{}", /*default_table_directory=*/ "/tmp/path")
+                .unwrap();
+        let expected_table_config = TableConfig {
+            mooncake_config: MooncakeConfig {
+                skip_index_merge: false,
+                skip_data_compaction: false,
+            },
+            iceberg_config: Some(IcebergConfig::new_with_storage_config(
+                moonlink::StorageConfig::FileSystem {
+                    root_directory: "/tmp/path".to_string(),
+                },
+            )),
+        };
+        assert_eq!(actual_table_config, expected_table_config);
     }
 
     #[test]
@@ -109,17 +130,21 @@ mod tests {
         "#;
 
         // Deserialize and check.
-        let actual_table_config = TableConfig::from_json(serialized).unwrap();
+        let actual_table_config = TableConfig::from_json_or_default(
+            serialized,
+            /*default_table_directory=*/ "/tmp/path",
+        )
+        .unwrap();
         let expected_table_config = TableConfig {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: true,
                 skip_data_compaction: false,
             },
-            iceberg_config: IcebergConfig::new_with_storage_config(
+            iceberg_config: Some(IcebergConfig::new_with_storage_config(
                 moonlink::StorageConfig::FileSystem {
                     root_directory: "/tmp".to_string(),
                 },
-            ),
+            )),
         };
         assert_eq!(expected_table_config, actual_table_config);
     }
@@ -147,21 +172,27 @@ mod tests {
         "#;
 
         // Deserialize and check.
-        let actual_table_config = TableConfig::from_json(serialized).unwrap();
+        let actual_table_config = TableConfig::from_json_or_default(
+            serialized,
+            /*default_table_directory=*/ "/tmp/path",
+        )
+        .unwrap();
         let expected_table_config = TableConfig {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: true,
                 skip_data_compaction: false,
             },
-            iceberg_config: IcebergConfig::new_with_storage_config(moonlink::StorageConfig::Gcs {
-                project: "gcs-proj".to_string(),
-                region: "us-west1".to_string(),
-                bucket: "moonlink".to_string(),
-                access_key_id: "access-key".to_string(),
-                secret_access_key: "secret".to_string(),
-                endpoint: None,
-                disable_auth: false,
-            }),
+            iceberg_config: Some(IcebergConfig::new_with_storage_config(
+                moonlink::StorageConfig::Gcs {
+                    project: "gcs-proj".to_string(),
+                    region: "us-west1".to_string(),
+                    bucket: "moonlink".to_string(),
+                    access_key_id: "access-key".to_string(),
+                    secret_access_key: "secret".to_string(),
+                    endpoint: None,
+                    disable_auth: false,
+                },
+            )),
         };
         assert_eq!(expected_table_config, actual_table_config);
     }
@@ -188,19 +219,25 @@ mod tests {
         "#;
 
         // Deserialize and check.
-        let actual_table_config = TableConfig::from_json(serialized).unwrap();
+        let actual_table_config = TableConfig::from_json_or_default(
+            serialized,
+            /*default_table_directory=*/ "/tmp/path",
+        )
+        .unwrap();
         let expected_table_config = TableConfig {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: true,
                 skip_data_compaction: false,
             },
-            iceberg_config: IcebergConfig::new_with_storage_config(moonlink::StorageConfig::S3 {
-                region: "us-west1".to_string(),
-                bucket: "moonlink".to_string(),
-                access_key_id: "access-key".to_string(),
-                secret_access_key: "secret".to_string(),
-                endpoint: None,
-            }),
+            iceberg_config: Some(IcebergConfig::new_with_storage_config(
+                moonlink::StorageConfig::S3 {
+                    region: "us-west1".to_string(),
+                    bucket: "moonlink".to_string(),
+                    access_key_id: "access-key".to_string(),
+                    secret_access_key: "secret".to_string(),
+                    endpoint: None,
+                },
+            )),
         };
         assert_eq!(expected_table_config, actual_table_config);
     }
