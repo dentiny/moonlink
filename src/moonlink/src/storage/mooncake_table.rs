@@ -165,6 +165,9 @@ impl MooncakeTableConfig {
             temp_files_directory,
         }
     }
+    pub fn validate(&self) {
+        self.file_index_config.validate();
+    }
     pub fn batch_size(&self) -> usize {
         self.batch_size
     }
@@ -738,6 +741,7 @@ impl MooncakeTable {
         object_storage_cache: ObjectStorageCache,
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     ) -> Result<Self> {
+        table_metadata.config.validate();
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
         let last_iceberg_snapshot_lsn = current_snapshot.data_file_flush_lsn;

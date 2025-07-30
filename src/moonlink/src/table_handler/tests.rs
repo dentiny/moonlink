@@ -1482,7 +1482,8 @@ async fn test_full_maintenance_with_sufficient_data_files() {
             data_file_final_size: u64::MAX,
         },
         file_index_config: FileIndexMergeConfig {
-            file_indices_to_merge: u32::MAX,
+            min_file_indices_to_merge: u32::MAX,
+            max_file_indices_to_merge: u32::MAX,
             index_block_final_size: u64::MAX,
         },
         ..Default::default()
