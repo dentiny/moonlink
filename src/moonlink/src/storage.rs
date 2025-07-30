@@ -30,6 +30,7 @@ pub use mooncake_table::table_secret::{
 };
 pub use mooncake_table::table_status::TableStatus;
 pub use mooncake_table::table_status_reader::TableStatusReader;
+pub use mooncake_table::IcebergPersistenceConfig;
 pub use mooncake_table::SnapshotReadOutput;
 pub use mooncake_table::{MooncakeTable, MooncakeTableConfig};
 pub(crate) use mooncake_table::{PuffinDeletionBlobAtRead, SnapshotTableState};

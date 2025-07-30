@@ -1,5 +1,5 @@
 #[cfg(feature = "chaos-test")]
-use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
+use crate::storage::filesystem::accessor::chaos_generator::FileSystemChaosOption;
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use crate::MoonlinkSecretType;
 use crate::MoonlinkTableSecret;
@@ -34,6 +34,7 @@ pub enum FileSystemConfig {
         /// Used for fake GCS server.
         disable_auth: bool,
     },
+    // TODO(hjiang): Provide retry related configs.
     #[cfg(feature = "chaos-test")]
     ChaosWrapper {
         chaos_option: FileSystemChaosOption,

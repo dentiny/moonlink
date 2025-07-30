@@ -17,6 +17,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::table_creation_config::TableCreationConfig;
+use crate::recovery_utils::BackendAttributes;
 
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
@@ -58,8 +59,16 @@ where
             base_path_str.to_string(),
             file_utils::create_default_object_storage_cache(read_cache_files_dir),
         );
-        recovery_utils::recover_all_tables(&*metadata_store_accessor, &mut replication_manager)
-            .await?;
+
+        let backend_attributes = BackendAttributes {
+            temp_files_dir: temp_files_dir.to_str().unwrap().to_string(),
+        };
+        recovery_utils::recover_all_tables(
+            backend_attributes,
+            &*metadata_store_accessor,
+            &mut replication_manager,
+        )
+        .await?;
 
         Ok(Self {
             base_path: base_path_str.to_string(),

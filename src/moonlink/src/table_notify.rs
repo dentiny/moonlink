@@ -52,6 +52,20 @@ impl std::fmt::Debug for EvictedFiles {
     }
 }
 
+#[derive(Clone)]
+pub struct ReadCompleteCacheHandle {
+    /// Cache handles which get pinned before query.
+    pub handles: Vec<NonEvictableHandle>,
+}
+
+impl std::fmt::Debug for ReadCompleteCacheHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReadCompleteCacheHandle")
+            .field("cache handle count", &self.handles.len())
+            .finish()
+    }
+}
+
 /// Completion notifications for mooncake table, including snapshot creation and compaction, etc.
 ///
 /// TODO(hjiang): Revisit whether we need to place the payload into box.
@@ -131,8 +145,13 @@ pub enum TableEvent {
         file_indice_merge_payload: IndexMergeMaintenanceStatus,
         /// Payload used to trigger a data compaction.
         data_compaction_payload: DataCompactionMaintenanceStatus,
-        /// Evicted object storage cache to delete.
-        evicted_data_files_to_delete: Vec<String>,
+        /// Evicted files to delete.
+        evicted_files_to_delete: EvictedFiles,
+    },
+    /// Regular iceberg persistence.
+    RegularIcebergSnapshot {
+        /// Payload used to create a new iceberg snapshot.
+        iceberg_snapshot_payload: IcebergSnapshotPayload,
     },
     /// Iceberg snapshot completes.
     IcebergSnapshotResult {
@@ -152,7 +171,7 @@ pub enum TableEvent {
     /// Read request completion.
     ReadRequestCompletion {
         /// Cache handles, which are pinned before query.
-        cache_handles: Vec<NonEvictableHandle>,
+        read_complete_handles: ReadCompleteCacheHandle,
     },
     /// Evicted files to delete.
     EvictedFilesToDelete {

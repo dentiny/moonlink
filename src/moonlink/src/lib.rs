@@ -12,10 +12,10 @@ pub use storage::storage_utils::create_data_file;
 pub(crate) use storage::NonEvictableHandle;
 pub use storage::{
     DataCompactionConfig, EventSyncReceiver, FileIndexMergeConfig, FileSystemAccessor,
-    FileSystemConfig, IcebergTableConfig, IcebergTableManager, MooncakeTable, MooncakeTableConfig,
-    MoonlinkSecretType, MoonlinkTableConfig, MoonlinkTableSecret, ObjectStorageCache,
-    ObjectStorageCacheConfig, SnapshotReadOutput, TableEventManager, TableManager, TableStatus,
-    TableStatusReader,
+    FileSystemConfig, IcebergPersistenceConfig, IcebergTableConfig, IcebergTableManager,
+    MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
+    MoonlinkTableSecret, ObjectStorageCache, ObjectStorageCacheConfig, SnapshotReadOutput,
+    TableEventManager, TableManager, TableStatus, TableStatusReader,
 };
 pub use table_handler::TableHandler;
 pub use table_notify::TableEvent;

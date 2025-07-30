@@ -201,7 +201,8 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
         // Trigger index merge as long as there're two index block files.
         file_index_config: FileIndexMergeConfig {
             index_block_final_size: u64::MAX,
-            file_indices_to_merge: 2,
+            min_file_indices_to_merge: 2,
+            max_file_indices_to_merge: u32::MAX,
         },
         ..Default::default()
     };

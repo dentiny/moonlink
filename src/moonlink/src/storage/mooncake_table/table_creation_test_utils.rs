@@ -9,6 +9,7 @@ use crate::storage::filesystem::gcs::gcs_test_utils;
 use crate::storage::filesystem::s3::s3_test_utils;
 use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
+#[cfg(feature = "chaos-test")]
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::IcebergPersistenceConfig;
@@ -53,7 +54,7 @@ pub(crate) fn get_iceberg_table_config_with_filesystem_config(
 pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     filesystem_config: FileSystemConfig,
 ) -> IcebergTableConfig {
-    use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::FileSystemChaosOption;
+    use crate::storage::filesystem::accessor::chaos_generator::FileSystemChaosOption;
 
     let inner_config = Box::new(filesystem_config);
     let chaos_option = FileSystemChaosOption {
@@ -165,19 +166,6 @@ pub(crate) fn create_test_table_metadata_with_config(
     })
 }
 
-/// Test util function to create mooncake table metadata with index merge enable whenever there're two index blocks.
-pub(crate) fn create_test_table_metadata_with_index_merge(
-    local_table_directory: String,
-) -> Arc<MooncakeTableMetadata> {
-    let file_index_config = FileIndexMergeConfig {
-        file_indices_to_merge: 2,
-        index_block_final_size: u64::MAX,
-    };
-    let mut config = MooncakeTableConfig::new(local_table_directory.clone());
-    config.file_index_config = file_index_config;
-    create_test_table_metadata_with_config(local_table_directory, config)
-}
-
 /// Test util function to create mooncake table metadata, which disables flush at commit.
 #[cfg(feature = "chaos-test")]
 pub(crate) fn create_test_table_metadata_disable_flush(
@@ -194,7 +182,8 @@ pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
     local_table_directory: String,
 ) -> Arc<MooncakeTableMetadata> {
     let file_index_config = FileIndexMergeConfig {
-        file_indices_to_merge: 2,
+        min_file_indices_to_merge: 2,
+        max_file_indices_to_merge: u32::MAX,
         index_block_final_size: u64::MAX,
     };
     let mut config = MooncakeTableConfig::new(local_table_directory.clone());
