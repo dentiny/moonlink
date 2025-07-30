@@ -1,5 +1,5 @@
 use arrow_array::Int64Array;
-use moonlink_backend::table_creation_config::{TableConfig, TableCreationConfig};
+use moonlink_backend::table_config::{MooncakeConfig, TableConfig};
 use moonlink_metadata_store::SqliteMetadataStore;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::sync::Arc;
@@ -49,7 +49,7 @@ impl TestGuard {
         &self.backend
     }
 
-    pub fn get_table_creation_config(&self) -> TableCreationConfig {
+    pub fn get_table_config(&self) -> TableConfig {
         let root_directory = self
             .tmp
             .as_ref()
@@ -58,13 +58,14 @@ impl TestGuard {
             .to_str()
             .unwrap()
             .to_string();
-        TableCreationConfig {
-            mooncake_creation_config: TableConfig {
+        TableConfig {
+            mooncake_config: MooncakeConfig {
                 enable_index_merge: false,
+                enable_data_compaction: false,
             },
-            storage_creation_config: AccessorConfig::new_with_storage_config(
-                StorageConfig::FileSystem { root_directory },
-            ),
+            iceberg_config: AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
+                root_directory,
+            }),
         }
     }
 
@@ -257,15 +258,16 @@ fn apply_position_deletes_to_files(
 }
 
 /// Util function to create a table creation config by directory.
-fn get_table_creation_config(tmp_dir: &TempDir) -> TableCreationConfig {
+fn get_table_config(tmp_dir: &TempDir) -> TableConfig {
     let root_directory = tmp_dir.path().to_str().unwrap().to_string();
-    TableCreationConfig {
-        mooncake_creation_config: TableConfig {
+    TableConfig {
+        mooncake_config: MooncakeConfig {
             enable_index_merge: false,
+            enable_data_compaction: false,
         },
-        storage_creation_config: AccessorConfig::new_with_storage_config(
-            StorageConfig::FileSystem { root_directory },
-        ),
+        iceberg_config: AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
+            root_directory,
+        }),
     }
 }
 
@@ -327,7 +329,7 @@ async fn setup_backend(
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                get_table_creation_config(&temp_dir),
+                get_table_config(&temp_dir),
             )
             .await
             .unwrap();
@@ -378,7 +380,7 @@ pub async fn smoke_create_and_insert(
             TABLE_ID,
             "public.test".to_string(),
             uri.to_string(),
-            get_table_creation_config(tmp_dir),
+            get_table_config(tmp_dir),
         )
         .await
         .unwrap();

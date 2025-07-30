@@ -2,7 +2,7 @@ mod error;
 
 use arrow_ipc::writer::StreamWriter;
 pub use error::{Error, Result};
-use moonlink_backend::table_creation_config::{TableConfig, TableCreationConfig};
+use moonlink_backend::table_config::{MooncakeConfig, TableConfig};
 use moonlink_backend::MoonlinkBackend;
 use moonlink_metadata_store::SqliteMetadataStore;
 use moonlink_rpc::{read, write, Request, Table};
@@ -70,18 +70,19 @@ async fn handle_stream(
                 src_uri,
             } => {
                 // TODO: currently by default use filesystem config.
-                let table_creation_config = TableCreationConfig {
-                    mooncake_creation_config: TableConfig {
+                let table_config = TableConfig {
+                    mooncake_config: MooncakeConfig {
                         enable_index_merge: true,
+                        enable_data_compaction: true,
                     },
-                    storage_creation_config: moonlink::AccessorConfig::new_with_storage_config(
+                    iceberg_config: moonlink::AccessorConfig::new_with_storage_config(
                         moonlink::StorageConfig::FileSystem {
                             root_directory: backend.get_base_path(),
                         },
                     ),
                 };
                 backend
-                    .create_table(database_id, table_id, src, src_uri, table_creation_config)
+                    .create_table(database_id, table_id, src, src_uri, table_config)
                     .await
                     .unwrap();
                 write(&mut stream, &()).await?;

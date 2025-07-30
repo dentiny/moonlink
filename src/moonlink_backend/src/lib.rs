@@ -3,7 +3,7 @@ pub mod file_utils;
 mod logging;
 pub mod mooncake_table_id;
 mod recovery_utils;
-pub mod table_creation_config;
+pub mod table_config;
 
 use arrow_schema::Schema;
 pub use error::{Error, Result};
@@ -17,7 +17,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::recovery_utils::BackendAttributes;
-use crate::table_creation_config::TableCreationConfig;
+use crate::table_config::TableConfig;
 
 pub struct MoonlinkBackend<
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
@@ -102,7 +102,7 @@ where
         table_id: T,
         src_table_name: String,
         src_uri: String,
-        table_creation_config: TableCreationConfig,
+        table_config: TableConfig,
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
             database_id: database_id.clone(),
@@ -112,7 +112,7 @@ where
         let table_id = mooncake_table_id.get_table_id_value();
 
         // Add mooncake table to replication, and create corresponding mooncake table.
-        let moonlink_table_config = table_creation_config
+        let moonlink_table_config = table_config
             .take_as_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
         {
             let mut manager = self.replication_manager.write().await;
