@@ -102,12 +102,12 @@ pub(crate) fn create_opendal_operator(accessor_config: &AccessorConfig) -> Resul
         let chaos_layer = ChaosLayer::new(chaos_config.clone());
         op = op.layer(chaos_layer);
     }
-    // Apply timeout layer.
-    let timeout_layer = create_timeout_layer(&accessor_config.timeout_config);
-    op = op.layer(timeout_layer);
     // Apply retry layer.
     let retry_layer = create_retry_layer(&accessor_config.retry_config);
     op = op.layer(retry_layer);
+    // Apply timeout layer.
+    let timeout_layer = create_timeout_layer(&accessor_config.timeout_config);
+    op = op.layer(timeout_layer);
 
     Ok(op)
 }

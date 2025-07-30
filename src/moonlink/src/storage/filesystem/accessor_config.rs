@@ -64,13 +64,13 @@ impl ChaosConfig {
 /// TODO(hjiang): Allow finer-granularity timeout control.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TimeoutConfig {
-    /// Timeout for all IO operations.
+    /// Timeout for all attempts for an IO operations, including retry.
     pub timeout: std::time::Duration,
 }
 
 impl TimeoutConfig {
     /// Default timeout for all IO operations.
-    const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+    const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
 }
 
 impl Default for TimeoutConfig {
