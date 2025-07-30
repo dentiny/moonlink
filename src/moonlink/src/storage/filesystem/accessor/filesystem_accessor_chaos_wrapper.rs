@@ -108,7 +108,7 @@ impl<R: opendal::raw::oio::Read> opendal::raw::oio::Read for ChaosReader<R> {
 }
 
 /// ==========================
-/// Chaos write
+/// Chaos writer
 /// ==========================
 ///
 pub struct ChaosWriter<W> {

@@ -66,9 +66,6 @@ impl ChaosGenerator {
         if rand_val <= self.option.err_prob {
             let err = opendal::Error::new(opendal::ErrorKind::Unexpected, "Injected error")
                 .set_temporary();
-
-            println!("err = {err:?}");
-
             return Err(err);
         }
 
