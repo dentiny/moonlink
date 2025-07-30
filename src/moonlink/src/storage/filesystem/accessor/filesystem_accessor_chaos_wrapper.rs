@@ -1,4 +1,4 @@
-/// A wrapper around filesystem accessor, which provides additional features like injected delay, intended errors, etc.
+/// A customized opendal layer, which provides chaos features like injected delay, intended errors, etc.
 use more_asserts as ma;
 use opendal::raw::{
     Access, Layer, LayeredAccess, OpList, OpRead, OpWrite, RpDelete, RpList, RpRead, RpWrite,
@@ -65,10 +65,10 @@ impl<A: Access> Layer<A> for ChaosLayer {
 pub struct ChaosAccessor<A> {
     /// Randomness.
     rng: Mutex<StdRng>,
-    /// Inner accessor.
-    inner: A,
     /// Chao layer option.
     option: FileSystemChaosOption,
+    /// Inner accessor.
+    inner: A,
 }
 
 impl<A: Access> ChaosAccessor<A> {
@@ -201,6 +201,18 @@ mod tests {
             min_latency: std::time::Duration::from_millis(500),
             max_latency: std::time::Duration::from_millis(1000),
             err_prob: 0,
+        };
+        let filesystem_accessor = create_filesystem_accessor(&temp_dir, chaos_option);
+        perform_read_write_op(&filesystem_accessor).await;
+    }
+
+    #[tokio::test]
+    async fn test_error_injected() {
+        let temp_dir = tempdir().unwrap();
+        let chaos_option = FileSystemChaosOption {
+            min_latency: std::time::Duration::ZERO,
+            max_latency: std::time::Duration::ZERO,
+            err_prob: 5, // 5% error ratio, which should be covered by retry layer.
         };
         let filesystem_accessor = create_filesystem_accessor(&temp_dir, chaos_option);
         perform_read_write_op(&filesystem_accessor).await;
