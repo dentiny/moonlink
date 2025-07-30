@@ -242,6 +242,7 @@ jobs:
       - name: Start chaos test
         timeout-minutes: 10
         run: |
+          cargo test storage::filesystem::accessor -p moonlink --features=chaos-test
           RUST_BACKTRACE=1 cargo test table_handler::chaos_s3_test --features=chaos-test,storage-s3 -p moonlink -- --nocapture
 
   # ──────────────────────── 6 · GCS Chaos test ────────────────────────────
