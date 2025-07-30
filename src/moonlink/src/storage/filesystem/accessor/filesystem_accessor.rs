@@ -19,7 +19,7 @@ use crate::storage::filesystem::accessor::base_unbuffered_stream_writer::BaseUnb
 use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::storage::filesystem::accessor::operator_utils;
 use crate::storage::filesystem::accessor::unbuffered_stream_writer::UnbufferedStreamWriter;
-use crate::storage::filesystem::filesystem_config::FileSystemConfig;
+use crate::storage::filesystem::accessor_config::AccessorConfig;
 use crate::Result;
 
 use std::pin::Pin;
@@ -35,8 +35,8 @@ pub struct FileSystemAccessor {
     root_path: String,
     /// Operator to manager all IO operations.
     operator: OnceCell<Operator>,
-    /// Filesystem configuration.
-    config: FileSystemConfig,
+    /// Accessor configuration.
+    config: AccessorConfig,
 }
 
 impl std::fmt::Debug for FileSystemAccessor {
@@ -49,7 +49,7 @@ impl std::fmt::Debug for FileSystemAccessor {
 }
 
 impl FileSystemAccessor {
-    pub fn new(config: FileSystemConfig) -> Self {
+    pub fn new(config: AccessorConfig) -> Self {
         Self {
             root_path: config.get_root_path(),
             operator: OnceCell::new(),
@@ -61,10 +61,11 @@ impl FileSystemAccessor {
     pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<dyn BaseFileSystemAccess> {
         use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 
-        let config = FileSystemConfig::FileSystem {
+        let storage_config = crate::StorageConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
         };
-        create_filesystem_accessor(config)
+        let accessor_config = AccessorConfig::new_with_storage_config(storage_config);
+        create_filesystem_accessor(accessor_config)
     }
 
     /// Sanitize given path.
@@ -435,6 +436,7 @@ mod tests {
     use super::*;
     use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
     use crate::storage::filesystem::accessor::test_utils::*;
+    use crate::storage::filesystem::storage_config::StorageConfig;
     use crate::storage::filesystem::test_utils::writer_test_utils::test_unbuffered_stream_writer_impl;
     use rstest::rstest;
 
@@ -442,10 +444,12 @@ mod tests {
     async fn test_stats_object() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_config = FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(
+            AccessorConfig::new_with_storage_config(storage_config.clone()),
+        );
 
         const DST_FILENAME: &str = "target";
         const TARGET_FILESIZE: usize = 10;
@@ -470,10 +474,12 @@ mod tests {
     async fn test_conditional_write() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_config = FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(
+            AccessorConfig::new_with_storage_config(storage_config.clone()),
+        );
 
         const DST_FILENAME: &str = "target";
         const TARGET_FILESIZE: usize = 10;
@@ -515,15 +521,16 @@ mod tests {
     async fn test_stream_read(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_config = FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+        let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
 
         // Prepare src file.
         let remote_filepath = format!("{}/remote", &root_directory);
         let expected_content =
-            create_remote_file(&remote_filepath, filesystem_config.clone(), file_size).await;
+            create_remote_file(&remote_filepath, accessor_config, file_size).await;
 
         // Stream read from destination path.
         let mut actual_content = vec![];
@@ -549,9 +556,11 @@ mod tests {
     async fn test_copy_from_local_to_remote(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_accessor = create_filesystem_accessor(FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
-        });
+        };
+        let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
 
         // Prepare src file.
         let src_filepath = format!("{}/src", &root_directory);
@@ -580,15 +589,15 @@ mod tests {
     async fn test_copy_from_remote_to_local(#[case] file_size: usize) {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_config = FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+        let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
 
         // Prepare src file.
         let src_filepath = format!("{}/src", &root_directory);
-        let expected_content =
-            create_remote_file(&src_filepath, filesystem_config.clone(), file_size).await;
+        let expected_content = create_remote_file(&src_filepath, accessor_config, file_size).await;
 
         // Copy from src to dst.
         let dst_filepath = format!("{}/dst", &root_directory);
@@ -609,10 +618,11 @@ mod tests {
     async fn test_unbuffered_stream_write() {
         let temp_dir = tempfile::tempdir().unwrap();
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
-        let filesystem_config = FileSystemConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
         };
-        let filesystem_accessor = create_filesystem_accessor(filesystem_config.clone());
+        let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
+        let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
 
         let dst_filename = "dst".to_string();
         let dst_filepath = format!("{}/{}", &root_directory, dst_filename);
@@ -620,6 +630,6 @@ mod tests {
             .create_unbuffered_stream_writer(&dst_filepath)
             .await
             .unwrap();
-        test_unbuffered_stream_writer_impl(writer, dst_filename, filesystem_config).await;
+        test_unbuffered_stream_writer_impl(writer, dst_filename, accessor_config).await;
     }
 }

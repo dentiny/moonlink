@@ -2,8 +2,8 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 use crate::storage::mooncake_table::test_utils::{test_row, TestContext};
 use crate::storage::wal::{PersistAndTruncateResult, WalEvent, WalManager};
 use crate::table_notify::TableEvent;
-use crate::FileSystemConfig;
 use crate::Result;
+use crate::StorageConfig;
 use futures::StreamExt;
 use std::sync::Arc;
 use tokio::fs;
@@ -191,7 +191,7 @@ pub async fn get_table_events_vector_recovery(
 
 // Helper function to create a WAL with some test data
 pub async fn create_test_wal(context: &TestContext) -> (WalManager, Vec<TableEvent>) {
-    let mut wal = WalManager::new(FileSystemConfig::FileSystem {
+    let mut wal = WalManager::new(StorageConfig::FileSystem {
         root_directory: context.path().to_str().unwrap().to_string(),
     });
     let mut expected_events = Vec::new();

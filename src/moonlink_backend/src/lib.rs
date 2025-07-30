@@ -114,7 +114,7 @@ where
                     database_id,
                     table_id,
                     &src_table_name,
-                    /*override_iceberg_filesystem_config=*/ None,
+                    /*override_iceberg_storage_config=*/ None,
                     /*is_recovery=*/ false,
                 )
                 .await?;

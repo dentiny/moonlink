@@ -20,8 +20,8 @@ use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
-use crate::{FileSystemConfig, TableEventManager};
 use crate::{IcebergTableConfig, ObjectStorageCache};
+use crate::{StorageConfig, TableEventManager};
 
 use more_asserts as ma;
 use rand::prelude::*;
@@ -480,8 +480,8 @@ struct TestEnvConfig {
     event_count: usize,
     /// Whether error injection is enabled.
     error_injection_enabled: bool,
-    /// Filesystem config for persistence.
-    filesystem_config: FileSystemConfig,
+    /// Filesystem storage config for persistence.
+    storage_config: StorageConfig,
 }
 
 #[allow(dead_code)]
@@ -526,9 +526,9 @@ impl TestEnvironment {
 
         // Create mooncake table and table event notification receiver.
         let iceberg_table_config = if config.error_injection_enabled {
-            get_iceberg_table_config_with_chaos_injection(config.filesystem_config.clone())
+            get_iceberg_table_config_with_chaos_injection(config.storage_config.clone())
         } else {
-            get_iceberg_table_config_with_filesystem_config(config.filesystem_config.clone())
+            get_iceberg_table_config_with_storage_config(config.storage_config.clone())
         };
         let table = create_mooncake_table(
             mooncake_table_metadata.clone(),
@@ -721,7 +721,7 @@ async fn test_chaos_with_no_background_maintenance() {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -736,7 +736,7 @@ async fn test_chaos_with_index_merge() {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -751,7 +751,7 @@ async fn test_chaos_with_data_compaction() {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -767,12 +767,12 @@ async fn test_chaos_with_data_compaction() {
 async fn test_s3_chaos_with_no_background_maintenance() {
     let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
-    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: s3_filesystem_config,
+        storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -784,12 +784,12 @@ async fn test_s3_chaos_with_no_background_maintenance() {
 async fn test_s3_chaos_with_index_merge() {
     let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
-    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: s3_filesystem_config,
+        storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -801,12 +801,12 @@ async fn test_s3_chaos_with_index_merge() {
 async fn test_s3_chaos_with_data_compaction() {
     let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
-    let s3_filesystem_config = create_s3_filesystem_config(&warehouse_uri);
+    let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: s3_filesystem_config,
+        storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -822,12 +822,12 @@ async fn test_s3_chaos_with_data_compaction() {
 async fn test_gcs_chaos_with_no_background_maintenance() {
     let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
-    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+    let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: gcs_filesystem_config,
+        storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -839,12 +839,12 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
 async fn test_gcs_chaos_with_index_merge() {
     let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
-    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+    let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: gcs_filesystem_config,
+        storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -856,12 +856,12 @@ async fn test_gcs_chaos_with_index_merge() {
 async fn test_gcs_chaos_with_data_compaction() {
     let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
-    let gcs_filesystem_config = create_gcs_filesystem_config(&warehouse_uri);
+    let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
-        filesystem_config: gcs_filesystem_config,
+        storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -880,7 +880,7 @@ async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: true,
         event_count: 100,
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -895,7 +895,7 @@ async fn test_chaos_with_index_merge_with_chaos_injection() {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: true,
         event_count: 100,
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
@@ -910,7 +910,7 @@ async fn test_chaos_with_data_compaction_with_chaos_injection() {
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: true,
         event_count: 100,
-        filesystem_config: FileSystemConfig::FileSystem { root_directory },
+        storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;

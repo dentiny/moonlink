@@ -1,41 +1,23 @@
-use more_asserts as ma;
 use opendal::Result;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use serde::{Deserialize, Serialize};
 /// A chaos generator, which creates delay and error status based on config and random generator.
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::Mutex;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-pub struct FileSystemChaosOption {
-    /// Min and max latency introduced to all operation access, both inclusive.
-    pub min_latency: std::time::Duration,
-    pub max_latency: std::time::Duration,
-
-    /// Probability ranges from [0, err_prob]; if not 0, will return retriable opendal error randomly.
-    pub err_prob: usize,
-}
-
-impl FileSystemChaosOption {
-    /// Validate whether the given option is valid.
-    pub fn validate(&self) {
-        ma::assert_le!(self.min_latency, self.max_latency);
-        ma::assert_le!(self.err_prob, 100);
-    }
-}
+use crate::storage::filesystem::accessor_config::ChaosConfig;
 
 #[derive(Clone, Debug)]
 pub(crate) struct ChaosGenerator {
     /// Randomness.
     rng: Arc<Mutex<StdRng>>,
     /// Chao layer option.
-    option: FileSystemChaosOption,
+    option: ChaosConfig,
 }
 
 impl ChaosGenerator {
-    pub(crate) fn new(option: FileSystemChaosOption) -> Self {
+    pub(crate) fn new(option: ChaosConfig) -> Self {
         option.validate();
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -91,7 +73,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_no_delay_no_error() {
-        let option = FileSystemChaosOption {
+        let option = ChaosConfig {
             min_latency: std::time::Duration::from_millis(0),
             max_latency: std::time::Duration::from_millis(0),
             err_prob: 0,
@@ -102,7 +84,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_delay_no_error() {
-        let option = FileSystemChaosOption {
+        let option = ChaosConfig {
             min_latency: std::time::Duration::from_millis(100),
             max_latency: std::time::Duration::from_millis(200),
             err_prob: 0,
@@ -115,7 +97,7 @@ mod tests {
     async fn test_always_error_no_delay() {
         const ATTEMPT_COUNT: usize = 10;
 
-        let option = FileSystemChaosOption {
+        let option = ChaosConfig {
             min_latency: std::time::Duration::from_millis(0),
             max_latency: std::time::Duration::from_millis(0),
             err_prob: 100,
