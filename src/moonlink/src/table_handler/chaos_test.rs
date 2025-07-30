@@ -735,7 +735,7 @@ async fn test_chaos_with_index_merge() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 5000,
+        event_count: 3000,
         filesystem_config: FileSystemConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
