@@ -58,6 +58,30 @@ impl ChaosConfig {
 }
 
 /// ========================
+/// Timeout config
+/// ========================
+///
+/// TODO(hjiang): Allow finer-granularity timeout control.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TimeoutConfig {
+    /// Timeout for all IO operations.
+    pub timeout: std::time::Duration,
+}
+
+impl TimeoutConfig {
+    /// Default timeout for all IO operations.
+    const DEFAULT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
+}
+
+impl Default for TimeoutConfig {
+    fn default() -> Self {
+        Self {
+            timeout: Self::DEFAULT_TIMEOUT,
+        }
+    }
+}
+
+/// ========================
 /// Accessor config
 /// ========================
 ///
@@ -65,8 +89,10 @@ impl ChaosConfig {
 pub struct AccessorConfig {
     /// Internal storage config.
     pub storage_config: StorageConfig,
-    /// Retry wrapper.
+    /// Retry config.
     pub retry_config: RetryConfig,
+    /// Timeout config.
+    pub timeout_config: TimeoutConfig,
     /// Chaos config.
     pub chaos_config: Option<ChaosConfig>,
 }
@@ -76,6 +102,7 @@ impl AccessorConfig {
         Self {
             storage_config,
             retry_config: RetryConfig::default(),
+            timeout_config: TimeoutConfig::default(),
             chaos_config: None,
         }
     }

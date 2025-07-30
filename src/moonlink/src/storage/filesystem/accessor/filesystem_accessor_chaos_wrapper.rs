@@ -151,6 +151,7 @@ mod tests {
     use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
     use crate::storage::filesystem::accessor_config::AccessorConfig;
     use crate::storage::filesystem::accessor_config::RetryConfig;
+    use crate::storage::filesystem::accessor_config::TimeoutConfig;
     use crate::storage::filesystem::storage_config::StorageConfig;
     use tempfile::{tempdir, TempDir};
 
@@ -158,6 +159,7 @@ mod tests {
     fn create_filesystem_accessor(
         temp_dir: &TempDir,
         chaos_config: ChaosConfig,
+        timeout_config: TimeoutConfig,
     ) -> FileSystemAccessor {
         let storage_config = StorageConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
@@ -166,6 +168,7 @@ mod tests {
             storage_config,
             chaos_config: Some(chaos_config),
             retry_config: RetryConfig::default(),
+            timeout_config,
         };
         FileSystemAccessor::new(accessor_config)
     }
@@ -193,7 +196,8 @@ mod tests {
             max_latency: std::time::Duration::ZERO,
             err_prob: 0,
         };
-        let filesystem_accessor = create_filesystem_accessor(&temp_dir, chaos_config);
+        let filesystem_accessor =
+            create_filesystem_accessor(&temp_dir, chaos_config, TimeoutConfig::default());
         perform_read_write_op(&filesystem_accessor).await;
     }
 
@@ -201,11 +205,17 @@ mod tests {
     async fn test_delay_injected() {
         let temp_dir = tempdir().unwrap();
         let chaos_config = ChaosConfig {
-            min_latency: std::time::Duration::from_millis(500),
-            max_latency: std::time::Duration::from_millis(1000),
+            min_latency: std::time::Duration::from_millis(5000),
+            max_latency: std::time::Duration::from_millis(5000),
             err_prob: 0,
         };
-        let filesystem_accessor = create_filesystem_accessor(&temp_dir, chaos_config);
-        perform_read_write_op(&filesystem_accessor).await;
+        let timeout_config = TimeoutConfig {
+            timeout: std::time::Duration::from_millis(500),
+        };
+        // Timeout is less than injected delay.
+        let filesystem_accessor =
+            create_filesystem_accessor(&temp_dir, chaos_config, timeout_config);
+        let res = filesystem_accessor.read_object("FAKE_FILEPATH").await;
+        assert!(res.is_err());
     }
 }

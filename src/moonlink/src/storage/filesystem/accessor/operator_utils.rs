@@ -1,10 +1,12 @@
 use crate::storage::filesystem::accessor::filesystem_accessor_chaos_wrapper::ChaosLayer;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
 use crate::storage::filesystem::accessor_config::RetryConfig;
+use crate::storage::filesystem::accessor_config::TimeoutConfig;
 use crate::storage::filesystem::storage_config::StorageConfig;
 use crate::Result;
 
 use opendal::layers::RetryLayer;
+use opendal::layers::TimeoutLayer;
 use opendal::services;
 use opendal::Operator;
 
@@ -76,6 +78,12 @@ fn create_retry_layer(retry_config: &RetryConfig) -> RetryLayer {
         .with_jitter()
 }
 
+fn create_timeout_layer(timeout_config: &TimeoutConfig) -> TimeoutLayer {
+    TimeoutLayer::new()
+        .with_io_timeout(timeout_config.timeout)
+        .with_timeout(timeout_config.timeout)
+}
+
 /// Util function to create opendal operator from filesystem config.
 pub(crate) fn create_opendal_operator(accessor_config: &AccessorConfig) -> Result<Operator> {
     let mut op = match accessor_config.storage_config {
@@ -89,10 +97,15 @@ pub(crate) fn create_opendal_operator(accessor_config: &AccessorConfig) -> Resul
         StorageConfig::S3 { .. } => create_opendal_operator_impl(&accessor_config.storage_config)?,
     };
 
+    // Apply chaos layer.
     if let Some(chaos_config) = &accessor_config.chaos_config {
         let chaos_layer = ChaosLayer::new(chaos_config.clone());
         op = op.layer(chaos_layer);
     }
+    // Apply timeout layer.
+    let timeout_layer = create_timeout_layer(&accessor_config.timeout_config);
+    op = op.layer(timeout_layer);
+    // Apply retry layer.
     let retry_layer = create_retry_layer(&accessor_config.retry_config);
     op = op.layer(retry_layer);
 

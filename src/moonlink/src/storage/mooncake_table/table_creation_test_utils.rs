@@ -58,7 +58,7 @@ pub(crate) fn get_iceberg_table_config_with_storage_config(
 pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     storage_config: StorageConfig,
 ) -> IcebergTableConfig {
-    use crate::storage::filesystem::accessor_config::{ChaosConfig, RetryConfig};
+    use crate::storage::filesystem::accessor_config::{ChaosConfig, RetryConfig, TimeoutConfig};
 
     let chaos_config = ChaosConfig {
         min_latency: std::time::Duration::from_secs(0),
@@ -68,6 +68,7 @@ pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     let accessor_config = AccessorConfig {
         storage_config,
         retry_config: RetryConfig::default(),
+        timeout_config: TimeoutConfig::default(),
         chaos_config: Some(chaos_config),
     };
     IcebergTableConfig {
