@@ -56,6 +56,7 @@ use arrow_schema::Schema;
 use delete_vector::BatchDeletionVector;
 pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
+use serde::{Deserialize, Serialize};
 pub(crate) use snapshot::{PuffinDeletionBlobAtRead, SnapshotTableState};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -74,7 +75,7 @@ use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 /// [https://github.com/postgres/postgres/blob/d5b9b2d40262f57f58322ad49f8928fd4a492adb/src/include/access/transam.h#L31]
 pub(crate) const INITIAL_COPY_XACT_ID: u32 = 0;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct IcebergPersistenceConfig {
     /// Number of new data files to trigger an iceberg snapshot.
     pub new_data_file_count: usize,
@@ -93,8 +94,10 @@ impl IcebergPersistenceConfig {
     pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
     #[cfg(not(debug_assertions))]
     pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
+}
 
-    pub fn default() -> Self {
+impl Default for IcebergPersistenceConfig {
+    fn default() -> Self {
         Self {
             new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
             new_committed_deletion_log: Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
@@ -148,7 +151,7 @@ impl MooncakeTableConfig {
     pub(crate) const DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE: usize = 1024 * 1024 * 128; // 128MiB
 
     /// Default local directory to hold temporary files for union read.
-    pub(crate) const DEFAULT_TEMP_FILE_DIRECTORY: &str = "/tmp/moonlink_temp_file";
+    pub const DEFAULT_TEMP_FILE_DIRECTORY: &str = "/tmp/moonlink_temp_file";
 
     pub fn new(temp_files_directory: String) -> Self {
         Self {

@@ -1,9 +1,10 @@
+use serde::{Deserialize, Serialize};
 use typed_builder::TypedBuilder;
 
 /// Configurations for data compaction.
 ///
 /// TODO(hjiang): To reduce code change before preview release, disable data compaction by default until we do further testing to make sure moonlink fine.
-#[derive(Clone, Debug, PartialEq, TypedBuilder)]
+#[derive(Clone, Debug, PartialEq, TypedBuilder, Deserialize, Serialize)]
 pub struct DataCompactionConfig {
     /// Number of existing data files with deletion vector and under final size to trigger a compaction operation.
     pub data_file_to_compact: u32,

@@ -1,9 +1,10 @@
+use serde::{Deserialize, Serialize};
 use typed_builder::TypedBuilder;
 
 /// Configuration for index merge.
 ///
 /// TODO(hjiang): To reduce code change before preview release, disable data compaction by default until we do further testing to make sure moonlink fine.
-#[derive(Clone, Debug, PartialEq, TypedBuilder)]
+#[derive(Clone, Debug, PartialEq, TypedBuilder, Deserialize, Serialize)]
 pub struct FileIndexMergeConfig {
     /// Number of existing index blocks under final size to trigger a merge operation.
     pub file_indices_to_merge: u32,
