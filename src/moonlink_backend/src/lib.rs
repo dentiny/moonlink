@@ -96,13 +96,14 @@ where
     /// # Arguments
     ///
     /// * src_uri: connection string for source database (row storage database).
+    /// * table_config: json serialized table configuration.
     pub async fn create_table(
         &self,
         database_id: D,
         table_id: T,
         src_table_name: String,
         src_uri: String,
-        table_config: TableConfig,
+        serialized_table_config: &str,
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
             database_id: database_id.clone(),
@@ -112,6 +113,7 @@ where
         let table_id = mooncake_table_id.get_table_id_value();
 
         // Add mooncake table to replication, and create corresponding mooncake table.
+        let table_config = TableConfig::from_json(serialized_table_config)?;
         let moonlink_table_config = table_config
             .take_as_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
         {

@@ -49,7 +49,7 @@ impl TestGuard {
         &self.backend
     }
 
-    pub fn get_table_config(&self) -> TableConfig {
+    pub fn get_serialized_table_config(&self) -> String {
         let root_directory = self
             .tmp
             .as_ref()
@@ -58,7 +58,7 @@ impl TestGuard {
             .to_str()
             .unwrap()
             .to_string();
-        TableConfig {
+        let table_config = TableConfig {
             mooncake_config: MooncakeConfig {
                 enable_index_merge: false,
                 enable_data_compaction: false,
@@ -66,7 +66,8 @@ impl TestGuard {
             iceberg_config: AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
                 root_directory,
             }),
-        }
+        };
+        serde_json::to_string(&table_config).unwrap()
     }
 
     #[allow(dead_code)]
@@ -258,9 +259,9 @@ fn apply_position_deletes_to_files(
 }
 
 /// Util function to create a table creation config by directory.
-fn get_table_config(tmp_dir: &TempDir) -> TableConfig {
+fn get_serialized_table_config(tmp_dir: &TempDir) -> String {
     let root_directory = tmp_dir.path().to_str().unwrap().to_string();
-    TableConfig {
+    let table_config = TableConfig {
         mooncake_config: MooncakeConfig {
             enable_index_merge: false,
             enable_data_compaction: false,
@@ -268,7 +269,8 @@ fn get_table_config(tmp_dir: &TempDir) -> TableConfig {
         iceberg_config: AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
             root_directory,
         }),
-    }
+    };
+    serde_json::to_string(&table_config).unwrap()
 }
 
 /// Spin up a backend + scratch TempDir + psql client, and guarantee
@@ -329,7 +331,7 @@ async fn setup_backend(
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                get_table_config(&temp_dir),
+                &get_serialized_table_config(&temp_dir),
             )
             .await
             .unwrap();
@@ -380,7 +382,7 @@ pub async fn smoke_create_and_insert(
             TABLE_ID,
             "public.test".to_string(),
             uri.to_string(),
-            get_table_config(tmp_dir),
+            &get_serialized_table_config(tmp_dir),
         )
         .await
         .unwrap();

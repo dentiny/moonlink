@@ -2806,6 +2806,7 @@ dependencies = [
  "moonlink_backend",
  "moonlink_metadata_store",
  "moonlink_rpc",
+ "serde_json",
  "thiserror 2.0.12",
  "tokio",
 ]

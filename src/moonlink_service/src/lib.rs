@@ -81,8 +81,15 @@ async fn handle_stream(
                         },
                     ),
                 };
+                let serialized_table_config = serde_json::to_string(&table_config).unwrap();
                 backend
-                    .create_table(database_id, table_id, src, src_uri, table_config)
+                    .create_table(
+                        database_id,
+                        table_id,
+                        src,
+                        src_uri,
+                        &serialized_table_config,
+                    )
                     .await
                     .unwrap();
                 write(&mut stream, &()).await?;

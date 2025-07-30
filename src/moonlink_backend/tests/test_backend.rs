@@ -204,7 +204,7 @@ mod tests {
                 TABLE_ID,
                 /*table_name=*/ "public.repl_test".to_string(),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();
@@ -312,7 +312,7 @@ mod tests {
                 TABLE_ID,
                 "public.recovery".to_string(),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();

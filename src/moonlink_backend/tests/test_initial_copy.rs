@@ -48,7 +48,7 @@ mod tests {
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();
@@ -119,7 +119,7 @@ mod tests {
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();
@@ -175,7 +175,7 @@ mod tests {
 
         // Start create_table without awaiting so we can modify data during copy
         let backend_clone = Arc::clone(&backend);
-        let table_config = guard.get_table_config();
+        let table_config = guard.get_serialized_table_config();
         tokio::spawn(async move {
             backend_clone
                 .create_table(
@@ -183,7 +183,7 @@ mod tests {
                     TABLE_ID,
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
-                    table_config,
+                    &table_config,
                 )
                 .await
                 .unwrap();
@@ -248,7 +248,7 @@ mod tests {
 
         // Start create_table without awaiting so we can modify data during copy
         let backend_clone = Arc::clone(&backend);
-        let table_config = guard.get_table_config();
+        let table_config = guard.get_serialized_table_config();
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
@@ -256,7 +256,7 @@ mod tests {
                     TABLE_ID,
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
-                    table_config,
+                    &table_config,
                 )
                 .await
                 .unwrap();
@@ -360,7 +360,7 @@ mod tests {
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();
@@ -434,7 +434,7 @@ mod tests {
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();
@@ -512,7 +512,7 @@ mod tests {
                 TABLE_ID,
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
-                guard.get_table_config(),
+                &guard.get_serialized_table_config(),
             )
             .await
             .unwrap();

@@ -12,5 +12,6 @@ moonlink = { path = "../moonlink" }
 moonlink_backend = { path = "../moonlink_backend" }
 moonlink_metadata_store = { path = "../moonlink_metadata_store" }
 moonlink_rpc = { path = "../moonlink_rpc" }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
