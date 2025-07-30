@@ -451,8 +451,11 @@ pub(crate) async fn sync_read_request_for_test(
     receiver: &mut Receiver<TableEvent>,
 ) {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::ReadRequestCompletion { cache_handles } = notification {
-        table.set_read_request_res(cache_handles);
+    if let TableEvent::ReadRequestCompletion {
+        read_complete_handles,
+    } = notification
+    {
+        table.set_read_request_res(read_complete_handles.handles);
     } else {
         panic!("Receive other notifications other than read request")
     }
