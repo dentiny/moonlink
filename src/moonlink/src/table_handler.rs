@@ -341,9 +341,9 @@ impl TableHandler {
                             }
                             table.persist_iceberg_snapshot(iceberg_snapshot_payload);
                         }
-                        TableEvent::MooncakeTableSnapshotResult { lsn, uuid: _, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_data_files_to_delete } => {
+                        TableEvent::MooncakeTableSnapshotResult { lsn, uuid: _, iceberg_snapshot_payload, data_compaction_payload, file_indice_merge_payload, evicted_files_to_delete } => {
                             // Spawn a detached best-effort task to delete evicted object storage cache.
-                            start_task_to_delete_evicted(evicted_data_files_to_delete);
+                            start_task_to_delete_evicted(evicted_files_to_delete.files);
 
                             // Mark mooncake snapshot as completed.
                             table.mark_mooncake_snapshot_completed();

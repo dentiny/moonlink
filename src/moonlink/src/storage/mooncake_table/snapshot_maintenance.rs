@@ -210,7 +210,8 @@ impl SnapshotTableState {
         if *index_merge_option == MaintenanceOption::Skip {
             return IndexMergeMaintenanceStatus::Unknown;
         }
-        let max_index_merge_file_num_threshold = self.mooncake_table_metadata
+        let max_index_merge_file_num_threshold = self
+            .mooncake_table_metadata
             .config
             .file_index_config
             .max_file_indices_to_merge as usize;
@@ -267,14 +268,19 @@ impl SnapshotTableState {
         if file_indices_to_merge.len() >= min_index_merge_file_num_threshold {
             let payload = FileIndiceMergePayload {
                 uuid: uuid::Uuid::new_v4(),
-                file_indices: file_indices_to_merge.into_iter().take(max_index_merge_file_num_threshold).collect::<HashSet<_>>(),
+                file_indices: file_indices_to_merge
+                    .into_iter()
+                    .take(max_index_merge_file_num_threshold)
+                    .collect::<HashSet<_>>(),
             };
             return IndexMergeMaintenanceStatus::Payload(payload);
         }
 
         // There're two possibilities here:
         // 1. If due to unpersistence, index merge should wait until persistence completion.
-        if file_indices_to_merge.len() + reject_by_unpersistence >= min_index_merge_file_num_threshold {
+        if file_indices_to_merge.len() + reject_by_unpersistence
+            >= min_index_merge_file_num_threshold
+        {
             return IndexMergeMaintenanceStatus::Unknown;
         }
 

@@ -139,7 +139,7 @@ pub(crate) async fn sync_mooncake_snapshot(
         iceberg_snapshot_payload,
         file_indice_merge_payload,
         data_compaction_payload,
-        evicted_data_files_to_delete,
+        evicted_files_to_delete,
     } = notification
     {
         (
@@ -147,7 +147,7 @@ pub(crate) async fn sync_mooncake_snapshot(
             iceberg_snapshot_payload,
             file_indice_merge_payload,
             data_compaction_payload,
-            evicted_data_files_to_delete,
+            evicted_files_to_delete.files,
         )
     } else {
         panic!("Expected mooncake snapshot completion notification, but get others.");

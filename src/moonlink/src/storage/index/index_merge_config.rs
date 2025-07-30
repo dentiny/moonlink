@@ -1,6 +1,6 @@
+use more_asserts as ma;
 use serde::{Deserialize, Serialize};
 use typed_builder::TypedBuilder;
-use more_asserts as ma;
 
 /// Configuration for index merge.
 ///
@@ -38,7 +38,10 @@ impl FileIndexMergeConfig {
     pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = 1 << 29; // 512MiB
 
     pub fn validate(&self) {
-        ma::assert_le!(self.min_file_indices_to_merge, self.max_file_indices_to_merge);
+        ma::assert_le!(
+            self.min_file_indices_to_merge,
+            self.max_file_indices_to_merge
+        );
     }
 }
 

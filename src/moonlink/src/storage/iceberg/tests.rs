@@ -17,6 +17,7 @@ use crate::storage::iceberg::schema_utils::*;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::iceberg::test_utils::*;
+use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -32,7 +33,6 @@ use crate::storage::mooncake_table::{
     IcebergSnapshotDataCompactionPayload, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload,
 };
-use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
 use crate::storage::storage_utils::FileId;
@@ -885,7 +885,10 @@ async fn test_index_merge_and_create_snapshot_impl(iceberg_table_config: Iceberg
     };
     let mut config = MooncakeTableConfig::new(table_temp_dir.path().to_str().unwrap().to_string());
     config.file_index_config = file_index_config;
-    let mooncake_table_metadata = create_test_table_metadata_with_config(table_temp_dir.path().to_str().unwrap().to_string(), config);
+    let mooncake_table_metadata = create_test_table_metadata_with_config(
+        table_temp_dir.path().to_str().unwrap().to_string(),
+        config,
+    );
 
     // Local filesystem to store read-through cache.
     let cache_temp_dir = tempdir().unwrap();
