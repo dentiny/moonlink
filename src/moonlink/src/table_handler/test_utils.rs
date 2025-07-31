@@ -51,7 +51,6 @@ pub struct TestEnvironment {
     pub(crate) force_snapshot_completion_rx: watch::Receiver<Option<Result<u64>>>,
     pub(crate) table_event_manager: TableEventManager,
     pub(crate) temp_dir: TempDir,
-    pub(crate) object_storage_cache: ObjectStorageCache,
 }
 
 impl Drop for TestEnvironment {
@@ -101,8 +100,6 @@ impl TestEnvironment {
             TableEventManager::new(handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = handler.get_event_sender();
 
-        let object_storage_cache = ObjectStorageCache::default_for_test(&temp_dir);
-
         Self {
             handler,
             event_sender,
@@ -113,7 +110,6 @@ impl TestEnvironment {
             force_snapshot_completion_rx,
             table_event_manager,
             temp_dir,
-            object_storage_cache,
         }
     }
 
@@ -160,7 +156,8 @@ impl TestEnvironment {
         );
         IcebergTableManager::new(
             mooncake_table_metadata,
-            self.object_storage_cache.clone(),
+            // Create new and separate object storage cache for new iceberg table manager.
+            ObjectStorageCache::default_for_test(&self.temp_dir),
             create_test_filesystem_accessor(&iceberg_table_config),
             iceberg_table_config.clone(),
         )
