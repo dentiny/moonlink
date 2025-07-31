@@ -483,9 +483,6 @@ impl TableHandler {
                                 return;
                             }
                         }
-                        TableEvent::ReadRequestCompletion { read_complete_handles } => {
-                            table.set_read_request_res(read_complete_handles.handles);
-                        }
                         TableEvent::EvictedFilesToDelete { evicted_files } => {
                             start_task_to_delete_evicted(evicted_files.files);
                         }
