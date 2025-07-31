@@ -689,7 +689,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         tokio::time::sleep(std::time::Duration::from_secs(5)).await;
 
         // If anything bad happens in the eventloop, drop table would fail.
-        event_sender.send(TableEvent::DropTable).await.unwrap();
+        table_event_manager.drop_table().await.unwrap();
     });
 
     // Await the task directly and handle its result.
