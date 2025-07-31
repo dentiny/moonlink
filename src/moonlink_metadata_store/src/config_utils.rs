@@ -248,9 +248,6 @@ mod tests {
             "file_index_config": {
                 "min_file_indices_to_merge": 5,
                 "index_block_final_size": 654321
-            },
-            "persistence_config": {
-                "new_data_file_count": 456
             }
         });
 
@@ -278,11 +275,7 @@ mod tests {
                 index_block_final_size: 654321,
             },
             // Iceberg persistence config.
-            persistence_config: IcebergPersistenceConfig {
-                new_data_file_count: 456,
-                new_committed_deletion_log:
-                    IcebergPersistenceConfig::default_new_committed_deletion_log(),
-            },
+            persistence_config: IcebergPersistenceConfig::default(),
         };
         assert_eq!(actual_persisted_config, expected_persisted_config);
     }
