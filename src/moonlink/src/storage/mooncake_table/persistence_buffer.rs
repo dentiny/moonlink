@@ -255,13 +255,33 @@ impl UnpersistedRecords {
     /// ==================================
     ///
     /// Util function to decide whether to create iceberg snapshot by data compaction results.
-    fn if_persist_by_data_compaction(&self) -> bool {
-        !self.compacted_data_files_to_add.is_empty()
-            || !self.compacted_data_files_to_remove.is_empty()
+    fn if_persist_by_data_compaction(&self, force_create: bool) -> bool {
+        let new_compacted_data_files_threshold = if !force_create {
+            self.mooncake_table_config
+                .iceberg_snapshot_new_compacted_data_file_count()
+        } else {
+            1
+        };
+        let old_compacted_data_files_threshold = if !force_create {
+            self.mooncake_table_config
+                .iceberg_snapshot_old_compacted_data_file_count()
+        } else {
+            1
+        };
+
+        self.compacted_data_files_to_add.len() >= new_compacted_data_files_threshold
+            || self.compacted_data_files_to_remove.len() >= old_compacted_data_files_threshold
     }
 
-    fn if_persist_by_index_merge(&self) -> bool {
-        !self.merged_file_indices_to_add.is_empty()
+    fn if_persist_by_index_merge(&self, force_create: bool) -> bool {
+        let old_merged_file_indices_threshold = if !force_create {
+            self.mooncake_table_config
+                .iceberg_snapshot_old_merged_file_indices_count()
+        } else {
+            1
+        };
+
+        self.merged_file_indices_to_add.len() >= old_merged_file_indices_threshold
     }
 
     /// Util function to decide whether to create iceberg snapshot by new data files.
@@ -280,10 +300,10 @@ impl UnpersistedRecords {
         if self.if_persist_by_data_files(force_create) {
             return true;
         }
-        if self.if_persist_by_data_compaction() {
+        if self.if_persist_by_data_compaction(force_create) {
             return true;
         }
-        if self.if_persist_by_index_merge() {
+        if self.if_persist_by_index_merge(force_create) {
             return true;
         }
         false

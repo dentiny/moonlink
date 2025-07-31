@@ -12,25 +12,57 @@ pub struct IcebergPersistenceConfig {
     /// Number of unpersisted committed delete logs to trigger an iceberg snapshot.
     #[serde(default = "IcebergPersistenceConfig::default_new_committed_deletion_log")]
     pub new_committed_deletion_log: usize,
+
+    /// Number of new compacted data files to trigger an iceberg snapshot.
+    #[serde(default = "IcebergPersistenceConfig::default_new_compacted_data_file_count")]
+    pub new_compacted_data_file_count: usize,
+
+    /// Number of old compacted data files to trigger an iceberg snapshot.
+    #[serde(default = "IcebergPersistenceConfig::default_old_compacted_data_file_count")]
+    pub old_compacted_data_file_count: usize,
+
+    /// Number of old merged file indices to trigger an iceberg snapshot.
+    #[serde(default = "IcebergPersistenceConfig::default_old_compacted_data_file_count")]
+    pub old_merged_file_indices_count: usize,
 }
 
-// TODO(hjiang): Add another threshold for merged file indices to trigger iceberg snapshot.
 impl IcebergPersistenceConfig {
     #[cfg(debug_assertions)]
     pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
     #[cfg(debug_assertions)]
     pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
+    #[cfg(debug_assertions)]
+    pub(crate) const DEFAULT_ICEBERG_NEW_COMPACTED_DATA_FILE_COUNT: usize = 1;
+    #[cfg(debug_assertions)]
+    pub(crate) const DEFAULT_ICEBERG_OLD_COMPACTED_DATA_FILE_COUNT: usize = 1;
+    #[cfg(debug_assertions)]
+    pub(crate) const DEFAULT_ICEBERG_OLD_MERGED_FILE_INDICES_COUNT: usize = 1;
 
     #[cfg(not(debug_assertions))]
     pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
     #[cfg(not(debug_assertions))]
     pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
+    #[cfg(not(debug_assertions))]
+    pub(crate) const DEFAULT_ICEBERG_NEW_COMPACTED_DATA_FILE_COUNT: usize = 1;
+    #[cfg(not(debug_assertions))]
+    pub(crate) const DEFAULT_ICEBERG_OLD_COMPACTED_DATA_FILE_COUNT: usize = 1;
+    #[cfg(not(debug_assertions))]
+    pub(crate) const DEFAULT_ICEBERG_OLD_MERGED_FILE_INDICES_COUNT: usize = 1;
 
     pub fn default_new_data_file_count() -> usize {
         Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT
     }
     pub fn default_new_committed_deletion_log() -> usize {
         Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG
+    }
+    pub fn default_new_compacted_data_file_count() -> usize {
+        Self::DEFAULT_ICEBERG_NEW_COMPACTED_DATA_FILE_COUNT
+    }
+    pub fn default_old_compacted_data_file_count() -> usize {
+        Self::DEFAULT_ICEBERG_OLD_COMPACTED_DATA_FILE_COUNT
+    }
+    pub fn default_old_merged_file_indices_count() -> usize {
+        Self::DEFAULT_ICEBERG_OLD_MERGED_FILE_INDICES_COUNT
     }
 }
 
@@ -39,6 +71,9 @@ impl Default for IcebergPersistenceConfig {
         Self {
             new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
             new_committed_deletion_log: Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
+            new_compacted_data_file_count: Self::DEFAULT_ICEBERG_NEW_COMPACTED_DATA_FILE_COUNT,
+            old_compacted_data_file_count: Self::DEFAULT_ICEBERG_OLD_COMPACTED_DATA_FILE_COUNT,
+            old_merged_file_indices_count: Self::DEFAULT_ICEBERG_OLD_MERGED_FILE_INDICES_COUNT,
         }
     }
 }
@@ -136,5 +171,14 @@ impl MooncakeTableConfig {
     }
     pub fn iceberg_snapshot_new_committed_deletion_log(&self) -> usize {
         self.persistence_config.new_committed_deletion_log
+    }
+    pub fn iceberg_snapshot_new_compacted_data_file_count(&self) -> usize {
+        self.persistence_config.new_compacted_data_file_count
+    }
+    pub fn iceberg_snapshot_old_compacted_data_file_count(&self) -> usize {
+        self.persistence_config.old_compacted_data_file_count
+    }
+    pub fn iceberg_snapshot_old_merged_file_indices_count(&self) -> usize {
+        self.persistence_config.old_merged_file_indices_count
     }
 }

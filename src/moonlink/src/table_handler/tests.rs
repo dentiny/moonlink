@@ -77,6 +77,9 @@ async fn test_append_with_small_disk_slice() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -570,6 +573,9 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -769,6 +775,9 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -999,6 +1008,9 @@ async fn test_multiple_snapshot_requests() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
