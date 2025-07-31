@@ -2,12 +2,14 @@
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
 };
-
+use crate::storage::iceberg::manifest_utils;
+use crate::storage::iceberg::manifest_utils::ManifestEntryType;
+use crate::storage::iceberg::puffin_writer_proxy::DataFileProxy;
 use crate::storage::iceberg::puffin_writer_proxy::PuffinBlobMetadataProxy;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use crate::storage::iceberg::puffin_writer_proxy::DataFileProxy;
 use iceberg::io::FileIO;
 use iceberg::puffin::DELETION_VECTOR_V1;
 use iceberg::spec::{
@@ -15,9 +17,6 @@ use iceberg::spec::{
     ManifestWriter, Struct, TableMetadata,
 };
 use iceberg::Result as IcebergResult;
-
-use crate::storage::iceberg::manifest_utils;
-use crate::storage::iceberg::manifest_utils::ManifestEntryType;
 
 pub(crate) struct DeletionVectorManifestManager<'a> {
     table_metadata: &'a TableMetadata,
@@ -43,7 +42,7 @@ impl<'a> DeletionVectorManifestManager<'a> {
         }
     }
 
-    fn init_deletion_vector_manifest_writer_for_once(&mut self) -> IcebergResult<()> {
+    fn init_writer_for_once(&mut self) -> IcebergResult<()> {
         if self.writer.is_some() {
             return Ok(());
         }
@@ -98,7 +97,7 @@ impl<'a> DeletionVectorManifestManager<'a> {
                     get_data_file_for_deletion_vector(puffin_filepath, cur_blob_metadata);
                 self.existing_deletion_vector_entries
                     .remove(&referenced_data_filepath);
-                self.init_deletion_vector_manifest_writer_for_once()?;
+                self.init_writer_for_once()?;
                 self.writer
                     .as_mut()
                     .unwrap()
@@ -111,7 +110,7 @@ impl<'a> DeletionVectorManifestManager<'a> {
     /// Finalize the current manifest file and return.
     pub(crate) async fn finalize(mut self) -> IcebergResult<Option<ManifestFile>> {
         if !self.existing_deletion_vector_entries.is_empty() {
-            self.init_deletion_vector_manifest_writer_for_once()?;
+            self.init_writer_for_once()?;
         }
 
         // Add old deletion vector entries which doesn't get overwritten.

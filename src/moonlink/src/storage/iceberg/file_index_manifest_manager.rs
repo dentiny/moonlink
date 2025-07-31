@@ -1,7 +1,9 @@
 use crate::storage::iceberg::index::{MOONCAKE_HASH_INDEX_V1, MOONCAKE_HASH_INDEX_V1_CARDINALITY};
-
+use crate::storage::iceberg::manifest_utils;
+use crate::storage::iceberg::manifest_utils::ManifestEntryType;
 use crate::storage::iceberg::puffin_writer_proxy::DataFileProxy;
 use crate::storage::iceberg::puffin_writer_proxy::PuffinBlobMetadataProxy;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
@@ -11,9 +13,6 @@ use iceberg::spec::{
     ManifestWriter, Struct, TableMetadata,
 };
 use iceberg::Result as IcebergResult;
-
-use crate::storage::iceberg::manifest_utils;
-use crate::storage::iceberg::manifest_utils::ManifestEntryType;
 
 pub(crate) struct FileIndexManifestManager<'a> {
     table_metadata: &'a TableMetadata,
@@ -36,7 +35,7 @@ impl<'a> FileIndexManifestManager<'a> {
         }
     }
 
-    fn init_file_index_manifest_writer(&mut self) -> IcebergResult<()> {
+    fn init_writer_for_once(&mut self) -> IcebergResult<()> {
         if self.writer.is_some() {
             return Ok(());
         }
@@ -66,7 +65,7 @@ impl<'a> FileIndexManifestManager<'a> {
             }
 
             // Keep file indices which are not requested to remove.
-            self.init_file_index_manifest_writer()?;
+            self.init_writer_for_once()?;
             self.writer.as_mut().unwrap().add_file(
                 cur_manifest_entry.data_file().clone(),
                 cur_manifest_entry.sequence_number().unwrap(),
@@ -82,12 +81,11 @@ impl<'a> FileIndexManifestManager<'a> {
         for (puffin_filepath, blob_metadata) in file_index_blobs_to_add.iter() {
             for cur_blob_metadata in blob_metadata.iter() {
                 let data_file = get_data_file_for_file_index(puffin_filepath, cur_blob_metadata);
-                self.init_file_index_manifest_writer()?;
+                self.init_writer_for_once()?;
                 self.writer
                     .as_mut()
                     .unwrap()
                     .add_file(data_file, cur_blob_metadata.sequence_number)?;
-                continue;
             }
         }
         Ok(())

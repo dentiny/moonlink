@@ -32,7 +32,7 @@ impl<'a> DataFileManifestManager<'a> {
         }
     }
 
-    fn init_data_file_manifest_writer_for_once(&mut self) -> IcebergResult<()> {
+    fn init_writer_for_once(&mut self) -> IcebergResult<()> {
         if self.writer.is_some() {
             return Ok(());
         }
@@ -61,7 +61,7 @@ impl<'a> DataFileManifestManager<'a> {
             {
                 continue;
             }
-            self.init_data_file_manifest_writer_for_once()?;
+            self.init_writer_for_once()?;
             self.writer.as_mut().unwrap().add_file(
                 cur_manifest_entry.data_file().clone(),
                 cur_manifest_entry.sequence_number().unwrap(),
