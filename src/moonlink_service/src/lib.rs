@@ -69,7 +69,7 @@ async fn handle_stream(
                 src_uri,
             } => {
                 // Use default mooncake config, and local filesystem for storage layer.
-                let serialized_table_config = "";
+                let serialized_table_config = "{}";
                 backend
                     .create_table(database_id, table_id, src, src_uri, serialized_table_config)
                     .await
