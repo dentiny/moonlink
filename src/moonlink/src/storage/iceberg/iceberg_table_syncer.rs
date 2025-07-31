@@ -432,7 +432,7 @@ impl IcebergTableManager {
             .collect::<Vec<_>>();
 
         // Process file indices to remove.
-        self.catalog.set_puffin_files_to_remove(
+        self.catalog.set_index_puffin_files_to_remove(
             file_indices_to_remove
                 .iter()
                 .map(|cur_index| self.persisted_file_indices.remove(cur_index).unwrap())
