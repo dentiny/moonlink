@@ -78,6 +78,7 @@ pub(crate) struct IndexBlock {
     /// File size for the index block file, used to decide whether to trigger merge index blocks merge.
     pub(crate) file_size: u64,
     /// Mmapped-data.
+    /// Synchronous IO is not needed because here we use mmap.
     data: Arc<Option<Mmap>>,
     /// Cache handle within object storage cache.
     pub(crate) cache_handle: Option<NonEvictableHandle>,
