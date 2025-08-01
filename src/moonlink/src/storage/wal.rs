@@ -69,6 +69,9 @@ pub enum WalEvent {
 
 #[derive(Debug, Clone)]
 pub struct WalPersistAndTruncateResult {
+    /// UUID for current persistence operation.
+    #[allow(dead_code)]
+    uuid: uuid::Uuid,
     file_persisted: Option<WalFileInfo>,
     highest_deleted_file: Option<WalFileInfo>,
     /// The LSN of the last seen iceberg snapshot which was used to
@@ -78,11 +81,13 @@ pub struct WalPersistAndTruncateResult {
 
 impl WalPersistAndTruncateResult {
     pub fn new(
+        uuid: uuid::Uuid,
         file_persisted: Option<WalFileInfo>,
         highest_deleted_file: Option<WalFileInfo>,
         iceberg_snapshot_lsn: Option<u64>,
     ) -> Self {
         Self {
+            uuid,
             file_persisted,
             highest_deleted_file,
             iceberg_snapshot_lsn,
@@ -467,6 +472,7 @@ impl WalManager {
     }
 
     pub async fn wal_persist_truncate_async(
+        uuid: uuid::Uuid,
         files_to_delete: Vec<WalFileInfo>,
         file_to_persist: Option<(Vec<WalEvent>, WalFileInfo)>,
         file_system_accessor: Arc<dyn BaseFileSystemAccess>,
@@ -495,6 +501,7 @@ impl WalManager {
         // Create result and notify
         let persist_and_truncate_result = result.map(|_| {
             WalPersistAndTruncateResult::new(
+                uuid,
                 file_to_persist.map(|(_, wal_file_info)| wal_file_info),
                 files_to_delete.last().cloned(),
                 iceberg_snapshot_lsn,

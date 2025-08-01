@@ -47,6 +47,7 @@ impl WalManager {
         }
 
         let persist_and_truncate_result = WalPersistAndTruncateResult {
+            uuid: uuid::Uuid::new_v4(),
             file_persisted: persisted_wal_file,
             highest_deleted_file,
             iceberg_snapshot_lsn: last_iceberg_snapshot_lsn,

@@ -160,11 +160,12 @@ pub enum TableEvent {
         evicted_files: EvictedFiles,
     },
 
-    // ================================================
-    // WAL events
-    // ================================================
+    /// ================================================
+    /// WAL events
+    /// ================================================
+    ///
     /// Periodically persist in-memory WAL and truncate WAL files.
-    PeriodicalPersistTruncateWal,
+    PeriodicalPersistTruncateWal(uuid::Uuid),
     /// Periodic persist and truncate wal completes.
     PeriodicalPersistTruncateWalResult {
         result: Result<WalPersistAndTruncateResult>,

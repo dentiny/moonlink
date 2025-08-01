@@ -1291,8 +1291,12 @@ impl MooncakeTable {
 
     /// Spawns a background task to persist and truncate WAL if needed.
     /// Returns true if there was a task spawned, false otherwise.
+    ///
+    /// # Arguments
+    ///
+    /// * uuid: WAL persistence event unique id.
     #[must_use]
-    pub(crate) fn persist_and_truncate_wal(&mut self) -> bool {
+    pub(crate) fn persist_and_truncate_wal(&mut self, uuid: uuid::Uuid) -> bool {
         let latest_iceberg_snapshot_lsn = self.get_iceberg_snapshot_lsn();
         let files_to_truncate =
             if let Some(latest_iceberg_snapshot_lsn) = latest_iceberg_snapshot_lsn {
@@ -1308,6 +1312,7 @@ impl MooncakeTable {
             let file_system_accessor = self.wal_manager.get_file_system_accessor();
             tokio::spawn(async move {
                 WalManager::wal_persist_truncate_async(
+                    uuid,
                     files_to_truncate,
                     file_to_persist,
                     file_system_accessor,
