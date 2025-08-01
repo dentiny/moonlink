@@ -439,6 +439,8 @@ impl SnapshotTableState {
         task.iceberg_persisted_records
             .validate_imported_files_remote(&self.iceberg_warehouse_location);
 
+        // Calculate the expected disk files number after current snapshot update.
+
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
 
