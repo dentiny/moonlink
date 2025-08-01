@@ -160,6 +160,7 @@ fn verify_files_and_deletions_impl(
     files: &[String],
     deletions: &[(u32, u32)],
     expected_ids: &[i32],
+    snapshot_lsn: Option<u64>,
 ) {
     let mut res = vec![];
     for (i, path) in files.iter().enumerate() {
@@ -172,7 +173,10 @@ fn verify_files_and_deletions_impl(
         res.extend(ids.into_iter().flatten());
     }
     res.sort();
-    assert_eq!(res, expected_ids);
+    assert_eq!(
+        res, expected_ids,
+        "Table snapshot unexpected at LSN {snapshot_lsn:?}"
+    );
 }
 
 pub fn get_data_files_for_read(data_file_paths: &[DataFileForRead]) -> Vec<String> {
@@ -197,6 +201,7 @@ pub async fn verify_files_and_deletions(
     position_deletes: Vec<(u32, u32)>,
     deletion_vectors: Vec<PuffinDeletionBlobAtRead>,
     expected_ids: &[i32],
+    snapshot_lsn: Option<u64>,
 ) {
     // Read deletion vector blobs and add to position deletes.
     let file_io = FileIOBuilder::new_fs_io().build().unwrap();
@@ -227,5 +232,10 @@ pub async fn verify_files_and_deletions(
         );
     }
 
-    verify_files_and_deletions_impl(data_file_paths, &position_deletes, expected_ids)
+    verify_files_and_deletions_impl(
+        data_file_paths,
+        &position_deletes,
+        expected_ids,
+        snapshot_lsn,
+    )
 }

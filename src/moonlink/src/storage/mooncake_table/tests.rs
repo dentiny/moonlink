@@ -107,6 +107,7 @@ async fn test_delete_and_append(#[case] identity: IdentityProp) -> Result<()> {
         position_deletes,
         deletion_vectors,
         &[1, 3, 4],
+        /*snapshot_lsn=*/ Some(3),
     )
     .await;
     Ok(())
@@ -214,6 +215,7 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
             position_deletes,
             deletion_vectors,
             /*expected_ids=*/ &[1, 2, 3],
+            /*snapshot_lsn=*/ Some(100),
         )
         .await;
     }
@@ -242,6 +244,7 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
             position_deletes,
             deletion_vectors,
             /*expected_ids=*/ &[1, 2, 3, 4],
+            /*snapshot_lsn=*/ Some(300),
         )
         .await;
     }
@@ -311,6 +314,7 @@ async fn test_force_snapshot_without_new_commits() {
             position_deletes,
             deletion_vectors,
             /*expected_ids=*/ &[1],
+            /*snapshot_lsn=*/ Some(100),
         )
         .await;
     }
@@ -373,6 +377,7 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
             position_deletes,
             deletion_vectors,
             &[1, 2, 2, 3, 3],
+            /*snapshot_lsn=*/ Some(2),
         )
         .await;
     }
@@ -402,6 +407,7 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
             position_deletes,
             deletion_vectors,
             &[1, 2, 3, 3],
+            /*snapshot_lsn=*/ Some(4),
         )
         .await;
     }
@@ -426,6 +432,7 @@ async fn test_full_row_with_duplication_and_identical() -> Result<()> {
             position_deletes,
             deletion_vectors,
             &[1, 2, 3],
+            /*snapshot_lsn=*/ Some(5),
         )
         .await;
     }
@@ -474,6 +481,7 @@ async fn test_duplicate_deletion() -> Result<()> {
             position_deletes,
             deletion_vectors,
             &[1],
+            /*snapshot_lsn=*/ Some(200),
         )
         .await;
     }
@@ -703,6 +711,7 @@ async fn test_alter_table_with_operations() {
         position_deletes,
         deletion_vectors,
         &[1, 2],
+        /*snapshot_lsn=*/ Some(2),
     )
     .await;
 }
@@ -931,6 +940,7 @@ async fn test_streaming_begin_flush_delete_commit_end_flush() {
             position_deletes,
             deletion_vectors,
             &[1],
+            /*snapshot_lsn=*/ Some(lsn + 1),
         )
         .await;
     }
@@ -1028,6 +1038,7 @@ async fn test_streaming_begin_flush_commit_delete_end_flush() {
             position_deletes,
             deletion_vectors,
             &[1],
+            /*snapshot_lsn=*/ Some(3),
         )
         .await;
     }

@@ -463,6 +463,7 @@ pub async fn check_read_snapshot(
         position_deletes,
         deletion_vectors,
         expected_ids,
+        /*snapshot_lsn=*/ target_lsn,
     )
     .await;
 }
