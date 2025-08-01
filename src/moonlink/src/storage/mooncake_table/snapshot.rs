@@ -446,6 +446,14 @@ impl SnapshotTableState {
             - task.data_compaction_result.old_data_files.len() // old data files before compaction
             + task.data_compaction_result.new_data_files.len() // new data files after compaction
             ;
+        // Calculate the expected file indices number after current snapshot update.
+        let expected_file_indices_count = self.current_snapshot.indices.file_indices.len()
+            + task.get_new_file_indices().len() // committed file indices, including streaming and non-streaming
+            - task.index_merge_result.old_file_indices.len() // old file indices before index merge
+            + task.index_merge_result.new_file_indices.len() // new file indices after index merge
+            - task.data_compaction_result.old_file_indices.len() // old file indices before index merge
+            + task.data_compaction_result.new_file_indices.len() // new file indices after index merge
+            ;
 
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
@@ -579,6 +587,9 @@ impl SnapshotTableState {
         // Validate disk files count is as expected.
         let actual_disk_files_count = self.current_snapshot.disk_files.len();
         assert_eq!(expected_disk_files_count, actual_disk_files_count);
+        // Validate file indices count is as expected.
+        let actual_file_indices_count = self.current_snapshot.indices.file_indices.len();
+        assert_eq!(expected_file_indices_count, actual_file_indices_count);
 
         // Expensive assertion, which is only enabled in unit tests.
         #[cfg(any(test, debug_assertions))]
