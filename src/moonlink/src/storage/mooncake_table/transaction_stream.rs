@@ -43,6 +43,16 @@ pub enum TransactionStreamOutput {
     Abort(u32),
 }
 
+impl TransactionStreamOutput {
+    /// Get committed persisted disk files count.
+    pub fn get_committed_persisted_disk_count(&self) -> usize {
+        match &self {
+            TransactionStreamOutput::Abort(_) => 0,
+            TransactionStreamOutput::Commit(commit) => commit.flushed_files.len(),
+        }
+    }
+}
+
 pub struct TransactionStreamCommit {
     xact_id: u32,
     commit_lsn: u64,

@@ -440,6 +440,12 @@ impl SnapshotTableState {
             .validate_imported_files_remote(&self.iceberg_warehouse_location);
 
         // Calculate the expected disk files number after current snapshot update.
+        let expected_disk_files_count = self.current_snapshot.disk_files.len()
+            + task.new_disk_slices.iter().map(|cur_disk_slice| cur_disk_slice.output_files().len()).sum::<usize>() // new persisted files by non-streaming committed transactions
+            + task.new_streaming_xact.iter().map(|cur_txn| cur_txn.get_committed_persisted_disk_count()).sum::<usize>() // new persisted files files by streaming committed transactions
+            - task.data_compaction_result.old_data_files.len() // old data files before compaction
+            + task.data_compaction_result.new_data_files.len() // new data files after compaction
+            ;
 
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
@@ -569,6 +575,10 @@ impl SnapshotTableState {
                 ));
             }
         }
+
+        // Validate disk files count is as expected.
+        let actual_disk_files_count = self.current_snapshot.disk_files.len();
+        assert_eq!(expected_disk_files_count, actual_disk_files_count);
 
         // Expensive assertion, which is only enabled in unit tests.
         #[cfg(any(test, debug_assertions))]
