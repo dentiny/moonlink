@@ -192,6 +192,12 @@ impl CompactionBuilder {
 
         let file = tokio::fs::File::open(filepath).await?;
         let builder = ParquetRecordBatchStreamBuilder::new(file).await?;
+        let total_num_rows: usize = builder
+            .metadata()
+            .row_groups()
+            .iter()
+            .map(|cur_row_group| cur_row_group.num_rows() as usize)
+            .sum();
         let mut reader = builder.build().unwrap();
 
         let batch_deletion_vector =
@@ -200,6 +206,7 @@ impl CompactionBuilder {
             } else {
                 BatchDeletionVector::new(/*max_rows=*/ 0)
             };
+        let deleted_rows_num = batch_deletion_vector.get_num_rows_deleted();
 
         let get_filtered_record_batch = |record_batch: RecordBatch, start_row_idx: usize| {
             if batch_deletion_vector.is_empty() {
@@ -275,6 +282,11 @@ impl CompactionBuilder {
             let evicted_files = cache_handle.unreference().await;
             evicted_files_to_delete.extend(evicted_files);
         }
+
+        // Sanity check on compaction result.
+        let expected_compacted_num_rows = total_num_rows - deleted_rows_num;
+        let actual_compacted_num_rows = old_to_new_remap.len();
+        assert_eq!(expected_compacted_num_rows, actual_compacted_num_rows);
 
         let data_file_compaction_result = DataFileCompactionResult {
             data_file_remap: old_to_new_remap,
