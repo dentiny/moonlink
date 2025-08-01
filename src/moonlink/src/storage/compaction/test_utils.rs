@@ -31,6 +31,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 /// Test data.
+const NUM_ROWS: usize = 6;
 const ID_VALUES: [i32; 6] = [1, 2, 3, 4, 5, 6];
 const NAME_VALUES: [&str; 6] = ["a", "b", "c", "d", "e", "f"];
 const AGE_VALUES: [i32; 6] = [10, 20, 30, 40, 50, 60];
@@ -151,38 +152,14 @@ pub(crate) async fn create_file_index_for_both_batches(
     data_file: MooncakeDataFileRef,
     start_file_id: u64,
 ) -> FileIndex {
-    let entries = vec![
-        (
-            get_hash_for_row(ID_VALUES[0], NAME_VALUES[0], AGE_VALUES[0]),
+    let mut entries = vec![];
+    for idx in 0..NUM_ROWS {
+        entries.push((
+            get_hash_for_row(ID_VALUES[idx], NAME_VALUES[idx], AGE_VALUES[idx]),
             /*seg_idx=*/ 0,
-            /*row_idx=*/ 0,
-        ),
-        (
-            get_hash_for_row(ID_VALUES[1], NAME_VALUES[1], AGE_VALUES[1]),
-            /*seg_idx=*/ 0,
-            /*row_idx=*/ 1,
-        ),
-        (
-            get_hash_for_row(ID_VALUES[2], NAME_VALUES[2], AGE_VALUES[2]),
-            /*seg_idx=*/ 0,
-            /*row_idx=*/ 2,
-        ),
-        (
-            get_hash_for_row(ID_VALUES[3], NAME_VALUES[3], AGE_VALUES[3]),
-            /*seg_idx=*/ 0,
-            /*row_idx=*/ 3,
-        ),
-        (
-            get_hash_for_row(ID_VALUES[4], NAME_VALUES[4], AGE_VALUES[4]),
-            /*seg_idx=*/ 0,
-            /*row_idx=*/ 4,
-        ),
-        (
-            get_hash_for_row(ID_VALUES[5], NAME_VALUES[5], AGE_VALUES[5]),
-            /*seg_idx=*/ 0,
-            /*row_idx=*/ 5,
-        ),
-    ];
+            /*row_idx=*/ idx,
+        ));
+    }
 
     let mut builder = GlobalIndexBuilder::new();
     builder.set_files(vec![data_file]);
