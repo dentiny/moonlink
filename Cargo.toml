@@ -74,6 +74,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 typed-builder = "0.20"
 url = "2.5"
 uuid = { version = "1.17", default-features = false, features = ["v4"] }
+bitstream-io = "4.5"
 
 [profile.release-with-debug]
 inherits = "release"

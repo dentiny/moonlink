@@ -24,18 +24,18 @@ impl FileIndexMergeConfig {
     pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = u64::MAX;
 
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = 4;
+    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = 8;
+    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = 1 << 10; // 1KiB
+    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = u64::MAX;
 
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = 16;
+    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = 32;
+    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = 1 << 29; // 512MiB
+    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = u64::MAX;
 
     pub fn validate(&self) {
         ma::assert_le!(

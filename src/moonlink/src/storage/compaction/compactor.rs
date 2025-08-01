@@ -361,6 +361,8 @@ impl CompactionBuilder {
     #[tracing::instrument(name = "compaction_build", skip_all)]
     #[allow(clippy::mutable_key_type)]
     pub(crate) async fn build(mut self) -> Result<DataCompactionResult> {
+        // let guard = pprof::ProfilerGuard::new(100).unwrap();
+
         let old_data_files = self
             .compaction_payload
             .disk_files
@@ -409,6 +411,11 @@ impl CompactionBuilder {
                 &record_loc_to_data_file_index,
             )
             .await;
+
+        // if let Ok(report) = guard.report().build() {
+        //     let file = std::fs::File::create("/tmp/compaction-flamegraph.svg").unwrap();
+        //     report.flamegraph(file).unwrap();
+        // }
 
         Ok(DataCompactionResult {
             uuid: self.compaction_payload.uuid,
