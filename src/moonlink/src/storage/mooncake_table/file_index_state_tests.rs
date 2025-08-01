@@ -52,12 +52,13 @@ use crate::storage::mooncake_table::table_accessor_test_utils::*;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::test_utils_commons::*;
-use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::MooncakeTableConfig;
+use crate::storage::mooncake_table_config::IcebergPersistenceConfig;
+use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
 use crate::table_notify::TableEvent;
 use crate::{
     IcebergTableConfig, IcebergTableManager, MooncakeTable, ObjectStorageCache,
-    ObjectStorageCacheConfig, TableManager,
+    ObjectStorageCacheConfig, TableManager, WalConfig,
 };
 
 async fn prepare_test_disk_file(
@@ -209,6 +210,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
         ..Default::default()
     };
 
+    let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, &path);
     let mut table = MooncakeTable::new(
         schema.as_ref().clone(),
         "test_table".to_string(),
@@ -217,6 +219,7 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
         identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
+        wal_config,
         object_storage_cache,
         create_test_filesystem_accessor(&iceberg_table_config),
     )

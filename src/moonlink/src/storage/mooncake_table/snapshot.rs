@@ -595,24 +595,33 @@ impl SnapshotTableState {
         }
 
         let incoming = take(&mut task.new_record_batches);
-        // close previously‐open batch
-        assert!(self.batches.values().last().unwrap().data.is_none());
-        self.batches.last_entry().unwrap().get_mut().data = Some(incoming[0].1.clone());
+        let (streaming_batches, mut non_streaming_batches): (Vec<_>, Vec<_>) =
+            incoming.into_iter().partition(|(id, _)| *id < (1u64 << 63));
 
-        // start a fresh empty batch after the newest data
-        let batch_size = self.current_snapshot.metadata.config.batch_size;
-        // Use the ID from the incoming batches rather than the counter, since the counter may have been further advanced elsewhere.
-        let next_id = incoming.last().unwrap().0 + 1;
+        if !non_streaming_batches.is_empty() {
+            // close previously‐open batch
+            assert!(self.batches.values().last().unwrap().data.is_none());
+            // Use the ID from the incoming batches rather than the counter, since the counter may have been further advanced elsewhere.
+            let next_id = non_streaming_batches.last().unwrap().0 + 1;
+            self.batches.last_entry().unwrap().get_mut().data =
+                Some(non_streaming_batches.remove(0).1.clone());
 
-        // Add to batch and assert that the batch is not already in the map.
-        assert!(self
-            .batches
-            .insert(next_id, InMemoryBatch::new(batch_size))
-            .is_none());
+            // start a fresh empty batch after the newest data
+            let batch_size = self.current_snapshot.metadata.config.batch_size;
+
+            // Add to batch and assert that the batch is not already in the map.
+            assert!(self
+                .batches
+                .insert(next_id, InMemoryBatch::new(batch_size))
+                .is_none());
+        }
 
         // Add completed batches
         // Assert that no incoming batch ID is already present in the map.
-        for (id, rb) in incoming.into_iter().skip(1) {
+        for (id, rb) in streaming_batches
+            .into_iter()
+            .chain(non_streaming_batches.into_iter())
+        {
             assert!(
                 self.batches
                     .insert(

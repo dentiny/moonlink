@@ -7,7 +7,7 @@ use moonlink::{
     AccessorConfig, EventSyncReceiver, EventSyncSender, FileSystemAccessor, IcebergTableConfig,
     MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
     MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, StorageConfig, TableEvent,
-    TableEventManager, TableHandler, TableStatusReader,
+    TableEventManager, TableHandler, TableStatusReader, WalConfig,
 };
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -28,6 +28,7 @@ pub struct TableResources {
     pub table_status_reader: TableStatusReader,
     pub commit_lsn_tx: watch::Sender<u64>,
     pub flush_lsn_rx: watch::Receiver<u64>,
+    pub wal_flush_lsn_rx: watch::Receiver<u64>,
 }
 
 /// Util function to delete and re-create the given directory.
@@ -69,6 +70,8 @@ pub async fn build_table_components(
     .await?;
 
     let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(table_schema);
+    let wal_config =
+        WalConfig::default_wal_config_local(&mooncake_table_id, &PathBuf::from(base_path));
     let table = MooncakeTable::new(
         arrow_schema,
         table_schema.table_name.to_string(),
@@ -77,6 +80,7 @@ pub async fn build_table_components(
         identity,
         moonlink_table_config.iceberg_table_config.clone(),
         moonlink_table_config.mooncake_table_config.clone(),
+        wal_config,
         object_storage_cache,
         Arc::new(FileSystemAccessor::new(
             moonlink_table_config
@@ -105,6 +109,7 @@ pub async fn build_table_components(
     )
     .await;
     let flush_lsn_rx = event_sync_receiver.flush_lsn_rx.clone();
+    let wal_flush_lsn_rx = event_sync_receiver.wal_flush_lsn_rx.clone();
     let table_event_manager =
         TableEventManager::new(table_handler.get_event_sender(), event_sync_receiver);
     let event_sender = table_handler.get_event_sender();
@@ -116,6 +121,7 @@ pub async fn build_table_components(
         table_event_manager,
         commit_lsn_tx,
         flush_lsn_rx,
+        wal_flush_lsn_rx,
     };
     Ok(table_resource)
 }

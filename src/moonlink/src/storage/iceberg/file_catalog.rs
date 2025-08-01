@@ -320,7 +320,7 @@ impl PuffinWrite for FileCatalog {
         self.data_files_to_remove = data_files;
     }
 
-    fn set_puffin_files_to_remove(&mut self, puffin_filepaths: HashSet<String>) {
+    fn set_index_puffin_files_to_remove(&mut self, puffin_filepaths: HashSet<String>) {
         assert!(self.puffin_blobs_to_remove.is_empty());
         self.puffin_blobs_to_remove = puffin_filepaths;
     }
@@ -687,9 +687,9 @@ impl Catalog for FileCatalog {
         append_puffin_metadata_and_rewrite(
             &metadata,
             &self.file_io,
-            &self.data_files_to_remove,
             &self.deletion_vector_blobs_to_add,
             &self.file_index_blobs_to_add,
+            &self.data_files_to_remove,
             &self.puffin_blobs_to_remove,
         )
         .await?;

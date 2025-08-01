@@ -17,7 +17,7 @@ use iceberg::Result as IcebergResult;
 pub(crate) struct FileIndexManifestManager<'a> {
     table_metadata: &'a TableMetadata,
     file_io: &'a FileIO,
-    puffin_blobs_to_remove: &'a HashSet<String>,
+    index_puffin_blobs_to_remove: &'a HashSet<String>,
     writer: Option<ManifestWriter>,
 }
 
@@ -25,12 +25,12 @@ impl<'a> FileIndexManifestManager<'a> {
     pub(crate) fn new(
         table_metadata: &'a TableMetadata,
         file_io: &'a FileIO,
-        puffin_blobs_to_remove: &'a HashSet<String>,
+        index_puffin_blobs_to_remove: &'a HashSet<String>,
     ) -> FileIndexManifestManager<'a> {
         Self {
             table_metadata,
             file_io,
-            puffin_blobs_to_remove,
+            index_puffin_blobs_to_remove,
             writer: None,
         }
     }
@@ -58,7 +58,7 @@ impl<'a> FileIndexManifestManager<'a> {
         for cur_manifest_entry in manifest_entries.into_iter() {
             // Skip file indices which are requested to remove (due to index merge and data file compaction).
             if self
-                .puffin_blobs_to_remove
+                .index_puffin_blobs_to_remove
                 .contains(cur_manifest_entry.data_file().file_path())
             {
                 continue;

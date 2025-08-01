@@ -10,11 +10,13 @@ use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccesso
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
-use crate::storage::mooncake_table::IcebergPersistenceConfig;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
-use crate::storage::mooncake_table::MooncakeTableConfig;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
+use crate::storage::mooncake_table_config::IcebergPersistenceConfig;
+use crate::storage::mooncake_table_config::MooncakeTableConfig;
+use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
+use crate::storage::wal::WalManager;
 use crate::storage::MockTableManager;
 use crate::storage::MooncakeTable;
 use crate::storage::PersistenceResult;
@@ -22,6 +24,7 @@ use crate::storage::TableManager;
 use crate::table_handler::table_handler_state::TableHandlerState;
 use crate::ObjectStorageCache;
 use crate::TableEventManager;
+use crate::WalConfig;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -77,6 +80,9 @@ async fn test_append_with_small_disk_slice() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -570,6 +576,9 @@ async fn test_iceberg_snapshot_creation_for_batch_write() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -769,6 +778,9 @@ async fn test_iceberg_snapshot_creation_for_streaming_write() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -999,6 +1011,9 @@ async fn test_multiple_snapshot_requests() {
         persistence_config: IcebergPersistenceConfig {
             new_data_file_count: 1000,
             new_committed_deletion_log: 1000,
+            new_compacted_data_file_count: 1,
+            old_compacted_data_file_count: 1,
+            old_merged_file_indices_count: 1,
         },
     };
     let mut env = TestEnvironment::new(temp_dir, mooncake_table_config.clone()).await;
@@ -1604,11 +1619,15 @@ async fn test_discard_duplicate_writes() {
             })
         });
 
+    let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, temp_dir.path());
+    let wal_manager = WalManager::new(&wal_config);
+
     let mooncake_table = MooncakeTable::new_with_table_manager(
         mooncake_table_metadata,
         Box::new(mock_table_manager),
         ObjectStorageCache::default_for_test(&temp_dir),
         FileSystemAccessor::default_for_test(&temp_dir),
+        wal_manager,
     )
     .await
     .unwrap();
@@ -1656,6 +1675,141 @@ async fn test_discard_duplicate_writes() {
     env.set_table_commit_lsn(40);
     env.set_replication_lsn(40);
     env.verify_snapshot(40, &[30, 40]).await;
+}
+
+/// --- Test for WAL events ---
+#[tokio::test]
+async fn test_wal_persists_events() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    let mut expected_events = Vec::new();
+
+    // we can't be sure of these events to be persisted because they will go into the iceberg snapshot
+    env.append_row(1, "John", 30, 1, None).await;
+    env.flush_table(1).await;
+
+    // this event will definitely be persisted in the WAL because it's not yet in the iceberg snapshot
+    expected_events.push(env.append_row(2, "Jane", 20, 0, Some(100)).await);
+
+    // take snapshot
+    let force_snapshot_completion_rx = env.table_event_manager.initiate_snapshot(1).await;
+    TableEventManager::synchronize_force_snapshot_request(
+        force_snapshot_completion_rx,
+        /*requested_lsn=*/ 1,
+    )
+    .await
+    .unwrap();
+
+    env.force_wal_persistence(1).await;
+
+    env.check_wal_events(&expected_events, &[]).await;
+}
+
+#[tokio::test]
+async fn test_wal_truncates_events_after_snapshot() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    let mut expected_events = Vec::new();
+    let mut not_expected_events = Vec::new();
+
+    // these events should not be persisted because they will go into the iceberg snapshot and be truncated
+    not_expected_events.push(env.append_row(1, "John", 30, 1, None).await);
+    env.flush_table(1).await;
+
+    // take snapshot
+    let force_snapshot_completion_rx = env.table_event_manager.initiate_snapshot(1).await;
+    TableEventManager::synchronize_force_snapshot_request(
+        force_snapshot_completion_rx,
+        /*requested_lsn=*/ 1,
+    )
+    .await
+    .unwrap();
+    env.force_wal_persistence(1).await;
+
+    // any vents after this should be in the WAL because iceberg snapshot cannot capture the uncommitted streaming xact
+    expected_events.push(env.append_row(2, "Jane", 20, 0, Some(100)).await);
+    expected_events.push(env.commit(2).await);
+
+    env.force_wal_persistence(2).await;
+
+    env.check_wal_events(&expected_events, &not_expected_events)
+        .await;
+}
+
+#[tokio::test]
+async fn test_wal_keeps_multiple_streaming_xacts() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    let mut expected_events = Vec::new();
+    let mut not_expected_events = Vec::new();
+
+    // these events should not be persisted because they will go into the iceberg snapshot
+    not_expected_events.push(env.append_row(1, "John", 30, 1, None).await);
+    env.flush_table(1).await;
+    not_expected_events.push(env.append_row(2, "Jane", 20, 0, Some(100)).await);
+    env.force_wal_persistence(1).await;
+
+    not_expected_events.push(env.stream_commit(2, 100).await);
+    env.force_wal_persistence(2).await;
+
+    // any events after this should be in the WAL because iceberg snapshot cannot capture the uncommitted streaming xact
+    expected_events.push(env.append_row(3, "Jim", 30, 0, Some(101)).await);
+    expected_events.push(env.append_row(4, "Jill", 40, 3, None).await);
+    env.flush_table(3).await;
+    env.force_wal_persistence(3).await;
+
+    expected_events.push(env.append_row(5, "Jack", 50, 0, Some(102)).await);
+    expected_events.push(env.append_row(6, "Jill", 60, 5, None).await);
+    env.flush_table(5).await;
+
+    // take snapshot
+    let force_snapshot_completion_rx = env.table_event_manager.initiate_snapshot(5).await;
+    TableEventManager::synchronize_force_snapshot_request(
+        force_snapshot_completion_rx,
+        /*requested_lsn=*/ 5,
+    )
+    .await
+    .unwrap();
+
+    // we do one more round of wal persistence to make sure our WAL is most up to date
+    expected_events.push(env.commit(7).await);
+    env.force_wal_persistence(7).await;
+
+    // we should be keeping all WAL after the flush at LSN 2 because we have a streaming xact that is not committed
+    env.check_wal_events(&expected_events, &not_expected_events)
+        .await;
+}
+
+#[tokio::test]
+async fn test_wal_drop_table_removes_files() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    // append a row
+    env.append_row(1, "John", 30, 1, None).await;
+    env.flush_table(1).await;
+
+    env.force_wal_persistence(1).await;
+
+    // drop the table
+    env.drop_table().await.unwrap();
+
+    // check that the WAL files are deleted
+    // we at most have 2 files for 2 events, we check 0 and 1
+    let wal_filesystem_accessor = env.wal_filesystem_accessor.clone();
+    let file_names = [0, 1]
+        .iter()
+        .map(|i| WalManager::get_file_name(*i))
+        .collect::<Vec<String>>();
+    for file_name in file_names {
+        assert!(!wal_filesystem_accessor
+            .object_exists(&file_name)
+            .await
+            .unwrap());
+    }
 }
 
 /// ---- Util functions unit test ----

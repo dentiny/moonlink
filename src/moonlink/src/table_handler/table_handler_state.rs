@@ -118,6 +118,11 @@ pub(crate) struct TableHandlerState {
     pub(crate) table_maintenance_process_status: MaintenanceProcessStatus,
     /// Notify when data compaction completes.
     pub(crate) table_maintenance_completion_tx: broadcast::Sender<Result<()>>,
+
+    // ================================================
+    // Write-ahead log (WAL)
+    // ================================================
+    pub(crate) wal_persist_ongoing: bool,
 }
 
 impl TableHandlerState {
@@ -144,6 +149,7 @@ impl TableHandlerState {
             table_maintenance_completion_tx,
             // Initial copy fields.
             initial_copy_buffered_events: Vec::new(),
+            wal_persist_ongoing: false,
         }
     }
 
@@ -314,6 +320,9 @@ impl TableHandlerState {
             return false;
         }
         if self.iceberg_snapshot_ongoing {
+            return false;
+        }
+        if self.wal_persist_ongoing {
             return false;
         }
         if self.table_maintenance_process_status != MaintenanceProcessStatus::Unrequested {

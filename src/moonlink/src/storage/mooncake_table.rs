@@ -20,13 +20,11 @@ pub mod table_status_reader;
 mod transaction_stream;
 
 use super::iceberg::puffin_utils::PuffinBlobRef;
-use super::index::index_merge_config::FileIndexMergeConfig;
 use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
 use crate::error::Result;
 use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
-use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
 pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
@@ -47,8 +45,10 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
 };
+use crate::storage::mooncake_table_config::MooncakeTableConfig;
 use crate::storage::storage_utils::{FileId, TableId};
 use crate::storage::wal::wal_persistence_metadata::WalPersistenceMetadata;
+use crate::storage::wal::{WalConfig, WalManager, WalPersistAndTruncateResult};
 use crate::table_notify::{EvictedFiles, TableEvent};
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
@@ -56,7 +56,6 @@ use arrow_schema::Schema;
 use delete_vector::BatchDeletionVector;
 pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
-use serde::{Deserialize, Serialize};
 pub(crate) use snapshot::{PuffinDeletionBlobAtRead, SnapshotTableState};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
@@ -74,114 +73,6 @@ use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 /// `0` is designated as `InvalidTransactionId` in the postgres implementation, so we can be sure this will never collide with a valid transaction id.
 /// [https://github.com/postgres/postgres/blob/d5b9b2d40262f57f58322ad49f8928fd4a492adb/src/include/access/transam.h#L31]
 pub(crate) const INITIAL_COPY_XACT_ID: u32 = 0;
-
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub struct IcebergPersistenceConfig {
-    /// Number of new data files to trigger an iceberg snapshot.
-    pub new_data_file_count: usize,
-    /// Number of unpersisted committed delete logs to trigger an iceberg snapshot.
-    pub new_committed_deletion_log: usize,
-}
-
-// TODO(hjiang): Add another threshold for merged file indices to trigger iceberg snapshot.
-impl IcebergPersistenceConfig {
-    #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
-    #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
-
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT: usize = 1;
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG: usize = 1000;
-}
-
-impl Default for IcebergPersistenceConfig {
-    fn default() -> Self {
-        Self {
-            new_data_file_count: Self::DEFAULT_ICEBERG_NEW_DATA_FILE_COUNT,
-            new_committed_deletion_log: Self::DEFAULT_ICEBERG_SNAPSHOT_NEW_COMMITTED_DELETION_LOG,
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct MooncakeTableConfig {
-    /// Number of batch records which decides when to flush records from MemSlice to disk.
-    pub mem_slice_size: usize,
-    /// Number of new deletion records which decides whether to create a new mooncake table snapshot.
-    pub snapshot_deletion_record_count: usize,
-    /// Max number of rows in each record batch within MemSlice.
-    pub batch_size: usize,
-    /// Disk slice parquet file flush threshold.
-    pub disk_slice_parquet_file_size: usize,
-    /// Config for iceberg persistence config.
-    pub persistence_config: IcebergPersistenceConfig,
-    /// Config for data compaction.
-    pub data_compaction_config: DataCompactionConfig,
-    /// Config for index merge.
-    pub file_index_config: FileIndexMergeConfig,
-    /// Filesystem directory to store temporary files, used for union read.
-    pub temp_files_directory: String,
-}
-
-impl Default for MooncakeTableConfig {
-    fn default() -> Self {
-        Self::new(Self::DEFAULT_TEMP_FILE_DIRECTORY.to_string())
-    }
-}
-
-impl MooncakeTableConfig {
-    #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_MEM_SLICE_SIZE: usize = MooncakeTableConfig::DEFAULT_BATCH_SIZE * 8;
-    #[cfg(debug_assertions)]
-    pub(super) const DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT: usize = 1000;
-    #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_BATCH_SIZE: usize = 128;
-    #[cfg(debug_assertions)]
-    pub(crate) const DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE: usize = 1024 * 1024 * 2; // 2MiB
-
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_MEM_SLICE_SIZE: usize = MooncakeTableConfig::DEFAULT_BATCH_SIZE * 32;
-    #[cfg(not(debug_assertions))]
-    pub(super) const DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT: usize = 1000;
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_BATCH_SIZE: usize = 4096;
-    #[cfg(not(debug_assertions))]
-    pub(crate) const DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE: usize = 1024 * 1024 * 128; // 128MiB
-
-    /// Default local directory to hold temporary files for union read.
-    pub const DEFAULT_TEMP_FILE_DIRECTORY: &str = "/tmp/moonlink_temp_file";
-
-    pub fn new(temp_files_directory: String) -> Self {
-        Self {
-            mem_slice_size: Self::DEFAULT_MEM_SLICE_SIZE,
-            snapshot_deletion_record_count: Self::DEFAULT_SNAPSHOT_DELETION_RECORD_COUNT,
-            batch_size: Self::DEFAULT_BATCH_SIZE,
-            disk_slice_parquet_file_size: Self::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE,
-            persistence_config: IcebergPersistenceConfig::default(),
-            data_compaction_config: DataCompactionConfig::default(),
-            file_index_config: FileIndexMergeConfig::default(),
-            temp_files_directory,
-        }
-    }
-    pub fn validate(&self) {
-        self.file_index_config.validate();
-        self.data_compaction_config.validate();
-    }
-    pub fn batch_size(&self) -> usize {
-        self.batch_size
-    }
-    pub fn iceberg_snapshot_new_data_file_count(&self) -> usize {
-        self.persistence_config.new_data_file_count
-    }
-    pub fn snapshot_deletion_record_count(&self) -> usize {
-        self.snapshot_deletion_record_count
-    }
-    pub fn iceberg_snapshot_new_committed_deletion_log(&self) -> usize {
-        self.persistence_config.new_committed_deletion_log
-    }
-}
 
 #[derive(Debug)]
 pub struct TableMetadata {
@@ -687,6 +578,9 @@ pub struct MooncakeTable {
 
     /// Table notifier, which is used to sent multiple types of event completion information.
     table_notify: Option<Sender<TableEvent>>,
+
+    /// WAL manager, used to persist WAL events.
+    wal_manager: WalManager,
 }
 
 impl MooncakeTable {
@@ -702,8 +596,9 @@ impl MooncakeTable {
         identity: IdentityProp,
         iceberg_table_config: IcebergTableConfig,
         table_config: MooncakeTableConfig,
+        wal_config: WalConfig,
         object_storage_cache: ObjectStorageCache,
-        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+        table_filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {
             name,
@@ -716,14 +611,17 @@ impl MooncakeTable {
         let iceberg_table_manager = Box::new(IcebergTableManager::new(
             metadata.clone(),
             object_storage_cache.clone(),
-            filesystem_accessor.clone(),
+            table_filesystem_accessor.clone(),
             iceberg_table_config,
         )?);
+
+        let wal_manager = WalManager::new(&wal_config);
         Self::new_with_table_manager(
             metadata,
             iceberg_table_manager,
             object_storage_cache,
-            filesystem_accessor,
+            table_filesystem_accessor,
+            wal_manager,
         )
         .await
     }
@@ -732,7 +630,8 @@ impl MooncakeTable {
         table_metadata: Arc<TableMetadata>,
         mut table_manager: Box<dyn TableManager>,
         object_storage_cache: ObjectStorageCache,
-        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+        table_filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+        wal_manager: WalManager,
     ) -> Result<Self> {
         table_metadata.config.validate();
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
@@ -759,7 +658,7 @@ impl MooncakeTable {
                     table_manager.get_warehouse_location(),
                     table_metadata.clone(),
                     object_storage_cache,
-                    filesystem_accessor,
+                    table_filesystem_accessor,
                     current_snapshot,
                     Arc::clone(&non_streaming_batch_id_counter),
                 )
@@ -777,6 +676,7 @@ impl MooncakeTable {
             last_iceberg_snapshot_lsn,
             last_wal_persisted_metadata,
             table_notify: None,
+            wal_manager,
         })
     }
 
@@ -1201,11 +1101,6 @@ impl MooncakeTable {
         self.table_snapshot_watch_sender.send(lsn).unwrap();
     }
 
-    #[cfg(test)]
-    pub(crate) fn get_snapshot_watch_sender(&self) -> watch::Sender<u64> {
-        self.table_snapshot_watch_sender.clone()
-    }
-
     /// Persist an iceberg snapshot.
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
@@ -1393,6 +1288,60 @@ impl MooncakeTable {
             .await
             .unwrap();
     }
+
+    /// Spawns a background task to persist and truncate WAL if needed.
+    /// Returns true if there was a task spawned, false otherwise.
+    #[must_use]
+    pub(crate) fn persist_and_truncate_wal(&mut self) -> bool {
+        let latest_iceberg_snapshot_lsn = self.get_iceberg_snapshot_lsn();
+        let files_to_truncate =
+            if let Some(latest_iceberg_snapshot_lsn) = latest_iceberg_snapshot_lsn {
+                self.wal_manager
+                    .get_files_to_truncate(latest_iceberg_snapshot_lsn)
+            } else {
+                vec![]
+            };
+        let file_to_persist = self.wal_manager.extract_next_persistent_file();
+
+        if !files_to_truncate.is_empty() || file_to_persist.is_some() {
+            let event_sender_clone = self.table_notify.as_ref().unwrap().clone();
+            let file_system_accessor = self.wal_manager.get_file_system_accessor();
+            tokio::spawn(async move {
+                WalManager::wal_persist_truncate_async(
+                    files_to_truncate,
+                    file_to_persist,
+                    file_system_accessor,
+                    event_sender_clone,
+                    latest_iceberg_snapshot_lsn,
+                )
+                .await;
+            });
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Handles the result of a persist and truncate operation.
+    /// Returns the highest LSN that has been persisted into WAL.
+    pub(crate) fn handle_completed_persistence_and_truncate_wal(
+        &mut self,
+        result: &WalPersistAndTruncateResult,
+    ) -> Option<u64> {
+        self.wal_manager
+            .handle_completed_persistence_and_truncate(result)
+    }
+
+    /// Drop the WAL files. Note that at the moment this drops WAL files in the mooncake table's local filesystem
+    /// and so behaves the same as MooncakeTable.drop_table(),
+    /// but in the future this is needed to support object storage
+    pub(crate) async fn drop_wal(&mut self) -> Result<()> {
+        self.wal_manager.drop_wal().await
+    }
+
+    pub fn push_wal_event(&mut self, event: &TableEvent) {
+        self.wal_manager.push(event);
+    }
 }
 
 #[cfg(test)]
@@ -1468,6 +1417,17 @@ mod mooncake_tests {
             /*persistence_lsn=*/ Some(1),
             &res_copy,
         );
+    }
+}
+
+#[cfg(test)]
+impl MooncakeTable {
+    pub fn get_table_id(&self) -> u32 {
+        self.metadata.table_id
+    }
+
+    pub(crate) fn get_snapshot_watch_sender(&self) -> watch::Sender<u64> {
+        self.table_snapshot_watch_sender.clone()
     }
 }
 

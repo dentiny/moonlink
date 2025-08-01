@@ -21,8 +21,8 @@ use crate::storage::iceberg::file_index_manifest_manager::FileIndexManifestManag
 use iceberg::io::FileIO;
 use iceberg::puffin::{CompressionCodec, PuffinWriter};
 use iceberg::spec::{
-    DataContentType, DataFileFormat, Datum, FormatVersion, ManifestContentType, ManifestListWriter,
-    Snapshot, Struct, TableMetadata,
+    DataContentType, DataFileFormat, Datum, FormatVersion, ManifestListWriter, Snapshot, Struct,
+    TableMetadata,
 };
 use iceberg::Result as IcebergResult;
 
@@ -241,21 +241,26 @@ async fn create_new_manifest_list_writer(
 ///
 /// Note: this function should be called before catalog transaction commit.
 ///
+/// # Arguments:
+///
+/// * data_files_to_remove: remote data file path, if non empty, both data file and deletion vector manifest entries should be updated.
+/// * index_puffin_blobs_to_remove: remote file index puffin file path, if non empty, file index manifest entries should be updated.
+///
 /// TODO(hjiang):
 /// 1. There're too many sequential IO operations to rewrite deletion vectors, need to optimize.
 /// 2. Could optimize to avoid file indices manifest file to rewrite.
 pub(crate) async fn append_puffin_metadata_and_rewrite(
     table_metadata: &TableMetadata,
     file_io: &FileIO,
-    data_files_to_remove: &HashSet<String>,
     deletion_vector_blobs_to_add: &HashMap<String, Vec<PuffinBlobMetadataProxy>>,
     file_index_blobs_to_add: &HashMap<String, Vec<PuffinBlobMetadataProxy>>,
-    puffin_blobs_to_remove: &HashSet<String>,
+    data_files_to_remove: &HashSet<String>,
+    index_puffin_blobs_to_remove: &HashSet<String>,
 ) -> IcebergResult<()> {
     if data_files_to_remove.is_empty()
         && deletion_vector_blobs_to_add.is_empty()
         && file_index_blobs_to_add.is_empty()
-        && puffin_blobs_to_remove.is_empty()
+        && index_puffin_blobs_to_remove.is_empty()
     {
         return Ok(());
     }
@@ -275,12 +280,17 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
     let mut deletion_vector_manifest_manager =
         DeletionVectorManifestManager::new(table_metadata, file_io, data_files_to_remove);
     let mut file_index_manifest_manager =
-        FileIndexManifestManager::new(table_metadata, file_io, puffin_blobs_to_remove);
+        FileIndexManifestManager::new(table_metadata, file_io, index_puffin_blobs_to_remove);
 
     // How to tell different manifest entry types:
     // - Data file: manifest content type `Data`, manifest entry file format `Parquet`
     // - Deletion vector: manifest content type `Deletes`, manifest entry file format `Puffin`
     // - File indices: manifest content type `Data`, manifest entry file format `Puffin`
+    //
+    // Precondition for manifest entries updates:
+    // - Data file: [`data_files_to_remove`] is non empty.
+    // - Deletion vector: [`deletion_vector_blobs_to_add`] is non empty, or [`data_files_to_remove`] is non empty.
+    // - File index: [`file_index_blobs_to_add`] is non empty, or [`index_puffin_blobs_to_remove`] is non empty.
     for cur_manifest_file in manifest_list.entries() {
         let manifest = cur_manifest_file.load_manifest(file_io).await?;
         let (manifest_entries, manifest_metadata) = manifest.into_parts();
@@ -288,17 +298,32 @@ pub(crate) async fn append_puffin_metadata_and_rewrite(
         // Assumption: we store all data file manifest entries in one manifest file.
         assert!(!manifest_entries.is_empty());
 
-        // For data file manifest entries, if nothing to remove we simply append the manifest file and do nothing.
-        if *manifest_metadata.content() == ManifestContentType::Data
-            && manifest_entries.first().as_ref().unwrap().file_format() == DataFileFormat::Parquet
+        // Check for data file entries, see if there're updates.
+        let manifest_entry_type =
+            manifest_utils::get_manifest_entry_type(&manifest_entries, &manifest_metadata);
+        if manifest_entry_type == ManifestEntryType::DataFile && data_files_to_remove.is_empty() {
+            manifest_list_writer.add_manifests([cur_manifest_file.clone()].into_iter())?;
+            continue;
+        }
+
+        // Check for deletion vector entries, see if there're updates.
+        if manifest_entry_type == ManifestEntryType::DeletionVector
+            && deletion_vector_blobs_to_add.is_empty()
             && data_files_to_remove.is_empty()
         {
             manifest_list_writer.add_manifests([cur_manifest_file.clone()].into_iter())?;
             continue;
         }
 
-        let manifest_entry_type =
-            manifest_utils::get_manifest_entry_type(&manifest_entries, &manifest_metadata);
+        // Check for file index entries, see if there're updates.
+        if manifest_entry_type == ManifestEntryType::FileIndex
+            && file_index_blobs_to_add.is_empty()
+            && index_puffin_blobs_to_remove.is_empty()
+        {
+            manifest_list_writer.add_manifests([cur_manifest_file.clone()].into_iter())?;
+            continue;
+        }
+
         match manifest_entry_type {
             ManifestEntryType::DataFile => {
                 data_file_manifest_manager

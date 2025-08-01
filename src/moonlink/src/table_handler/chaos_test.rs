@@ -494,6 +494,7 @@ struct TestEnvironment {
     table_handler: TableHandler,
     event_sender: mpsc::Sender<TableEvent>,
     event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
+    wal_flush_lsn_rx: watch::Receiver<u64>,
     last_commit_lsn_tx: watch::Sender<u64>,
     replication_lsn_tx: watch::Sender<u64>,
     mooncake_table_metadata: Arc<TableMetadata>,
@@ -548,6 +549,7 @@ impl TestEnvironment {
             Some(event_replay_tx),
         )
         .await;
+        let wal_flush_lsn_rx = table_event_sync_receiver.wal_flush_lsn_rx.clone();
         let table_event_manager =
             TableEventManager::new(table_handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = table_handler.get_event_sender();
@@ -562,6 +564,7 @@ impl TestEnvironment {
             table_handler,
             event_sender,
             event_replay_rx,
+            wal_flush_lsn_rx,
             replication_lsn_tx,
             last_commit_lsn_tx,
             mooncake_table_metadata,

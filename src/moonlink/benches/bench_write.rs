@@ -3,7 +3,7 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 use moonlink::row::{IdentityProp, MoonlinkRow, RowValue};
 use moonlink::{
     AccessorConfig, FileSystemAccessor, IcebergTableConfig, MooncakeTable, MooncakeTableConfig,
-    ObjectStorageCache, StorageConfig,
+    ObjectStorageCache, StorageConfig, WalConfig,
 };
 use pprof::criterion::{Output, PProfProfiler};
 use std::collections::HashMap;
@@ -64,6 +64,8 @@ fn bench_write(c: &mut Criterion) {
                 };
                 let table_config =
                     MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+                // TODO(Paul): May need to tie this to the actual mooncake table ID in the future.
+                let wal_config = WalConfig::default_wal_config_local("1", temp_dir.path());
                 let mut table = MooncakeTable::new(
                     schema.clone(),
                     "test_table".to_string(),
@@ -72,6 +74,7 @@ fn bench_write(c: &mut Criterion) {
                     IdentityProp::SinglePrimitiveKey(0),
                     iceberg_table_config,
                     table_config,
+                    wal_config,
                     ObjectStorageCache::default_for_bench(),
                     Arc::new(FileSystemAccessor::new(
                         AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
@@ -108,6 +111,8 @@ fn bench_write(c: &mut Criterion) {
                 };
                 let table_config =
                     MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+                // TODO(Paul): May need to tie this to the actual mooncake table ID in the future.
+                let wal_config = WalConfig::default_wal_config_local("1", temp_dir.path());
                 let mut table = MooncakeTable::new(
                     schema.clone(),
                     "test_table".to_string(),
@@ -116,6 +121,7 @@ fn bench_write(c: &mut Criterion) {
                     IdentityProp::SinglePrimitiveKey(0),
                     iceberg_table_config,
                     table_config,
+                    wal_config,
                     ObjectStorageCache::default_for_bench(),
                     Arc::new(FileSystemAccessor::new(
                         AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
@@ -155,6 +161,8 @@ fn bench_write(c: &mut Criterion) {
                 };
                 let table_config =
                     MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+                // TODO(Paul): May need to tie this to the actual mooncake table ID in the future.
+                let wal_config = WalConfig::default_wal_config_local("1", temp_dir.path());
                 let mut table = rt
                     .block_on(MooncakeTable::new(
                         schema.clone(),
@@ -164,6 +172,7 @@ fn bench_write(c: &mut Criterion) {
                         IdentityProp::SinglePrimitiveKey(0),
                         iceberg_table_config,
                         table_config,
+                        wal_config,
                         ObjectStorageCache::default_for_bench(),
                         Arc::new(FileSystemAccessor::new(
                             AccessorConfig::new_with_storage_config(StorageConfig::FileSystem {
@@ -181,8 +190,7 @@ fn bench_write(c: &mut Criterion) {
                             1,
                         );
                     }
-                    let handle = table.flush_transaction_stream(1);
-                    handle.await.unwrap();
+                    table.flush_stream(1, None).await.unwrap();
                 });
                 table
             },
@@ -198,8 +206,7 @@ fn bench_write(c: &mut Criterion) {
                             )
                             .await;
                     }
-                    let handle = table.flush_transaction_stream(1);
-                    handle.await.unwrap();
+                    table.flush_stream(1, None).await.unwrap();
                     //let handle = table.create_snapshot();
                     //let _ = handle.unwrap().await.unwrap();
                 });
