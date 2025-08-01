@@ -2,7 +2,7 @@ use crate::create_data_file;
 use crate::storage::async_bitwriter::BitWriter as AsyncBitWriter;
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 use crate::NonEvictableHandle;
-use futures::executor::block_on;
+use bitstream_io::{BigEndian, BitRead, BitReader};
 use memmap2::Mmap;
 use std::collections::{BinaryHeap, HashSet};
 use std::fmt::Debug;
@@ -13,10 +13,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::{fmt, vec};
 use tokio::fs::File as AsyncFile;
-use tokio_bitstream_io::{
-    BigEndian as AsyncBigEndian,
-};
-use bitstream_io::{BigEndian, BitRead, BitReader};
+use tokio_bitstream_io::BigEndian as AsyncBigEndian;
 
 // Constants
 const HASH_BITS: u32 = 64;
@@ -136,8 +133,12 @@ impl IndexBlock {
                     (bucket_idx * metadata.bucket_bits) as u64 + self.bucket_start_offset,
                 ))
                 .unwrap();
-            let start = reader.read_unsigned_var::<u32>(metadata.bucket_bits).unwrap();
-            let end = reader.read_unsigned_var::<u32>(metadata.bucket_bits).unwrap();
+            let start = reader
+                .read_unsigned_var::<u32>(metadata.bucket_bits)
+                .unwrap();
+            let end = reader
+                .read_unsigned_var::<u32>(metadata.bucket_bits)
+                .unwrap();
             if start != end {
                 results.push(BucketEntry {
                     upper_hash: (*bucket_idx as u64) << metadata.hash_lower_bits,
@@ -155,9 +156,15 @@ impl IndexBlock {
         reader: &mut BitReader<Cursor<&[u8]>, BigEndian>,
         metadata: &GlobalIndex,
     ) -> (u64, usize, usize) {
-        let hash = reader.read_unsigned_var::<u64>(metadata.hash_lower_bits).unwrap();
-        let seg_idx = reader.read_unsigned_var::<u32>(metadata.seg_id_bits).unwrap();
-        let row_idx = reader.read_unsigned_var::<u32>(metadata.row_id_bits).unwrap();
+        let hash = reader
+            .read_unsigned_var::<u64>(metadata.hash_lower_bits)
+            .unwrap();
+        let seg_idx = reader
+            .read_unsigned_var::<u32>(metadata.seg_id_bits)
+            .unwrap();
+        let row_idx = reader
+            .read_unsigned_var::<u32>(metadata.row_id_bits)
+            .unwrap();
         (hash, seg_idx as usize, row_idx as usize)
     }
 
@@ -173,8 +180,7 @@ impl IndexBlock {
         bucket_idxs.dedup();
         let entries = self.read_buckets(&bucket_idxs, &mut reader, metadata);
         let mut results = Vec::new();
-        let mut lookup_iter =
-            LookupIterator::new(self, metadata, &mut entry_reader, &entries);
+        let mut lookup_iter = LookupIterator::new(self, metadata, &mut entry_reader, &entries);
         let mut i = 0;
         let mut lookup_entry = lookup_iter.next();
         while let Some((entry_hash, seg_idx, row_idx)) = lookup_entry {
@@ -242,9 +248,8 @@ impl<'a> LookupIterator<'a> {
                 return None;
             }
             if self.current_entry < self.entries[self.current_bucket].entry_end {
-                let (lower_hash, seg_idx, row_idx) = self
-                    .index
-                    .read_entry(self.entry_reader, self.metadata);
+                let (lower_hash, seg_idx, row_idx) =
+                    self.index.read_entry(self.entry_reader, self.metadata);
                 self.current_entry += 1;
                 return Some((
                     lower_hash | self.entries[self.current_bucket].upper_hash,
@@ -284,22 +289,16 @@ impl GlobalIndex {
             while end_idx < upper_hashes.len() && upper_hashes[end_idx] < block.bucket_end_idx {
                 end_idx += 1;
             }
-            results.extend(
-                block
-                    .read(
-                        &value_and_hashes[start_idx..end_idx],
-                        upper_hashes[start_idx..end_idx].to_vec(),
-                        self,
-                    )
-            );
+            results.extend(block.read(
+                &value_and_hashes[start_idx..end_idx],
+                upper_hashes[start_idx..end_idx].to_vec(),
+                self,
+            ));
         }
         results
     }
 
-    pub fn create_iterator<'a>(
-        &'a self,
-        file_id_remap: &'a Vec<u32>,
-    ) -> GlobalIndexIterator<'a> {
+    pub fn create_iterator<'a>(&'a self, file_id_remap: &'a Vec<u32>) -> GlobalIndexIterator<'a> {
         GlobalIndexIterator::new(self, file_id_remap)
     }
 
@@ -535,7 +534,6 @@ impl GlobalIndexBuilder {
         self.build_from_merging_iterator(merge_iter, file_id).await
     }
 
-    #[tracing::instrument(name = "index_merge", skip_all)]
     async fn build_from_merging_iterator(
         mut self,
         mut iter: GlobalIndexMergingIterator<'_>,
@@ -581,8 +579,6 @@ impl GlobalIndexBuilder {
         GetRemappedRecLoc: FnMut(RecordLocation) -> Option<RecordLocation>,
         GetSegIdx: FnMut(RecordLocation) -> usize, /*seg_idx*/
     {
-       // let guard = pprof::ProfilerGuard::new(100).unwrap();
-
         // Assign data files before compaction, used to compose old record location and look it up with [`get_remapped_record_location`] and new record location after compaction.
         self.files = indices
             .iter()
@@ -596,24 +592,16 @@ impl GlobalIndexBuilder {
             iters.push(index.create_iterator(&file_id_remaps[idx]));
         }
         let merge_iter = GlobalIndexMergingIterator::new(iters);
-        let x = self.build_from_merging_iterator_with_predicate(
+        self.build_from_merging_iterator_with_predicate(
             file_id,
             merge_iter,
             new_data_files,
             get_remapped_record_location,
             get_seg_idx,
         )
-        .await;
-
-        // if let Ok(report) = guard.report().build() {
-        //     let file = std::fs::File::create("/tmp/flamegraph.svg").unwrap();
-        //     report.flamegraph(file).unwrap();
-        // }
-
-        x
+        .await
     }
 
-    #[tracing::instrument(name = "index_merge", skip_all)]
     async fn build_from_merging_iterator_with_predicate<GetRemappedRecLoc, GetSegIdx>(
         mut self,
         file_id: u64,
@@ -754,10 +742,7 @@ impl<'a> GlobalIndexIterator<'a> {
         let mut block_iter = None;
         let block_idx = 0;
         if !index.index_blocks.is_empty() {
-            block_iter = Some(
-                index.index_blocks[0]
-                    .create_iterator(index, file_id_remap)
-            );
+            block_iter = Some(index.index_blocks[0].create_iterator(index, file_id_remap));
         }
         Self {
             index,
@@ -767,7 +752,6 @@ impl<'a> GlobalIndexIterator<'a> {
         }
     }
 
-    #[tracing::instrument(name = "index_iter_next", skip_all)]
     pub fn next(
         &mut self,
     ) -> Option<(
@@ -787,7 +771,7 @@ impl<'a> GlobalIndexIterator<'a> {
             }
             self.block_iter = Some(
                 self.index.index_blocks[self.block_idx]
-                    .create_iterator(self.index, self.file_id_remap)
+                    .create_iterator(self.index, self.file_id_remap),
             );
         }
     }
@@ -826,7 +810,6 @@ impl Ord for HeapItem<'_> {
 }
 
 impl<'a> GlobalIndexMergingIterator<'a> {
-    #[tracing::instrument(name = "merge_iter_new", skip_all)]
     pub fn new(iterators: Vec<GlobalIndexIterator<'a>>) -> Self {
         let mut heap = BinaryHeap::new();
         for mut it in iterators {
@@ -837,7 +820,6 @@ impl<'a> GlobalIndexMergingIterator<'a> {
         Self { heap }
     }
 
-    #[tracing::instrument(name = "merge_iter_next", skip_all)]
     pub fn next(&mut self) -> Option<(u64, usize, usize)> {
         if let Some(mut heap_item) = self.heap.pop() {
             let result = heap_item.value;
@@ -868,9 +850,13 @@ impl IndexBlock {
         let mut reader = BitReader::endian(cursor, BigEndian);
         write!(f, "\n   Buckets: ")?;
         let mut num = 0;
-        reader.seek_bits(SeekFrom::Start(self.bucket_start_offset)).unwrap();
+        reader
+            .seek_bits(SeekFrom::Start(self.bucket_start_offset))
+            .unwrap();
         for _i in 0..self.bucket_end_idx {
-            num = reader.read_unsigned_var::<u32>(metadata.bucket_bits).unwrap();
+            num = reader
+                .read_unsigned_var::<u32>(metadata.bucket_bits)
+                .unwrap();
             write!(f, "{num} ")?;
         }
         write!(f, "\n   Entries: ")?;
@@ -956,8 +942,8 @@ mod tests {
         let mut hash_entry_num = 0;
         let file_id_remap = vec![0; index.files.len()];
         for block in index.index_blocks.iter() {
-            let mut index_block_iter = block.create_iterator(&index, &file_id_remap).await;
-            while let Some((hash, seg_idx, row_idx)) = index_block_iter.next().await {
+            let mut index_block_iter = block.create_iterator(&index, &file_id_remap);
+            while let Some((hash, seg_idx, row_idx)) = index_block_iter.next() {
                 debug!(?hash, seg_idx, row_idx, "index entry");
                 hash_entry_num += 1;
             }

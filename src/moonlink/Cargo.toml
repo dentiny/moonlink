@@ -45,6 +45,7 @@ async-trait = { workspace = true }
 backon = { workspace = true }
 base64 = { version = "0.22", optional = true }
 bincode = { workspace = true }
+bitstream-io = { workspace = true }
 chrono = { workspace = true }
 crc32fast = { workspace = true }
 fastbloom = { workspace = true }
@@ -74,10 +75,6 @@ tracing = "0.1"
 typed-builder = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
-flame = "0.2"
-flamegraph = "0.6"
-bitstream-io = { workspace = true }
-pprof = { version = "0.14", features = ["flamegraph"] }
 
 [dev-dependencies]
 criterion = "0.5.1"

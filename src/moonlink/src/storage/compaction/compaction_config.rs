@@ -27,18 +27,18 @@ impl DataCompactionConfig {
     pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = u64::MAX;
 
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_MIN_DATA_FILE_TO_COMPACT: u32 = u32::MAX;
+    pub const DEFAULT_MIN_DATA_FILE_TO_COMPACT: u32 = 4;
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_MAX_DATA_FILE_TO_COMPACT: u32 = u32::MAX;
+    pub const DEFAULT_MAX_DATA_FILE_TO_COMPACT: u32 = 8;
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = u64::MAX;
+    pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = 1 << 10; // 1KiB
 
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_MIN_DATA_FILE_TO_COMPACT: u32 = u32::MAX;
+    pub const DEFAULT_MIN_DATA_FILE_TO_COMPACT: u32 = 16;
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_MAX_DATA_FILE_TO_COMPACT: u32 = u32::MAX;
+    pub const DEFAULT_MAX_DATA_FILE_TO_COMPACT: u32 = 32;
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = u64::MAX;
+    pub const DEFAULT_DATA_FILE_FINAL_SIZE: u64 = 1 << 29; // 512MiB
 
     pub fn default_min_data_file_to_compact() -> u32 {
         Self::DEFAULT_MIN_DATA_FILE_TO_COMPACT

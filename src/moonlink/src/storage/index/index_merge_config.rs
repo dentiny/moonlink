@@ -29,18 +29,18 @@ impl FileIndexMergeConfig {
     pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = u64::MAX;
 
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
+    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = 4;
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
+    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = 8;
     #[cfg(all(not(test), debug_assertions))]
-    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = u64::MAX;
+    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = 1 << 10; // 1KiB
 
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
+    pub const DEFAULT_MIN_FILE_INDICES_TO_MERGE: u32 = 16;
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = u32::MAX;
+    pub const DEFAULT_MAX_FILE_INDICES_TO_MERGE: u32 = 32;
     #[cfg(all(not(test), not(debug_assertions)))]
-    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = u64::MAX;
+    pub const DEFAULT_INDEX_BLOCK_FINAL_SIZE: u64 = 1 << 29; // 512MiB
 
     pub fn default_min_file_indices_to_merge() -> u32 {
         Self::DEFAULT_MIN_FILE_INDICES_TO_MERGE
