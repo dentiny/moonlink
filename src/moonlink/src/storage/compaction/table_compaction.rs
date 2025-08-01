@@ -1,3 +1,4 @@
+use crate::storage::compaction::compactor::DataFileCompactionRemap;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
@@ -99,7 +100,7 @@ pub struct DataCompactionResult {
     /// UUID for current compaction operation, used for observability purpose.
     pub(crate) uuid: uuid::Uuid,
     /// Data files which get compacted, maps from old record location to new one.
-    pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
+    pub(crate) remapped_data_files: DataFileCompactionRemap,
     /// Old compacted data files, which maps to their corresponding compacted data file.
     pub(crate) old_data_files: HashSet<MooncakeDataFileRef>,
     /// New compacted data files.
@@ -136,7 +137,7 @@ impl std::fmt::Debug for DataCompactionResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DataCompactionResult")
             .field("uuid", &self.uuid)
-            .field("remapped data files count", &self.remapped_data_files.len())
+            .field("remapped data files count", &self.remapped_data_files.get_num_rows())
             .field("old data files count", &self.old_data_files.len())
             .field("old file indices count", &self.old_file_indices.len())
             .field("new data files count", &self.new_data_files.len())

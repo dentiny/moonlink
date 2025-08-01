@@ -26,7 +26,34 @@ use crate::storage::storage_utils::{FileId, RecordLocation};
 use crate::storage::{parquet_utils, storage_utils};
 use crate::{create_data_file, Result};
 
-type DataFileRemap = HashMap<RecordLocation, RemappedRecordLocation>;
+type FlatDataFileCompactionRemap = Vec<Option<RemappedRecordLocation>>;
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct DataFileCompactionRemap {
+    /// Number of total number of rows after compaction.
+    num_rows: usize,
+    /// Remap after compaction, from file id, to record location in the compacted files.
+    remap: HashMap<FileId, FlatDataFileCompactionRemap>,
+}
+
+impl DataFileCompactionRemap {
+    /// Return whether there's no valid rows after compaction.
+    pub fn is_empty(&self) -> bool {
+        self.num_rows == 0
+    }
+
+    /// Return number of valid rows after compaction.
+    pub fn get_num_rows(&self) -> usize {
+        self.num_rows
+    }
+
+    /// Get remapped record location after compaction.
+    pub fn get_remapped_record_location(&self, record_loc: &RecordLocation) -> Option<RemappedRecordLocation> {
+        let old_file_id = record_loc.get_file_id().unwrap();
+        let old_row_idx = record_loc.get_row_idx();
+        let remapped_record_loc = self.remap.get(&old_file_id).unwrap().get(old_row_idx).unwrap();
+        remapped_record_loc.clone()
+    }
+}
 
 pub(crate) struct CompactionFileParams {
     /// Local directory to place compacted data files.
@@ -61,14 +88,17 @@ pub(crate) struct CompactionBuilder {
 /// Result for data file compaction.
 #[derive(Clone, Debug)]
 struct DataFileCompactionResult {
-    /// Mapping from record locations before compaction to record locations after compaction.
-    data_file_remap: DataFileRemap,
+    /// Maps from old compacted file id to flat data file remap.
+    /// The flat data file remap records new locations after compaction, index-ed by row index.
+    /// Rows which are deleted are mapped to [`None`] in the flat remap.
+    /// Invariant: for each flat data file remap, its length is equal to the number of rows in the data file.
+    data_file_remap: DataFileCompactionRemap,
     /// Cache evicted files to delete.
     evicted_files_to_delete: Vec<String>,
 }
 
 impl DataFileCompactionResult {
-    fn into_parts(self) -> (DataFileRemap, Vec<String>) {
+    fn into_parts(self) -> (DataFileCompactionRemap, Vec<String>) {
         (self.data_file_remap, self.evicted_files_to_delete)
     }
 }
@@ -220,7 +250,7 @@ impl CompactionBuilder {
         };
 
         let mut old_start_row_idx = 0;
-        let mut old_to_new_remap = HashMap::new();
+        let mut old_to_new_remap = FlatDataFileCompactionRemap::with_capacity(total_num_rows);
         while let Some(cur_record_batch) = reader.try_next().await? {
             // If all rows have been deleted for the old data file, do nothing.
             let cur_num_rows = cur_record_batch.num_rows();
@@ -228,6 +258,7 @@ impl CompactionBuilder {
                 get_filtered_record_batch(cur_record_batch, old_start_row_idx);
             if filtered_record_batch.num_rows() == 0 {
                 old_start_row_idx += cur_num_rows;
+                old_to_new_remap.extend(std::iter::repeat(None).take(cur_num_rows));
                 continue;
             }
 
@@ -239,14 +270,11 @@ impl CompactionBuilder {
                 .await?;
 
             // Construct old data file to new one mapping on-the-fly.
-            old_to_new_remap.reserve(old_to_new_remap.len() + cur_num_rows);
-
             for old_row_idx in old_start_row_idx..(old_start_row_idx + cur_num_rows) {
                 if batch_deletion_vector.is_deleted(old_row_idx) {
+                    old_to_new_remap.push(None);
                     continue;
                 }
-                let old_record_location =
-                    RecordLocation::DiskFile(data_file_to_compact.file_id.file_id, old_row_idx);
                 let new_record_location = RecordLocation::DiskFile(
                     self.cur_new_data_file.as_ref().unwrap().file_id(),
                     self.cur_row_num,
@@ -256,9 +284,7 @@ impl CompactionBuilder {
                     record_location: new_record_location,
                     new_data_file: self.cur_new_data_file.as_ref().unwrap().clone(),
                 };
-                let old_entry =
-                    old_to_new_remap.insert(old_record_location, remapped_record_location);
-                assert!(old_entry.is_none());
+                old_to_new_remap.push(Some(remapped_record_location));
                 self.cur_row_num += 1;
             }
 
@@ -284,9 +310,15 @@ impl CompactionBuilder {
         let expected_compacted_num_rows = total_num_rows - deleted_rows_num;
         let actual_compacted_num_rows = old_to_new_remap.len();
         assert_eq!(expected_compacted_num_rows, actual_compacted_num_rows);
+        // Sanity check on remap size.
+        assert_eq!(old_to_new_remap.len(), total_num_rows);
 
+        let data_file_compaction_remap = DataFileCompactionRemap {
+            num_rows: actual_compacted_num_rows,
+            remap: HashMap::<FileId, FlatDataFileCompactionRemap>::from([(data_file_to_compact.file_id.file_id, old_to_new_remap)]),
+        };
         let data_file_compaction_result = DataFileCompactionResult {
-            data_file_remap: old_to_new_remap,
+            data_file_remap: data_file_compaction_remap,
             evicted_files_to_delete,
         };
 
@@ -300,16 +332,21 @@ impl CompactionBuilder {
 
         let disk_files = std::mem::take(&mut self.compaction_payload.disk_files);
         let mut evicted_files_to_delete = vec![];
+        let mut total_num_rows = 0; // Total number of valid rows after compaction. 
         for single_file_to_compact in disk_files.into_iter() {
             let data_file_compaction_result = self
                 .apply_deletion_vector_and_write(single_file_to_compact)
                 .await?;
+            total_num_rows += data_file_compaction_result.data_file_remap.num_rows;
             evicted_files_to_delete.extend(data_file_compaction_result.evicted_files_to_delete);
-            old_to_new_remap.extend(data_file_compaction_result.data_file_remap);
+            old_to_new_remap.extend(data_file_compaction_result.data_file_remap.remap);
         }
 
         let data_file_compaction_result = DataFileCompactionResult {
-            data_file_remap: old_to_new_remap,
+            data_file_remap: DataFileCompactionRemap {
+                num_rows: total_num_rows,
+                remap: old_to_new_remap,
+            },
             evicted_files_to_delete,
         };
         Ok(data_file_compaction_result)
@@ -332,12 +369,12 @@ impl CompactionBuilder {
     async fn compact_file_indices(
         &mut self,
         old_file_indices: Vec<FileIndex>,
-        old_to_new_remap: &HashMap<RecordLocation, RemappedRecordLocation>,
+        data_file_compaction_remap: &DataFileCompactionRemap,
     ) -> FileIndex {
         let get_remapped_record_location =
             |old_record_location: RecordLocation| -> Option<RecordLocation> {
-                if let Some(remapped_record_location) = old_to_new_remap.get(&old_record_location) {
-                    return Some(remapped_record_location.record_location.clone());
+                if let Some(remapped_record_loc) = data_file_compaction_remap.get_remapped_record_location(&old_record_location) {
+                    return Some(remapped_record_loc.record_location);
                 }
                 None
             };
@@ -355,7 +392,7 @@ impl CompactionBuilder {
         global_index_builder.set_directory(self.file_params.dir_path.clone());
         global_index_builder
             .build_from_merge_for_compaction(
-                /*num_rows=*/ old_to_new_remap.len() as u32,
+                data_file_compaction_remap.num_rows as u32,
                 /*file_id=*/ file_id_for_index_file,
                 old_file_indices,
                 /*new_data_files=*/ self.get_new_compacted_data_files(),
@@ -387,14 +424,14 @@ impl CompactionBuilder {
             .cloned()
             .collect::<HashSet<_>>();
         let data_file_compaction_result = self.compact_data_files().await?;
-        let (old_record_loc_to_new_mapping, evicted_files_to_delete) =
+        let (data_file_compaction_remap, evicted_files_to_delete) =
             data_file_compaction_result.into_parts();
 
         // All rows have been deleted.
-        if old_record_loc_to_new_mapping.is_empty() {
+        if data_file_compaction_remap.is_empty() {
             return Ok(DataCompactionResult {
                 uuid: self.compaction_payload.uuid,
-                remapped_data_files: old_record_loc_to_new_mapping,
+                remapped_data_files: data_file_compaction_remap,
                 old_data_files,
                 old_file_indices,
                 new_data_files: Vec::new(),
@@ -412,13 +449,13 @@ impl CompactionBuilder {
         let new_file_indices = self
             .compact_file_indices(
                 self.compaction_payload.file_indices.clone(),
-                &old_record_loc_to_new_mapping,
+                &data_file_compaction_remap,
             )
             .await;
 
         Ok(DataCompactionResult {
             uuid: self.compaction_payload.uuid,
-            remapped_data_files: old_record_loc_to_new_mapping,
+            remapped_data_files: data_file_compaction_remap,
             old_data_files,
             old_file_indices,
             new_data_files: self.new_data_files,

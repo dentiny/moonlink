@@ -23,7 +23,7 @@ fn remap_record_location_after_compaction(
     let remapped_data_files_after_compaction = &mut task.data_compaction_result;
     let new_record_location = remapped_data_files_after_compaction
         .remapped_data_files
-        .remove(old_record_location);
+        .get_remapped_record_location(old_record_location);
     if new_record_location.is_none() {
         return false;
     }

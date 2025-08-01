@@ -9,6 +9,7 @@ use crate::storage::cache::object_storage::base_cache::{
     CacheEntry as DataFileCacheEntry, CacheTrait, FileMetadata,
 };
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
+use crate::storage::compaction::compactor::DataFileCompactionRemap;
 use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
@@ -317,7 +318,7 @@ impl SnapshotTableState {
         &mut self,
         old_data_files: HashSet<MooncakeDataFileRef>,
         new_data_files: Vec<(MooncakeDataFileRef, CompactedDataEntry)>,
-        remapped_data_files_after_compaction: HashMap<RecordLocation, RemappedRecordLocation>,
+        remapped_data_files_after_compaction: DataFileCompactionRemap,
     ) -> Vec<String> {
         if old_data_files.is_empty() {
             assert!(new_data_files.is_empty());
@@ -409,7 +410,7 @@ impl SnapshotTableState {
                 let old_record_location =
                     RecordLocation::DiskFile(cur_old_data_file.file_id(), cur_deleted_row as usize);
                 let new_record_location =
-                    remapped_data_files_after_compaction.get(&old_record_location);
+                    remapped_data_files_after_compaction.get_remapped_record_location(&old_record_location);
                 // Case-1: The old record still exists, need to remap.
                 if let Some(new_record_location) = new_record_location {
                     let new_deletion_entry = self
