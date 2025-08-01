@@ -428,6 +428,22 @@ impl SnapshotTableState {
         evicted_files_to_delete
     }
 
+    fn get_expected_disk_files_count(&self, task: &SnapshotTask) -> usize {
+        self.current_snapshot.disk_files.len()
+            + task.new_disk_slices.iter().map(|cur_disk_slice| cur_disk_slice.output_files().len()).sum::<usize>() // new persisted files by non-streaming committed transactions
+            + task.new_streaming_xact.iter().map(|cur_txn| cur_txn.get_committed_persisted_disk_count()).sum::<usize>() // new persisted files files by streaming committed transactions
+            - task.data_compaction_result.old_data_files.len() // old data files before compaction
+            + task.data_compaction_result.new_data_files.len() // new data files after compaction
+    }
+    fn get_expected_file_indices_count(&self, task: &SnapshotTask) -> usize {
+        self.current_snapshot.indices.file_indices.len()
+            + task.get_new_file_indices().len() // committed file indices, including streaming and non-streaming
+            - task.index_merge_result.old_file_indices.len() // old file indices before index merge
+            + task.index_merge_result.new_file_indices.len() // new file indices after index merge
+            - task.data_compaction_result.old_file_indices.len() // old file indices before index merge
+            + task.data_compaction_result.new_file_indices.len() // new file indices after index merge
+    }
+
     pub(super) async fn update_snapshot(
         &mut self,
         mut task: SnapshotTask,
@@ -440,20 +456,9 @@ impl SnapshotTableState {
             .validate_imported_files_remote(&self.iceberg_warehouse_location);
 
         // Calculate the expected disk files number after current snapshot update.
-        let expected_disk_files_count = self.current_snapshot.disk_files.len()
-            + task.new_disk_slices.iter().map(|cur_disk_slice| cur_disk_slice.output_files().len()).sum::<usize>() // new persisted files by non-streaming committed transactions
-            + task.new_streaming_xact.iter().map(|cur_txn| cur_txn.get_committed_persisted_disk_count()).sum::<usize>() // new persisted files files by streaming committed transactions
-            - task.data_compaction_result.old_data_files.len() // old data files before compaction
-            + task.data_compaction_result.new_data_files.len() // new data files after compaction
-            ;
+        let expected_disk_files_count = self.get_expected_disk_files_count(&task);
         // Calculate the expected file indices number after current snapshot update.
-        let expected_file_indices_count = self.current_snapshot.indices.file_indices.len()
-            + task.get_new_file_indices().len() // committed file indices, including streaming and non-streaming
-            - task.index_merge_result.old_file_indices.len() // old file indices before index merge
-            + task.index_merge_result.new_file_indices.len() // new file indices after index merge
-            - task.data_compaction_result.old_file_indices.len() // old file indices before index merge
-            + task.data_compaction_result.new_file_indices.len() // new file indices after index merge
-            ;
+        let expected_file_indices_count = self.get_expected_file_indices_count(&task);
 
         // All evicted data files by the object storage cache.
         let mut evicted_data_files_to_delete = vec![];
