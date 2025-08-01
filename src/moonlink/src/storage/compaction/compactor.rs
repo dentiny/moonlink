@@ -59,6 +59,7 @@ pub(crate) struct CompactionBuilder {
 }
 
 /// Result for data file compaction.
+#[derive(Clone, Debug)]
 struct DataFileCompactionResult {
     /// Mapping from record locations before compaction to record locations after compaction.
     data_file_remap: DataFileRemap,
@@ -218,6 +219,7 @@ impl CompactionBuilder {
             let filtered_record_batch =
                 get_filtered_record_batch(cur_record_batch, old_start_row_idx);
             if filtered_record_batch.num_rows() == 0 {
+                old_start_row_idx += cur_num_rows;
                 continue;
             }
 
