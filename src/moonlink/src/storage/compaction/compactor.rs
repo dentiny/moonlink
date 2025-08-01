@@ -3,6 +3,7 @@
 
 use std::collections::{HashMap, HashSet};
 
+use ahash::HashMapExt;
 use arrow_array::RecordBatch;
 use arrow_schema::SchemaRef;
 use futures::TryStreamExt;
@@ -26,7 +27,9 @@ use crate::storage::storage_utils::{
 use crate::storage::{parquet_utils, storage_utils};
 use crate::{create_data_file, Result};
 
-type DataFileRemap = HashMap<RecordLocation, RemappedRecordLocation>;
+pub type Hasher = std::hash::BuildHasherDefault<ahash::AHasher>;
+pub type DataFileRemap = HashMap<RecordLocation, RemappedRecordLocation, Hasher>;
+pub type RecordLocToDataFile = HashMap<RecordLocation, u64, Hasher>;
 
 pub(crate) struct CompactionFileParams {
     /// Local directory to place compacted data files.
@@ -66,11 +69,11 @@ struct DataFileCompactionResult {
     /// Cache evicted files to delete.
     evicted_files_to_delete: Vec<String>,
     /// Mapping from record location to data file index (i.e. idx-th data file after compaction).
-    record_loc_to_data_file_index: HashMap<RecordLocation, u64>,
+    record_loc_to_data_file_index: RecordLocToDataFile,
 }
 
 impl DataFileCompactionResult {
-    fn into_parts(self) -> (DataFileRemap, Vec<String>, HashMap<RecordLocation, u64>) {
+    fn into_parts(self) -> (DataFileRemap, Vec<String>, RecordLocToDataFile) {
         (
             self.data_file_remap,
             self.evicted_files_to_delete,
@@ -218,8 +221,8 @@ impl CompactionBuilder {
         };
 
         let mut old_start_row_idx = 0;
-        let mut old_to_new_remap = HashMap::new();
-        let mut record_loc_to_data_file_index_map = HashMap::new();
+        let mut old_to_new_remap = DataFileRemap::new();
+        let mut record_loc_to_data_file_index_map = RecordLocToDataFile::new();
         while let Some(cur_record_batch) = reader.try_next().await? {
             // If all rows have been deleted for the old data file, do nothing.
             let cur_num_rows = cur_record_batch.num_rows();
@@ -300,8 +303,8 @@ impl CompactionBuilder {
     /// Util function to compact the given data files, with their corresponding deletion vector applied.
     #[tracing::instrument(name = "compact_data_files", skip_all)]
     async fn compact_data_files(&mut self) -> Result<DataFileCompactionResult> {
-        let mut old_to_new_remap = HashMap::new();
-        let mut record_loc_to_data_file_index_map = HashMap::new();
+        let mut old_to_new_remap = DataFileRemap::new();
+        let mut record_loc_to_data_file_index_map = RecordLocToDataFile::new();
 
         let disk_files = std::mem::take(&mut self.compaction_payload.disk_files);
         let mut evicted_files_to_delete = vec![];
@@ -340,8 +343,8 @@ impl CompactionBuilder {
     async fn compact_file_indices(
         &mut self,
         old_file_indices: Vec<FileIndex>,
-        old_to_new_remap: &HashMap<RecordLocation, RemappedRecordLocation>,
-        record_loc_to_data_file_index: &HashMap<RecordLocation, u64>,
+        old_to_new_remap: &DataFileRemap,
+        record_loc_to_data_file_index: &RecordLocToDataFile,
     ) -> FileIndex {
         let get_remapped_record_location =
             |old_record_location: RecordLocation| -> Option<RecordLocation> {

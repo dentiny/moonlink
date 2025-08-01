@@ -1,3 +1,4 @@
+use crate::storage::compaction::compactor::DataFileRemap;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
@@ -7,7 +8,6 @@ use crate::storage::storage_utils::TableUniqueFileId;
 use crate::ObjectStorageCache;
 
 use std::borrow::Borrow;
-use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -99,7 +99,7 @@ pub struct DataCompactionResult {
     /// UUID for current compaction operation, used for observability purpose.
     pub(crate) uuid: uuid::Uuid,
     /// Data files which get compacted, maps from old record location to new one.
-    pub(crate) remapped_data_files: HashMap<RecordLocation, RemappedRecordLocation>,
+    pub(crate) remapped_data_files: DataFileRemap,
     /// Old compacted data files, which maps to their corresponding compacted data file.
     pub(crate) old_data_files: HashSet<MooncakeDataFileRef>,
     /// New compacted data files.
