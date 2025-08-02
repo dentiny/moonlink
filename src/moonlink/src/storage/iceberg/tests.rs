@@ -364,8 +364,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         .await
         .unwrap();
 
-    println!("step 1 finished");
-
     // ==============
     // Step 2
     // ==============
@@ -461,8 +459,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         assert_eq!(deleted_rows, vec![0],);
     }
 
-    println!("step 2 fnished");
-
     // ==============
     // Step 3
     // ==============
@@ -556,8 +552,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     .await;
     let compacted_file_index = create_file_index(vec![compacted_data_file.clone()]);
 
-    println!("step 3 finished");
-
     // ==============
     // Step 4
     // ==============
@@ -628,9 +622,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         filesystem_accessor.as_ref(),
     )
     .await;
-
-
-    println!("step 4 finsihed");
 
     // ==============
     // Step 5

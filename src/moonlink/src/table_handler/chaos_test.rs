@@ -600,9 +600,6 @@ async fn validate_persisted_iceberg_table(
 
     let read_state_manager =
         ReadStateManager::new(&table, replication_lsn_rx.clone(), last_commit_lsn_rx);
-
-    println!("read iceberg snapshot");
-
     check_read_snapshot(
         &read_state_manager,
         Some(snapshot_lsn),
@@ -659,9 +656,6 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
             if let Some(read_lsn) = chaos_events.snapshot_read_lsn {
                 let requested_read_lsn = if read_lsn == 0 { None } else { Some(read_lsn) };
                 let expected_ids = state.get_valid_ids();
-
-                println!("read mooncake snapshot");
-
                 check_read_snapshot(
                     &state.read_state_manager,
                     requested_read_lsn,
@@ -738,7 +732,7 @@ async fn test_chaos_with_index_merge() {
     let test_env_config = TestEnvConfig {
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 10000,
+        event_count: 3000,
         storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;

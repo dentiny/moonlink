@@ -764,9 +764,6 @@ async fn test_compaction_2_2_2() {
     let injected_uncommitted_deletion_rows = vec![
         (rows[3].clone(), /*lsn=*/ 7), // Belong to the second data file.
     ];
-
-    println!("before first snapshot!!");
-        
     create_mooncake_and_persist_for_data_compaction_for_test(
         &mut table,
         &mut receiver,
@@ -774,8 +771,6 @@ async fn test_compaction_2_2_2() {
         injected_uncommitted_deletion_rows,
     )
     .await;
-
-    println!("\n\nfirst!!!!============");
 
     // Check iceberg snapshot status.
     let (next_file_id, snapshot) = iceberg_table_manager_to_load
@@ -797,8 +792,6 @@ async fn test_compaction_2_2_2() {
         filesystem_accessor.as_ref(),
     )
     .await;
-
-    println!("\n\n-----??????-----------\n\n");
 
     // Check disk files for the current mooncake snapshot.
     let disk_files = get_disk_files_for_table(&table).await;

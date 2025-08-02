@@ -144,9 +144,6 @@ impl SnapshotTableState {
             RecordLocation::MemoryBatch(_, _)
         ));
         let (batch_id, row_id) = self.last_commit.clone().into();
-
-        println!("batch id = {}, row id = {}, batch size = {}", batch_id, row_id, self.batches.len());
-
         if batch_id > 0 || row_id > 0 {
             // add all batches
             let mut filtered_batches = Vec::new();
