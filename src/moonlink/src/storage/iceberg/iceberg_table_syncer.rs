@@ -194,7 +194,6 @@ impl IcebergTableManager {
                     deletion_vector: BatchDeletionVector::new(
                         max_rows.unwrap_or(UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW),
                     ),
-                    persisted_deletion_vector: None,
                 },
             );
             assert!(old_entry.is_none());
