@@ -295,7 +295,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
 
     // Local filesystem to store read-through cache.
     let cache_temp_dir = tempdir().unwrap();
-    let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
 
     // ==============
@@ -305,7 +304,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // At the beginning of the test, there's nothing in table.
     let mut iceberg_table_manager = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate object storage cache.
         create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
@@ -364,6 +363,8 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
         .await
         .unwrap();
+
+    println!("step 1 finished");
 
     // ==============
     // Step 2
@@ -460,6 +461,8 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         assert_eq!(deleted_rows, vec![0],);
     }
 
+    println!("step 2 fnished");
+
     // ==============
     // Step 3
     // ==============
@@ -502,7 +505,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Create a new iceberg table manager and check persisted content.
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate object storage cache.
         create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
@@ -553,6 +556,8 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     .await;
     let compacted_file_index = create_file_index(vec![compacted_data_file.clone()]);
 
+    println!("step 3 finished");
+
     // ==============
     // Step 4
     // ==============
@@ -591,7 +596,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Create a new iceberg table manager and check persisted content.
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate object storage cache.
         create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )
@@ -623,6 +628,9 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         filesystem_accessor.as_ref(),
     )
     .await;
+
+
+    println!("step 4 finsihed");
 
     // ==============
     // Step 5
@@ -662,7 +670,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Create a new iceberg table manager and check persisted content.
     let mut iceberg_table_manager_for_load = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
-        object_storage_cache.clone(),
+        ObjectStorageCache::default_for_test(&cache_temp_dir), // Use separate object storage cache.
         create_test_filesystem_accessor(&iceberg_table_config),
         iceberg_table_config.clone(),
     )

@@ -168,9 +168,9 @@ impl IcebergTableManager {
     ) -> IcebergResult<DataFileImportResult> {
         let mut local_data_files_to_remote = HashMap::with_capacity(new_data_files.len());
         let mut new_remote_data_files = Vec::with_capacity(new_data_files.len());
+        let mut new_iceberg_data_files = Vec::with_capacity(new_data_files.len());
 
         // Handle imported new data files.
-        let mut new_iceberg_data_files = Vec::with_capacity(new_data_files.len());
         for local_data_file in new_data_files.into_iter() {
             let iceberg_data_file = iceberg_io_utils::write_record_batch_to_iceberg(
                 self.iceberg_table.as_ref().unwrap(),
@@ -279,7 +279,6 @@ impl IcebergTableManager {
                     puffin_index as u64,
                 )
                 .await?;
-            entry.persisted_deletion_vector = Some(puffin_blob.clone());
             let old_entry = self.persisted_data_files.insert(data_file.file_id(), entry);
             assert!(old_entry.is_some());
             puffin_deletion_blobs.insert(data_file.file_id(), puffin_blob);
@@ -461,19 +460,10 @@ impl IcebergTableManager {
         let entries_count_before_sync = manifest_utils::get_manifest_entries_number(table_metadata, file_io).await;
         // =====================
 
-        println!("\n\n==========\n\n");
-        println!("iceberg payload = {:?}, entry count before = {:?}", snapshot_payload, entries_count_before_sync);
-        for (cur_data_file, cur_disk_file) in self.persisted_data_files.iter() {
-            println!("current file id = {:?}, deletion vector = {:?}", cur_data_file, cur_disk_file.deletion_vector.collect_deleted_rows());
-        }
-        
-
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
         let old_data_files = take_data_files_to_remove(&mut snapshot_payload);
         let new_file_indices = take_file_indices_to_import(&mut snapshot_payload);
         let old_file_indices = take_file_indices_to_remove(&mut snapshot_payload);
-
-        println!("old data files = {:?}", old_data_files);
 
         // =====================
         let mut expected_count_after_sync = entries_count_before_sync.clone();
@@ -482,25 +472,19 @@ impl IcebergTableManager {
         expected_count_after_sync[2] += new_file_indices.len();
         expected_count_after_sync[2] -= old_file_indices.len();
         let committed_deletion_logs = &snapshot_payload.committed_deletion_logs;
-        for (cur_file_id, _) in committed_deletion_logs.iter() {
-            if let Some(data_file_entry) = self.persisted_data_files.get(cur_file_id) {
-                if data_file_entry.persisted_deletion_vector.is_some() {
+        let data_file_ids_for_deletion_log = committed_deletion_logs.iter().map(|(file_id, _)| file_id.clone()).collect::<HashSet<_>>();
+        for cur_file_id in data_file_ids_for_deletion_log.into_iter() {
+            if let Some(data_file_entry) = self.persisted_data_files.get(&cur_file_id) {
+                if !data_file_entry.deletion_vector.is_empty() {
                     continue;
                 }
             }
-            println!("incre dv ref count by 1");
             expected_count_after_sync[1] += 1;
         }
         for cur_old_data_file in old_data_files.iter() {
             let file_id = cur_old_data_file.file_id();
             if let Some(data_file_entry) = self.persisted_data_files.get(&file_id) {
-                // Invariant check: if batch deletion vector assigned, persisted deletion vector (puffin blob) is assigned also.
-                if !data_file_entry.deletion_vector.collect_deleted_rows().is_empty() {
-                    assert!(data_file_entry.persisted_deletion_vector.is_some());
-                }
-
-                if data_file_entry.persisted_deletion_vector.is_some() {
-                    println!("decre dv ref count by 1");
+                if !data_file_entry.deletion_vector.is_empty() {
                     expected_count_after_sync[1] -= 1;
                 }
             }

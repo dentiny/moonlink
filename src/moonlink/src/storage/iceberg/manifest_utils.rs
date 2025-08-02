@@ -76,11 +76,11 @@ pub(crate) async fn get_manifest_entries_number(table_metadata: &TableMetadata, 
         let (manifest_entries, manifest_metadata) = manifest.into_parts();
         let entry_type = get_manifest_entry_type(&manifest_entries, &manifest_metadata);
         if entry_type == ManifestEntryType::DataFile {
-            entry_count[0] = manifest_entries.len();
+            entry_count[0] += manifest_entries.len();
         } else if entry_type == ManifestEntryType::DeletionVector {
-            entry_count[1] = manifest_entries.len();
+            entry_count[1] += manifest_entries.len();
         } else {
-            entry_count[2] = manifest_entries.len();
+            entry_count[2] += manifest_entries.len();
         }
     }
 
