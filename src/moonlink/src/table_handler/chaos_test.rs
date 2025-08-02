@@ -22,6 +22,7 @@ use crate::union_read::ReadStateManager;
 use crate::{IcebergTableConfig, ObjectStorageCache};
 use crate::{StorageConfig, TableEventManager};
 
+use function_name::named;
 use more_asserts as ma;
 use rand::prelude::*;
 use rand::rngs::StdRng;
@@ -130,6 +131,8 @@ enum TxnState {
 }
 
 struct ChaosState {
+    /// Random seed used to generate random events.
+    random_seed: u64,
     /// Used to generate random events, with current timestamp as random seed.
     rng: StdRng,
     /// Non table update operation invocation status.
@@ -165,8 +168,10 @@ impl ChaosState {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos();
-        let rng = StdRng::seed_from_u64(nanos as u64);
+        let random_seed = nanos as u64;
+        let rng = StdRng::seed_from_u64(random_seed);
         Self {
+            random_seed,
             rng,
             non_table_update_cmd_call: NonTableUpdateCmdCall::default(),
             txn_state: TxnState::Empty,
@@ -473,6 +478,8 @@ enum TableMainenanceOption {
 
 #[derive(Clone, Debug)]
 struct TestEnvConfig {
+    /// Test name.
+    test_name: &'static str,
     /// Table background maintenance option.
     maintenance_option: TableMainenanceOption,
     /// Event count.
@@ -622,6 +629,10 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
 
     let task = tokio::spawn(async move {
         let mut state = ChaosState::new(read_state_manager);
+        println!(
+            "Test {} is with random seed {}",
+            test_env_config.test_name, state.random_seed
+        );
 
         for _ in 0..test_env_config.event_count {
             let chaos_events = state.generate_random_events();
@@ -710,11 +721,13 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
 /// ============================
 ///
 /// Chaos test with no background table maintenance enabled.
+#[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_no_background_maintenance() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
@@ -725,11 +738,13 @@ async fn test_chaos_with_no_background_maintenance() {
 }
 
 /// Chaos test with index merge enabled by default.
+#[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_index_merge() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
@@ -740,11 +755,13 @@ async fn test_chaos_with_index_merge() {
 }
 
 /// Chaos test with data compaction enabled by default.
+#[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_data_compaction() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
@@ -759,6 +776,7 @@ async fn test_chaos_with_data_compaction() {
 /// ============================
 ///
 /// Chaos test with no background table maintenance enabled.
+#[named]
 #[cfg(feature = "storage-s3")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_s3_chaos_with_no_background_maintenance() {
@@ -766,6 +784,7 @@ async fn test_s3_chaos_with_no_background_maintenance() {
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
@@ -776,6 +795,7 @@ async fn test_s3_chaos_with_no_background_maintenance() {
 }
 
 /// Chaos test with index merge enabled by default.
+#[named]
 #[cfg(feature = "storage-s3")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_s3_chaos_with_index_merge() {
@@ -783,6 +803,7 @@ async fn test_s3_chaos_with_index_merge() {
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
@@ -793,6 +814,7 @@ async fn test_s3_chaos_with_index_merge() {
 }
 
 /// Chaos test with data compaction enabled by default.
+#[named]
 #[cfg(feature = "storage-s3")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_s3_chaos_with_data_compaction() {
@@ -800,6 +822,7 @@ async fn test_s3_chaos_with_data_compaction() {
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
@@ -814,6 +837,7 @@ async fn test_s3_chaos_with_data_compaction() {
 /// ============================
 ///
 /// Chaos test with no background table maintenance enabled.
+#[named]
 #[cfg(feature = "storage-gcs")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_gcs_chaos_with_no_background_maintenance() {
@@ -821,6 +845,7 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
@@ -831,6 +856,7 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
 }
 
 /// Chaos test with index merge enabled by default.
+#[named]
 #[cfg(feature = "storage-gcs")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_gcs_chaos_with_index_merge() {
@@ -838,6 +864,7 @@ async fn test_gcs_chaos_with_index_merge() {
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
@@ -848,6 +875,7 @@ async fn test_gcs_chaos_with_index_merge() {
 }
 
 /// Chaos test with data compaction enabled by default.
+#[named]
 #[cfg(feature = "storage-gcs")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_gcs_chaos_with_data_compaction() {
@@ -855,6 +883,7 @@ async fn test_gcs_chaos_with_data_compaction() {
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
@@ -869,11 +898,13 @@ async fn test_gcs_chaos_with_data_compaction() {
 /// ============================
 ///
 /// Chaos test with no background table maintenance enabled.
+#[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: true,
         event_count: 100,
@@ -884,11 +915,13 @@ async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
 }
 
 /// Chaos test with index merge enabled by default.
+#[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_index_merge_with_chaos_injection() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: true,
         event_count: 100,
@@ -899,11 +932,13 @@ async fn test_chaos_with_index_merge_with_chaos_injection() {
 }
 
 /// Chaos test with data compaction enabled by default.
+#[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_chaos_with_data_compaction_with_chaos_injection() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: true,
         event_count: 100,
