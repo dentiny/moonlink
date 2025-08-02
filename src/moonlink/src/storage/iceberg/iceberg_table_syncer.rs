@@ -4,7 +4,7 @@ use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
     MOONCAKE_DELETION_VECTOR_NUM_ROWS,
 };
-use crate::storage::iceberg::iceberg_table_manager::*;
+use crate::storage::iceberg::{iceberg_table_manager::*, manifest_utils};
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::PuffinBlobType;
@@ -279,6 +279,7 @@ impl IcebergTableManager {
                     puffin_index as u64,
                 )
                 .await?;
+            entry.persisted_deletion_vector = Some(puffin_blob.clone());
             let old_entry = self.persisted_data_files.insert(data_file.file_id(), entry);
             assert!(old_entry.is_some());
             puffin_deletion_blobs.insert(data_file.file_id(), puffin_blob);
@@ -452,10 +453,59 @@ impl IcebergTableManager {
         // Validate schema consistency before persistence operation.
         self.validate_schema_consistency_at_store().await;
 
+       
+
+        // =====================
+        let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
+        let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
+        let entries_count_before_sync = manifest_utils::get_manifest_entries_number(table_metadata, file_io).await;
+        // =====================
+
+        println!("\n\n==========\n\n");
+        println!("iceberg payload = {:?}, entry count before = {:?}", snapshot_payload, entries_count_before_sync);
+        for (cur_data_file, cur_disk_file) in self.persisted_data_files.iter() {
+            println!("current file id = {:?}, deletion vector = {:?}", cur_data_file, cur_disk_file.deletion_vector.collect_deleted_rows());
+        }
+        
+
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
         let old_data_files = take_data_files_to_remove(&mut snapshot_payload);
         let new_file_indices = take_file_indices_to_import(&mut snapshot_payload);
         let old_file_indices = take_file_indices_to_remove(&mut snapshot_payload);
+
+        println!("old data files = {:?}", old_data_files);
+
+        // =====================
+        let mut expected_count_after_sync = entries_count_before_sync.clone();
+        expected_count_after_sync[0] += new_data_files.len();
+        expected_count_after_sync[0] -= old_data_files.len();
+        expected_count_after_sync[2] += new_file_indices.len();
+        expected_count_after_sync[2] -= old_file_indices.len();
+        let committed_deletion_logs = &snapshot_payload.committed_deletion_logs;
+        for (cur_file_id, _) in committed_deletion_logs.iter() {
+            if let Some(data_file_entry) = self.persisted_data_files.get(cur_file_id) {
+                if data_file_entry.persisted_deletion_vector.is_some() {
+                    continue;
+                }
+            }
+            println!("incre dv ref count by 1");
+            expected_count_after_sync[1] += 1;
+        }
+        for cur_old_data_file in old_data_files.iter() {
+            let file_id = cur_old_data_file.file_id();
+            if let Some(data_file_entry) = self.persisted_data_files.get(&file_id) {
+                // Invariant check: if batch deletion vector assigned, persisted deletion vector (puffin blob) is assigned also.
+                if !data_file_entry.deletion_vector.collect_deleted_rows().is_empty() {
+                    assert!(data_file_entry.persisted_deletion_vector.is_some());
+                }
+
+                if data_file_entry.persisted_deletion_vector.is_some() {
+                    println!("decre dv ref count by 1");
+                    expected_count_after_sync[1] -= 1;
+                }
+            }
+        }
+        // =====================
 
         // Persist data files.
         let data_file_import_result = self
@@ -512,6 +562,13 @@ impl IcebergTableManager {
         self.iceberg_table = Some(updated_iceberg_table);
 
         self.catalog.clear_puffin_metadata();
+
+        // ==================
+        let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
+        let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
+        let entries_count_after_sync = manifest_utils::get_manifest_entries_number(table_metadata, file_io).await;
+        assert_eq!(expected_count_after_sync, entries_count_after_sync);
+        // ==================
 
         // NOTICE: persisted data files and file indices are returned in the order of (1) newly imported ones; (2) index merge ones; (3) data compacted ones.
         Ok(PersistenceResult {

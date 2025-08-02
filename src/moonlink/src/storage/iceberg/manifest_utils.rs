@@ -54,3 +54,35 @@ pub(crate) fn create_manifest_writer_builder(
     );
     Ok(manifest_writer_builder)
 }
+
+/// Get manifest entry number for all types.
+pub(crate) async fn get_manifest_entries_number(table_metadata: &TableMetadata, file_io: FileIO) -> Vec<usize> {
+    let mut entry_count = vec![0, 0, 0];
+    let current_snapshot = table_metadata.current_snapshot();
+    if current_snapshot.is_none() {
+        return entry_count;
+    }
+    let snapshot_meta = current_snapshot.unwrap();
+    let manifest_list = snapshot_meta
+        .load_manifest_list(
+            &file_io,
+            table_metadata,
+        )
+        .await.unwrap();
+
+    
+    for manifest_file in manifest_list.entries().iter() {
+        let manifest = manifest_file.load_manifest(&file_io).await.unwrap();
+        let (manifest_entries, manifest_metadata) = manifest.into_parts();
+        let entry_type = get_manifest_entry_type(&manifest_entries, &manifest_metadata);
+        if entry_type == ManifestEntryType::DataFile {
+            entry_count[0] = manifest_entries.len();
+        } else if entry_type == ManifestEntryType::DeletionVector {
+            entry_count[1] = manifest_entries.len();
+        } else {
+            entry_count[2] = manifest_entries.len();
+        }
+    }
+
+    entry_count
+}
