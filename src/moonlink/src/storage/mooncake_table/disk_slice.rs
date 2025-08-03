@@ -169,6 +169,7 @@ impl DiskSliceWriter {
                     out_file_idx as u64,
                 );
                 let file_path = get_random_file_name_in_dir(dir_path);
+                println!("write disk slice {}", file_path);
                 data_file = Some(create_data_file(file_id, file_path));
                 let file =
                     tokio::fs::File::create(dir_path.join(data_file.as_ref().unwrap().file_path()))
