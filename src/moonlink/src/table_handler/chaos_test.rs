@@ -29,6 +29,7 @@ use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
 use tokio::sync::mpsc;
 use tokio::sync::watch;
@@ -163,11 +164,11 @@ struct ChaosState {
 
 impl ChaosState {
     fn new(read_state_manager: ReadStateManager) -> Self {
-        // let nanos = SystemTime::now()
-        //     .duration_since(UNIX_EPOCH)
-        //     .unwrap()
-        //     .as_nanos();
-        let random_seed = 1754180284932695315;
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let random_seed = nanos as u64;
         let rng = StdRng::seed_from_u64(random_seed);
         Self {
             random_seed,
@@ -739,7 +740,7 @@ async fn test_chaos_with_no_background_maintenance() {
 /// Chaos test with index merge enabled by default.
 #[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_chaos_with_repro_index_merge() {
+async fn test_chaos_with_index_merge() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {

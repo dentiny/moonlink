@@ -598,18 +598,6 @@ impl IcebergTableManager {
             actual_manifest_entries_after_sync
         );
 
-        println!(
-            "\n\n======after sync at {:?}=====\n\n",
-            snapshot_payload.flush_lsn
-        );
-        for (_, cur_entry) in self.persisted_data_files.iter() {
-            println!(
-                "file path = {}, deletion vector = {:?}",
-                cur_entry.data_file.file_path(),
-                cur_entry.deletion_vector.collect_deleted_rows()
-            );
-        }
-
         // NOTICE: persisted data files and file indices are returned in the order of (1) newly imported ones; (2) index merge ones; (3) data compacted ones.
         Ok(PersistenceResult {
             remote_data_files: data_file_import_result.new_remote_data_files,
