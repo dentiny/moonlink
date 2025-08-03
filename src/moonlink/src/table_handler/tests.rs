@@ -1856,3 +1856,24 @@ fn test_get_persisted_table_lsn() {
         assert_eq!(persisted_table_lsn, 2);
     }
 }
+
+/// Testing scenario: append and commit in non-streaming transaction, its content should be flushed in the followup streaming transaction flush.
+#[tokio::test]
+async fn test_commit_streaming_transaction_flush_non_streaming_writes() {
+    let mut env = TestEnvironment::default().await;
+
+    // Append and commit in non-streaming transaction.
+    env.append_row(1, "User-1", 20, /*lsn=*/ 50, None).await;
+    env.commit(/*lsn=*/ 100).await;
+
+    // Append and commit in streaming transaction.
+    let xact_id = 0;
+    env.append_row(10, "User-2", 25, /*lsn=*/ 50, Some(xact_id))
+        .await;
+    env.stream_commit(101, xact_id).await;
+
+    env.set_readable_lsn(101);
+    env.verify_snapshot(101, &[1, 10]).await;
+
+    env.shutdown().await;
+}

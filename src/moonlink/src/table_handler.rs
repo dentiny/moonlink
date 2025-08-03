@@ -679,6 +679,11 @@ impl TableHandler {
 
         match xact_id {
             Some(xact_id) => {
+                // Attempt to flush all preceding unflushed committed non-streaming writes.
+                if let Err(e) = table.flush(lsn).await {
+                    error!(error = %e, "flush non-streaming writes failed in LSN {lsn}");
+                }
+
                 // For streaming writers, whose commit LSN is only finalized at commit phase, delay decision whether to discard now.
                 // If commit LSN is no fresher than persistence LSN, it means already persisted, directly discard.
                 if let Some(initial_persistence_lsn) = table_handler_state.initial_persistence_lsn {

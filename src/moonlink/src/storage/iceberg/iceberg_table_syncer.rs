@@ -181,8 +181,6 @@ impl IcebergTableManager {
             )
             .await?;
 
-            println!("write iceberg file {}", iceberg_data_file.file_path());
-
             // Try get deletion vector batch size.
             let max_rows = new_deletion_vector
                 .get(&local_data_file)
@@ -282,9 +280,6 @@ impl IcebergTableManager {
                     puffin_index as u64,
                 )
                 .await?;
-
-            println!("write puffin blob = {}", puffin_blob.puffin_file_cache_handle.get_cache_filepath());
-
             let old_entry = self.persisted_data_files.insert(data_file.file_id(), entry);
             assert!(old_entry.is_some());
             puffin_deletion_blobs.insert(data_file.file_id(), puffin_blob);
@@ -524,12 +519,6 @@ impl IcebergTableManager {
         mut snapshot_payload: IcebergSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> IcebergResult<PersistenceResult> {
-        println!("\n\nimport new data file = {:?}, compacted new file = {:?}, compacted old file = {:?}",
-            snapshot_payload.import_payload.data_files,
-            snapshot_payload.data_compaction_payload.new_data_files_to_import,
-            snapshot_payload.data_compaction_payload.old_data_files_to_remove,
-        );
-
         // Initialize iceberg table on access.
         self.initialize_iceberg_table_for_once().await?;
 
@@ -608,6 +597,18 @@ impl IcebergTableManager {
             expected_manifest_entries_after_sync,
             actual_manifest_entries_after_sync
         );
+
+        println!(
+            "\n\n======after sync at {:?}=====\n\n",
+            snapshot_payload.flush_lsn
+        );
+        for (_, cur_entry) in self.persisted_data_files.iter() {
+            println!(
+                "file path = {}, deletion vector = {:?}",
+                cur_entry.data_file.file_path(),
+                cur_entry.deletion_vector.collect_deleted_rows()
+            );
+        }
 
         // NOTICE: persisted data files and file indices are returned in the order of (1) newly imported ones; (2) index merge ones; (3) data compacted ones.
         Ok(PersistenceResult {

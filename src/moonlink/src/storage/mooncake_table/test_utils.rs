@@ -172,12 +172,6 @@ fn verify_files_and_deletions_impl(
         res.extend(ids.into_iter().flatten());
     }
     res.sort();
-
-    if res != expected_ids {
-        println!("id unequal: {:?} \n\n {:?}", res, expected_ids);
-        std::thread::sleep(std::time::Duration::from_secs(3600));
-    }
-
     assert_eq!(res, expected_ids);
 }
 
@@ -204,10 +198,6 @@ pub async fn verify_files_and_deletions(
     deletion_vectors: Vec<PuffinDeletionBlobAtRead>,
     expected_ids: &[i32],
 ) {
-    println!("at verity, data files = {:?}, puffin file = {:?}, positional = {:?}, deletion vector = {:?}",
-        data_file_paths, puffin_file_paths, position_deletes, deletion_vectors,
-    );
-
     // Read deletion vector blobs and add to position deletes.
     let file_io = FileIOBuilder::new_fs_io().build().unwrap();
     let mut position_deletes = position_deletes;
