@@ -1496,6 +1496,7 @@ async fn test_full_maintenance_with_sufficient_data_files() {
             min_data_file_to_compact: 2,
             max_data_file_to_compact: u32::MAX,
             data_file_final_size: u64::MAX,
+            data_file_deletion_percentage: 0,
         },
         file_index_config: FileIndexMergeConfig {
             min_file_indices_to_merge: u32::MAX,

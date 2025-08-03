@@ -201,6 +201,7 @@ impl IcebergTableManager {
             mooncake_snapshot.disk_files.insert(
                 data_file,
                 DiskFileEntry {
+                    num_rows: data_file_entry.data_file.record_count() as usize,
                     file_size: data_file_entry.data_file.file_size_in_bytes() as usize,
                     cache_handle: None,
                     puffin_deletion_blob,
