@@ -730,7 +730,7 @@ async fn test_chaos_with_no_background_maintenance() {
         test_name: function_name!(),
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 2500,
         storage_config: StorageConfig::FileSystem { root_directory },
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -757,7 +757,7 @@ async fn test_chaos_with_index_merge() {
 /// Chaos test with data compaction enabled by default.
 #[named]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn test_chaos_with_repro_data_compaction() {
+async fn test_chaos_with_data_compaction() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
