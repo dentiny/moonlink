@@ -1,4 +1,7 @@
+use snafu::location;
 use snafu::ResultExt;
+use snafu::prelude::*;
+use crate::error::SnafuError;
 
 use crate::{Result, SnafuResult};
 
@@ -17,11 +20,7 @@ pub(crate) async fn delete_local_files(local_files: &[String]) -> Result<()> {
 /// Util function to test snafu error.
 pub(crate) async fn failed_file_creation() -> SnafuResult<()> {
     let mut file = tokio::fs::File::create("/tmp/non_existent_dir/example.txt").await
-    .map_err(std::sync::Arc::new)
-    .context_with(|source| TestErrorSnafuError {
-        source,
-        path: "/tmp/non_existent_dir/example.txt".to_string(),
-    })?;
+        .map_err(|e| SnafuError::io_error(e, "/path", location!()))?;
     Ok(())
 }
 
@@ -57,6 +56,7 @@ mod tests {
     #[tokio::test]
     async fn test_error_prop() {
         let res = failed_file_creation().await;
+        println!("res = {:?}", res);
         assert!(res.is_err());
     }
 }

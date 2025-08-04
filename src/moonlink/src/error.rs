@@ -2,11 +2,12 @@ use arrow::error::ArrowError;
 use iceberg::Error as IcebergError;
 use parquet::errors::ParquetError;
 use std::io;
+use std::path::PathBuf;
 use std::result;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::watch;
-use snafu::prelude::*;
+use snafu::{prelude::*, Location};
 
 /// Custom error type for moonlink
 #[derive(Clone, Debug, Error)]
@@ -109,11 +110,21 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-////////
+////////==========
 #[derive(Clone, Debug, Snafu)]
 pub enum SnafuError {
     #[snafu(display("Unable to create file {}", path.display()))]
-    TestError { source: Arc<std::io::Error>, path: std::path::PathBuf },
+    TestError { source: Arc<std::io::Error>, path: std::path::PathBuf, location: Location, },
 }
 
 pub type SnafuResult<T> = result::Result<T, SnafuError>;
+
+impl SnafuError {
+    pub fn io_error(source: std::io::Error, path: impl Into<PathBuf>, location: Location) -> Self {
+        SnafuError::TestError { 
+            source: Arc::new(source),
+            path: path.into(),
+            location,
+        }
+    }
+}
