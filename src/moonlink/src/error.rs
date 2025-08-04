@@ -6,6 +6,7 @@ use std::result;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::watch;
+use snafu::prelude::*;
 
 /// Custom error type for moonlink
 #[derive(Clone, Debug, Error)]
@@ -107,3 +108,12 @@ impl From<serde_json::Error> for Error {
         }
     }
 }
+
+////////
+#[derive(Clone, Debug, Snafu)]
+pub enum SnafuError {
+    #[snafu(display("Unable to create file {}", path.display()))]
+    TestError { source: Arc<std::io::Error>, path: std::path::PathBuf },
+}
+
+pub type SnafuResult<T> = result::Result<T, SnafuError>;
