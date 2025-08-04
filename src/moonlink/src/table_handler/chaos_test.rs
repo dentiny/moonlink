@@ -725,6 +725,8 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
             std::panic::resume_unwind(panic);
         }
     }
+
+    println!("test finished!");
 }
 
 /// ============================
