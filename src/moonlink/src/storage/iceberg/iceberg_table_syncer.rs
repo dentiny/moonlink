@@ -4,15 +4,17 @@ use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
     MOONCAKE_DELETION_VECTOR_NUM_ROWS,
 };
+use crate::storage::iceberg::iceberg_table_manager::*;
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
+#[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
+use crate::storage::iceberg::manifest_utils;
 use crate::storage::iceberg::manifest_utils::ManifestEntryCount;
 use crate::storage::iceberg::moonlink_catalog::PuffinBlobType;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::iceberg::schema_utils;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
-use crate::storage::iceberg::{iceberg_table_manager::*, manifest_utils};
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::take_data_files_to_remove;
@@ -447,12 +449,13 @@ impl IcebergTableManager {
         &self,
         snapshot_payload: &IcebergSnapshotPayload,
     ) -> ManifestEntryCount {
-        #[cfg(not(any(test, debug_assertions)))]
+        #[cfg(any(feature = "chaos-test", not(any(test, debug_assertions))))]
         {
-            return ManifestEntryCount::default();
+            let _ = snapshot_payload; // Suppress unused warning.
+            ManifestEntryCount::default()
         }
 
-        #[cfg(any(test, debug_assertions))]
+        #[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
         {
             let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
             let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
@@ -501,12 +504,12 @@ impl IcebergTableManager {
 
     /// Get actual entry count after sync.
     async fn get_actual_entry_count_after_sync(&self) -> ManifestEntryCount {
-        #[cfg(not(any(test, debug_assertions)))]
+        #[cfg(any(feature = "chaos-test", not(any(test, debug_assertions))))]
         {
-            return ManifestEntryCount::default();
+            ManifestEntryCount::default()
         }
 
-        #[cfg(any(test, debug_assertions))]
+        #[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
         {
             let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
             let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();

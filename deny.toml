@@ -48,7 +48,6 @@ skip = [
     { name = "rand_core" },
     { name = "regex-automata" },
     { name = "regex-syntax" },
-    { name = "roaring" },
     { name = "socket2" },
     { name = "strum" },
     { name = "strum_macros" },
