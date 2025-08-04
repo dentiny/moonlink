@@ -34,8 +34,8 @@ pub enum Error {
     #[error("Iceberg error: {source}")]
     IcebergError { source: Arc<IcebergError> },
 
-    #[error("Iceberg error: {0}")]
-    IcebergMessage(String),
+    #[error("Iceberg error: {message}")]
+    IcebergMessage { message: String, location: Location, },
 
     #[error("OpenDAL error: {source}")]
     OpenDal { source: Arc<opendal::Error> },
