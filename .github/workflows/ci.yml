@@ -231,8 +231,8 @@ jobs:
           RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_chaos --features=chaos-test -p moonlink -- --nocapture
 
   # ───────────── 6 · Chaos test with local fs optimization ─────────────
-  chaos_test:
-    name: Chaos test
+  chaos_test_with_local_fs_optimization:
+    name: Chaos test with local filesystem optimization
     runs-on: ubuntu-latest
 
     steps:
