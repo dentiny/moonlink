@@ -3,6 +3,7 @@ use async_trait::async_trait;
 #[cfg(feature = "storage-gcs")]
 use futures::TryStreamExt;
 use futures::{Stream, StreamExt};
+use iceberg::Error;
 use opendal::options::WriteOptions;
 use opendal::Metadata;
 use opendal::Operator;
