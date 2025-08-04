@@ -19,7 +19,7 @@ use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::union_read::ReadStateManager;
-use crate::{IcebergTableConfig, ObjectStorageCache};
+use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
 use crate::{StorageConfig, TableEventManager};
 
 use function_name::named;
@@ -480,6 +480,8 @@ enum TableMainenanceOption {
 struct TestEnvConfig {
     /// Test name.
     test_name: &'static str,
+    /// Whether to enable local filesystem optimization for object storage cache.
+    local_filesystem_optimization_enabled: bool,
     /// Table background maintenance option.
     maintenance_option: TableMainenanceOption,
     /// Event count.
@@ -529,7 +531,16 @@ impl TestEnvironment {
 
         // Local filesystem to store read-through cache.
         let cache_temp_dir = tempdir().unwrap();
-        let object_storage_cache = ObjectStorageCache::default_for_test(&cache_temp_dir);
+        let object_storage_cache = if config.local_filesystem_optimization_enabled {
+            let config = ObjectStorageCacheConfig::new(
+                /*max_bytes=*/ 1 << 30, // 1GiB
+                table_temp_dir.path().to_str().unwrap().to_string(),
+                /*optimize_local_filesystem=*/ true,
+            );
+            ObjectStorageCache::new(config)
+        } else {
+            ObjectStorageCache::default_for_test(&cache_temp_dir)
+        };
 
         // Create mooncake table and table event notification receiver.
         let iceberg_table_config = if config.error_injection_enabled {
@@ -728,6 +739,7 @@ async fn test_chaos_with_no_background_maintenance() {
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 2500,
@@ -745,6 +757,7 @@ async fn test_chaos_with_index_merge() {
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
@@ -762,6 +775,65 @@ async fn test_chaos_with_data_compaction() {
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
+        maintenance_option: TableMainenanceOption::DataCompaction,
+        error_injection_enabled: false,
+        event_count: 3000,
+        storage_config: StorageConfig::FileSystem { root_directory },
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// ============================
+/// Local filesystem persistence with local filesystem optimization
+/// ============================
+///
+/// Chaos test with no background table maintenance enabled.
+#[named]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_local_system_optimization_chaos_with_no_background_maintenance() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
+    let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
+        local_filesystem_optimization_enabled: true,
+        maintenance_option: TableMainenanceOption::NoTableMaintenance,
+        error_injection_enabled: false,
+        event_count: 2500,
+        storage_config: StorageConfig::FileSystem { root_directory },
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with index merge enabled by default.
+#[named]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_local_system_optimization_chaos_with_index_merge() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
+    let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
+        local_filesystem_optimization_enabled: true,
+        maintenance_option: TableMainenanceOption::IndexMerge,
+        error_injection_enabled: false,
+        event_count: 3000,
+        storage_config: StorageConfig::FileSystem { root_directory },
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    chaos_test_impl(env).await;
+}
+
+/// Chaos test with data compaction enabled by default.
+#[named]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_local_system_optimization_chaos_with_data_compaction() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
+    let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
+        local_filesystem_optimization_enabled: true,
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
@@ -785,6 +857,7 @@ async fn test_s3_chaos_with_no_background_maintenance() {
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
@@ -804,6 +877,7 @@ async fn test_s3_chaos_with_index_merge() {
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
@@ -823,6 +897,7 @@ async fn test_s3_chaos_with_data_compaction() {
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
@@ -846,6 +921,7 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3000,
@@ -865,6 +941,7 @@ async fn test_gcs_chaos_with_index_merge() {
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3000,
@@ -884,6 +961,7 @@ async fn test_gcs_chaos_with_data_compaction() {
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3000,
@@ -905,6 +983,7 @@ async fn test_chaos_with_no_background_maintenance_with_chaos_injection() {
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::NoTableMaintenance,
         error_injection_enabled: true,
         event_count: 100,
@@ -922,6 +1001,7 @@ async fn test_chaos_with_index_merge_with_chaos_injection() {
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::IndexMerge,
         error_injection_enabled: true,
         event_count: 100,
@@ -939,6 +1019,7 @@ async fn test_chaos_with_data_compaction_with_chaos_injection() {
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         test_name: function_name!(),
+        local_filesystem_optimization_enabled: false,
         maintenance_option: TableMainenanceOption::DataCompaction,
         error_injection_enabled: true,
         event_count: 100,
