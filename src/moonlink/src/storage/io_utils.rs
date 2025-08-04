@@ -1,4 +1,9 @@
-use crate::Result;
+use crate::error::SnafuError;
+use snafu::location;
+use snafu::prelude::*;
+use snafu::ResultExt;
+
+use crate::{Result, SnafuResult};
 
 /// Util function to delete local file in parallel.
 pub(crate) async fn delete_local_files(local_files: &[String]) -> Result<()> {
@@ -9,6 +14,14 @@ pub(crate) async fn delete_local_files(local_files: &[String]) -> Result<()> {
     for cur_res in delete_results.into_iter() {
         cur_res?;
     }
+    Ok(())
+}
+
+/// Util function to test snafu error.
+pub(crate) async fn failed_file_creation() -> SnafuResult<()> {
+    let mut file = tokio::fs::File::create("/tmp/non_existent_dir/example.txt")
+        .await
+        .map_err(|e| SnafuError::io_error(e, "/path", location!()))?;
     Ok(())
 }
 
@@ -39,5 +52,12 @@ mod tests {
         // Confirm files are deleted.
         assert!(!tokio::fs::try_exists(&file1).await.unwrap());
         assert!(!tokio::fs::try_exists(&file2).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_error_prop() {
+        let res = failed_file_creation().await;
+        println!("res = {:?}", res);
+        assert!(res.is_err());
     }
 }
