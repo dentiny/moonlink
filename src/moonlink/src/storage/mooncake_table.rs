@@ -160,7 +160,7 @@ pub struct Snapshot {
     ///
     /// At iceberg snapshot creation, we should only dump consistent data files and deletion logs.
     /// Data file flush LSN is recorded here, to get corresponding deletion logs from "committed deletion logs".
-    pub(crate) data_file_flush_lsn: Option<u64>,
+    pub(crate) flush_lsn: Option<u64>,
     /// WAL persistence metadata.
     pub(crate) wal_persistence_metadata: Option<WalPersistenceMetadata>,
     /// indices
@@ -173,7 +173,7 @@ impl Snapshot {
             metadata,
             disk_files: HashMap::new(),
             snapshot_version: 0,
-            data_file_flush_lsn: None,
+            flush_lsn: None,
             wal_persistence_metadata: None,
             indices: MooncakeIndex::new(),
         }
@@ -513,7 +513,7 @@ impl MooncakeTable {
         table_metadata.config.validate();
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
-        let last_iceberg_snapshot_lsn = current_snapshot.data_file_flush_lsn;
+        let last_iceberg_snapshot_lsn = current_snapshot.flush_lsn;
         let last_wal_persisted_metadata = current_snapshot.wal_persistence_metadata.clone();
         if let Some(persistence_lsn) = last_iceberg_snapshot_lsn {
             table_snapshot_watch_sender.send(persistence_lsn).unwrap();
