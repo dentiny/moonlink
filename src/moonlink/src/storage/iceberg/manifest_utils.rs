@@ -67,7 +67,7 @@ pub(crate) fn create_manifest_writer_builder(
 }
 
 /// Get manifest entry number for all types.
-#[cfg(any(test, debug_assertions))]
+#[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
 pub(crate) async fn get_manifest_entries_number(
     table_metadata: &TableMetadata,
     file_io: FileIO,
