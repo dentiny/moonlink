@@ -540,9 +540,9 @@ impl SnapshotTableState {
         // or (4) there's pending table schema update
         let mut iceberg_snapshot_payload: Option<IcebergSnapshotPayload> = None;
         let flush_by_deletion = self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
-        let flush_by_new_files_or_maintainence = self
+        let flush_by_new_files_or_maintenance = self
             .unpersisted_records
-            .if_persist_by_new_files_or_maintainence(opt.force_create);
+            .if_persist_by_new_files_or_maintenance(opt.force_create);
         let force_empty_iceberg_payload = task.force_empty_iceberg_payload;
 
         // Decide whether to perform a data compaction.
@@ -559,7 +559,7 @@ impl SnapshotTableState {
         }
 
         let flush_by_table_write = self.current_snapshot.flush_lsn.is_some()
-            && (flush_by_new_files_or_maintainence || flush_by_deletion);
+            && (flush_by_new_files_or_maintenance || flush_by_deletion);
 
         let iceberg_corresponding_wal_metadata = task
             .iceberg_corresponding_wal_metadata
@@ -579,7 +579,7 @@ impl SnapshotTableState {
 
             // Only create iceberg snapshot when there's something to import.
             if !committed_deletion_logs.new_deletions_to_persist.is_empty()
-                || flush_by_new_files_or_maintainence
+                || flush_by_new_files_or_maintenance
                 || force_empty_iceberg_payload
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
@@ -673,7 +673,7 @@ impl SnapshotTableState {
 
         for mut slice in take(&mut task.new_disk_slices) {
             let write_lsn = slice.lsn();
-            let lsn = write_lsn.expect("commited datafile should have a valid LSN");
+            let lsn = write_lsn.expect("committed datafile should have a valid LSN");
 
             // Register new files into mooncake snapshot, add it into cache, and record LSN map.
             for (file, file_attrs) in slice.output_files().iter() {

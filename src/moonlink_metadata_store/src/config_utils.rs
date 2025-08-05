@@ -176,7 +176,7 @@ fn recover_storage_config(
 }
 
 /// Deserialize json value to moonlink table config.
-pub(crate) fn deserialze_moonlink_table_config(
+pub(crate) fn deserialize_moonlink_table_config(
     serialized_config: serde_json::Value,
     secret_entry: Option<MoonlinkTableSecret>,
 ) -> Result<MoonlinkTableConfig> {
@@ -211,7 +211,7 @@ mod tests {
         let (serialized_persisted_config, secret_entry) =
             parse_moonlink_table_config(old_moonlink_table_config.clone()).unwrap();
         let new_moonlink_table_config =
-            deserialze_moonlink_table_config(serialized_persisted_config, secret_entry).unwrap();
+            deserialize_moonlink_table_config(serialized_persisted_config, secret_entry).unwrap();
         assert_eq!(old_moonlink_table_config, new_moonlink_table_config);
     }
 

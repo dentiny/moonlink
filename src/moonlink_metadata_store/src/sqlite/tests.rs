@@ -165,7 +165,7 @@ async fn test_table_metadata_load_from_non_existent_table() {
     assert!(res.is_err());
 }
 
-/// Test senario: delete table metadata store.
+/// Test scenario: delete table metadata store.
 #[tokio::test]
 async fn test_delete_table_metadata_store() {
     let tmp_dir = tempdir().unwrap();

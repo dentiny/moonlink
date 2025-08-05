@@ -1054,7 +1054,7 @@ async fn test_empty_table_snapshot_creation() {
     }
 }
 
-/// Testing senario: request iceberg snapshot with multiple LSNs.
+/// Testing scenario: request iceberg snapshot with multiple LSNs.
 #[tokio::test]
 async fn test_multiple_snapshot_requests() {
     // Set mooncake and iceberg flush and snapshot threshold to huge value, to verify force flush and force snapshot works as expected.
