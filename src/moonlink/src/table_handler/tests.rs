@@ -1416,7 +1416,8 @@ async fn test_index_merge_with_sufficient_file_indices() {
     )
     .await;
     env.commit(10).await;
-    env.flush_table_and_sync(/*lsn=*/ 10).await;
+    env.flush_table_and_sync(/*lsn=*/ 10, /*xact_id=*/ None)
+        .await;
 
     env.append_row(
         /*id=*/ 3, /*name=*/ "Tom", /*age=*/ 50, /*lsn=*/ 15,
@@ -1424,7 +1425,8 @@ async fn test_index_merge_with_sufficient_file_indices() {
     )
     .await;
     env.commit(20).await;
-    env.flush_table_and_sync(/*lsn=*/ 20).await;
+    env.flush_table_and_sync(/*lsn=*/ 20, /*xact_id=*/ None)
+        .await;
 
     // Force index merge and iceberg snapshot, check result.
     env.force_index_merge_and_sync().await.unwrap();
@@ -1452,7 +1454,8 @@ async fn test_index_merge_with_sufficient_file_indices() {
     )
     .await;
     env.commit(30).await;
-    env.flush_table_and_sync(/*lsn=*/ 30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30, /*xact_id=*/ None)
+        .await;
 
     // Force index merge and iceberg snapshot, check result.
     env.force_index_merge_and_sync().await.unwrap();
@@ -1488,7 +1491,8 @@ async fn test_data_compaction_with_sufficient_data_files() {
     )
     .await;
     env.commit(10).await;
-    env.flush_table_and_sync(/*lsn=*/ 10).await;
+    env.flush_table_and_sync(/*lsn=*/ 10, /*xact_id=*/ None)
+        .await;
 
     env.append_row(
         /*id=*/ 3, /*name=*/ "Tom", /*age=*/ 50, /*lsn=*/ 15,
@@ -1496,7 +1500,8 @@ async fn test_data_compaction_with_sufficient_data_files() {
     )
     .await;
     env.commit(20).await;
-    env.flush_table_and_sync(/*lsn=*/ 20).await;
+    env.flush_table_and_sync(/*lsn=*/ 20, /*xact_id=*/ None)
+        .await;
 
     // Force index merge and iceberg snapshot, check result.
     env.force_data_compaction_and_sync().await.unwrap();
@@ -1524,7 +1529,8 @@ async fn test_data_compaction_with_sufficient_data_files() {
     )
     .await;
     env.commit(30).await;
-    env.flush_table_and_sync(/*lsn=*/ 30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30, /*xact_id=*/ None)
+        .await;
 
     // Force index merge and iceberg snapshot, check result.
     env.force_data_compaction_and_sync().await.unwrap();
@@ -1576,7 +1582,8 @@ async fn test_full_maintenance_with_sufficient_data_files() {
     )
     .await;
     env.commit(10).await;
-    env.flush_table_and_sync(/*lsn=*/ 10).await;
+    env.flush_table_and_sync(/*lsn=*/ 10, /*xact_id=*/ None)
+        .await;
 
     env.append_row(
         /*id=*/ 3, /*name=*/ "Tom", /*age=*/ 50, /*lsn=*/ 15,
@@ -1584,7 +1591,8 @@ async fn test_full_maintenance_with_sufficient_data_files() {
     )
     .await;
     env.commit(20).await;
-    env.flush_table_and_sync(/*lsn=*/ 20).await;
+    env.flush_table_and_sync(/*lsn=*/ 20, /*xact_id=*/ None)
+        .await;
 
     // Force index merge and iceberg snapshot, check result.
     env.force_full_maintenance_and_sync().await.unwrap();
@@ -1612,7 +1620,8 @@ async fn test_full_maintenance_with_sufficient_data_files() {
     )
     .await;
     env.commit(30).await;
-    env.flush_table_and_sync(/*lsn=*/ 30).await;
+    env.flush_table_and_sync(/*lsn=*/ 30, /*xact_id=*/ None)
+        .await;
 
     // Force index merge and iceberg snapshot, check result.
     env.force_full_maintenance_and_sync().await.unwrap();
@@ -2089,6 +2098,27 @@ async fn test_commit_streaming_transaction_flush_non_streaming_writes() {
     env.append_row(10, "User-2", 25, /*lsn=*/ 50, Some(xact_id))
         .await;
     env.stream_commit(101, xact_id).await;
+
+    env.set_readable_lsn(101);
+    env.verify_snapshot(101, &[1, 10]).await;
+
+    env.shutdown().await;
+}
+
+/// Testing scenario: append and commit in non-streaming transaction, its content should be flushed in the followup streaming transaction flush.
+#[tokio::test]
+async fn test_commit_flush_streaming_transaction_flush_non_streaming_writes() {
+    let mut env = TestEnvironment::default().await;
+
+    // Append and commit in non-streaming transaction.
+    env.append_row(1, "User-1", 20, /*lsn=*/ 50, None).await;
+    env.commit(/*lsn=*/ 100).await;
+
+    // Append and commit in streaming transaction.
+    let xact_id = 0;
+    env.append_row(10, "User-2", 25, /*lsn=*/ 50, Some(xact_id))
+        .await;
+    env.flush_table_and_sync(101, Some(xact_id)).await;
 
     env.set_readable_lsn(101);
     env.verify_snapshot(101, &[1, 10]).await;

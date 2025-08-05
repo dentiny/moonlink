@@ -285,8 +285,8 @@ impl TestEnvironment {
         rx.recv().await.unwrap()
     }
 
-    pub async fn flush_table_and_sync(&mut self, lsn: u64) {
-        self.send_event(TableEvent::CommitFlush { lsn, xact_id: None })
+    pub async fn flush_table_and_sync(&mut self, lsn: u64, xact_id: Option<u32>) {
+        self.send_event(TableEvent::CommitFlush { lsn, xact_id })
             .await;
         self.send_event(TableEvent::ForceSnapshot { lsn: Some(lsn) })
             .await;
