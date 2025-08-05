@@ -143,6 +143,34 @@ async fn test_streaming_delete() {
     env.shutdown().await;
 }
 
+/// Testing scenario: flush an empty batch record doesn't generate data file.
+#[tokio::test]
+async fn test_flush_empty_batch_records() {
+    let mut env = TestEnvironment::default().await;
+
+    // operation-1: append and commit in non-streaming transaction
+    env.append_row(1, "User-1", 10, /*lsn=*/ 50, /*xact_id=*/ None)
+        .await;
+    env.commit(/*lsn=*/ 150).await;
+
+    // operation-2: in a non-streaming transaction, delete rows committed in the above transaction
+    env.delete_row(1, "User-1", 20, /*lsn=*/ 200, /*xact_id=*/ None)
+        .await;
+    env.commit(/*lsn=*/ 250).await;
+    // Later when we do flush and create snapshot, there should be no data files generated for the deleted row.
+
+    // operation-3: start and commit a streaming transaction
+    let xact_id = 0;
+    env.append_row(10, "User-3", 25, /*lsn=*/ 300, Some(xact_id))
+        .await;
+    env.stream_commit(350, xact_id).await;
+
+    env.set_readable_lsn(350);
+    env.verify_snapshot(350, &[10]).await;
+
+    env.shutdown().await;
+}
+
 /// Testing scenario:
 /// operation-1: append and commit in non-streaming transaction
 /// operation-2: in a non-streaming transaction, delete rows committed in the above transaction
@@ -163,7 +191,7 @@ async fn test_delete_committed_unflushed_follow_streaming() {
         .await;
     env.commit(/*lsn=*/ 250).await;
 
-    // start and commit a streaming transaction
+    // operation-3: start and commit a streaming transaction
     let xact_id = 0;
     env.append_row(10, "User-3", 25, /*lsn=*/ 300, Some(xact_id))
         .await;
@@ -1257,7 +1285,7 @@ async fn test_flush_lsn_consistency_across_snapshots() {
             .load_snapshot_from_table()
             .await
             .unwrap();
-        assert_eq!(snapshot.data_file_flush_lsn, Some(lsn));
+        assert_eq!(snapshot.flush_lsn, Some(lsn));
     }
 
     env.shutdown().await;
@@ -1371,7 +1399,7 @@ async fn test_periodical_force_snapshot() {
         .load_snapshot_from_table()
         .await
         .unwrap();
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 10);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 10);
 }
 
 #[tokio::test]
@@ -1413,7 +1441,7 @@ async fn test_index_merge_with_sufficient_file_indices() {
         .await
         .unwrap();
     assert_eq!(next_file_id, 3);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 20);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 20);
     assert_eq!(snapshot.disk_files.len(), 2); // two data files created by two flushes
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one merged file index
 
@@ -1441,7 +1469,7 @@ async fn test_index_merge_with_sufficient_file_indices() {
         .await
         .unwrap();
     assert_eq!(next_file_id, 4);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 3); // three data files created by three flushes
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one merged file index
 }
@@ -1485,7 +1513,7 @@ async fn test_data_compaction_with_sufficient_data_files() {
         .await
         .unwrap();
     assert_eq!(next_file_id, 2);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 20);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 20);
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 
@@ -1513,7 +1541,7 @@ async fn test_data_compaction_with_sufficient_data_files() {
         .await
         .unwrap();
     assert_eq!(next_file_id, 2);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 }
@@ -1573,7 +1601,7 @@ async fn test_full_maintenance_with_sufficient_data_files() {
         .await
         .unwrap();
     assert_eq!(next_file_id, 2);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 20);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 20);
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 
@@ -1601,7 +1629,7 @@ async fn test_full_maintenance_with_sufficient_data_files() {
         .await
         .unwrap();
     assert_eq!(next_file_id, 2);
-    assert_eq!(snapshot.data_file_flush_lsn.unwrap(), 30);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 30);
     assert_eq!(snapshot.disk_files.len(), 1); // one compacted data file
     assert_eq!(snapshot.indices.file_indices.len(), 1); // one compacted file index
 }
@@ -1622,7 +1650,7 @@ async fn test_discard_duplicate_writes() {
     });
 
     let mut mock_mooncake_snapshot = MooncakeSnapshot::new(mooncake_table_metadata.clone());
-    mock_mooncake_snapshot.data_file_flush_lsn = Some(10);
+    mock_mooncake_snapshot.flush_lsn = Some(10);
     let mut mock_table_manager = MockTableManager::new();
     mock_table_manager
         .expect_get_warehouse_location()
@@ -1735,7 +1763,8 @@ async fn test_wal_persists_events() {
 
     env.force_wal_persistence(1).await;
 
-    env.check_wal_events(&expected_events, &[]).await;
+    env.check_wal_events_inferring_lowest_file_number(&expected_events, &[])
+        .await;
 }
 
 #[tokio::test]
@@ -1749,6 +1778,9 @@ async fn test_wal_truncates_events_after_snapshot() {
     // these events should not be persisted because they will go into the iceberg snapshot and be truncated
     not_expected_events.push(env.append_row(1, "John", 30, 1, None).await);
     env.flush_table(1).await;
+    // flush these events first so that they are persisted in the WAL, and this file is subsequently dropped by
+    // the iceberg snapshot
+    env.force_wal_persistence(1).await;
 
     // take snapshot
     let force_snapshot_completion_rx = env.table_event_manager.initiate_snapshot(1).await;
@@ -1758,7 +1790,6 @@ async fn test_wal_truncates_events_after_snapshot() {
     )
     .await
     .unwrap();
-    env.force_wal_persistence(1).await;
 
     // any vents after this should be in the WAL because iceberg snapshot cannot capture the uncommitted streaming xact
     expected_events.push(env.append_row(2, "Jane", 20, 0, Some(100)).await);
@@ -1766,7 +1797,7 @@ async fn test_wal_truncates_events_after_snapshot() {
 
     env.force_wal_persistence(2).await;
 
-    env.check_wal_events(&expected_events, &not_expected_events)
+    env.check_wal_events_inferring_lowest_file_number(&expected_events, &not_expected_events)
         .await;
 }
 
@@ -1811,7 +1842,7 @@ async fn test_wal_keeps_multiple_streaming_xacts() {
     env.force_wal_persistence(7).await;
 
     // we should be keeping all WAL after the flush at LSN 2 because we have a streaming xact that is not committed
-    env.check_wal_events(&expected_events, &not_expected_events)
+    env.check_wal_events_inferring_lowest_file_number(&expected_events, &not_expected_events)
         .await;
 }
 
@@ -1842,6 +1873,161 @@ async fn test_wal_drop_table_removes_files() {
             .await
             .unwrap());
     }
+}
+
+#[tokio::test]
+async fn test_wal_iceberg_snapshot_metadata_retrieval() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    let mut not_expected_events = Vec::new();
+
+    // Append some data and flush to create WAL files
+    not_expected_events.push(env.append_row(1, "Alice", 25, 1, None).await);
+    not_expected_events.push(env.append_row(2, "Bob", 30, 1, None).await);
+    env.flush_table(3).await;
+
+    // Lowest relevant file >= 0
+    env.force_wal_persistence(3).await;
+
+    // create more events
+    not_expected_events.push(env.append_row(3, "Charlie", 35, 4, None).await);
+    not_expected_events.push(env.append_row(4, "Diana", 40, 4, None).await);
+    env.flush_table(5).await;
+    // Lowest relevant file >= 1
+    env.force_wal_persistence(5).await;
+
+    // Create an iceberg snapshot
+    // None of the files before this are relevant, so we truncate them and lowest relevant file >= 2
+    let rx = env.table_event_manager.initiate_snapshot(5).await;
+    TableEventManager::synchronize_force_snapshot_request(rx, 5)
+        .await
+        .unwrap();
+
+    // Load the latest snapshot from the iceberg table manager
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    // Retrieve the WAL persistence metadata from the latest snapshot
+    let iceberg_corresponding_wal_metadata = &snapshot.iceberg_corresponding_wal_metadata;
+    let highest_file_number = iceberg_corresponding_wal_metadata.earliest_wal_file_num;
+
+    assert!(
+        highest_file_number >= 2,
+        "Expected valid file number, got {highest_file_number}"
+    );
+
+    env.check_wal_events(highest_file_number, &[], &not_expected_events)
+        .await;
+}
+
+#[tokio::test]
+async fn test_wal_iceberg_snapshot_keeps_relevant_events() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    let mut not_expected_events = Vec::new();
+    let mut expected_events = Vec::new();
+
+    // Append some data and flush to create WAL files
+    not_expected_events.push(env.append_row(1, "Alice", 25, 1, None).await);
+    not_expected_events.push(env.append_row(2, "Bob", 30, 1, None).await);
+    env.flush_table(3).await;
+
+    // We eventually discard this WAL file
+    env.force_wal_persistence(3).await;
+
+    // create more events
+    expected_events.push(env.append_row(3, "Charlie", 35, 4, None).await);
+    expected_events.push(env.append_row(4, "Diana", 40, 4, None).await);
+    expected_events.push(env.append_row(5, "Eve", 45, 5, Some(100)).await);
+
+    env.flush_table(5).await;
+    // we keep events in this WAL file, because xact 100 never goes into the iceberg snapshot
+    env.force_wal_persistence(5).await;
+
+    // Create an iceberg snapshot
+    // None of the files before this are relevant, so we truncate them and lowest relevant file >= 2
+    let rx = env.table_event_manager.initiate_snapshot(5).await;
+    TableEventManager::synchronize_force_snapshot_request(rx, 5)
+        .await
+        .unwrap();
+
+    // Load the latest snapshot from the iceberg table manager
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    // Retrieve the WAL persistence metadata from the latest snapshot
+    let iceberg_corresponding_wal_metadata = &snapshot.iceberg_corresponding_wal_metadata;
+    let highest_file_number = iceberg_corresponding_wal_metadata.earliest_wal_file_num;
+
+    env.check_wal_events(highest_file_number, &expected_events, &not_expected_events)
+        .await;
+}
+
+#[tokio::test]
+async fn test_wal_iceberg_snapshot_truncates_correctly() {
+    let temp_dir = tempdir().unwrap();
+    let mut env = TestEnvironment::new(temp_dir, MooncakeTableConfig::default()).await;
+
+    let mut not_expected_events = Vec::new();
+    let mut expected_events = Vec::new();
+
+    // Append some data and flush to create WAL files
+    not_expected_events.push(env.append_row(1, "Alice", 25, 1, None).await);
+    not_expected_events.push(env.append_row(2, "Bob", 30, 1, None).await);
+    not_expected_events.push(env.append_row(5, "Eve", 45, 0, Some(100)).await);
+    env.flush_table(3).await;
+
+    env.force_wal_persistence(3).await;
+
+    // create more events
+    not_expected_events.push(env.append_row(3, "Charlie", 35, 4, None).await);
+    not_expected_events.push(env.append_row(4, "Diana", 40, 4, None).await);
+    not_expected_events.push(env.stream_commit(5, 100).await);
+
+    env.flush_table(6).await;
+    // we discard all events up to this WAL file, because xact 100 goes into the iceberg snapshot
+    env.force_wal_persistence(6).await;
+
+    expected_events.push(env.append_row(7, "Frank", 50, 0, Some(101)).await);
+    env.flush_table(7).await;
+    // we keep events in this WAL file, because xact 101 never goes into the iceberg snapshot
+    env.force_wal_persistence(7).await;
+
+    // Create an iceberg snapshot
+    // None of the files before this are relevant, so we truncate them and lowest relevant file >= 2
+    let rx = env.table_event_manager.initiate_snapshot(7).await;
+    TableEventManager::synchronize_force_snapshot_request(rx, 7)
+        .await
+        .unwrap();
+
+    expected_events.push(env.append_row(8, "George", 60, 9, None).await);
+    // we keep events in this WAL file, because the previous exact 101 is still uncomitted
+    env.force_wal_persistence(9).await;
+
+    // Load the latest snapshot from the iceberg table manager
+    let mut iceberg_table_manager =
+        env.create_iceberg_table_manager(MooncakeTableConfig::default());
+    let (_, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+
+    // Retrieve the WAL persistence metadata from the latest snapshot
+    let iceberg_corresponding_wal_metadata = &snapshot.iceberg_corresponding_wal_metadata;
+    let highest_file_number = iceberg_corresponding_wal_metadata.earliest_wal_file_num;
+
+    env.check_wal_events(highest_file_number, &expected_events, &not_expected_events)
+        .await;
 }
 
 /// ---- Util functions unit test ----

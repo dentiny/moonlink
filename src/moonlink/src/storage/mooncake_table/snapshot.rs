@@ -518,19 +518,11 @@ impl SnapshotTableState {
         // Assert and update flush LSN.
         if let Some(new_flush_lsn) = task.new_flush_lsn {
             // Assert flush LSN doesn't regress, if not force snapshot.
-            if self.current_snapshot.data_file_flush_lsn.is_some() && !opt.force_create {
-                ma::assert_lt!(
-                    self.current_snapshot.data_file_flush_lsn.unwrap(),
-                    new_flush_lsn
-                );
+            if self.current_snapshot.flush_lsn.is_some() && !opt.force_create {
+                ma::assert_lt!(self.current_snapshot.flush_lsn.unwrap(), new_flush_lsn);
             }
             // Update flush LSN.
-            self.current_snapshot.data_file_flush_lsn = Some(new_flush_lsn);
-        }
-
-        // Assert and update WAL persisted LSN.
-        if let Some(wal_persistence_metadata) = task.new_wal_persistence_metadata {
-            self.current_snapshot.wal_persistence_metadata = Some(wal_persistence_metadata);
+            self.current_snapshot.flush_lsn = Some(new_flush_lsn);
         }
 
         if task.new_commit_lsn != 0 {
@@ -566,14 +558,22 @@ impl SnapshotTableState {
             file_indices_merge_payload = self.get_file_indices_to_merge(&opt.index_merge_option);
         }
 
-        let flush_by_table_write = self.current_snapshot.data_file_flush_lsn.is_some()
+        let flush_by_table_write = self.current_snapshot.flush_lsn.is_some()
             && (flush_by_new_files_or_maintainence || flush_by_deletion);
+
+        let iceberg_corresponding_wal_metadata = task
+            .iceberg_corresponding_wal_metadata
+            .clone()
+            .expect("accompanying wal metadata should always be populated in a snapshot");
+
+        self.current_snapshot.iceberg_corresponding_wal_metadata =
+            iceberg_corresponding_wal_metadata.clone();
 
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         if !opt.skip_iceberg_snapshot && (force_empty_iceberg_payload || flush_by_table_write) {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
-            let flush_lsn = self.current_snapshot.data_file_flush_lsn.unwrap_or(0);
+            let flush_lsn = self.current_snapshot.flush_lsn.unwrap_or(0);
             let committed_deletion_logs = self.aggregate_committed_deletion_logs(flush_lsn);
             committed_deletion_logs.validate();
 
@@ -584,8 +584,8 @@ impl SnapshotTableState {
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
-                    self.current_snapshot.wal_persistence_metadata.clone(),
                     committed_deletion_logs,
+                    iceberg_corresponding_wal_metadata,
                 ));
             }
         }
