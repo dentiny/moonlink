@@ -2020,7 +2020,7 @@ async fn test_wal_iceberg_snapshot_truncates_correctly() {
         .unwrap();
 
     expected_events.push(env.append_row(8, "George", 60, 9, None).await);
-    // we keep events in this WAL file, because the previous exact 101 is still uncomitted
+    // we keep events in this WAL file, because the previous exact 101 is still uncommitted
     env.force_wal_persistence(9).await;
 
     // Load the latest snapshot from the iceberg table manager

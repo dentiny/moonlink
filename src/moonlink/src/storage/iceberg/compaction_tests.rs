@@ -1009,7 +1009,7 @@ async fn test_compaction_2_3_2() {
     .await;
     check_deleted_rows(committed_deleted_arrow_batches, vec![rows[1].clone()]);
 
-    // Check comitted deletion logs.
+    // Check committed deletion logs.
     let (committed_deletion_log, uncommitted_deletion_log) =
         get_deletion_logs_for_snapshot(&table).await;
 

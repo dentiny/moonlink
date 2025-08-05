@@ -399,7 +399,7 @@ impl SnapshotTableState {
         self.committed_deletion_log = new_committed_deletion_log;
     }
 
-    /// Remap uncomitted deletion log after compaction.
+    /// Remap uncommitted deletion log after compaction.
     pub(super) fn remap_uncommitted_deletion_logs_after_compaction(
         &mut self,
         task: &mut SnapshotTask,

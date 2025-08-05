@@ -275,7 +275,7 @@ impl MooncakeTable {
     }
 
     pub fn abort_in_stream_batch(&mut self, xact_id: u32) {
-        // Record abortion in snapshot task so we can remove any uncomitted deletions
+        // Record abortion in snapshot task so we can remove any uncommitted deletions
         let stream_state = self
             .transaction_stream_states
             .get_mut(&xact_id)
