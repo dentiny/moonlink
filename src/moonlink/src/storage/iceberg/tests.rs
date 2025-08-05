@@ -366,11 +366,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         },
     };
 
-    let peristence_file_params = PersistenceFileParams {
+    let persistence_file_params = PersistenceFileParams {
         table_auto_incr_ids: 1..2,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -420,11 +420,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         },
     };
 
-    let peristence_file_params = PersistenceFileParams {
+    let persistence_file_params = PersistenceFileParams {
         table_auto_incr_ids: 3..4,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -497,11 +497,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_file_indices_to_remove: vec![],
         },
     };
-    let peristence_file_params = PersistenceFileParams {
+    let persistence_file_params = PersistenceFileParams {
         table_auto_incr_ids: 4..5,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
     assert_eq!(iceberg_table_manager.persisted_file_indices.len(), 1);
@@ -585,11 +585,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_file_indices_to_remove: vec![merged_file_index.clone()],
         },
     };
-    let peristence_file_params = PersistenceFileParams {
+    let persistence_file_params = PersistenceFileParams {
         table_auto_incr_ids: 6..7,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -656,11 +656,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_file_indices_to_remove: vec![compacted_file_index.clone()],
         },
     };
-    let peristence_file_params = PersistenceFileParams {
+    let persistence_file_params = PersistenceFileParams {
         table_auto_incr_ids: 7..8,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, peristence_file_params)
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -1593,7 +1593,7 @@ async fn test_multiple_table_ids_for_deletion_vector() {
     // Create the second mooncake and iceberg snapshot, which include [`target_data_files_num`] number of deletion vector puffin files.
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
-    // Load snaphot from iceberg table to validate.
+    // Load snapshot from iceberg table to validate.
     let (_, mut iceberg_table_manager_for_recovery, _) =
         create_table_and_iceberg_manager(&temp_dir).await;
     let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
