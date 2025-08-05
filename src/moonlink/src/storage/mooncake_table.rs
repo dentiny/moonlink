@@ -981,7 +981,7 @@ impl MooncakeTable {
     }
 
     /// Update table schema to the provided [`updated_table_metadata`].
-    /// To synchronize on its completion, caller should trigger a force snapshot and block wait iceberg snapshot complet
+    /// To synchronize on its completion, caller should trigger a force snapshot and block wait iceberg snapshot complete
     pub(crate) fn force_empty_iceberg_payload(&mut self) {
         assert!(!self.next_snapshot_task.force_empty_iceberg_payload);
         self.next_snapshot_task.force_empty_iceberg_payload = true;

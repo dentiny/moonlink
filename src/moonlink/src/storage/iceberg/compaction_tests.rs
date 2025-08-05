@@ -18,7 +18,7 @@
 /// 1 - 3 - *
 ///
 /// Possible states for file indices:
-/// (1) File indices correponds 1-1 to their data files, which means no index merge
+/// (1) File indices corresponds 1-1 to their data files, which means no index merge
 /// (2) File indices have been merged
 ///
 /// For more details, please refer to https://docs.google.com/document/d/1aiQqhl5F8QODJm3HPl47BZX0rfNyUbUPSHGArUcCIw4/edit?usp=sharing
@@ -57,7 +57,7 @@ fn get_moonlink_row(idx: usize) -> MoonlinkRow {
     ])
 }
 
-/// Test util functio to convert moonlink row to arrow batch.
+/// Test util function to convert moonlink row to arrow batch.
 fn extract_value_from_row(row: MoonlinkRow) -> RecordBatch {
     let mut col_1 = vec![];
     let mut col_2 = vec![];
