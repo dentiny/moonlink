@@ -2125,3 +2125,28 @@ async fn test_commit_flush_streaming_transaction_flush_non_streaming_writes() {
 
     env.shutdown().await;
 }
+
+/// Testing scenario: there's deletion operation in the streaming transaction commit flush.
+#[tokio::test]
+async fn test_commit_flush_streaming_transaction_with_deletes() {
+    let mut env = TestEnvironment::default().await;
+
+    // Append and commit in treaming transaction.
+    let xact_id = 0;
+    env.append_row(1, "User-1", 20, /*lsn=*/ 50, Some(xact_id))
+        .await;
+    env.flush_table_and_sync(/*lsn=*/ 100, Some(xact_id)).await;
+
+    // Append and commit in streaming transaction.
+    let xact_id = 1;
+    env.append_row(10, "User-2", 25, /*lsn=*/ 150, Some(xact_id))
+        .await;
+    env.delete_row(1, "User-1", 20, /*lsn=*/ 200, Some(xact_id))
+        .await;
+    env.flush_table_and_sync(250, Some(xact_id)).await;
+
+    env.set_readable_lsn(250);
+    env.verify_snapshot(250, &[10]).await;
+
+    env.shutdown().await;
+}
