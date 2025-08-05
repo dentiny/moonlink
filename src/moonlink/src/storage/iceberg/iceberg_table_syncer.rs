@@ -567,12 +567,10 @@ impl IcebergTableManager {
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),
             snapshot_payload.flush_lsn.to_string(),
         )]);
-        if let Some(wal_metadata) = snapshot_payload.wal_persistence_metadata {
-            snapshot_properties.insert(
-                MOONCAKE_WAL_METADATA.to_string(),
-                serde_json::to_string(&wal_metadata).unwrap(),
-            );
-        }
+        snapshot_properties.insert(
+            MOONCAKE_WAL_METADATA.to_string(),
+            serde_json::to_string(&snapshot_payload.iceberg_corresponding_wal_metadata).unwrap(),
+        );
 
         let mut txn = Transaction::new(self.iceberg_table.as_ref().unwrap());
         let action = txn.fast_append();

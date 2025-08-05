@@ -525,11 +525,6 @@ impl SnapshotTableState {
             self.current_snapshot.flush_lsn = Some(new_flush_lsn);
         }
 
-        // Assert and update WAL persisted LSN.
-        if let Some(wal_persistence_metadata) = task.new_wal_persistence_metadata {
-            self.current_snapshot.wal_persistence_metadata = Some(wal_persistence_metadata);
-        }
-
         if task.new_commit_lsn != 0 {
             self.current_snapshot.snapshot_version = task.new_commit_lsn;
         }
@@ -566,6 +561,14 @@ impl SnapshotTableState {
         let flush_by_table_write = self.current_snapshot.flush_lsn.is_some()
             && (flush_by_new_files_or_maintainence || flush_by_deletion);
 
+        let iceberg_corresponding_wal_metadata = task
+            .iceberg_corresponding_wal_metadata
+            .clone()
+            .expect("accompanying wal metadata should always be populated in a snapshot");
+
+        self.current_snapshot.iceberg_corresponding_wal_metadata =
+            iceberg_corresponding_wal_metadata.clone();
+
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         if !opt.skip_iceberg_snapshot && (force_empty_iceberg_payload || flush_by_table_write) {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
@@ -581,8 +584,8 @@ impl SnapshotTableState {
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     flush_lsn,
-                    self.current_snapshot.wal_persistence_metadata.clone(),
                     committed_deletion_logs,
+                    iceberg_corresponding_wal_metadata,
                 ));
             }
         }

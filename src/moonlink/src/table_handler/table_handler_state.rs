@@ -166,13 +166,13 @@ impl TableHandlerState {
                     self.latest_commit_lsn = Some(*lsn);
                     self.table_consistent_view_lsn = Some(*lsn);
                     if xact_id.is_none() {
+                        // Unset at flush operation.
                         self.last_unflushed_commit_lsn = Some(*lsn);
                     }
                 }
                 TableEvent::CommitFlush { lsn, .. } => {
                     self.latest_commit_lsn = Some(*lsn);
                     self.table_consistent_view_lsn = Some(*lsn);
-                    self.last_unflushed_commit_lsn = None;
                 }
                 // Unset for table write operations.
                 TableEvent::Append { .. }
