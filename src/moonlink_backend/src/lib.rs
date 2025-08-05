@@ -201,7 +201,7 @@ where
         Ok(table_states)
     }
 
-    /// Perform a table maintaince operation based on requested mode, block wait until maintenance results have been persisted.
+    /// Perform a table maintenance operation based on requested mode, block wait until maintenance results have been persisted.
     /// Notice, it's only exposed for debugging, testing and admin usage.
     ///
     /// There're currently three modes supported:

@@ -1555,7 +1555,7 @@ async fn test_data_compaction_with_sufficient_data_files() {
 #[tokio::test]
 async fn test_full_maintenance_with_sufficient_data_files() {
     let temp_dir = tempdir().unwrap();
-    // Setup mooncake config, which won't trigger any data compaction or index merge, if not full table maintaince.
+    // Setup mooncake config, which won't trigger any data compaction or index merge, if not full table maintenance.
     let mooncake_table_config = MooncakeTableConfig {
         data_compaction_config: DataCompactionConfig {
             min_data_file_to_compact: 2,

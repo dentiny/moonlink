@@ -360,10 +360,10 @@ impl SnapshotTask {
 
 /// Option for a maintenance option.
 ///
-/// For all types of maintaince tasks, we have two basic dimensions:
+/// For all types of maintenance tasks, we have two basic dimensions:
 /// - Selection criteria: for full-mode maintenance task, all files will take part in, however big it is; for non-full-mode, only those meet certain threshold will be selected.
 ///   For example, for non-full-mode, only small files will be compacted.
-/// - Trigger criteria: to avoid overly frequent background maintaince task, it's only triggered when selected files reaches certain threshold.
+/// - Trigger criteria: to avoid overly frequent background maintenance task, it's only triggered when selected files reaches certain threshold.
 ///   While for force maintenance request, as long as there're at least two files, task will be triggered.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MaintenanceOption {
@@ -372,7 +372,7 @@ pub enum MaintenanceOption {
     BestEffort,
     /// Force a regular maintenance attempt.
     ForceRegular,
-    /// Force a full maintaince attempt.
+    /// Force a full maintenance attempt.
     ForceFull,
     /// Skip maintenance attempt.
     Skip,
@@ -412,7 +412,7 @@ impl SnapshotOption {
 /// And periodically disk slices will be merged and compacted.
 /// Single thread is used to write to the table.
 ///
-/// LSN is used for visiblity control of mooncake table.
+/// LSN is used for visibility control of mooncake table.
 /// Currently it has following rules:
 /// For read at lsn X, any record committed at lsn <= X is visible.
 /// For commit at lsn X, any record whose lsn < X is committed.
@@ -472,7 +472,7 @@ pub struct MooncakeTable {
 impl MooncakeTable {
     /// foreground functions
     ///
-    /// TODO(hjiang): Provide a struct to hold all paramters.
+    /// TODO(hjiang): Provide a struct to hold all parameters.
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         schema: Schema,

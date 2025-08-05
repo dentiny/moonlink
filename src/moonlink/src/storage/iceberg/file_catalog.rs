@@ -21,7 +21,7 @@ use std::collections::{HashMap, HashSet};
 ///   - An empty file, indicates it's a valid namespace
 /// - data
 ///   - parquet files
-/// - metdata
+/// - metadata
 ///   - version hint file
 ///     + version-hint.text
 ///     + contains the latest version number for metadata
@@ -182,8 +182,8 @@ impl FileCatalog {
         table_requirements: Vec<TableRequirement>,
         table_metadata: &TableMetadata,
     ) -> IcebergResult<()> {
-        for cur_requirment in table_requirements.into_iter() {
-            cur_requirment.check(Some(table_metadata))?;
+        for cur_requirement in table_requirements.into_iter() {
+            cur_requirement.check(Some(table_metadata))?;
         }
         Ok(())
     }

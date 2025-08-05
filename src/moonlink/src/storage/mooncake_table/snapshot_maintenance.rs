@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-/// This file contains maintaince related features for mooncake snapshot.
+/// This file contains maintenance related features for mooncake snapshot.
 use crate::storage::compaction::table_compaction::SingleFileToCompact;
 use crate::storage::mooncake_table::snapshot::SnapshotTableState;
 use crate::storage::mooncake_table::{
