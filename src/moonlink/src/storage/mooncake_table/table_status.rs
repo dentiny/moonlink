@@ -10,10 +10,8 @@ pub(crate) struct TableSnapshotStatus {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct TableStatus {
-    /// Database id.
-    pub database_id: u32,
     /// Mooncake table id.
-    pub table_id: u32,
+    pub mooncake_table_id: String,
     /// Mooncake table commit LSN.
     pub commit_lsn: u64,
     /// Iceberg flush LSN.

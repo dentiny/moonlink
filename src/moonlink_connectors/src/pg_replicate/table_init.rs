@@ -50,7 +50,6 @@ async fn recreate_directory(dir: &PathBuf) -> Result<()> {
 /// Build all components needed to replicate `table_schema`.
 pub async fn build_table_components(
     mooncake_table_id: String,
-    database_id: u32,
     table_id: u32,
     table_schema: &TableSchema,
     base_path: &String,
@@ -95,8 +94,7 @@ pub async fn build_table_components(
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
     let table_status_reader = TableStatusReader::new(
-        database_id,
-        table_id,
+        mooncake_table_id,
         &moonlink_table_config.iceberg_table_config,
         &table,
     );

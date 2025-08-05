@@ -97,8 +97,7 @@ async fn handle_stream(
                 let tables: Vec<Table> = tables
                     .into_iter()
                     .map(|table| Table {
-                        database_id: table.database_id,
-                        table_id: table.table_id,
+                        mooncake_table_id: table.mooncake_table_id,
                         commit_lsn: table.commit_lsn,
                         flush_lsn: table.flush_lsn,
                         iceberg_warehouse_location: table.iceberg_warehouse_location,

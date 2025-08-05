@@ -124,7 +124,6 @@ where
                 .add_table(
                     &src_uri,
                     mooncake_table_id,
-                    database_id,
                     table_id,
                     &src_table_name,
                     moonlink_table_config.clone(),
