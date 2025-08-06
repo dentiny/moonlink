@@ -87,7 +87,9 @@ impl ColumnArrayBuilder {
             DataType::Decimal128(precision, scale) => ColumnArrayBuilder::Decimal128(
                 PrimitiveBuilder::<Decimal128Type>::with_capacity(capacity)
                     .with_precision_and_scale(*precision, *scale)
-                    .expect("Failed to create Decimal128Type"),
+                    .expect(
+                        "Failed to create Decimal128Type with precision {precision} and {scale}",
+                    ),
                 array_builder,
             ),
             DataType::Binary => ColumnArrayBuilder::Binary(
@@ -110,7 +112,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::Bool(v) => builder.append_value(*v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("Bool expected from well-typed input"),
+                                _ => unreachable!(
+                                    "Bool expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -121,7 +126,7 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("Bool expected from well-typed input"),
+                    _ => unreachable!("Bool expected from well-typed input, but get {:?}", value),
                 };
                 Ok(())
             }
@@ -134,7 +139,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::Int32(v) => builder.append_value(*v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("Int32 expected from well-typed input"),
+                                _ => unreachable!(
+                                    "Int32 expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -145,7 +153,7 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("Int32 expected from well-typed input"),
+                    _ => unreachable!("Int32 expected from well-typed input, but get {:?}", value),
                 };
                 Ok(())
             }
@@ -158,7 +166,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::Int64(v) => builder.append_value(*v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("Int64 expected from well-typed input"),
+                                _ => unreachable!(
+                                    "Int64 expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -169,7 +180,7 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("Int64 expected from well-typed input"),
+                    _ => unreachable!("Int64 expected from well-typed input, but get {:?}", value),
                 };
                 Ok(())
             }
@@ -182,7 +193,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::Float32(v) => builder.append_value(*v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("Float32 expected from well-typed input"),
+                                _ => unreachable!(
+                                    "Float32 expected from well-typed input, but get {:?}",
+                                    value
+                                ),
                             }
                         }
                     }
@@ -193,7 +207,10 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("Float32 expected from well-typed input"),
+                    _ => unreachable!(
+                        "Float32 expected from well-typed input, but get {:?}",
+                        value
+                    ),
                 };
                 Ok(())
             }
@@ -206,7 +223,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::Float64(v) => builder.append_value(*v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("Float64 expected from well-typed input"),
+                                _ => unreachable!(
+                                    "Float64 expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -217,7 +237,10 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("Float64 expected from well-typed input"),
+                    _ => unreachable!(
+                        "Float64 expected from well-typed input, but get {:?}",
+                        value
+                    ),
                 };
                 Ok(())
             }
@@ -230,7 +253,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::Decimal(v) => builder.append_value(*v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("Decimal128 expected from well-typed input"),
+                                _ => unreachable!(
+                                    "Decimal128 expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -241,7 +267,10 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("Decimal128 expected from well-typed input"),
+                    _ => unreachable!(
+                        "Decimal128 expected from well-typed input, but get {:?}",
+                        value
+                    ),
                 };
                 Ok(())
             }
@@ -257,7 +286,10 @@ impl ColumnArrayBuilder {
                                 RowValue::ByteArray(v) => builder
                                     .append_value(unsafe { std::str::from_utf8_unchecked(v) }),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("ByteArray expected from well-typed input"),
+                                _ => unreachable!(
+                                    "ByteArray expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -268,7 +300,10 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("ByteArray expected from well-typed input"),
+                    _ => unreachable!(
+                        "ByteArray expected from well-typed input, but get {:?}",
+                        value
+                    ),
                 };
                 Ok(())
             }
@@ -282,7 +317,7 @@ impl ColumnArrayBuilder {
                                 RowValue::FixedLenByteArray(v) => builder.append_value(v)?,
                                 RowValue::Null => builder.append_null(),
                                 _ => {
-                                    unreachable!("FixedLenByteArray expected from well-typed input")
+                                    unreachable!("FixedLenByteArray expected from well-typed input, but get {:?}", v[i])
                                 }
                             }
                         }
@@ -294,7 +329,10 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("FixedLenByteArray expected from well-typed input"),
+                    _ => unreachable!(
+                        "FixedLenByteArray expected from well-typed input, but get {:?}",
+                        value
+                    ),
                 };
                 Ok(())
             }
@@ -307,7 +345,10 @@ impl ColumnArrayBuilder {
                             match &v[i] {
                                 RowValue::ByteArray(v) => builder.append_value(v),
                                 RowValue::Null => builder.append_null(),
-                                _ => unreachable!("ByteArray expected from well-typed input"),
+                                _ => unreachable!(
+                                    "ByteArray expected from well-typed input, but get {:?}",
+                                    v[i]
+                                ),
                             }
                         }
                     }
@@ -318,7 +359,10 @@ impl ColumnArrayBuilder {
                             builder.append_null();
                         }
                     }
-                    _ => unreachable!("ByteArray expected from well-typed input"),
+                    _ => unreachable!(
+                        "ByteArray expected from well-typed input, but get {:?}",
+                        value
+                    ),
                 };
                 Ok(())
             }
