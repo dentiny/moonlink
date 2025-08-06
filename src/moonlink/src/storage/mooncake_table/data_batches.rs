@@ -271,6 +271,7 @@ impl ColumnStoreBuffer {
         self.current_rows.get_snapshot()
     }
 
+    #[must_use]
     pub(super) fn try_delete_at_pos(&mut self, pos: (u64, usize)) -> bool {
         let idx = self
             .in_memory_batches
