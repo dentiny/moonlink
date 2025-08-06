@@ -80,7 +80,7 @@ impl BatchDeletionVector {
         self.apply_to_batch_with_slice(batch, /*start_row_idx=*/ 0)
     }
 
-    /// Similar to [`apply_to_batch`], this function also takes a slice of deletion vector indiciated by the [`start_row_idx`].
+    /// Similar to [`apply_to_batch`], this function also takes a slice of deletion vector indicated by the [`start_row_idx`].
     pub(crate) fn apply_to_batch_with_slice(
         &self,
         batch: &RecordBatch,

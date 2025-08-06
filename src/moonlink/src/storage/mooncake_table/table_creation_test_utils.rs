@@ -42,7 +42,7 @@ pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig
     }
 }
 
-/// Test util function to get iceberg table cofig from filesystem config.
+/// Test util function to get iceberg table config from filesystem config.
 #[cfg(feature = "chaos-test")]
 pub(crate) fn get_iceberg_table_config_with_storage_config(
     storage_config: StorageConfig,

@@ -33,7 +33,7 @@ fn remap_record_location_after_compaction(
 
 impl SnapshotTableState {
     /// ===============================
-    /// Get maintence payload
+    /// Get maintenance payload
     /// ===============================
     ///
     /// Util function to decide whether and what to compact data files.
@@ -382,7 +382,7 @@ impl SnapshotTableState {
                 }
                 // Case-2: the deletion log exists in the compacted new data file, perform a remap.
                 //
-                // Committed deletion log only contains unpersisted records, so remap should succed.
+                // Committed deletion log only contains unpersisted records, so remap should succeed.
                 let remap_succ =
                     remap_record_location_after_compaction(&mut cur_deletion_log, task);
                 assert!(
