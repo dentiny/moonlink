@@ -44,6 +44,7 @@ pub fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
 pub fn get_iceberg_manager_config(table_name: String, warehouse_uri: String) -> IcebergTableConfig {
     let storage_config = StorageConfig::FileSystem {
         root_directory: warehouse_uri,
+        atomic_write_dir: None,
     };
     IcebergTableConfig {
         namespace: vec!["default".to_string()],

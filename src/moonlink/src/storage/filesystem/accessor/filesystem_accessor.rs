@@ -63,6 +63,7 @@ impl FileSystemAccessor {
 
         let storage_config = crate::StorageConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
         };
         let accessor_config = AccessorConfig::new_with_storage_config(storage_config);
         create_filesystem_accessor(accessor_config)
@@ -448,6 +449,7 @@ mod tests {
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
+            atomic_write_dir: None,
         };
         let filesystem_accessor = create_filesystem_accessor(
             AccessorConfig::new_with_storage_config(storage_config.clone()),
@@ -478,6 +480,7 @@ mod tests {
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
+            atomic_write_dir: None,
         };
         let filesystem_accessor = create_filesystem_accessor(
             AccessorConfig::new_with_storage_config(storage_config.clone()),
@@ -525,6 +528,7 @@ mod tests {
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
+            atomic_write_dir: None,
         };
         let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
         let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
@@ -560,6 +564,7 @@ mod tests {
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
+            atomic_write_dir: None,
         };
         let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
         let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
@@ -593,6 +598,7 @@ mod tests {
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
+            atomic_write_dir: None,
         };
         let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
         let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());
@@ -622,6 +628,7 @@ mod tests {
         let root_directory = temp_dir.path().to_str().unwrap().to_string();
         let storage_config = StorageConfig::FileSystem {
             root_directory: root_directory.clone(),
+            atomic_write_dir: None,
         };
         let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
         let filesystem_accessor = create_filesystem_accessor(accessor_config.clone());

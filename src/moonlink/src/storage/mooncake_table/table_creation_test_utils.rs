@@ -33,7 +33,10 @@ use tokio::sync::mpsc::Receiver;
 /// Test util function to get iceberg table config for local filesystem.
 pub(crate) fn get_iceberg_table_config(temp_dir: &TempDir) -> IcebergTableConfig {
     let root_directory = temp_dir.path().to_str().unwrap().to_string();
-    let storage_config = StorageConfig::FileSystem { root_directory };
+    let storage_config = StorageConfig::FileSystem {
+        root_directory,
+        atomic_write_dir: None,
+    };
     let accessor_config = AccessorConfig::new_with_storage_config(storage_config);
     IcebergTableConfig {
         namespace: vec![ICEBERG_TEST_NAMESPACE.to_string()],
@@ -103,6 +106,7 @@ pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTable
     } else {
         let storage_config = StorageConfig::FileSystem {
             root_directory: warehouse_uri.clone(),
+            atomic_write_dir: None,
         };
         AccessorConfig::new_with_storage_config(storage_config)
     };

@@ -37,6 +37,8 @@ impl WalConfig {
                 .to_str()
                 .unwrap()
                 .to_string(),
+            // TODO(paul): evaluate atomic write option.
+            atomic_write_dir: None,
         };
         Self {
             accessor_config: AccessorConfig::new_with_storage_config(wal_storage_config),

@@ -46,6 +46,7 @@ fn get_storage_config() -> StorageConfig {
     {
         return StorageConfig::FileSystem {
             root_directory: "/tmp/test_warehouse_uri".to_string(),
+            atomic_write_dir: None,
         };
     }
 
