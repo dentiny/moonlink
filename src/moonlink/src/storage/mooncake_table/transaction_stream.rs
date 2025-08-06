@@ -248,7 +248,7 @@ impl MooncakeTable {
                                     pos: loc,
                                     lsn: record.lsn,
                                 });
-                                disk_file_entry.batch_deletion_vector.delete_row(row_id);
+                                assert!(disk_file_entry.batch_deletion_vector.delete_row(row_id));
                                 return;
                             }
                         }

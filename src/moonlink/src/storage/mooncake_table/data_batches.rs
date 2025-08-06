@@ -238,10 +238,10 @@ impl ColumnStoreBuffer {
                     identity,
                 )
             {
-                self.in_memory_batches[idx]
+                assert!(self.in_memory_batches[idx]
                     .batch
                     .deletions
-                    .delete_row(*row_offset);
+                    .delete_row(*row_offset));
                 return Some((*batch_id, *row_offset));
             }
         }
