@@ -216,7 +216,8 @@ impl MooncakeTable {
                                 lsn: record.lsn,
                             });
                             // Mark the row as deleted in the batch
-                            stream_state
+                            // TODO(hjiang): Add assertion after https://github.com/Mooncake-Labs/moonlink/pull/1243
+                            let _ = stream_state
                                 .new_record_batches
                                 .get_mut(&batch_id)
                                 .unwrap()

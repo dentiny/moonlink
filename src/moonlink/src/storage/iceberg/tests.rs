@@ -68,7 +68,7 @@ fn test_committed_deletion_log_1(
     data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
-    deletion_vector.delete_row(0);
+    assert!(deletion_vector.delete_row(0));
 
     HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(data_file, deletion_vector)])
 }
@@ -84,8 +84,8 @@ fn test_committed_deletion_log_2(
     data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
     let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
-    deletion_vector.delete_row(1);
-    deletion_vector.delete_row(2);
+    assert!(deletion_vector.delete_row(1));
+    assert!(deletion_vector.delete_row(2));
 
     HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(
         data_file.clone(),

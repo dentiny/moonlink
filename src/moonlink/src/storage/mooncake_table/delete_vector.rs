@@ -47,7 +47,8 @@ impl BatchDeletionVector {
         }
     }
 
-    /// Mark a row as deleted
+    /// Mark a row as deleted, return whether deletion succeeds or not.
+    #[must_use]
     pub(crate) fn delete_row(&mut self, row_idx: usize) -> bool {
         // Set the bit at row_idx to 1 (deleted)
         self.initialize_vector_for_once();
@@ -182,8 +183,8 @@ mod tests {
         // Create a delete vector
         let mut buffer = BatchDeletionVector::new(5);
         // Delete some rows
-        buffer.delete_row(1);
-        buffer.delete_row(3);
+        assert!(buffer.delete_row(1));
+        assert!(buffer.delete_row(3));
 
         // Check deletion status
         assert!(!buffer.is_deleted(0));
@@ -242,8 +243,8 @@ mod tests {
     fn test_apply_filter_with_slice() {
         // Create deletion vector.
         let mut batch_deletion_vector = BatchDeletionVector::new(/*max_rows=*/ 6);
-        batch_deletion_vector.delete_row(0);
-        batch_deletion_vector.delete_row(4);
+        assert!(batch_deletion_vector.delete_row(0));
+        assert!(batch_deletion_vector.delete_row(4));
         // Check number of deleted rows.
         assert_eq!(batch_deletion_vector.get_num_rows_deleted(), 2);
 
@@ -331,9 +332,9 @@ mod tests {
         assert!(deleted_rows.is_empty());
 
         // Delete rows 1, 3, and 8
-        buffer.delete_row(1);
-        buffer.delete_row(3);
-        buffer.delete_row(8);
+        assert!(buffer.delete_row(1));
+        assert!(buffer.delete_row(3));
+        assert!(buffer.delete_row(8));
 
         // Check that the iterator returns those positions
         let active_rows: Vec<usize> = buffer.collect_active_rows(10);
@@ -350,7 +351,7 @@ mod tests {
         {
             let mut dv1 = BatchDeletionVector::new(10);
             let mut dv2 = BatchDeletionVector::new(10);
-            dv2.delete_row(0);
+            assert!(dv2.delete_row(0));
             dv1.merge_with(&dv2);
             assert_eq!(dv1.collect_deleted_rows(), vec![0]);
             // Check number of deleted rows.
@@ -360,7 +361,7 @@ mod tests {
         // rhs deletion vector is empty.
         {
             let mut dv1 = BatchDeletionVector::new(10);
-            dv1.delete_row(0);
+            assert!(dv1.delete_row(0));
             let dv2 = BatchDeletionVector::new(10);
             dv1.merge_with(&dv2);
             assert_eq!(dv1.collect_deleted_rows(), vec![0]);
@@ -373,13 +374,13 @@ mod tests {
     fn test_deletion_vector_merge() {
         let mut dv1 = BatchDeletionVector::new(10);
         assert!(dv1.is_empty());
-        dv1.delete_row(0);
-        dv1.delete_row(2);
+        assert!(dv1.delete_row(0));
+        assert!(dv1.delete_row(2));
         assert!(!dv1.is_empty());
 
         let mut dv2 = BatchDeletionVector::new(10);
-        dv2.delete_row(6);
-        dv2.delete_row(8);
+        assert!(dv2.delete_row(6));
+        assert!(dv2.delete_row(8));
 
         dv1.merge_with(&dv2);
         assert_eq!(dv1.collect_deleted_rows(), vec![0, 2, 6, 8]);
