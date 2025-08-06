@@ -1,22 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: my-rust-cli
+  name: moonlink-deployment
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: my-rust-cli
+      app: moonlink-deployment
   template:
     metadata:
       labels:
-        app: my-rust-cli
+        app: moonlink-deployment
     spec:
       containers:
-      # TODO(hjiang): Rename container name.
-      # TODO(hjiang): Add resource limit/request.
-      - name: my-rust-cli
-        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/my-rust-cli:deefde16-0ab8-4c03-90b6-b1a2ae201df0
+      - name: moonlink-deployment
+        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:bc30497c-e2e2-48c1-8dea-ce565ac1b4d4
         env:
         - name: PGHOST
           value: localhost
@@ -28,7 +26,19 @@ spec:
           value: mydb
         - name: PGPORT
           value: "5432"
-      # TODO(hjiang): Postgres container to test moonlink.
+        volumeMounts:
+        - name: shared-cache-directory
+          mountPath: /tmp/moonlink
+
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        # nginx serves local files under certain directory.
+        - name: shared-cache-directory
+          mountPath: /usr/share/nginx/html
+
       - name: postgres
         image: postgres:17
         env:
@@ -45,6 +55,10 @@ spec:
         volumeMounts:
         - name: pgdata
           mountPath: /var/lib/postgresql/data
+
       volumes:
       - name: pgdata
+        emptyDir: {}
+      # Shared cache directory between data server and moonlink.
+      - name: shared-cache-directory
         emptyDir: {}
