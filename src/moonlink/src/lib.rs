@@ -15,7 +15,8 @@ pub use storage::{
     FileSystemAccessor, IcebergPersistenceConfig, IcebergTableConfig, IcebergTableManager,
     MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
     MoonlinkTableSecret, ObjectStorageCache, ObjectStorageCacheConfig, SnapshotReadOutput,
-    StorageConfig, TableEventManager, TableManager, TableStatus, TableStatusReader, WalConfig,
+    StorageConfig, TableEventManager, TableManager, TableSnapshotStatus, TableStatusReader,
+    WalConfig,
 };
 pub use table_handler::TableHandler;
 pub use table_notify::TableEvent;

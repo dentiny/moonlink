@@ -6,7 +6,7 @@ mod tests {
         current_wal_lsn, ids_from_state, smoke_create_and_insert, DatabaseId, TableId, TestGuard,
         TestGuardMode, TABLE_ID,
     };
-    use moonlink::TableStatus;
+    use moonlink_backend::table_status::TableStatus;
     use moonlink_backend::MoonlinkBackend;
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, SqliteMetadataStore};
 
@@ -154,7 +154,8 @@ mod tests {
         // Check table status.
         let table_statuses = backend.list_tables().await.unwrap();
         let expected_table_status = TableStatus {
-            mooncake_table_id: format!("{0}.{TABLE_ID}", guard.database_id),
+            database_id: guard.database_id,
+            table_id: TABLE_ID as u32,
             commit_lsn: lsn,
             flush_lsn: Some(lsn),
             iceberg_warehouse_location: guard.tmp().unwrap().path().to_str().unwrap().to_string(),

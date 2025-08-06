@@ -56,7 +56,8 @@ const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Table {
-    pub mooncake_table_id: String,
+    pub database_id: u32,
+    pub table_id: u32,
     pub commit_lsn: u64,
     pub flush_lsn: Option<u64>,
     pub iceberg_warehouse_location: String,

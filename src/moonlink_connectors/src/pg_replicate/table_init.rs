@@ -93,11 +93,8 @@ pub async fn build_table_components(
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
     let read_state_manager =
         ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
-    let table_status_reader = TableStatusReader::new(
-        mooncake_table_id,
-        &moonlink_table_config.iceberg_table_config,
-        &table,
-    );
+    let table_status_reader =
+        TableStatusReader::new(&moonlink_table_config.iceberg_table_config, &table);
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();
     let table_handler = TableHandler::new(
         table,
