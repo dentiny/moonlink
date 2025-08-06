@@ -216,12 +216,12 @@ impl MooncakeTable {
                                 lsn: record.lsn,
                             });
                             // Mark the row as deleted in the batch
-                            stream_state
+                            assert!(stream_state
                                 .new_record_batches
                                 .get_mut(&batch_id)
                                 .unwrap()
                                 .deletions
-                                .delete_row(row_id);
+                                .delete_row(row_id));
                             return;
                         }
                         RecordLocation::DiskFile(file_id, row_id) => {
