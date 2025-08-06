@@ -47,8 +47,11 @@ impl BatchDeletionVector {
         }
     }
 
-    /// Mark a row as deleted
+    /// Mark a row as deleted, return whether deletion succeeds or not.
+    /// Precondition: deletion vector's capacity is larger than 0, otherwise panics.
     pub(crate) fn delete_row(&mut self, row_idx: usize) -> bool {
+        ma::assert_gt!(self.max_rows, 0);
+
         // Set the bit at row_idx to 1 (deleted)
         self.initialize_vector_for_once();
         let exist = bit_util::get_bit(self.deletion_vector.as_ref().unwrap(), row_idx);

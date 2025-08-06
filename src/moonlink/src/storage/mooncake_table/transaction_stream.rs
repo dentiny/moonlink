@@ -193,9 +193,6 @@ impl MooncakeTable {
                                 .get(&batch_id)
                                 .expect("Attempting to delete batch that doesn't exist");
 
-                            if batch.deletions.is_deleted(row_id) {
-                                continue;
-                            }
                             if record.row_identity.is_some()
                                 && metadata_identity.requires_identity_check_in_mem_slice()
                                 && !record
@@ -216,12 +213,12 @@ impl MooncakeTable {
                                 lsn: record.lsn,
                             });
                             // Mark the row as deleted in the batch
-                            stream_state
+                            assert!(stream_state
                                 .new_record_batches
                                 .get_mut(&batch_id)
                                 .unwrap()
                                 .deletions
-                                .delete_row(row_id);
+                                .delete_row(row_id));
                             return;
                         }
                         RecordLocation::DiskFile(file_id, row_id) => {
@@ -314,11 +311,12 @@ impl MooncakeTable {
         for batch in batches.iter_mut() {
             let filtered_batch = batch.batch.get_filtered_batch()?;
             if let Some(filtered_batch) = filtered_batch {
+                let num_rows = filtered_batch.num_rows();
                 stream_state.new_record_batches.insert(
                     batch.id,
                     InMemoryBatch {
                         data: Some(Arc::new(filtered_batch)),
-                        deletions: BatchDeletionVector::default(),
+                        deletions: BatchDeletionVector::new(num_rows),
                     },
                 );
             }
@@ -458,11 +456,12 @@ impl MooncakeTable {
         for batch in batches.iter_mut() {
             let filtered_batch = batch.batch.get_filtered_batch()?;
             if let Some(filtered_batch) = filtered_batch {
+                let num_rows = filtered_batch.num_rows();
                 stream_state.new_record_batches.insert(
                     batch.id,
                     InMemoryBatch {
                         data: Some(Arc::new(filtered_batch)),
-                        deletions: BatchDeletionVector::default(),
+                        deletions: BatchDeletionVector::new(num_rows),
                     },
                 );
             }
