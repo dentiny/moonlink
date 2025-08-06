@@ -193,6 +193,9 @@ impl MooncakeTable {
                                 .get(&batch_id)
                                 .expect("Attempting to delete batch that doesn't exist");
 
+                            if batch.deletions.is_deleted(row_id) {
+                                continue;
+                            }
                             if record.row_identity.is_some()
                                 && metadata_identity.requires_identity_check_in_mem_slice()
                                 && !record
