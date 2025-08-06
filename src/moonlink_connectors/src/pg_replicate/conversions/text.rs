@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::pg_replicate::conversions::{bool::parse_bool, hex};
 
-use super::{bool::ParseBoolError, hex::ByteaHexParseError, numeric::PgNumeric, ArrayCell, Cell};
+use super::{bool::ParseBoolError, hex::ByteaHexParseError, numeric::PgNumberic, ArrayCell, Cell};
 
 #[derive(Debug, Error)]
 pub enum FromTextError {
@@ -26,7 +26,7 @@ pub enum FromTextError {
     InvalidFloat(#[from] ParseFloatError),
 
     #[error("invalid numeric: {0}")]
-    InvalidNumeric(#[from] ParseBigDecimalError),
+    InvalidNumberic(#[from] ParseBigDecimalError),
 
     #[error("invalid bytea: {0}")]
     InvalidBytea(#[from] ByteaHexParseError),
@@ -129,8 +129,8 @@ impl TextFormatConverter {
             Type::FLOAT4_ARRAY => Cell::Array(ArrayCell::F32(Vec::default())),
             Type::FLOAT8 => Cell::F64(f64::default()),
             Type::FLOAT8_ARRAY => Cell::Array(ArrayCell::F64(Vec::default())),
-            Type::NUMERIC => Cell::Numeric(PgNumeric::default()),
-            Type::NUMERIC_ARRAY => Cell::Array(ArrayCell::Numeric(Vec::default())),
+            Type::NUMERIC => Cell::Numberic(PgNumberic::default()),
+            Type::NUMERIC_ARRAY => Cell::Array(ArrayCell::Numberic(Vec::default())),
             Type::BYTEA => Cell::Bytes(Vec::default()),
             Type::BYTEA_ARRAY => Cell::Array(ArrayCell::Bytes(Vec::default())),
             Type::DATE => Cell::Date(NaiveDate::MIN),
@@ -196,11 +196,11 @@ impl TextFormatConverter {
             Type::FLOAT8_ARRAY => {
                 TextFormatConverter::parse_array(str, |str| Ok(Some(str.parse()?)), ArrayCell::F64)
             }
-            Type::NUMERIC => Ok(Cell::Numeric(str.parse()?)),
+            Type::NUMERIC => Ok(Cell::Numberic(str.parse()?)),
             Type::NUMERIC_ARRAY => TextFormatConverter::parse_array(
                 str,
                 |str| Ok(Some(str.parse()?)),
-                ArrayCell::Numeric,
+                ArrayCell::Numberic,
             ),
             Type::BYTEA => Ok(Cell::Bytes(hex::from_bytea_hex(str)?)),
             Type::BYTEA_ARRAY => TextFormatConverter::parse_array(

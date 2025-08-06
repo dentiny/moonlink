@@ -7,32 +7,32 @@ use byteorder::{BigEndian, ReadBytesExt};
 use std::{fmt::Display, io::Cursor, str::FromStr};
 use tokio_postgres::types::{FromSql, Type};
 
-/// A rust variant of the Postgres Numeric type. The full spectrum of Postgres'
-/// Numeric value range is supported.
+/// A rust variant of the Postgres Numberic type. The full spectrum of Postgres'
+/// Numberic value range is supported.
 ///
 /// Represented as an Optional BigDecimal. None for 'NaN', Some(bigdecimal) for
 /// all other values.
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
-pub enum PgNumeric {
+pub enum PgNumberic {
     NaN,
     PositiveInf,
     NegativeInf,
     Value(BigDecimal),
 }
 
-impl FromStr for PgNumeric {
+impl FromStr for PgNumberic {
     type Err = ParseBigDecimalError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match BigDecimal::from_str(s) {
-            Ok(n) => Ok(PgNumeric::Value(n)),
+            Ok(n) => Ok(PgNumberic::Value(n)),
             Err(e) => {
                 if s.to_lowercase() == "infinity" {
-                    Ok(PgNumeric::PositiveInf)
+                    Ok(PgNumberic::PositiveInf)
                 } else if s.to_lowercase() == "-infinity" {
-                    Ok(PgNumeric::NegativeInf)
+                    Ok(PgNumberic::NegativeInf)
                 } else if s.to_lowercase() == "nan" {
-                    Ok(PgNumeric::NaN)
+                    Ok(PgNumberic::NaN)
                 } else {
                     Err(e)
                 }
@@ -41,7 +41,7 @@ impl FromStr for PgNumeric {
     }
 }
 
-impl<'a> FromSql<'a> for PgNumeric {
+impl<'a> FromSql<'a> for PgNumberic {
     fn from_sql(
         _: &Type,
         raw: &'a [u8],
@@ -53,9 +53,9 @@ impl<'a> FromSql<'a> for PgNumeric {
         let sign = match rdr.read_u16::<BigEndian>()? {
             0x4000 => Sign::Minus,
             0x0000 => Sign::Plus,
-            0xC000 => return Ok(PgNumeric::NaN),
-            0xD000 => return Ok(PgNumeric::PositiveInf),
-            0xF000 => return Ok(PgNumeric::NegativeInf),
+            0xC000 => return Ok(PgNumberic::NaN),
+            0xD000 => return Ok(PgNumberic::PositiveInf),
+            0xF000 => return Ok(PgNumberic::NegativeInf),
             v => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
@@ -82,7 +82,7 @@ impl<'a> FromSql<'a> for PgNumeric {
         let res = BigDecimal::new(BigInt::from_biguint(sign, biguint), -correction_exp)
             .with_scale(i64::from(scale));
 
-        Ok(PgNumeric::Value(res))
+        Ok(PgNumberic::Value(res))
     }
 
     fn accepts(ty: &Type) -> bool {
@@ -90,19 +90,19 @@ impl<'a> FromSql<'a> for PgNumeric {
     }
 }
 
-impl Display for PgNumeric {
+impl Display for PgNumberic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            PgNumeric::NaN => write!(f, "NaN"),
-            PgNumeric::PositiveInf => write!(f, "Infinity"),
-            PgNumeric::NegativeInf => write!(f, "-Infinity"),
-            PgNumeric::Value(n) => write!(f, "{n}"),
+            PgNumberic::NaN => write!(f, "NaN"),
+            PgNumberic::PositiveInf => write!(f, "Infinity"),
+            PgNumberic::NegativeInf => write!(f, "-Infinity"),
+            PgNumberic::Value(n) => write!(f, "{n}"),
         }
     }
 }
 
-impl Default for PgNumeric {
+impl Default for PgNumberic {
     fn default() -> Self {
-        PgNumeric::Value(BigDecimal::default())
+        PgNumberic::Value(BigDecimal::default())
     }
 }

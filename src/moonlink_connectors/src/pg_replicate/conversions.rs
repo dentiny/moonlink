@@ -1,7 +1,7 @@
 use std::fmt::Debug;
 
 use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use numeric::PgNumeric;
+use numeric::PgNumberic;
 use uuid::Uuid;
 
 pub mod bool;
@@ -22,7 +22,7 @@ pub enum Cell {
     I64(i64),
     F32(f32),
     F64(f64),
-    Numeric(PgNumeric),
+    Numberic(PgNumberic),
     Date(NaiveDate),
     Time(NaiveTime),
     TimeStamp(NaiveDateTime),
@@ -44,7 +44,7 @@ pub enum ArrayCell {
     I64(Vec<Option<i64>>),
     F32(Vec<Option<f32>>),
     F64(Vec<Option<f64>>),
-    Numeric(Vec<Option<PgNumeric>>),
+    Numberic(Vec<Option<PgNumberic>>),
     Date(Vec<Option<NaiveDate>>),
     Time(Vec<Option<NaiveTime>>),
     TimeStamp(Vec<Option<NaiveDateTime>>),
