@@ -1,5 +1,5 @@
 use crate::pg_replicate::{
-    conversions::{numeric::PgNumberic, table_row::TableRow, ArrayCell, Cell},
+    conversions::{numeric::PgNumeric, table_row::TableRow, ArrayCell, Cell},
     table::{LookupKey, TableSchema},
 };
 use arrow::datatypes::{DataType, Field, Schema};
@@ -48,7 +48,7 @@ fn postgres_primitive_to_arrow_type(
         Type::FLOAT4 => (DataType::Float32, None),
         Type::FLOAT8 => (DataType::Float64, None),
         Type::NUMERIC => {
-            // Numberic type can contain invalid values, we will cast them to NULL
+            // Numeric type can contain invalid values, we will cast them to NULL
             // so make it nullable.
             nullable = true;
             let (precision, scale) = numeric_precision_scale(modifier)
@@ -237,11 +237,11 @@ fn convert_array_cell(cell: ArrayCell) -> Vec<RowValue> {
             .into_iter()
             .map(|v| v.map(RowValue::Float64).unwrap_or(RowValue::Null))
             .collect(),
-        ArrayCell::Numberic(values) => values
+        ArrayCell::Numeric(values) => values
             .into_iter()
             .map(|v| {
                 v.map(|n| match n {
-                    PgNumberic::Value(bigdecimal) => {
+                    PgNumeric::Value(bigdecimal) => {
                         let (int_val, _) = bigdecimal.into_bigint_and_exponent();
                         RowValue::Decimal(int_val.to_i128().unwrap())
                     }
@@ -362,9 +362,9 @@ impl From<PostgresTableRow> for MoonlinkRow {
                 Cell::Array(value) => {
                     values.push(RowValue::Array(convert_array_cell(value)));
                 }
-                Cell::Numberic(value) => {
+                Cell::Numeric(value) => {
                     match value {
-                        PgNumberic::Value(bigdecimal) => {
+                        PgNumeric::Value(bigdecimal) => {
                             let (int_val, _) = bigdecimal.into_bigint_and_exponent();
                             values.push(RowValue::Decimal(int_val.to_i128().unwrap()));
                         }
