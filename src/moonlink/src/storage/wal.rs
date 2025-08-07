@@ -307,12 +307,34 @@ impl PersistentWalMetadata {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct PreparePersistentUpdate {
     persistent_wal_metadata: PersistentWalMetadata,
     files_to_delete: Vec<WalFileInfo>,
     accompanying_iceberg_snapshot_lsn: Option<u64>,
-    file_to_persist: Option<(Vec<WalEvent>, WalFileInfo)>,
+    files_to_persist: Option<(Vec<WalEvent>, WalFileInfo)>,
+}
+
+impl std::fmt::Debug for PreparePersistentUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (files_to_persist_num, wal_file_info) =
+            if let Some((files_to_persist, wal_file_info)) = &self.files_to_persist {
+                (files_to_persist.len(), Some(wal_file_info.clone()))
+            } else {
+                (0, None)
+            };
+
+        f.debug_struct("PreparePersistentUpdate")
+            .field("persistent_wal_metadata", &self.persistent_wal_metadata)
+            .field(
+                "accompanying_iceberg_snapshot_lsn",
+                &self.accompanying_iceberg_snapshot_lsn,
+            )
+            .field("files to delete number", &self.files_to_delete.len())
+            .field("files to persist number", &files_to_persist_num)
+            .field("wal file info", &wal_file_info)
+            .finish()
+    }
 }
 
 impl PreparePersistentUpdate {
@@ -320,18 +342,18 @@ impl PreparePersistentUpdate {
         persistent_wal_metadata: PersistentWalMetadata,
         files_to_delete: Vec<WalFileInfo>,
         accompanying_iceberg_snapshot_lsn: Option<u64>,
-        file_to_persist: Option<(Vec<WalEvent>, WalFileInfo)>,
+        files_to_persist: Option<(Vec<WalEvent>, WalFileInfo)>,
     ) -> Self {
         Self {
             persistent_wal_metadata,
             files_to_delete,
             accompanying_iceberg_snapshot_lsn,
-            file_to_persist,
+            files_to_persist,
         }
     }
 
     pub fn should_do_persistence(&self) -> bool {
-        self.file_to_persist.is_some() || !self.files_to_delete.is_empty()
+        self.files_to_persist.is_some() || !self.files_to_delete.is_empty()
     }
 }
 
@@ -397,7 +419,7 @@ impl WalManager {
     fn compute_updated_live_wal_file_tracker(
         &self,
         files_to_delete: &[WalFileInfo],
-        file_to_persist: &Option<WalFileInfo>,
+        files_to_persist: &Option<WalFileInfo>,
     ) -> Vec<WalFileInfo> {
         let mut updated_live_wal_file_tracker_copy = if files_to_delete.is_empty() {
             self.live_wal_files_tracker.clone()
@@ -409,8 +431,8 @@ impl WalManager {
             updated_live_wal_file_tracker_copy
         };
 
-        if let Some(file_to_persist) = file_to_persist {
-            updated_live_wal_file_tracker_copy.push(file_to_persist.clone());
+        if let Some(files_to_persist) = files_to_persist {
+            updated_live_wal_file_tracker_copy.push(files_to_persist.clone());
         }
         updated_live_wal_file_tracker_copy
     }
@@ -661,10 +683,10 @@ impl WalManager {
         &self,
         iceberg_snapshot_lsn: Option<u64>,
         files_to_delete: Vec<WalFileInfo>,
-        file_to_persist: Option<WalFileInfo>,
+        files_to_persist: Option<WalFileInfo>,
     ) -> PersistentWalMetadata {
         let live_wal_files_tracker =
-            self.compute_updated_live_wal_file_tracker(&files_to_delete, &file_to_persist);
+            self.compute_updated_live_wal_file_tracker(&files_to_delete, &files_to_persist);
 
         let (cleanedup_xacts, cleanedup_main_xacts) =
             self.compute_cleanedup_xacts(iceberg_snapshot_lsn, &files_to_delete);
@@ -691,12 +713,12 @@ impl WalManager {
             vec![]
         };
 
-        let next_file_to_persist = self.extract_next_persistence_file();
+        let next_files_to_persist = self.extract_next_persistence_file();
 
         let metadata_to_persist = self.prepare_metadata(
             iceberg_snapshot_lsn,
             files_to_truncate.clone(),
-            next_file_to_persist
+            next_files_to_persist
                 .as_ref()
                 .map(|(_, file_info)| file_info.clone()),
         );
@@ -705,7 +727,7 @@ impl WalManager {
             metadata_to_persist,
             files_to_truncate,
             iceberg_snapshot_lsn,
-            next_file_to_persist,
+            next_files_to_persist,
         )
     }
 
@@ -782,7 +804,7 @@ impl WalManager {
             // and finally truncate the old WAL files.
 
             // (1) Persist new WAL file
-            if let Some((wal_events, wal_file_info)) = &prepare_persistent_update.file_to_persist {
+            if let Some((wal_events, wal_file_info)) = &prepare_persistent_update.files_to_persist {
                 WalManager::persist_new_wal_file(
                     file_system_accessor_persist.clone(),
                     wal_events,
@@ -837,10 +859,10 @@ impl WalManager {
     fn update_live_wal_file_tracker(
         &mut self,
         files_to_delete: &[WalFileInfo],
-        file_to_persist: &Option<WalFileInfo>,
+        files_to_persist: &Option<WalFileInfo>,
     ) {
         self.live_wal_files_tracker =
-            self.compute_updated_live_wal_file_tracker(files_to_delete, file_to_persist);
+            self.compute_updated_live_wal_file_tracker(files_to_delete, files_to_persist);
     }
 
     /// Updates the trackers for a persistence update result.
@@ -860,7 +882,7 @@ impl WalManager {
                 .files_to_delete,
             &persistence_update_result
                 .prepare_persistent_update
-                .file_to_persist
+                .files_to_persist
                 .as_ref()
                 .map(|(_, file_info)| file_info.clone()),
         );
@@ -914,7 +936,7 @@ impl WalManager {
 
         wal_persistence_update_result
             .prepare_persistent_update
-            .file_to_persist
+            .files_to_persist
             .as_ref()
             .map(|(_, wal_file_info)| wal_file_info.highest_lsn)
     }
