@@ -15,15 +15,16 @@ edition = "2021"
 license = "LicenseRef-BSL-1.1"
 
 [workspace.dependencies]
+anyhow = "1.0"
 arrow = { version = "55", default-features = false, features = [
   "canonical_extension_types",
 ] }
 arrow-array = "55"
 arrow-ipc = "55"
 arrow-schema = "55"
-async-stream = "0.3.6"
+async-stream = "0.3"
 async-trait = "0.1"
-backon = { version = "1.5.1" }
+backon = { version = "1.5" }
 bincode = { version = "2", features = ["serde"] }
 bitstream-io = "4.5"
 chrono = { version = "0.4", default-features = false }
@@ -37,7 +38,7 @@ iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "fb6fef31f
   "storage-fs",
 ] }
 itertools = { version = "0.14" }
-lru = { version = "0.14.0" }
+lru = { version = "0.14" }
 more-asserts = "0.3"
 multimap = { version = "0.10", default-features = false }
 nix = { version = "0.27", default-features = false, features = ["fs"] }
@@ -68,7 +69,7 @@ tokio = { version = "1.47", default-features = false, features = [
   "time",
   "tracing",
 ] }
-tokio-bitstream-io = "0.0.7"
+tokio-bitstream-io = "0.0"
 tokio-postgres = { git = "https://github.com/Mooncake-labs/rust-postgres.git", rev = "e6bd7d5cacc4eb7a03930b5ca3db1ef9caf0a3d5", features = ["with-serde_json-1"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
