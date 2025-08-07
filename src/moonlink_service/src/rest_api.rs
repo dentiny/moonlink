@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tokio::sync::oneshot;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, error, info};
 
@@ -267,14 +268,22 @@ async fn ingest_data(
 }
 
 /// Start the REST API server
-pub async fn start_server(state: ApiState, port: u16) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn start_server(
+    state: ApiState,
+    port: u16,
+    shutdown_signal: oneshot::Receiver<()>,
+) -> Result<(), Box<dyn std::error::Error>> {
     let app = create_router(state);
     let addr = format!("0.0.0.0:{port}");
 
     info!("Starting REST API server on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(&addr).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            shutdown_signal.await.ok();
+        })
+        .await?;
 
     Ok(())
 }

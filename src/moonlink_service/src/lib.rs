@@ -38,15 +38,17 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     });
 
     // Optionally start REST API
-    let rest_api_handle = if let Some(port) = config.rest_api_port {
+    let (rest_api_handle, rest_api_shutdown_signal) = if let Some(port) = config.rest_api_port {
         let api_state = rest_api::ApiState::new(backend.clone());
-        Some(tokio::spawn(async move {
-            if let Err(e) = rest_api::start_server(api_state, port).await {
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        let handle = tokio::spawn(async move {
+            if let Err(e) = rest_api::start_server(api_state, port, shutdown_rx).await {
                 warn!("REST API server failed: {}", e);
             }
-        }))
+        });
+        (Some(handle), Some(shutdown_tx))
     } else {
-        None
+        (None, None)
     };
 
     info!("Moonlink service started successfully");
@@ -57,7 +59,11 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
 
     // Clean shutdown: abort background servers
     if let Some(handle) = rest_api_handle {
-        handle.abort();
+        rest_api_shutdown_signal
+            .expect("REST API shutdown sender supposed to be valid")
+            .send(())
+            .unwrap();
+        handle.await?;
     }
     rpc_handle.abort();
 
