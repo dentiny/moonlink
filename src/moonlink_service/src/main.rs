@@ -11,10 +11,16 @@ struct Cli {
     /// Port for REST API server (optional, defaults to 3030)
     #[arg(long, short = 'p')]
     rest_api_port: Option<u16>,
-
     /// Disable REST API server
     #[arg(long)]
     no_rest_api: bool,
+
+    /// Port for moonlink standalone server (optional, defaults to 3031).
+    #[arg(long, short = 'p')]
+    tcp_port: Option<u16>,
+    /// Disable standalone deployment.
+    #[arg(long)]
+    no_tcp_api: bool,
 }
 
 #[tokio::main]
@@ -28,6 +34,11 @@ pub async fn main() -> Result<()> {
         } else {
             Some(cli.rest_api_port.unwrap_or(3030))
         },
+        tcp_port: if cli.no_tcp_api {
+            None
+        } else {
+            Some(cli.tcp_port.unwrap_or(3031))
+        }
     };
 
     start_with_config(config).await

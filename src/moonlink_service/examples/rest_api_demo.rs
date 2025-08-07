@@ -23,6 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = moonlink_service::start_with_config(ServiceConfig {
             base_path: demo_path.to_string(),
             rest_api_port: Some(3030),
+            tcp_port: None,
         })
         .await
         {

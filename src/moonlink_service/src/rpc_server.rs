@@ -2,11 +2,13 @@ use crate::{error::Error, Result};
 use arrow_ipc::writer::StreamWriter;
 use moonlink_backend::MoonlinkBackend;
 use moonlink_rpc::{read, write, Request, Table};
+use tokio::io::{AsyncRead, AsyncWrite};
+use std::net::SocketAddr;
 use std::collections::HashMap;
 use std::io::ErrorKind::{BrokenPipe, ConnectionReset, UnexpectedEof};
 use std::sync::Arc;
 use tokio::fs;
-use tokio::net::{UnixListener, UnixStream};
+use tokio::net::{TcpListener, UnixListener, UnixStream};
 use tracing::info;
 
 /// Start the Unix socket RPC server and serve requests until the task is aborted.
@@ -37,10 +39,37 @@ pub async fn start_unix_server(
     }
 }
 
-async fn handle_stream(
+/// Start the TCP socket RPC server and serve requests until the task is aborted.
+/// 
+/// TODO(hjiang): Better error handling.
+pub async fn start_tcp_server(
     backend: Arc<MoonlinkBackend<u32, u32>>,
-    mut stream: UnixStream,
+    addr: SocketAddr,
 ) -> Result<()> {
+    let listener = TcpListener::bind(addr).await?;
+    info!("Moonlink RPC server listening on TCP: {}", addr);
+
+    loop {
+        let (stream, _) = listener.accept().await?;
+        let backend = Arc::clone(&backend);
+        tokio::spawn(async move {
+            match handle_stream(backend, stream).await {
+                Err(Error::Rpc(moonlink_rpc::Error::Io(e)))
+                    if matches!(e.kind(), BrokenPipe | ConnectionReset | UnexpectedEof) => {}
+                Err(e) => panic!("{e}"),
+                Ok(()) => {}
+            }
+        });
+    }
+}
+
+async fn handle_stream<S>(
+    backend: Arc<MoonlinkBackend<u32, u32>>,
+    mut stream: S,
+) -> Result<()> 
+where
+    S: AsyncRead + AsyncWrite + Unpin
+{
     let mut map = HashMap::new();
     loop {
         match read(&mut stream).await? {
@@ -127,13 +156,13 @@ async fn handle_stream(
                     .await
                     .unwrap();
                 write(&mut stream, &state.data).await?;
-                map.insert((database_id, table_id), state);
+                assert!(map.insert((database_id, table_id), state).is_none());
             }
             Request::ScanTableEnd {
                 database_id,
                 table_id,
             } => {
-                map.remove(&(database_id, table_id));
+                assert!(map.remove(&(database_id, table_id)).is_some());
                 write(&mut stream, &()).await?;
             }
         }
