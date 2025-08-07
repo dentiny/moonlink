@@ -7,6 +7,10 @@ repos:
     rev: v1.0
     hooks:
       - id: fmt
+  - repo: https://github.com/est31/cargo-udeps
+    rev: v0.1.47
+    hooks:
+      - id: udeps
   - repo: local
     hooks:
       - id: cargo-sort
