@@ -758,7 +758,7 @@ async fn test_chaos_on_local_fs_with_no_background_maintenance() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -779,7 +779,7 @@ async fn test_chaos_on_local_fs_with_index_merge() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -800,7 +800,7 @@ async fn test_chaos_on_local_fs_with_data_compaction() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -825,7 +825,7 @@ async fn test_local_system_optimization_chaos_with_no_background_maintenance() {
         local_filesystem_optimization_enabled: true,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 2500,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -846,7 +846,7 @@ async fn test_local_system_optimization_chaos_with_index_merge() {
         local_filesystem_optimization_enabled: true,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -867,7 +867,7 @@ async fn test_local_system_optimization_chaos_with_data_compaction() {
         local_filesystem_optimization_enabled: true,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -894,7 +894,7 @@ async fn test_s3_chaos_with_no_background_maintenance() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -914,7 +914,7 @@ async fn test_s3_chaos_with_index_merge() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -934,7 +934,7 @@ async fn test_s3_chaos_with_data_compaction() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -958,7 +958,7 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -978,7 +978,7 @@ async fn test_gcs_chaos_with_index_merge() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -998,7 +998,7 @@ async fn test_gcs_chaos_with_data_compaction() {
         local_filesystem_optimization_enabled: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3000,
+        event_count: 3500,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
