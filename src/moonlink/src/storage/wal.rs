@@ -277,7 +277,7 @@ impl WalTransactionState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct PersistentWalMetadata {
     curr_file_number: u64,
     highest_seen_lsn: u64,
@@ -285,6 +285,28 @@ pub struct PersistentWalMetadata {
     active_transactions: HashMap<u32, WalTransactionState>,
     main_transaction_tracker: Vec<WalTransactionState>,
     iceberg_snapshot_lsn: Option<u64>,
+}
+
+impl std::fmt::Debug for PersistentWalMetadata {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PersistentWalMetadata")
+            .field("curr_file_number", &self.curr_file_number)
+            .field("highest_seen_lsn", &self.highest_seen_lsn)
+            .field("iceberg_snapshot_lsn", &self.iceberg_snapshot_lsn)
+            .field(
+                "live wal files tracker number",
+                &self.live_wal_files_tracker.len(),
+            )
+            .field(
+                "active transactions number",
+                &self.active_transactions.len(),
+            )
+            .field(
+                "main transaction tracker number",
+                &self.main_transaction_tracker.len(),
+            )
+            .finish()
+    }
 }
 
 impl PersistentWalMetadata {
