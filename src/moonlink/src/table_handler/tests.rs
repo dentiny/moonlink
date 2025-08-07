@@ -2105,16 +2105,3 @@ async fn test_commit_flush_streaming_transaction_with_deletes() {
 
     env.shutdown().await;
 }
-
-/// Minimal test to ensure we panic when deletion records have row_ids exceeding deletion vector capacity
-#[test]
-#[should_panic(expected = "Deletion vector capacity exceeded")]
-fn test_deletion_vector_capacity_exceeded_minimal() {
-    use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-
-    // Create a deletion vector with capacity for only 3 rows (0, 1, 2)
-    let mut deletion_vector = BatchDeletionVector::new(3);
-
-    // This should panic - trying to delete row_id=5 when capacity is only 3
-    let _ = deletion_vector.delete_row(5);
-}

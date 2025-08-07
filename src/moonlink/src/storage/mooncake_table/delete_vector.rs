@@ -52,13 +52,7 @@ impl BatchDeletionVector {
     #[must_use]
     pub(crate) fn delete_row(&mut self, row_idx: usize) -> bool {
         ma::assert_gt!(self.max_rows, 0);
-
-        assert!(
-            row_idx < self.max_rows,
-            "Deletion vector capacity exceeded: trying to delete row_idx {} but deletion vector only has capacity for {} rows. \
-            This indicates a misalignment where deletion records reference rows beyond the deletion vector's range.",
-            row_idx, self.max_rows
-        );
+        ma::assert_lt!(row_idx, self.max_rows);
 
         // Set the bit at row_idx to 1 (deleted)
         self.initialize_vector_for_once();
@@ -397,5 +391,17 @@ mod tests {
         assert!(!dv1.is_empty());
         // Check number of deleted rows.
         assert_eq!(dv1.get_num_rows_deleted(), 4);
+    }
+
+    #[test]
+    #[should_panic(expected = "left: `5`,\n right: `3`")]
+    fn test_deletion_vector_capacity_exceeded_minimal() {
+        use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
+
+        // Create a deletion vector with capacity for only 3 rows (0, 1, 2)
+        let mut deletion_vector = BatchDeletionVector::new(3);
+
+        // This should panic - trying to delete row_id=5 when capacity is only 3
+        let _ = deletion_vector.delete_row(5);
     }
 }
