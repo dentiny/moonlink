@@ -240,11 +240,16 @@ impl FileCatalog {
 
     /// Load and assign etag, which is used to commit transaction.
     async fn load_version_hint_etag(&self, version_hint_filepath: &str) -> IcebergResult<()> {
-        let version_hint_metadata = self.filesystem_accessor.stats_object(version_hint_filepath).await
+        let version_hint_metadata = self
+            .filesystem_accessor
+            .stats_object(version_hint_filepath)
+            .await
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!("Failed to stats version hint file {version_hint_filepath} on load table: {e}"),
+                    format!(
+                        "Failed to stats version hint file {version_hint_filepath} on load table"
+                    ),
                 )
                 .with_retryable(true)
                 .with_source(e)
@@ -274,7 +279,11 @@ impl FileCatalog {
                 .with_source(e)
             })?;
         let version = version_str.trim().parse::<u32>().map_err(|e| {
-            IcebergError::new(iceberg::ErrorKind::DataInvalid, e.to_string()).with_source(e)
+            IcebergError::new(
+                iceberg::ErrorKind::DataInvalid,
+                "Failed to parse version hint string".to_string(),
+            )
+            .with_source(e)
         })?;
         Ok(version)
     }
