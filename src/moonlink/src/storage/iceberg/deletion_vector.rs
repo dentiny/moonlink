@@ -58,8 +58,10 @@ impl DeletionVector {
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::DataInvalid,
-                    format!("Failed to deserialize DeletionVector: {e}"),
+                    "Failed to deserialize DeletionVector puffin blob".to_string(),
                 )
+                .with_retryable(false)
+                .with_source(e)
             })
     }
 
@@ -162,7 +164,8 @@ impl DeletionVector {
             return Err(IcebergError::new(
                 iceberg::ErrorKind::DataInvalid,
                 "Serialized deletion vector blob should be at least 12 bytes.".to_string(),
-            ));
+            )
+            .with_retryable(false));
         }
 
         // Check magic bytes.
@@ -171,7 +174,8 @@ impl DeletionVector {
             return Err(IcebergError::new(
                 iceberg::ErrorKind::DataInvalid,
                 "Data corruption detected for serialized deletion vector blob.".to_string(),
-            ));
+            )
+            .with_retryable(false));
         }
 
         // Check combined length.
@@ -184,7 +188,7 @@ impl DeletionVector {
                     std::mem::size_of_val(&combined_length) + (combined_length as usize) + 4, /*crc32c*/
                     data.len()
                 ),
-            ));
+            ).with_retryable(false));
         }
 
         // The rest between magic bytes and CRC is the serialized bitmap.
@@ -209,7 +213,7 @@ impl DeletionVector {
             return Err(IcebergError::new(
                 iceberg::ErrorKind::DataInvalid,
                 format!("Within serialized deletion vector blob persisted crc32c is {expected_crc}, actual crc32c is {stored_crc}."),
-            ));
+            ).with_retryable(false));
         }
 
         // Get max number of rows for corresponding mooncake deletion vector.

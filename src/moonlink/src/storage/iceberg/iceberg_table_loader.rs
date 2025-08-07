@@ -141,22 +141,20 @@ impl IcebergTableManager {
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!(
-                        "Failed to get cache entry for {}: {:?}",
-                        data_file.file_path(),
-                        e
-                    ),
+                    format!("Failed to get cache entry for {}", data_file.file_path(),),
                 )
                 .with_retryable(true)
+                .with_source(e)
             })?;
         io_utils::delete_local_files(&evicted_files_to_delete)
             .await
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!("Failed to delete files for {evicted_files_to_delete:?}: {e:?}"),
+                    format!("Failed to delete files for {evicted_files_to_delete:?}"),
                 )
                 .with_retryable(true)
+                .with_source(e)
             })?;
 
         let persisted_deletion_vector = PuffinBlobRef {

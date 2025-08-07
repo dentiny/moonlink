@@ -129,12 +129,10 @@ impl FileIndex {
                 .map_err(|e| {
                     IcebergError::new(
                         iceberg::ErrorKind::Unexpected,
-                        format!(
-                            "Failed to get file from {}: {:?}",
-                            cur_index_block.filepath, e
-                        ),
+                        format!("Failed to get file from {}", cur_index_block.filepath),
                     )
                     .with_retryable(true)
+                    .with_source(e)
                 })?;
             evicted_files_to_delete.extend(cur_evicted_files);
 
@@ -177,9 +175,10 @@ impl FileIndex {
             .map_err(|e| {
                 IcebergError::new(
                     iceberg::ErrorKind::Unexpected,
-                    format!("Failed to delete files for {evicted_files_to_delete:?}: {e:?}"),
+                    format!("Failed to delete files for {evicted_files_to_delete:?}"),
                 )
                 .with_retryable(true)
+                .with_source(e)
             })?;
 
         Ok(file_indice)
@@ -213,8 +212,9 @@ impl FileIndexBlob {
         let blob_bytes = serde_json::to_vec(self).map_err(|e| {
             IcebergError::new(
                 iceberg::ErrorKind::DataInvalid,
-                format!("Failed to serialize file index into json: {e:?}"),
+                "Failed to serialize file index into json".to_string(),
             )
+            .with_source(e)
         })?;
         let mut properties = HashMap::new();
         let total_num_rows: u32 = self.file_index.num_rows;
@@ -261,8 +261,9 @@ impl FileIndexBlob {
         serde_json::from_slice(blob.data()).map_err(|e| {
             IcebergError::new(
                 iceberg::ErrorKind::DataInvalid,
-                format!("Failed to deserialize blob from json string: {e:?}"),
+                "Failed to deserialize blob from json string".to_string(),
             )
+            .with_source(e)
         })
     }
 }
