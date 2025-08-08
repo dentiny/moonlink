@@ -15,24 +15,13 @@ spec:
       containers:
       # Moonlink deployment, which serves REST API and TCP rpc requests.
       - name: moonlink-deployment
-        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:8aa98bda-70da-47ab-abcf-0eadda072665
+        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:42f29a70-e2f2-4ac2-99f8-95f830464ecc
         command: ["/app/moonlink_service"]
         args:
         - "/tmp/moonlink"
         - "--no-rest-api"
         - "--tcp-port=3031"
         env:
-        # TODO(hjiang): Remove all pg test related envs before release. 
-        - name: PGHOST
-          value: localhost
-        - name: PGUSER
-          value: user
-        - name: PGPASSWORD
-          value: password
-        - name: PGDATABASE
-          value: mydb
-        - name: PGPORT
-          value: "5432"
         volumeMounts:
         - name: shared-cache-directory
           mountPath: /tmp/moonlink
@@ -54,16 +43,10 @@ spec:
 
       # TODO(hjiang): Currently serves merely as source database to sync from, need to remove before release.
       - name: postgres
-        image: postgres:17
+        image: mooncakelabs/pg_mooncake
         env:
-        - name: POSTGRES_USER
-          value: user
         - name: POSTGRES_PASSWORD
           value: password
-        - name: POSTGRES_DB
-          value: mydb
-        - name: POSTGRES_INITDB_ARGS
-          value: "-c wal_level=logical"
         ports:
         - containerPort: 5432
         volumeMounts:
