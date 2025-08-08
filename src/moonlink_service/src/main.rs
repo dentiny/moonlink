@@ -19,8 +19,10 @@ struct Cli {
 
 #[tokio::main]
 pub async fn main() -> Result<()> {
-    let cli = Cli::parse();
+    // By default enables backtrace for better troubleshooting capability, no performance overhead, only takes effect at panic.
+    std::env::set_var("RUST_BACKTRACE", "1");
 
+    let cli = Cli::parse();
     let config = ServiceConfig {
         base_path: cli.base_path,
         rest_api_port: if cli.no_rest_api {
