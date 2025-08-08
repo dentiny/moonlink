@@ -7,11 +7,15 @@ use moonlink_backend::MoonlinkBackend;
 use moonlink_metadata_store::SqliteMetadataStore;
 use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
-use tracing::{info, warn};
+use tracing::{error, info};
 
 pub struct ServiceConfig {
+    /// Base location for moonlink storage (including cache files, iceberg tables, etc).
     pub base_path: String,
+    /// Used for REST API as ingestion source.
     pub rest_api_port: Option<u16>,
+    /// Used for moonlink standalone deployment.
+    pub tcp_port: Option<u16>,
 }
 
 pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
@@ -33,7 +37,7 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     let rpc_backend = backend.clone();
     let rpc_handle = tokio::spawn(async move {
         if let Err(e) = rpc_server::start_unix_server(rpc_backend, socket_path).await {
-            warn!("RPC server failed: {}", e);
+            error!("RPC server failed: {}", e);
         }
     });
 
@@ -43,12 +47,28 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
         let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
         let handle = tokio::spawn(async move {
             if let Err(e) = rest_api::start_server(api_state, port, shutdown_rx).await {
-                warn!("REST API server failed: {}", e);
+                error!("REST API server failed: {}", e);
             }
         });
         (Some(handle), Some(shutdown_tx))
     } else {
         (None, None)
+    };
+
+    // Optionally start TCP server.
+    let tcp_api_handle = if let Some(port) = config.tcp_port {
+        let backend_clone = backend.clone();
+        let addr: std::net::SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
+        // TODO(hjiang): Implement graceful shutdown for TCP server.
+        let handle = tokio::spawn(async move {
+            if let Err(e) = rpc_server::start_tcp_server(backend_clone, addr).await {
+                error!("TCP rpc server failed: {}", e);
+            }
+            println!("TCP rpc server starts at port {port}");
+        });
+        Some(handle)
+    } else {
+        None
     };
 
     info!("Moonlink service started successfully");
@@ -65,6 +85,11 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
             .unwrap();
         handle.await?;
     }
+
+    if let Some(handle) = tcp_api_handle {
+        handle.abort();
+    }
+
     rpc_handle.abort();
 
     info!("Moonlink service shut down complete");

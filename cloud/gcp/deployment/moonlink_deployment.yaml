@@ -13,23 +13,25 @@ spec:
         app: moonlink-deployment
     spec:
       containers:
+      # Moonlink deployment, which serves REST API and TCP rpc requests.
       - name: moonlink-deployment
-        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:bc30497c-e2e2-48c1-8dea-ce565ac1b4d4
+        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:42f29a70-e2f2-4ac2-99f8-95f830464ecc
+        command: ["/app/moonlink_service"]
+        args:
+        - "/tmp/moonlink"
+        - "--no-rest-api"
+        - "--tcp-port=3031"
         env:
-        - name: PGHOST
-          value: localhost
-        - name: PGUSER
-          value: user
-        - name: PGPASSWORD
-          value: password
-        - name: PGDATABASE
-          value: mydb
-        - name: PGPORT
-          value: "5432"
         volumeMounts:
         - name: shared-cache-directory
           mountPath: /tmp/moonlink
+        ports:
+        # Port number for REST API server.
+        - containerPort: 3030
+        # Port number for TCP rpc server.
+        - containerPort: 3031
 
+      # Data server, which serves data plane requests.
       - name: nginx
         image: nginx:latest
         ports:
@@ -39,17 +41,12 @@ spec:
         - name: shared-cache-directory
           mountPath: /usr/share/nginx/html
 
+      # TODO(hjiang): Currently serves merely as source database to sync from, need to remove before release.
       - name: postgres
-        image: postgres:17
+        image: mooncakelabs/pg_mooncake
         env:
-        - name: POSTGRES_USER
-          value: user
         - name: POSTGRES_PASSWORD
           value: password
-        - name: POSTGRES_DB
-          value: mydb
-        - name: POSTGRES_INITDB_ARGS
-          value: "-c wal_level=logical"
         ports:
         - containerPort: 5432
         volumeMounts:

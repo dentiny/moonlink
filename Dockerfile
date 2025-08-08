@@ -22,5 +22,3 @@ RUN apt-get update && \
 WORKDIR /app
 
 COPY --from=builder /workspace/target/x86_64-unknown-linux-gnu/debug/moonlink_service .
-
-ENTRYPOINT ["/app/moonlink_service", "/tmp/moonlink"]
