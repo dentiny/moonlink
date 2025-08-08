@@ -38,9 +38,9 @@ use tokio::sync::watch;
 /// To avoid excessive and continuous table maintenance operations, set an interval between each invocation for each non table update operation.
 const NON_UPDATE_COMMAND_INTERVAL_LSN: u64 = 5;
 /// Event count to trigger periodical mooncake snapshot.
-const PERIODICAL_MOONCAKE_SNAPSHOT_EVENT_INTERVAL: usize = 10;
+const PERIODICAL_MOONCAKE_SNAPSHOT_EVENT_INTERVAL: usize = 150;
 /// Event count to trigger periodical WAL operations.
-const PERIODICAL_WAL_OPERATION_EVENT_INTERVAL: usize = 10;
+const PERIODICAL_WAL_OPERATION_EVENT_INTERVAL: usize = 150;
 
 /// Create a test moonlink row.
 fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
