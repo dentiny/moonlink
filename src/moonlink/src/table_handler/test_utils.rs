@@ -13,6 +13,7 @@ use crate::storage::wal::{PersistentWalMetadata, WalManager};
 use crate::storage::IcebergTableConfig;
 use crate::storage::{verify_files_and_deletions, MooncakeTable};
 use crate::table_handler::{TableEvent, TableHandler};
+use crate::table_handler_timer::create_table_handler_timers;
 use crate::union_read::{decode_read_state_for_testing, ReadStateManager};
 use crate::{
     FileSystemAccessor, IcebergTableManager, MooncakeTableConfig, StorageConfig, TableEventManager,
@@ -114,10 +115,12 @@ impl TestEnvironment {
         let wal_filesystem_accessor = Arc::new(FileSystemAccessor::new(
             default_wal_config.get_accessor_config().clone(),
         ));
+        let table_handler_timer = create_table_handler_timers();
 
         let handler = TableHandler::new(
             mooncake_table,
             table_event_sync_sender,
+            table_handler_timer,
             replication_rx.clone(),
             /*event_replay_tx=*/ None,
         )

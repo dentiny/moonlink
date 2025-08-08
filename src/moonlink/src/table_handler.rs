@@ -14,12 +14,12 @@ use crate::storage::mooncake_table::MaintenanceOption;
 use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
 use crate::storage::{io_utils, MooncakeTable};
+use crate::table_handler_timer::TableHandlerTimer;
 use crate::table_notify::TableEvent;
 use crate::Error;
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tokio::time::Duration;
 use tracing::Instrument;
 use tracing::{debug, error, info_span};
 pub(crate) mod table_handler_state;
@@ -44,6 +44,7 @@ impl TableHandler {
     pub async fn new(
         mut table: MooncakeTable,
         event_sync_sender: EventSyncSender,
+        mut table_handler_timer: TableHandlerTimer,
         replication_lsn_rx: watch::Receiver<u64>,
         event_replay_tx: Option<mpsc::UnboundedSender<TableEvent>>,
     ) -> Self {
@@ -59,25 +60,20 @@ impl TableHandler {
         let event_sender_for_periodical_force_snapshot = event_sender.clone();
         let event_sender_for_periodical_wal = event_sender.clone();
         let periodic_event_handle = tokio::spawn(async move {
-            let mut periodic_snapshot_interval = tokio::time::interval(Duration::from_millis(500));
-            let mut periodic_force_snapshot_interval =
-                tokio::time::interval(Duration::from_secs(300));
-            let mut periodic_wal_interval = tokio::time::interval(Duration::from_millis(500));
-
             loop {
                 tokio::select! {
                     // Sending to channel fails only happens when eventloop exits, directly exit timer events.
-                    _ = periodic_wal_interval.tick() => {
+                    _ = table_handler_timer.wal_snapshot_timer.tick() => {
                         if event_sender_for_periodical_wal.send(TableEvent::PeriodicalPersistenceUpdateWal(uuid::Uuid::new_v4())).await.is_err() {
                             return;
                         }
                     }
-                    _ = periodic_snapshot_interval.tick() => {
+                    _ = table_handler_timer.mooncake_snapshot_timer.tick() => {
                         if event_sender_for_periodical_snapshot.send(TableEvent::PeriodicalMooncakeTableSnapshot(uuid::Uuid::new_v4())).await.is_err() {
                            return;
                         }
                     }
-                    _ = periodic_force_snapshot_interval.tick() => {
+                    _ = table_handler_timer.force_snapshot_timer.tick() => {
                         if event_sender_for_periodical_force_snapshot.send(TableEvent::ForceSnapshot { lsn: None }).await.is_err() {
                             return;
                         }

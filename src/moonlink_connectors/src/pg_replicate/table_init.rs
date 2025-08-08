@@ -3,6 +3,7 @@ use crate::pg_replicate::table::SrcTableId;
 use crate::{Error, Result};
 use arrow_schema::Schema as ArrowSchema;
 use moonlink::event_sync::create_table_event_syncer;
+use moonlink::table_handler_timer::create_table_handler_timers;
 use moonlink::{
     row::IdentityProp, AccessorConfig, EventSyncReceiver, EventSyncSender, FileSystemAccessor,
     IcebergTableConfig, MooncakeTable, MooncakeTableConfig, MoonlinkSecretType,
@@ -99,9 +100,11 @@ pub async fn build_table_components(
     let table_status_reader =
         TableStatusReader::new(&moonlink_table_config.iceberg_table_config, &table);
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();
+    let table_handler_timers = create_table_handler_timers();
     let table_handler = TableHandler::new(
         table,
         event_sync_sender,
+        table_handler_timers,
         replication_state.subscribe(),
         /*event_replay_tx=*/ None,
     )

@@ -2,7 +2,8 @@ pub mod error;
 pub mod event_sync;
 pub mod row;
 mod storage;
-mod table_handler;
+pub(crate) mod table_handler;
+pub mod table_handler_timer;
 pub(crate) mod table_notify;
 mod union_read;
 
@@ -19,6 +20,7 @@ pub use storage::{
     WalConfig, WalManager, WalTransactionState,
 };
 pub use table_handler::TableHandler;
+pub use table_handler_timer::TableHandlerTimer;
 pub use table_notify::TableEvent;
 pub use union_read::{ReadState, ReadStateManager};
 

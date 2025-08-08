@@ -18,6 +18,7 @@ use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
+use crate::table_handler_timer::create_table_handler_timers;
 use crate::union_read::ReadStateManager;
 use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
 use crate::{StorageConfig, TableEventManager};
@@ -579,6 +580,7 @@ impl TestEnvironment {
         let table_handler = TableHandler::new(
             table,
             table_event_sync_sender,
+            create_table_handler_timers(),
             replication_lsn_rx.clone(),
             Some(event_replay_tx),
         )

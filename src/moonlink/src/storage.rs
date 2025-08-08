@@ -10,6 +10,7 @@ pub mod mooncake_table_config;
 pub(crate) mod parquet_utils;
 pub(crate) mod path_utils;
 pub(crate) mod storage_utils;
+pub(super) mod timer;
 pub(crate) mod wal;
 
 pub use crate::event_sync::EventSyncReceiver;
