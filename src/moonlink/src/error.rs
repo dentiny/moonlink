@@ -4,10 +4,12 @@ use parquet::errors::ParquetError;
 use std::error;
 use std::fmt;
 use std::io;
+use std::path::PathBuf;
 use std::result;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::watch;
+use snafu::{prelude::*, Location};
 
 /// Error status categories
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -289,5 +291,24 @@ mod tests {
         let io_err = source.downcast_ref::<io::Error>().unwrap();
         assert_eq!(io_err.kind(), io::ErrorKind::NotFound);
         assert_eq!(io_err.to_string(), "File not found");
+    }
+}
+
+////////==========
+#[derive(Clone, Debug, Snafu)]
+pub enum SnafuError {
+    #[snafu(display("Unable to create file {}", path.display()))]
+    TestError { source: Arc<std::io::Error>, path: std::path::PathBuf, location: Location, },
+}
+
+pub type SnafuResult<T> = result::Result<T, SnafuError>;
+
+impl SnafuError {
+    pub fn io_error(source: std::io::Error, path: impl Into<PathBuf>, location: Location) -> Self {
+        SnafuError::TestError { 
+            source: Arc::new(source),
+            path: path.into(),
+            location,
+        }
     }
 }
