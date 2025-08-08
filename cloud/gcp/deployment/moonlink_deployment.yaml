@@ -13,9 +13,16 @@ spec:
         app: moonlink-deployment
     spec:
       containers:
+      # Moonlink deployment, which serves REST API and TCP rpc requests.
       - name: moonlink-deployment
-        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:bc30497c-e2e2-48c1-8dea-ce565ac1b4d4
+        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:8aa98bda-70da-47ab-abcf-0eadda072665
+        command: ["/app/moonlink_service"]
+        args:
+        - "/tmp/moonlink"
+        - "--no-rest-api"
+        - "--tcp-port=3031"
         env:
+        # TODO(hjiang): Remove all pg test related envs before release. 
         - name: PGHOST
           value: localhost
         - name: PGUSER
@@ -29,7 +36,13 @@ spec:
         volumeMounts:
         - name: shared-cache-directory
           mountPath: /tmp/moonlink
+        ports:
+        # Port number for REST API server.
+        - containerPort: 3030
+        # Port number for TCP rpc server.
+        - containerPort: 3031
 
+      # Data server, which serves data plane requests.
       - name: nginx
         image: nginx:latest
         ports:
@@ -39,6 +52,7 @@ spec:
         - name: shared-cache-directory
           mountPath: /usr/share/nginx/html
 
+      # TODO(hjiang): Currently serves merely as source database to sync from, need to remove before release.
       - name: postgres
         image: postgres:17
         env:

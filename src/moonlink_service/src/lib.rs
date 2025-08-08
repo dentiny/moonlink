@@ -62,8 +62,9 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
         // TODO(hjiang): Implement graceful shutdown for TCP server.
         let handle = tokio::spawn(async move {
             if let Err(e) = rpc_server::start_tcp_server(backend_clone, addr).await {
-                error!("TCP server failed: {}", e);
+                error!("TCP rpc server failed: {}", e);
             }
+            println!("TCP rpc server starts at port {port}");
         });
         Some(handle)
     } else {

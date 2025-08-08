@@ -16,7 +16,7 @@ struct Cli {
     no_rest_api: bool,
 
     /// Port for moonlink standalone server (optional, defaults to 3031).
-    #[arg(long, short = 'p')]
+    #[arg(long)]
     tcp_port: Option<u16>,
     /// Disable standalone deployment.
     #[arg(long)]
