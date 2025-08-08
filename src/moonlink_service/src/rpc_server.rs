@@ -69,7 +69,8 @@ where
 {
     let mut map = HashMap::new();
     loop {
-        match read(&mut stream).await? {
+        let request = read(&mut stream).await?;
+        match request {
             Request::CreateSnapshot {
                 database_id,
                 table_id,

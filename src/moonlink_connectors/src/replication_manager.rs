@@ -58,6 +58,9 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
     ) -> Result<()> {
+
+        println!("add table id {:?}", mooncake_table_id.to_string());
+
         debug!(%src_uri, table_name, "adding table through manager");
         if !self.connections.contains_key(src_uri) {
             debug!(%src_uri, "creating replication connection");
