@@ -2,13 +2,13 @@ use crate::{error::Error, Result};
 use arrow_ipc::writer::StreamWriter;
 use moonlink_backend::MoonlinkBackend;
 use moonlink_rpc::{read, write, Request, Table};
-use tokio::io::{AsyncRead, AsyncWrite};
-use std::net::SocketAddr;
 use std::collections::HashMap;
 use std::io::ErrorKind::{BrokenPipe, ConnectionReset, UnexpectedEof};
+use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::fs;
-use tokio::net::{TcpListener, UnixListener, UnixStream};
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::{TcpListener, UnixListener};
 use tracing::info;
 
 /// Start the Unix socket RPC server and serve requests until the task is aborted.
@@ -40,7 +40,7 @@ pub async fn start_unix_server(
 }
 
 /// Start the TCP socket RPC server and serve requests until the task is aborted.
-/// 
+///
 /// TODO(hjiang): Better error handling.
 pub async fn start_tcp_server(
     backend: Arc<MoonlinkBackend<u32, u32>>,
@@ -63,12 +63,9 @@ pub async fn start_tcp_server(
     }
 }
 
-async fn handle_stream<S>(
-    backend: Arc<MoonlinkBackend<u32, u32>>,
-    mut stream: S,
-) -> Result<()> 
+async fn handle_stream<S>(backend: Arc<MoonlinkBackend<u32, u32>>, mut stream: S) -> Result<()>
 where
-    S: AsyncRead + AsyncWrite + Unpin
+    S: AsyncRead + AsyncWrite + Unpin,
 {
     let mut map = HashMap::new();
     loop {

@@ -7,7 +7,7 @@ use moonlink_backend::MoonlinkBackend;
 use moonlink_metadata_store::SqliteMetadataStore;
 use std::sync::Arc;
 use tokio::signal::unix::{signal, SignalKind};
-use tracing::{info, error};
+use tracing::{error, info};
 
 pub struct ServiceConfig {
     /// Base location for moonlink storage (including cache files, iceberg tables, etc).
@@ -42,26 +42,30 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     });
 
     // Optionally start REST API
-    let rest_api_handle = if let Some(port) = config.rest_api_port {
+    let (rest_api_handle, rest_api_shutdown_signal) = if let Some(port) = config.rest_api_port {
         let api_state = rest_api::ApiState::new(backend.clone());
-        Some(tokio::spawn(async move {
-            if let Err(e) = rest_api::start_server(api_state, port).await {
+        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+        let handle = tokio::spawn(async move {
+            if let Err(e) = rest_api::start_server(api_state, port, shutdown_rx).await {
                 error!("REST API server failed: {}", e);
             }
-        }))
+        });
+        (Some(handle), Some(shutdown_tx))
     } else {
-        None
-    };    
+        (None, None)
+    };
 
     // Optionally start TCP server.
     let tcp_api_handle = if let Some(port) = config.tcp_port {
         let backend_clone = backend.clone();
         let addr: std::net::SocketAddr = format!("0.0.0.0:{port}").parse().unwrap();
-        Some(tokio::spawn(async move {
+        // TODO(hjiang): Implement graceful shutdown for TCP server.
+        let handle = tokio::spawn(async move {
             if let Err(e) = rpc_server::start_tcp_server(backend_clone, addr).await {
                 error!("TCP server failed: {}", e);
             }
-        }))
+        });
+        Some(handle)
     } else {
         None
     };
@@ -74,8 +78,17 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
 
     // Clean shutdown: abort background servers
     if let Some(handle) = rest_api_handle {
+        rest_api_shutdown_signal
+            .expect("REST API shutdown sender supposed to be valid")
+            .send(())
+            .unwrap();
+        handle.await?;
+    }
+
+    if let Some(handle) = tcp_api_handle {
         handle.abort();
     }
+
     rpc_handle.abort();
 
     info!("Moonlink service shut down complete");

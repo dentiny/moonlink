@@ -38,7 +38,7 @@ pub async fn main() -> Result<()> {
             None
         } else {
             Some(cli.tcp_port.unwrap_or(3031))
-        }
+        },
     };
 
     start_with_config(config).await

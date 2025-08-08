@@ -8,6 +8,8 @@ pub enum Error {
     Io(#[from] std::io::Error),
     #[error("RPC error: {0}")]
     Rpc(#[from] moonlink_rpc::Error),
+    #[error("Join error: {0}.")]
+    TokioTaskJoin(#[from] tokio::task::JoinError),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
