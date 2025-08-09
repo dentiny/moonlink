@@ -146,7 +146,7 @@ mod tests {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_read_state_construction() {
         let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| {
-            format!("{}/some_non_existent_dir", local_filepath)
+            format!("{local_filepath}/some_non_existent_dir")
         });
 
         let data_files = vec!["/tmp/file_1".to_string(), "/tmp/file_2".to_string()];
