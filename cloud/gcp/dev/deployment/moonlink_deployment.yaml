@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: moonlink-deployment
+  name: moonlink-deployment-dev
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: moonlink-deployment
+      app: moonlink-deployment-dev
   template:
     metadata:
       labels:
-        app: moonlink-deployment
+        app: moonlink-deployment-dev
     spec:
       containers:
       # Moonlink deployment, which serves REST API and TCP rpc requests.
-      - name: moonlink-deployment
-        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:7cb80acf-9d2e-4dfe-b19a-ad8e6578415d
+      - name: moonlink-deployment-dev
+        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment-dev:7cb80acf-9d2e-4dfe-b19a-ad8e6578415d
         command: ["/app/moonlink_service"]
         args:
         - "/tmp/moonlink"
@@ -41,7 +41,7 @@ spec:
         - name: shared-cache-directory
           mountPath: /usr/share/nginx/html
 
-      # TODO(hjiang): Currently serves merely as source database to sync from, need to remove before release.
+      # Act as remote postgres instance.
       - name: postgres
         image: mooncakelabs/pg_mooncake
         env:
