@@ -60,7 +60,7 @@ pub async fn build_table_components(
     src_table_id: SrcTableId,
     base_path: &String,
     replication_state: &ReplicationState,
-    local_filepath_remap: ReadStateFilepathRemap,
+    read_state_filepath_remap: ReadStateFilepathRemap,
     object_storage_cache: ObjectStorageCache,
     moonlink_table_config: MoonlinkTableConfig,
 ) -> Result<TableResources> {
@@ -101,7 +101,7 @@ pub async fn build_table_components(
         &table,
         replication_state.subscribe(),
         commit_lsn_rx,
-        local_filepath_remap,
+        read_state_filepath_remap,
     );
     let table_status_reader =
         TableStatusReader::new(&moonlink_table_config.iceberg_table_config, &table);

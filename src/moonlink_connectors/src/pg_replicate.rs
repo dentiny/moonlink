@@ -346,7 +346,7 @@ impl PostgresConnection {
         moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
         table_base_path: &str,
-        local_filepath_remap: ReadStateFilepathRemap,
+        read_state_filepath_remap: ReadStateFilepathRemap,
         object_storage_cache: ObjectStorageCache,
     ) -> Result<(SrcTableId, crate::pg_replicate::table_init::TableResources)> {
         debug!(table_name, "adding table");
@@ -369,7 +369,7 @@ impl PostgresConnection {
             table_schema.src_table_id,
             &table_base_path.to_string(),
             &self.replication_state,
-            local_filepath_remap,
+            read_state_filepath_remap,
             object_storage_cache,
             moonlink_table_config,
         )

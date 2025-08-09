@@ -267,7 +267,7 @@ async fn prepare_state_3(
         // Read and increment reference count.
         let snapshot_read_output = perform_read_request_for_test(&mut table).await;
         let read_state = snapshot_read_output
-            .take_as_read_state(get_local_filepath_remap())
+            .take_as_read_state(get_read_state_filepath_remap())
             .await;
 
         // Persist.
@@ -298,7 +298,7 @@ async fn prepare_state_3(
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     (table, table_notify, read_state)
@@ -319,7 +319,7 @@ async fn prepare_state_4(
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     (table, table_notify, read_state)
@@ -448,7 +448,7 @@ async fn test_5_read_4(#[case] optimize_local_filesystem: bool, #[case] use_batc
     assert!(files_to_delete.is_empty());
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let _read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -590,7 +590,7 @@ async fn test_4_read_4(#[case] optimize_local_filesystem: bool, #[case] use_batc
     // Read and increment reference count for the second time.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let _read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -621,7 +621,7 @@ async fn test_4_read_and_read_over_4(
     // Read, increment reference count for the second time.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let _read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // State input: drop read state and still referenced.
@@ -662,7 +662,7 @@ async fn test_3_read_3_without_filesystem_optimization(#[case] use_batch_write: 
     // State input: read and increment reference count.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let _read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Persist and reflect result to mooncake snapshot.
     create_mooncake_and_persist_for_test(&mut table, &mut table_notify).await;
@@ -703,7 +703,7 @@ async fn test_3_read_3_with_filesystem_optimization(#[case] use_batch_write: boo
     // State input: read and increment reference count.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let _read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -740,7 +740,7 @@ async fn test_3_read_and_read_over_and_pinned_3_without_local_filesystem_optimiz
     // State input: read and increment reference count.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     drop(read_state_2);
 
@@ -784,7 +784,7 @@ async fn test_3_read_and_read_over_and_pinned_3_with_local_filesystem_optimizati
     // State input: read and increment reference count.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     drop(read_state_2);
     // Create a mooncake snapshot to reflect read request completion result.
@@ -889,7 +889,7 @@ async fn test_1_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
     // State input: read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let _read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -923,7 +923,7 @@ async fn test_1_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     // State input: read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let _read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -959,7 +959,7 @@ async fn test_1_read_and_unpinned_3_without_local_optimization(#[case] use_batch
     // State input: read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let _read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -996,7 +996,7 @@ async fn test_1_read_and_unpinned_3_with_local_optimization(#[case] use_batch_wr
     // State input: read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let _read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Validate end state.
@@ -1032,7 +1032,7 @@ async fn test_2_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
     // State input: read, but no reference count hold within read state.
     let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let _read_state_1 = snapshot_read_output_1
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Till now, the state is (remote, no local, in use).
 
@@ -1042,7 +1042,7 @@ async fn test_2_read_and_pinned_3_without_local_optimization(#[case] use_batch_w
 
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let _read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Check fake file has been evicted.
@@ -1085,7 +1085,7 @@ async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
     // State input: read, but no reference count hold within read state.
     let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let _read_state_1 = snapshot_read_output_1
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Till now, the state is (remote, no local, in use).
 
@@ -1095,7 +1095,7 @@ async fn test_2_read_and_pinned_3_with_local_optimization(#[case] use_batch_writ
 
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let _read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Check fake file has been evicted.
@@ -1137,14 +1137,14 @@ async fn test_2_read_and_unpinned_2_without_local_optimization(#[case] use_batch
     // State input: read, but no reference count hold within read state.
     let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Till now, the state is (remote, no local, in use).
 
     // Read, but no reference count hold within read state.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Check data file has been recorded in mooncake table.
@@ -1192,14 +1192,14 @@ async fn test_2_read_and_unpinned_2_with_local_optimization(#[case] use_batch_wr
     // Read, but no reference count hold within read state.
     let snapshot_read_output_1 = perform_read_request_for_test(&mut table).await;
     let read_state_1 = snapshot_read_output_1
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Till now, the state is (remote, no local, in use).
 
     // Read, but no reference count hold within read state.
     let snapshot_read_output_2 = perform_read_request_for_test(&mut table).await;
     let read_state_2 = snapshot_read_output_2
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Check data file has been recorded in mooncake table.
@@ -1246,7 +1246,7 @@ async fn test_2_read_over_1_without_local_optimization(#[case] use_batch_write: 
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Till now, the state is (remote, no local, in use).
     drop(read_state);
@@ -1283,7 +1283,7 @@ async fn test_2_read_over_1_with_local_optimization(#[case] use_batch_write: boo
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
     // Till now, the state is (remote, no local, in use).
     drop(read_state);
@@ -1380,7 +1380,7 @@ async fn test_3_compact_3_5_without_local_filesystem_optimization() {
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Persist and reflect result to mooncake snapshot.
@@ -1489,7 +1489,7 @@ async fn test_3_compact_3_5_with_local_filesystem_optimization() {
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Persist and reflect result to mooncake snapshot.
@@ -1601,7 +1601,7 @@ async fn test_3_compact_1_5_without_local_filesystem_optimization() {
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Persist and reflect result to mooncake snapshot.
@@ -1683,7 +1683,7 @@ async fn test_3_compact_1_5_with_local_filesystem_optimization() {
     // Read and increment reference count.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Persist and reflect result to mooncake snapshot.

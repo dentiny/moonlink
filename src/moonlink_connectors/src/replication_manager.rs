@@ -56,7 +56,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         table_id: u32,
         table_name: &str,
         moonlink_table_config: MoonlinkTableConfig,
-        local_filepath_remap: ReadStateFilepathRemap,
+        read_state_filepath_remap: ReadStateFilepathRemap,
         is_recovery: bool,
     ) -> Result<()> {
         debug!(%src_uri, table_name, "adding table through manager");
@@ -83,7 +83,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 &mooncake_table_id,
                 table_id,
                 moonlink_table_config,
-                local_filepath_remap,
+                read_state_filepath_remap,
                 is_recovery,
             )
             .await?;
@@ -112,7 +112,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         table_name: &str,
         arrow_schema: arrow_schema::Schema,
         moonlink_table_config: MoonlinkTableConfig,
-        local_filepath_remap: ReadStateFilepathRemap,
+        read_state_filepath_remap: ReadStateFilepathRemap,
         is_recovery: bool,
     ) -> Result<()> {
         debug!(%src_uri, table_name, "adding REST API table through manager");
@@ -133,7 +133,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 table_id,
                 arrow_schema,
                 moonlink_table_config,
-                local_filepath_remap,
+                read_state_filepath_remap,
                 is_recovery,
             )
             .await?;

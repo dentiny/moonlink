@@ -606,11 +606,14 @@ impl TestEnvironment {
         .await;
         let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
         let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
-        let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| {
-            local_filepath
-        });
-        let read_state_manager =
-            ReadStateManager::new(&table, replication_lsn_rx.clone(), last_commit_lsn_rx, read_state_filepath_remap);
+        let read_state_filepath_remap =
+            std::sync::Arc::new(|local_filepath: String| local_filepath);
+        let read_state_manager = ReadStateManager::new(
+            &table,
+            replication_lsn_rx.clone(),
+            last_commit_lsn_rx,
+            read_state_filepath_remap,
+        );
         let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
         let (event_replay_tx, event_replay_rx) = mpsc::unbounded_channel();
         let table_handler = TableHandler::new(
@@ -670,11 +673,13 @@ async fn validate_persisted_iceberg_table(
     .await;
     table.register_table_notify(event_sender).await;
 
-    let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| {
-        local_filepath
-    });
-    let read_state_manager =
-        ReadStateManager::new(&table, replication_lsn_rx.clone(), last_commit_lsn_rx, read_state_filepath_remap);
+    let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| local_filepath);
+    let read_state_manager = ReadStateManager::new(
+        &table,
+        replication_lsn_rx.clone(),
+        last_commit_lsn_rx,
+        read_state_filepath_remap,
+    );
     check_read_snapshot(
         &read_state_manager,
         Some(snapshot_lsn),

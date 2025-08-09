@@ -17,7 +17,7 @@ pub(crate) struct BackendAttributes {
 async fn recover_table<D, T>(
     metadata_entry: TableMetadataEntry,
     replication_manager: &mut ReplicationManager<MooncakeTableId<D, T>>,
-    local_filepath_remap: ReadStateFilepathRemap,
+    read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()>
 where
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
@@ -34,7 +34,7 @@ where
             metadata_entry.table_id,
             &metadata_entry.src_table_name,
             metadata_entry.moonlink_table_config,
-            local_filepath_remap,
+            read_state_filepath_remap,
             /*is_recovery=*/ true,
         )
         .await?;
@@ -47,7 +47,7 @@ where
 pub(super) async fn recover_all_tables<D, T>(
     backend_attributes: BackendAttributes,
     metadata_store_accessor: &dyn MetadataStoreTrait,
-    local_filepath_remap: ReadStateFilepathRemap,
+    read_state_filepath_remap: ReadStateFilepathRemap,
     replication_manager: &mut ReplicationManager<MooncakeTableId<D, T>>,
 ) -> Result<()>
 where
@@ -80,7 +80,7 @@ where
         recover_table(
             cur_metadata_entry,
             replication_manager,
-            local_filepath_remap.clone(),
+            read_state_filepath_remap.clone(),
         )
         .await?;
     }

@@ -62,7 +62,7 @@ impl ReadOutput {
     /// TODO(hjiang): Parallelize download and pin.
     pub async fn take_as_read_state(
         mut self,
-        local_filepath_remap: ReadStateFilepathRemap,
+        read_state_filepath_remap: ReadStateFilepathRemap,
     ) -> Arc<ReadState> {
         // Resolve remote data files.
         let mut resolved_data_files = Vec::with_capacity(self.data_file_paths.len());
@@ -116,7 +116,7 @@ impl ReadOutput {
             // Fields used for read state cleanup after query completion.
             self.associated_files,
             cache_handles,
-            local_filepath_remap,
+            read_state_filepath_remap,
         ))
     }
 }

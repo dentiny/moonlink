@@ -319,7 +319,7 @@ async fn test_2_read_without_local_optimization(#[case] use_batch_write: bool) {
     // Use by read.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Check data file has been pinned in mooncake table.
@@ -375,7 +375,7 @@ async fn test_2_read_with_local_optimization(#[case] use_batch_write: bool) {
     // Use by read.
     let snapshot_read_output = perform_read_request_for_test(&mut table).await;
     let read_state = snapshot_read_output
-        .take_as_read_state(get_local_filepath_remap())
+        .take_as_read_state(get_read_state_filepath_remap())
         .await;
 
     // Check data file has been pinned in mooncake table.

@@ -16,7 +16,7 @@ pub struct ReadStateManager {
     replication_lsn_rx: watch::Receiver<u64>,
     last_commit_lsn_rx: watch::Receiver<u64>,
     /// Functor which maps local filepath to remote URI if possible, should be applied on all files within [`ReadState`].
-    local_filepath_remap: ReadStateFilepathRemap,
+    read_state_filepath_remap: ReadStateFilepathRemap,
 }
 
 impl ReadStateManager {
@@ -24,7 +24,7 @@ impl ReadStateManager {
         table: &MooncakeTable,
         replication_lsn_rx: watch::Receiver<u64>,
         last_commit_lsn_rx: watch::Receiver<u64>,
-        local_filepath_remap: ReadStateFilepathRemap,
+        read_state_filepath_remap: ReadStateFilepathRemap,
     ) -> Self {
         let (table_snapshot, table_snapshot_watch_receiver) = table.get_state_for_reader();
         ReadStateManager {
@@ -36,13 +36,13 @@ impl ReadStateManager {
                 /*position_deletes=*/ Vec::new(),
                 /*associated_files=*/ Vec::new(),
                 /*cache_handles=*/ Vec::new(),
-                local_filepath_remap.clone(), // Unused
+                read_state_filepath_remap.clone(), // Unused
             ))),
             table_snapshot,
             table_snapshot_watch_receiver,
             replication_lsn_rx,
             last_commit_lsn_rx,
-            local_filepath_remap,
+            read_state_filepath_remap,
         }
     }
 
@@ -176,7 +176,7 @@ impl ReadStateManager {
 
             self.last_read_lsn.store(effective_lsn, Ordering::Release);
             *last_read_state_guard = snapshot_read_output
-                .take_as_read_state(self.local_filepath_remap.clone())
+                .take_as_read_state(self.read_state_filepath_remap.clone())
                 .await;
         }
         Ok(last_read_state_guard.clone())

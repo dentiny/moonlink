@@ -579,7 +579,7 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
     }
 }
 
-pub(crate) fn get_local_filepath_remap() -> ReadStateFilepathRemap {
+pub(crate) fn get_read_state_filepath_remap() -> ReadStateFilepathRemap {
     Arc::new(|local_filepath: String| local_filepath)
 }
 
