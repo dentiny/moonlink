@@ -1,6 +1,6 @@
-use crate::pg_replicate::table::SrcTableId;
 use crate::pg_replicate::table_init::build_table_components;
 use crate::pg_replicate::PostgresConnection;
+use crate::pg_replicate::{table::SrcTableId, table_init::TableComponents};
 use crate::rest_ingest::rest_source::EventRequest;
 use crate::rest_ingest::RestApiConnection;
 use crate::Result;
@@ -209,6 +209,11 @@ impl ReplicationConnection {
                 debug!(table_name, "adding REST API table");
 
                 let src_table_id = conn.next_src_table_id();
+                let table_components = TableComponents {
+                    read_state_filepath_remap,
+                    object_storage_cache: self.object_storage_cache.clone(),
+                    moonlink_table_config,
+                };
 
                 // Create MooncakeTable resources using the table init function
                 let mut table_resources = build_table_components(
@@ -221,9 +226,7 @@ impl ReplicationConnection {
                     &self.table_base_path,
                     // REST API doesn't have replication state, create a dummy one
                     &crate::pg_replicate::replication_state::ReplicationState::new(),
-                    read_state_filepath_remap,
-                    self.object_storage_cache.clone(),
-                    moonlink_table_config,
+                    table_components,
                 )
                 .await?;
 

@@ -19,7 +19,7 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::pg_replicate::replication_state::ReplicationState;
 use crate::pg_replicate::table::{SrcTableId, TableSchema};
-use crate::pg_replicate::table_init::build_table_components;
+use crate::pg_replicate::table_init::{build_table_components, TableComponents};
 use crate::Result;
 use futures::StreamExt;
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, TableEvent};
@@ -359,6 +359,11 @@ impl PostgresConnection {
 
         let (arrow_schema, identity) =
             crate::pg_replicate::util::postgres_schema_to_moonlink_schema(&table_schema);
+        let table_components = TableComponents {
+            read_state_filepath_remap,
+            object_storage_cache,
+            moonlink_table_config,
+        };
 
         let mut table_resources = build_table_components(
             mooncake_table_id.to_string(),
@@ -369,9 +374,7 @@ impl PostgresConnection {
             table_schema.src_table_id,
             &table_base_path.to_string(),
             &self.replication_state,
-            read_state_filepath_remap,
-            object_storage_cache,
-            moonlink_table_config,
+            table_components,
         )
         .await?;
 
