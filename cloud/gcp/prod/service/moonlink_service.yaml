@@ -23,3 +23,8 @@ spec:
     protocol: TCP
     port: 3031
     targetPort: 3031
+  # Exposed port for readiness check.
+  - name: readiness
+    protocol: TCP
+    port: 5050
+    targetPort: 5050

@@ -30,6 +30,16 @@ spec:
         - containerPort: 3030
         # Port number for TCP rpc server.
         - containerPort: 3031
+        # Port number for readiness probe.
+        - containerPort: 5050 
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 5050
+          initialDelaySeconds: 2
+          periodSeconds: 5
+          timeoutSeconds: 1
+          failureThreshold: 3
 
       # Data server, which serves data plane requests.
       - name: nginx
