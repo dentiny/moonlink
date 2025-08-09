@@ -21,14 +21,6 @@ spec:
         - "/tmp/moonlink"
         - "--no-rest-api"
         - "--tcp-port=3031"
-        # TODO(hjiang): Revisit before release and production deployment, use a dummy guaranteed QoS for now. 
-        resources:
-          requests:
-            cpu: "800m"
-            memory: "1GiB"
-          limits:
-            cpu: "800m"
-            memory: "1GiB"
         env:
         volumeMounts:
         - name: shared-cache-directory
@@ -42,13 +34,6 @@ spec:
       # Data server, which serves data plane requests.
       - name: nginx
         image: nginx:latest
-        resources:
-          requests:
-            cpu: "50m"
-            memory: "10Mi"
-          limits:
-            cpu: "50m"
-            memory: "10Mi"
         ports:
         - containerPort: 80
         volumeMounts:
@@ -56,7 +41,21 @@ spec:
         - name: shared-cache-directory
           mountPath: /usr/share/nginx/html
 
+      # TODO(hjiang): Currently serves merely as source database to sync from, need to remove before release.
+      - name: postgres
+        image: mooncakelabs/pg_mooncake
+        env:
+        - name: POSTGRES_PASSWORD
+          value: password
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: pgdata
+          mountPath: /var/lib/postgresql/data
+
       volumes:
+      - name: pgdata
+        emptyDir: {}
       # Shared cache directory between data server and moonlink.
       - name: shared-cache-directory
         emptyDir: {}
