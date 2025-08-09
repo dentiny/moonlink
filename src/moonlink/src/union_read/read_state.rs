@@ -138,3 +138,42 @@ pub fn decode_read_state_for_testing(
         metadata.position_deletes,
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_read_state_construction() {
+        let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| {
+            format!("{}/some_non_existent_dir", local_filepath)
+        });
+
+        let data_files = vec!["/tmp/file_1".to_string(), "/tmp/file_2".to_string()];
+        let read_state = ReadState::new(
+            data_files,
+            /*puffin_cache_handles=*/ vec![],
+            /*deletion_vectors_at_read=*/ vec![],
+            /*position_deletes=*/ vec![],
+            /*associated_files=*/ vec![],
+            /*cache_handles=*/ vec![],
+            read_state_filepath_remap,
+        );
+        let (
+            deserialized_data_files,
+            deserialized_puffin_files,
+            deserialized_deletion_vector,
+            deserialized_position_deletes,
+        ) = decode_read_state_for_testing(&read_state);
+        assert_eq!(
+            deserialized_data_files,
+            vec![
+                "/tmp/file_1/some_non_existent_dir".to_string(),
+                "/tmp/file_2/some_non_existent_dir".to_string(),
+            ]
+        );
+        assert!(deserialized_puffin_files.is_empty());
+        assert!(deserialized_deletion_vector.is_empty());
+        assert!(deserialized_position_deletes.is_empty());
+    }
+}
