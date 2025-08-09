@@ -4,6 +4,7 @@ use crate::{Error, Result};
 use arrow_schema::Schema as ArrowSchema;
 use moonlink::event_sync::create_table_event_syncer;
 use moonlink::table_handler_timer::create_table_handler_timers;
+use moonlink::ReadStateFilepathRemap;
 use moonlink::{
     row::IdentityProp, AccessorConfig, EventSyncReceiver, EventSyncSender, FileSystemAccessor,
     IcebergTableConfig, MooncakeTable, MooncakeTableConfig, MoonlinkSecretType,
@@ -59,6 +60,7 @@ pub async fn build_table_components(
     src_table_id: SrcTableId,
     base_path: &String,
     replication_state: &ReplicationState,
+    local_filepath_remap: ReadStateFilepathRemap,
     object_storage_cache: ObjectStorageCache,
     moonlink_table_config: MoonlinkTableConfig,
 ) -> Result<TableResources> {
@@ -95,8 +97,12 @@ pub async fn build_table_components(
     .await?;
 
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
-    let read_state_manager =
-        ReadStateManager::new(&table, replication_state.subscribe(), commit_lsn_rx);
+    let read_state_manager = ReadStateManager::new(
+        &table,
+        replication_state.subscribe(),
+        commit_lsn_rx,
+        local_filepath_remap,
+    );
     let table_status_reader =
         TableStatusReader::new(&moonlink_table_config.iceberg_table_config, &table);
     let (event_sync_sender, event_sync_receiver) = create_table_event_syncer();

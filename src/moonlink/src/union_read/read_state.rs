@@ -13,6 +13,9 @@ use tracing::{error, info_span, warn};
 
 const BINCODE_CONFIG: config::Configuration = config::standard();
 
+/// Type alias for filepath remap function, which remaps local filepath to remote for [`ReadState`] if possible.
+pub type ReadStateFilepathRemap = std::sync::Arc<dyn Fn(String) -> String + Send + Sync>;
+
 // TODO(hjiang): A better solution might be wrap clean up in a functor.
 #[derive(Debug)]
 pub struct ReadState {
@@ -74,6 +77,7 @@ impl ReadState {
         // Fields used for read state cleanup after query completion.
         associated_files: Vec<String>,
         mut cache_handles: Vec<NonEvictableHandle>, // Cache handles for data files.
+        local_filepath_remap: ReadStateFilepathRemap, // Used to remap local filepath to
     ) -> Self {
         deletion_vectors_at_read.sort_by(|dv_1, dv_2| {
             dv_1.data_file_index
@@ -88,9 +92,20 @@ impl ReadState {
             .iter()
             .map(|handle| handle.cache_entry.cache_filepath.clone())
             .collect::<Vec<_>>();
+
+        // Map from local filepath to remote file path if needed and if possible.
+        let remapped_data_files = data_files
+            .into_iter()
+            .map(|path| local_filepath_remap(path))
+            .collect::<Vec<_>>();
+        let remapped_puffin_files = puffin_files
+            .into_iter()
+            .map(|path| local_filepath_remap(path))
+            .collect::<Vec<_>>();
+
         let metadata = TableMetadata {
-            data_files,
-            puffin_files,
+            data_files: remapped_data_files,
+            puffin_files: remapped_puffin_files,
             deletion_vectors: deletion_vectors_at_read,
             position_deletes,
         };

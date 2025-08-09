@@ -15,7 +15,7 @@ spec:
       containers:
       # Moonlink deployment, which serves REST API and TCP rpc requests.
       - name: moonlink-deployment
-        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:42f29a70-e2f2-4ac2-99f8-95f830464ecc
+        image: us-west1-docker.pkg.dev/coral-ring-465417-r0/moonlink-standalone-experiment/moonlink-deployment:7cb80acf-9d2e-4dfe-b19a-ad8e6578415d
         command: ["/app/moonlink_service"]
         args:
         - "/tmp/moonlink"

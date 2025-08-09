@@ -12,6 +12,8 @@ use tracing::{error, info};
 pub struct ServiceConfig {
     /// Base location for moonlink storage (including cache files, iceberg tables, etc).
     pub base_path: String,
+    /// Data server URI, if assigned, all table scan file path should be remapped to conform data server.
+    pub data_server_uri: Option<String>,
     /// Used for REST API as ingestion source.
     pub rest_api_port: Option<u16>,
     /// Used for moonlink standalone deployment.
@@ -23,8 +25,12 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     let sqlite_metadata_accessor = SqliteMetadataStore::new_with_directory(&config.base_path)
         .await
         .unwrap();
-    let mut backend =
-        MoonlinkBackend::new(config.base_path.clone(), Box::new(sqlite_metadata_accessor)).await?;
+    let mut backend = MoonlinkBackend::new(
+        config.base_path.clone(),
+        config.data_server_uri.clone(),
+        Box::new(sqlite_metadata_accessor),
+    )
+    .await?;
 
     if config.rest_api_port.is_some() {
         backend.initialize_event_api().await?;

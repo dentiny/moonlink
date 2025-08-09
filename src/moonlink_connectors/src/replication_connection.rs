@@ -6,7 +6,8 @@ use crate::rest_ingest::RestApiConnection;
 use crate::Result;
 use arrow_schema::Schema as ArrowSchema;
 use moonlink::{
-    MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager, TableStatusReader,
+    MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, ReadStateManager,
+    TableEventManager, TableStatusReader,
 };
 use std::collections::HashMap;
 use tokio::sync::mpsc;
@@ -154,6 +155,7 @@ impl ReplicationConnection {
         mooncake_table_id: &T,
         table_id: u32,
         moonlink_table_config: MoonlinkTableConfig,
+        local_filepath_remap: ReadStateFilepathRemap,
         is_recovery: bool,
     ) -> Result<SrcTableId> {
         match &mut self.source {
@@ -168,6 +170,7 @@ impl ReplicationConnection {
                         moonlink_table_config,
                         is_recovery,
                         &self.table_base_path,
+                        local_filepath_remap,
                         self.object_storage_cache.clone(),
                     )
                     .await?;
@@ -198,6 +201,7 @@ impl ReplicationConnection {
         table_id: u32,
         arrow_schema: ArrowSchema,
         moonlink_table_config: MoonlinkTableConfig,
+        local_filepath_remap: ReadStateFilepathRemap,
         _is_recovery: bool,
     ) -> Result<SrcTableId> {
         match &mut self.source {
@@ -217,6 +221,7 @@ impl ReplicationConnection {
                     &self.table_base_path,
                     // REST API doesn't have replication state, create a dummy one
                     &crate::pg_replicate::replication_state::ReplicationState::new(),
+                    local_filepath_remap,
                     self.object_storage_cache.clone(),
                     moonlink_table_config,
                 )

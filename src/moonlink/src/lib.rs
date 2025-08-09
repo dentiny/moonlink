@@ -22,7 +22,7 @@ pub use storage::{
 pub use table_handler::TableHandler;
 pub use table_handler_timer::TableHandlerTimer;
 pub use table_notify::TableEvent;
-pub use union_read::{ReadState, ReadStateManager};
+pub use union_read::{ReadState, ReadStateFilepathRemap, ReadStateManager};
 
 #[cfg(any(test, feature = "test-utils"))]
 pub use union_read::decode_read_state_for_testing;
