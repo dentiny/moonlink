@@ -12,12 +12,12 @@ pub use event_sync::EventSyncSender;
 pub use storage::storage_utils::create_data_file;
 pub(crate) use storage::NonEvictableHandle;
 pub use storage::{
-    AccessorConfig, DataCompactionConfig, EventSyncReceiver, FileIndexMergeConfig,
-    FileSystemAccessor, IcebergPersistenceConfig, IcebergTableConfig, IcebergTableManager,
-    MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
-    MoonlinkTableSecret, ObjectStorageCache, ObjectStorageCacheConfig, SnapshotReadOutput,
-    StorageConfig, TableEventManager, TableManager, TableSnapshotStatus, TableStatusReader,
-    WalConfig, WalManager, WalTransactionState,
+    AccessorConfig, DataCompactionConfig, DiskSliceWriterConfig, EventSyncReceiver,
+    FileIndexMergeConfig, FileSystemAccessor, IcebergPersistenceConfig, IcebergTableConfig,
+    IcebergTableManager, MooncakeTable, MooncakeTableConfig, MoonlinkSecretType,
+    MoonlinkTableConfig, MoonlinkTableSecret, ObjectStorageCache, ObjectStorageCacheConfig,
+    SnapshotReadOutput, StorageConfig, TableEventManager, TableManager, TableSnapshotStatus,
+    TableStatusReader, WalConfig, WalManager, WalTransactionState,
 };
 pub use table_handler::TableHandler;
 pub use table_handler_timer::TableHandlerTimer;
