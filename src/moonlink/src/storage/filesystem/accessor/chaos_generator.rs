@@ -79,6 +79,7 @@ mod tests {
     #[tokio::test]
     async fn test_no_delay_no_error() {
         let option = ChaosConfig {
+            random_seed: None,
             min_latency: std::time::Duration::from_millis(0),
             max_latency: std::time::Duration::from_millis(0),
             err_prob: 0,
@@ -90,6 +91,7 @@ mod tests {
     #[tokio::test]
     async fn test_delay_no_error() {
         let option = ChaosConfig {
+            random_seed: None,
             min_latency: std::time::Duration::from_millis(100),
             max_latency: std::time::Duration::from_millis(200),
             err_prob: 0,
@@ -103,6 +105,7 @@ mod tests {
         const ATTEMPT_COUNT: usize = 10;
 
         let option = ChaosConfig {
+            random_seed: None,
             min_latency: std::time::Duration::from_millis(0),
             max_latency: std::time::Duration::from_millis(0),
             err_prob: 100,
