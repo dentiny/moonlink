@@ -10,7 +10,7 @@ pub struct DiskSliceWriterConfig {
     #[serde(default = "IcebergPersistenceConfig::default_new_data_file_count")]
     pub parquet_file_size: usize,
 
-    /// Chaos config on disk write.
+    /// Chaos config on disk write flush.
     #[serde(default)]
     pub chaos_config: Option<ChaosConfig>,
 }

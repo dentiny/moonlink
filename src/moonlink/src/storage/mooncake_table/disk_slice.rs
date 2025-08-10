@@ -1,5 +1,6 @@
 use super::data_batches::BatchEntry;
 use crate::error::{Error, Result};
+use crate::storage::filesystem::accessor::chaos_generator::ChaosGenerator;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex, MemIndex};
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
@@ -100,6 +101,13 @@ impl DiskSliceWriter {
     /// Apply deletion vector to in-memory batches, write to parquet files and remap index.
     #[tracing::instrument(name = "disk_slice_write", skip_all)]
     pub(super) async fn write(&mut self) -> Result<()> {
+        // Attempt to perform chaos operations.
+        if let Some(chaos_config) = &self.disk_slice_writer_config.chaos_config {
+            let chaos_generator = ChaosGenerator::new(chaos_config.clone());
+            chaos_generator.perform_wrapper_function().await?;
+        }
+
+        // Do real parquet write operation.
         let mut filtered_batches = Vec::new();
         let mut id = 0;
         for entry in self.batches.iter() {
