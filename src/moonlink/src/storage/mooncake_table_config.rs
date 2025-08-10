@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct DiskSliceWriterConfig {
     /// Disk slice parquet file flush threshold.
-    #[serde(default = "IcebergPersistenceConfig::default_new_data_file_count")]
+    #[serde(default = "DiskSliceWriterConfig::default_disk_slice_parquet_file_size")]
     pub parquet_file_size: usize,
 
     /// Chaos config on disk write flush.
@@ -22,6 +22,9 @@ impl DiskSliceWriterConfig {
     #[cfg(not(debug_assertions))]
     pub(crate) const DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE: usize = 1024 * 1024 * 128; // 128MiB
 
+    pub fn default_disk_slice_parquet_file_size() -> usize {
+        Self::DEFAULT_DISK_SLICE_PARQUET_FILE_SIZE
+    }
     pub fn validate(&self) {
         if let Some(chaos_config) = &self.chaos_config {
             chaos_config.validate();
