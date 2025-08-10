@@ -566,8 +566,11 @@ struct TestEnvironment {
 impl TestEnvironment {
     async fn new(config: TestEnvConfig) -> Self {
         let table_temp_dir = tempdir().unwrap();
-        let disk_slice_write_config =
-            create_disk_slice_write_option(config.disk_slice_write_chaos_enabled);
+        let chaos_test_arg = parse_chaos_test_args();
+        let disk_slice_write_config = create_disk_slice_write_option(
+            config.disk_slice_write_chaos_enabled,
+            chaos_test_arg.seed,
+        );
         let mooncake_table_metadata = match &config.maintenance_option {
             TableMaintenanceOption::NoTableMaintenance => create_test_table_metadata_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
@@ -601,7 +604,6 @@ impl TestEnvironment {
         };
 
         // Create mooncake table and table event notification receiver.
-        let chaos_test_arg = parse_chaos_test_args();
         let iceberg_table_config = if config.error_injection_enabled {
             get_iceberg_table_config_with_chaos_injection(
                 config.storage_config.clone(),

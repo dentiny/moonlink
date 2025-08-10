@@ -194,11 +194,13 @@ pub(crate) fn create_test_table_metadata_with_config(
 #[cfg(feature = "chaos-test")]
 pub(crate) fn create_disk_slice_write_option(
     enable_disk_slice_write_chaos: bool,
+    random_seed: u64,
 ) -> DiskSliceWriterConfig {
     use crate::storage::filesystem::accessor_config::ChaosConfig;
 
     let chaos_config = if enable_disk_slice_write_chaos {
         Some(ChaosConfig {
+            random_seed: Some(random_seed),
             err_prob: 0,
             // Injected latency is comparable to mooncake snapshot interval.
             min_latency: std::time::Duration::from_millis(50),
