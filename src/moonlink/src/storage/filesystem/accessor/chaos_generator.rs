@@ -19,11 +19,16 @@ pub(crate) struct ChaosGenerator {
 impl ChaosGenerator {
     pub(crate) fn new(option: ChaosConfig) -> Self {
         option.validate();
-        let nanos = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let rng = Arc::new(Mutex::new(StdRng::seed_from_u64(nanos as u64)));
+        let random_seed = if let Some(random_seed) = option.random_seed {
+            random_seed
+        } else {
+            let nanos = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos();
+            nanos as u64
+        };
+        let rng = Arc::new(Mutex::new(StdRng::seed_from_u64(random_seed)));
 
         Self { rng, option }
     }
