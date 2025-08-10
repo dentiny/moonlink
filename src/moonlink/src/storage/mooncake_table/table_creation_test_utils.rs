@@ -69,10 +69,12 @@ pub(crate) fn get_iceberg_table_config_with_storage_config(
 #[cfg(feature = "chaos-test")]
 pub(crate) fn get_iceberg_table_config_with_chaos_injection(
     storage_config: StorageConfig,
+    random_seed: u64,
 ) -> IcebergTableConfig {
     use crate::storage::filesystem::accessor_config::{ChaosConfig, RetryConfig, TimeoutConfig};
 
     let chaos_config = ChaosConfig {
+        random_seed: Some(random_seed),
         min_latency: std::time::Duration::from_secs(0),
         max_latency: std::time::Duration::from_secs(1),
         err_prob: 5, // 5% error probability, a few retry attempts should work
