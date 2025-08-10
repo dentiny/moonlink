@@ -546,6 +546,7 @@ struct TestEnvConfig {
 
 #[allow(dead_code)]
 struct TestEnvironment {
+    chaos_test_arg: ChaosTestArgs,
     test_env_config: TestEnvConfig,
     cache_temp_dir: TempDir,
     table_temp_dir: TempDir,
@@ -600,8 +601,12 @@ impl TestEnvironment {
         };
 
         // Create mooncake table and table event notification receiver.
+        let chaos_test_arg = parse_chaos_test_args();
         let iceberg_table_config = if config.error_injection_enabled {
-            get_iceberg_table_config_with_chaos_injection(config.storage_config.clone())
+            get_iceberg_table_config_with_chaos_injection(
+                config.storage_config.clone(),
+                chaos_test_arg.seed,
+            )
         } else {
             get_iceberg_table_config_with_storage_config(config.storage_config.clone())
         };
@@ -637,6 +642,7 @@ impl TestEnvironment {
         let event_sender = table_handler.get_event_sender();
 
         Self {
+            chaos_test_arg,
             test_env_config: config,
             cache_temp_dir,
             table_temp_dir,
@@ -706,12 +712,10 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
     // Fields used to recreate a new mooncake table.
     let mooncake_table_metadata = env.mooncake_table_metadata.clone();
     let iceberg_table_config = env.iceberg_table_config.clone();
-
-    let args = parse_chaos_test_args();
-    let cloned_args = args.clone();
+    let cloned_args = env.chaos_test_arg.clone();
 
     let task = tokio::spawn(async move {
-        let mut state = ChaosState::new(read_state_manager, args);
+        let mut state = ChaosState::new(read_state_manager, cloned_args);
         println!(
             "Test {} is with random seed {}",
             test_env_config.test_name, state.random_seed
@@ -796,7 +800,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         if let Ok(panic) = e.try_into_panic() {
             std::panic::resume_unwind(panic);
         }
-    } else if cloned_args.print_events_on_success {
+    } else if env.chaos_test_arg.print_events_on_success {
         // Optionally print events even when the test succeeded, for debugging.
         while let Some(cur_event) = env.event_replay_rx.recv().await {
             println!("{cur_event:?}");
