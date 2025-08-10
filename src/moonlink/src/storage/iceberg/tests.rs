@@ -1525,7 +1525,7 @@ async fn test_multiple_table_ids_for_deletion_vector() {
         mem_slice_size: 1,
         // At flush, place each row in a separate parquet file.
         disk_slice_writer_config: DiskSliceWriterConfig {
-            parquet_file_size: 1000,
+            parquet_file_size: 1,
             chaos_config: None,
         },
         ..Default::default()
