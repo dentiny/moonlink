@@ -808,6 +808,8 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
             println!("{cur_event:?}");
         }
     }
+
+    println!("test ok");
 }
 
 /// ============================
