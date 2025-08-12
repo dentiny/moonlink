@@ -317,6 +317,7 @@ impl TableHandler {
                     assert!(table.create_snapshot(SnapshotOption {
                         uuid: uuid::Uuid::new_v4(),
                         force_create: true,
+                        dump_snapshot: false,
                         skip_iceberg_snapshot: true,
                         index_merge_option: MaintenanceOption::Skip,
                         data_compaction_option: MaintenanceOption::Skip,
@@ -406,6 +407,7 @@ impl TableHandler {
                     data_compaction_payload,
                     file_indice_merge_payload,
                     evicted_files_to_delete,
+                    current_snapshot: _,
                 } => {
                     // Spawn a detached best-effort task to delete evicted object storage cache.
                     start_task_to_delete_evicted(evicted_files_to_delete.files);

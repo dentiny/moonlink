@@ -187,6 +187,17 @@ impl Snapshot {
     }
 }
 
+impl std::fmt::Debug for Snapshot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Snapshot")
+            .field("disk files count", &self.disk_files.len())
+            .field("file indices count", &self.indices.file_indices.len())
+            .field("flush_lsn", &self.flush_lsn)
+            .field("snapshot_version", &self.snapshot_version)
+            .finish()
+    }
+}
+
 struct RecordBatchWithDeletionVector {
     batch_id: u64,
     record_batch: Arc<RecordBatch>,
@@ -385,6 +396,8 @@ pub enum MaintenanceOption {
 pub struct SnapshotOption {
     /// UUID for the current mooncake snapshot operation.
     pub(crate) uuid: uuid::Uuid,
+    /// Whether to return mooncake snapshot status in the snapshot result.
+    pub(crate) dump_snapshot: bool,
     /// Whether to force create snapshot.
     /// When specified, mooncake snapshot will be created with snapshot threshold ignored.
     pub(crate) force_create: bool,
@@ -400,6 +413,7 @@ impl SnapshotOption {
     pub fn default() -> SnapshotOption {
         Self {
             uuid: uuid::Uuid::new_v4(),
+            dump_snapshot: false,
             force_create: false,
             skip_iceberg_snapshot: false,
             index_merge_option: MaintenanceOption::BestEffort,
@@ -1165,6 +1179,7 @@ impl MooncakeTable {
                 evicted_files_to_delete: EvictedFiles {
                     files: snapshot_result.evicted_data_files_to_delete,
                 },
+                current_snapshot: snapshot_result.current_snapshot,
             })
             .await
             .unwrap();

@@ -213,6 +213,7 @@ impl TableHandlerState {
         SnapshotOption {
             uuid,
             force_create,
+            dump_snapshot: false,
             skip_iceberg_snapshot: self.iceberg_snapshot_ongoing,
             index_merge_option: self.get_index_merge_maintenance_option(),
             data_compaction_option: self.get_data_compaction_maintenance_option(),

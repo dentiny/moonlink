@@ -1934,6 +1934,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
@@ -1971,6 +1972,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
@@ -2035,6 +2037,7 @@ async fn test_out_of_order_flush_completion_with_iceberg_snapshots() -> Result<(
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: false,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
@@ -2184,6 +2187,7 @@ async fn test_streaming_batch_id_mismatch_with_data_compaction() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true, // Skip iceberg to focus on the mooncake issue
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::ForceRegular, // Trigger data compaction
@@ -2254,6 +2258,7 @@ async fn test_streaming_empty_batch_filtering() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::ForceRegular,
@@ -2308,6 +2313,7 @@ async fn test_batch_id_removal_assertion_direct() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip, // No compaction to avoid other issues
@@ -2385,6 +2391,7 @@ async fn test_puffin_deletion_blob_inconsistency_assertion() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::ForceRegular, // Force data compaction
@@ -2446,6 +2453,7 @@ async fn test_stream_commit_with_ongoing_flush_deletion_remapping() -> Result<()
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
@@ -2494,6 +2502,7 @@ async fn test_deletion_align_with_batch() -> Result<()> {
     let created = table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
