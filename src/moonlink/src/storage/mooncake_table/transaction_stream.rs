@@ -463,6 +463,17 @@ impl MooncakeTable {
     }
 
     pub fn flush_stream(&mut self, xact_id: u32, lsn: Option<u64>) -> Result<()> {
+        // Record events for flush initiation.
+        let mut flush_event_id = None;
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_flush_event_initiation(/*xact_id=*/ Some(xact_id), lsn);
+            flush_event_id = Some(table_event.id);
+            event_replay_tx
+                .send(MooncakeTableEvent::FlushInitiation(table_event))
+                .unwrap();
+        }
+
         // Temporarily remove to drop reference to self
         let mut stream_state = self
             .transaction_stream_states
