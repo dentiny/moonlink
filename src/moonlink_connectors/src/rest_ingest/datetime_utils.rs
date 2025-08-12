@@ -41,11 +41,15 @@ pub fn parse_time(time_str: &str) -> Result<RowValue, String> {
 /// Parse an RFC3339/ISO8601 timestamp and normalize to UTC
 /// Follows the same behavior as pg -> moonlink: canonicalize to UTC timezone
 pub fn parse_timestamp(timestamp_str: &str) -> Result<RowValue, String> {
-    parse_timestamp_with_timezone(timestamp_str, None)
+    parse_timestamp_with_timezone(timestamp_str, /*schema_timezone=*/ None)
 }
 
 /// Parse an RFC3339/ISO8601 timestamp with optional schema timezone and normalize to UTC
 /// Follows the same behavior as pg -> moonlink: canonicalize to UTC timezone
+///
+/// There're two things worth noticing:
+/// - If [`timestamp_str`] contains timezone information, [`schema_timezone`] will be overridden and ignored.
+/// - If the timestamp/timezone combination represents multiple timestamp possibilities (i.e., due to DST change), the earliest timestamp will be returned.
 pub fn parse_timestamp_with_timezone(
     timestamp_str: &str,
     schema_timezone: Option<&str>,
@@ -68,8 +72,10 @@ pub fn parse_timestamp_with_timezone(
         if let Ok(tz) = tz_str.parse::<chrono_tz::Tz>() {
             let local_dt = tz
                 .from_local_datetime(&naive_dt)
-                .single()
-                .ok_or_else(|| format!("Ambiguous time in timezone {tz_str}"))?;
+                .earliest()
+                .ok_or_else(|| {
+                    format!("Non-existent timestamp {timestamp_str} in timezone {tz_str}.")
+                })?;
             let utc_dt = local_dt.with_timezone(&Utc);
             let timestamp_micros = utc_dt.timestamp_micros();
             return Ok(RowValue::Int64(timestamp_micros));
@@ -77,7 +83,7 @@ pub fn parse_timestamp_with_timezone(
     }
 
     // Default behavior: treat naive datetime as UTC
-    // This matches pg_replicate behavior: t.and_utc().timestamp_micros()
+    // This matches pg_replicate behavior to use microseconds as value.
     let timestamp_micros = naive_dt.and_utc().timestamp_micros();
     Ok(RowValue::Int64(timestamp_micros))
 }
@@ -110,11 +116,13 @@ mod tests {
         assert!(parse_time("25:00:00").is_err());
     }
 
+    /// Testing scenario: parse timestamp without timezone.
     #[test]
     fn test_parse_timestamp() {
+        use chrono::TimeZone;
+
         // UTC timestamp
         let result = parse_timestamp("2024-03-15T10:30:45.123Z").unwrap();
-        use chrono::TimeZone;
         let expected = Utc
             .with_ymd_and_hms(2024, 3, 15, 10, 30, 45)
             .unwrap()
@@ -149,5 +157,36 @@ mod tests {
 
         // Invalid timestamp
         assert!(parse_timestamp("2024-03-15 10:30:45").is_err());
+    }
+
+    #[test]
+    fn test_parse_timestamp_with_timezone() {
+        use chrono::TimeZone;
+
+        // Unique timestamp.
+        let utc_timezone = "UTC";
+        let result =
+            parse_timestamp_with_timezone("2024-03-15T10:30:45.123", Some(utc_timezone)).unwrap();
+        let expected = Utc
+            .with_ymd_and_hms(2024, 3, 15, 10, 30, 45)
+            .unwrap()
+            .timestamp_micros()
+            + 123000;
+        assert_eq!(result, RowValue::Int64(expected));
+
+        // Ambiguous timestamp due to DST (Daylight Saving Time) change.
+        let est_timezone = "America/New_York";
+        let result =
+            parse_timestamp_with_timezone("2024-11-03T01:30:00", Some(est_timezone)).unwrap();
+        let expected = Utc
+            .with_ymd_and_hms(2024, 11, 3, 5, 30, 00)
+            .unwrap()
+            .timestamp_micros();
+        assert_eq!(result, RowValue::Int64(expected));
+
+        // Non-existent timestamp due to DST (Daylight Saving Time) change.
+        let est_timezone = "America/New_York";
+        let result = parse_timestamp_with_timezone("2024-03-10T02:30:00", Some(est_timezone));
+        assert!(result.is_err());
     }
 }

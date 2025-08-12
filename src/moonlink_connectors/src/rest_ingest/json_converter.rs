@@ -41,6 +41,13 @@ impl JsonToMoonlinkRowConverter {
 
     fn convert_value(field: &Field, value: &Value) -> Result<RowValue, JsonToMoonlinkRowError> {
         match field.data_type() {
+            DataType::Boolean => {
+                if let Some(b) = value.as_bool() {
+                    Ok(RowValue::Bool(b))
+                } else {
+                    Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
+                }
+            }
             DataType::Int32 => {
                 if let Some(i) = value.as_i64() {
                     Ok(RowValue::Int32(i as i32))
@@ -48,16 +55,9 @@ impl JsonToMoonlinkRowConverter {
                     Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
                 }
             }
-            DataType::Utf8 => {
-                if let Some(s) = value.as_str() {
-                    Ok(RowValue::ByteArray(s.as_bytes().to_vec()))
-                } else {
-                    Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
-                }
-            }
-            DataType::Boolean => {
-                if let Some(b) = value.as_bool() {
-                    Ok(RowValue::Bool(b))
+            DataType::Int64 => {
+                if let Some(i) = value.as_i64() {
+                    Ok(RowValue::Int64(i))
                 } else {
                     Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
                 }
@@ -72,13 +72,6 @@ impl JsonToMoonlinkRowConverter {
             DataType::Float64 => {
                 if let Some(f) = value.as_f64() {
                     Ok(RowValue::Float64(f))
-                } else {
-                    Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
-                }
-            }
-            DataType::Int64 => {
-                if let Some(i) = value.as_i64() {
-                    Ok(RowValue::Int64(i))
                 } else {
                     Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
                 }
@@ -103,6 +96,13 @@ impl JsonToMoonlinkRowConverter {
                 if let Some(s) = value.as_str() {
                     parse_timestamp_with_timezone(s, tz.as_deref())
                         .map_err(|_| JsonToMoonlinkRowError::InvalidValue(field.name().clone()))
+                } else {
+                    Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
+                }
+            }
+            DataType::Utf8 => {
+                if let Some(s) = value.as_str() {
+                    Ok(RowValue::ByteArray(s.as_bytes().to_vec()))
                 } else {
                     Err(JsonToMoonlinkRowError::TypeMismatch(field.name().clone()))
                 }

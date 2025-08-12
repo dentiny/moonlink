@@ -427,13 +427,21 @@ mod tests {
         let schema = Arc::new(Schema::new(vec![
             Field::new(
                 "id",
-                DataType::List(Arc::new(Field::new("item", DataType::Int32, true))),
-                true,
+                DataType::List(Arc::new(Field::new(
+                    "item",
+                    DataType::Int32,
+                    /*nullable=*/ true,
+                ))),
+                /*nullable=*/ true,
             ),
             Field::new(
                 "age",
-                DataType::List(Arc::new(Field::new("item", DataType::Int64, true))),
-                true,
+                DataType::List(Arc::new(Field::new(
+                    "item",
+                    DataType::Int64,
+                    /*nullable=*/ true,
+                ))),
+                /*nullable=*/ true,
             ),
         ]));
 
@@ -465,7 +473,7 @@ mod tests {
             .unwrap();
         assert!(row0_age_only.equals_record_batch_at_offset(
             &batch,
-            0,
+            /*offset=*/ 0,
             &IdentityProp::Keys(vec![1])
         ));
 
@@ -483,7 +491,7 @@ mod tests {
             .unwrap();
         assert!(row1_age_only.equals_record_batch_at_offset(
             &batch,
-            1,
+            /*offset=*/ 1,
             &IdentityProp::Keys(vec![1])
         ));
     }
@@ -491,8 +499,16 @@ mod tests {
     #[tokio::test]
     async fn test_equals_parquet_at_offset() {
         let schema = Arc::new(arrow::datatypes::Schema::new(vec![
-            arrow::datatypes::Field::new("id", arrow::datatypes::DataType::Int32, false),
-            arrow::datatypes::Field::new("age", arrow::datatypes::DataType::Int64, false),
+            arrow::datatypes::Field::new(
+                "id",
+                arrow::datatypes::DataType::Int32,
+                /*nullable=*/ false,
+            ),
+            arrow::datatypes::Field::new(
+                "age",
+                arrow::datatypes::DataType::Int64,
+                /*nullable=*/ false,
+            ),
         ]));
         let record_batch = RecordBatch::try_new(
             schema.clone(),
