@@ -129,6 +129,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
+
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
+
       # ─────────────────────── Start Fake S3 Server ──────────────────────────
       - name: Start Fake S3 Server
         run: |
@@ -181,6 +190,11 @@ jobs:
         with:
           shared-key: ${{ steps.toolchain.outputs.cachekey }}
 
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
+
       - uses: taiki-e/install-action@v2
         with: { tool: cargo-llvm-cov }
       - uses: taiki-e/install-action@v2
@@ -228,6 +242,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
+
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
+
       - name: Start chaos test
         timeout-minutes: 10
         run: |
@@ -254,6 +277,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
+
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
+
       - name: Start chaos test
         timeout-minutes: 10
         run: |
@@ -266,6 +298,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
+
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
 
       - name: Start chaos test
         timeout-minutes: 10
