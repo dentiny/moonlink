@@ -34,6 +34,7 @@ use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
+use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
 
@@ -196,8 +197,6 @@ struct ChaosState {
     last_commit_lsn: Option<u64>,
     /// Whether the last finished transaction committed successfully, or not.
     last_txn_is_committed: bool,
-    /// Parsed chaos test arguments.
-    _args: ChaosTestArgs,
 }
 
 impl ChaosState {
@@ -219,7 +218,6 @@ impl ChaosState {
             cur_xact_id: 0,
             last_commit_lsn: None,
             last_txn_is_committed: false,
-            _args: args,
         }
     }
 
@@ -557,7 +555,6 @@ struct TestEnvironment {
     table_handler: TableHandler,
     event_sender: mpsc::Sender<TableEvent>,
     handler_event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
-    table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
     wal_flush_lsn_rx: watch::Receiver<u64>,
     last_commit_lsn_tx: watch::Sender<u64>,
     replication_lsn_tx: watch::Sender<u64>,
@@ -647,6 +644,12 @@ impl TestEnvironment {
             TableEventManager::new(table_handler.get_event_sender(), table_event_sync_receiver);
         let event_sender = table_handler.get_event_sender();
 
+        // Start a background task to dump serialized mooncake table event.
+        // TODO(hjiang): Synchronize the background task and gracefully shutdown.
+        tokio::spawn(async move {
+            Self::dump_table_event(table_event_replay_rx).await;
+        });
+
         Self {
             chaos_test_arg,
             test_env_config: config,
@@ -658,13 +661,56 @@ impl TestEnvironment {
             table_handler,
             event_sender,
             handler_event_replay_rx,
-            table_event_replay_rx,
             wal_flush_lsn_rx,
             replication_lsn_tx,
             last_commit_lsn_tx,
             mooncake_table_metadata,
             iceberg_table_config,
         }
+    }
+
+    /// Generate a random string to use as filename.
+    fn generate_random_filename() -> String {
+        const TEST_FILENAME_LEN: usize = 12;
+        const ALLOWED_CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+        let mut rng = rand::rng();
+        let random_string: String = (0..TEST_FILENAME_LEN)
+            .map(|_| {
+                let idx = rng.random_range(0..ALLOWED_CHARS.len());
+                ALLOWED_CHARS[idx] as char
+            })
+            .collect();
+        random_string
+    }
+
+    /// Continuously read from table replay channel and dump to local json file.
+    async fn dump_table_event(
+        mut table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
+    ) {
+        let filepath = format!("/tmp/{}", Self::generate_random_filename());
+        println!("Mooncake table events dumped to {filepath}");
+
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(filepath)
+            .await
+            .unwrap();
+
+        let mut written_events_count: usize = 0;
+        const WRITREN_EVENT_FLUSH_INTERVAL: usize = 100;
+        while let Some(table_event) = table_event_replay_rx.recv().await {
+            let json_str = serde_json::to_string(&table_event).unwrap();
+            file.write_all(json_str.as_bytes()).await.unwrap();
+            file.write_all(b"\n").await.unwrap();
+
+            written_events_count += 1;
+            if written_events_count % WRITREN_EVENT_FLUSH_INTERVAL == 0 {
+                file.flush().await.unwrap();
+            }
+        }
+        file.flush().await.unwrap();
+        drop(file);
     }
 }
 
@@ -800,7 +846,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
     // Print out events in order if chaos test fails.
     if let Err(e) = task_result {
         // Display all enqueued events for debugging and replay.
-        while let Some(cur_event) = env.event_replay_rx.recv().await {
+        while let Some(cur_event) = env.handler_event_replay_rx.recv().await {
             println!("{cur_event:?}");
         }
         // Propagate the panic to fail the test.
@@ -809,7 +855,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         }
     } else if env.chaos_test_arg.print_events_on_success {
         // Optionally print events even when the test succeeded, for debugging.
-        while let Some(cur_event) = env.event_replay_rx.recv().await {
+        while let Some(cur_event) = env.handler_event_replay_rx.recv().await {
             println!("{cur_event:?}");
         }
     }
