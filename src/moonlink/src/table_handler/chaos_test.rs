@@ -325,20 +325,22 @@ impl ChaosState {
 
     /// Return whether we could delete a row in the next event.
     fn can_delete(&self) -> bool {
-        // There're undeleted committed records.
-        if !self.committed_inserted_rows.is_empty()
-            && self.deleted_committed_row_ids.len() != self.committed_inserted_rows.len()
+        let uncommitted_inserted_rows = self.uncommitted_inserted_rows.len();
+        let committed_inserted_rows = self.committed_inserted_rows.len();
+        let uncommitted_updated_rows = self.uncommitted_updated_rows.len();
+        let deleted_committed_rows = self.deleted_committed_row_ids.len();
+        let deleted_uncommitted_rows = self.deleted_uncommitted_row_ids.len();
+
+        // There're undeleted committed records, which are not deleted or updated in the current transaction.
+        if committed_inserted_rows > 0
+            && (committed_inserted_rows > deleted_committed_rows + uncommitted_updated_rows)
         {
-            ma::assert_lt!(
-                self.deleted_committed_row_ids.len(),
-                self.committed_inserted_rows.len()
-            );
             return true;
         }
 
         // Streaming transactions are allowed to delete rows inserted in the current transaction.
         if self.txn_state == TxnState::InStreaming
-            && self.deleted_uncommitted_row_ids.len() != self.uncommitted_inserted_rows.len()
+            && deleted_uncommitted_rows != uncommitted_inserted_rows
         {
             ma::assert_lt!(
                 self.deleted_uncommitted_row_ids.len(),
@@ -370,7 +372,10 @@ impl ChaosState {
         let mut candidates: Vec<(i32, MoonlinkRow, bool /*committed*/)> = self
             .committed_inserted_rows
             .iter()
-            .filter(|(id, _)| !self.deleted_committed_row_ids.contains(id))
+            .filter(|(id, _)| {
+                !self.deleted_committed_row_ids.contains(id)
+                    && !self.uncommitted_updated_rows.contains_key(id)
+            })
             .map(|(id, row)| (*id, row.clone(), /*committed=*/ true))
             .collect();
 
@@ -379,6 +384,7 @@ impl ChaosState {
             candidates.extend(
                 self.uncommitted_inserted_rows
                     .iter()
+                    // TODO(hjiang): For now, we don't allow to delete updated rows, which is allowed for streaming transaction.
                     .filter(|(id, _)| !self.deleted_uncommitted_row_ids.contains(id))
                     .map(|(id, row)| (*id, row.clone(), /*committed=*/ false)),
             );
