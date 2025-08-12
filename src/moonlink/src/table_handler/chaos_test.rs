@@ -324,6 +324,8 @@ impl ChaosState {
     }
 
     /// Return whether we could delete a row in the next event.
+    ///
+    /// The logic corresponds to [`get_random_row_to_delete`].
     fn can_delete(&self) -> bool {
         let uncommitted_inserted_rows = self.uncommitted_inserted_rows.len();
         let committed_inserted_rows = self.committed_inserted_rows.len();
@@ -353,6 +355,8 @@ impl ChaosState {
     }
 
     /// Return whether we could update a row in the next event.
+    ///
+    /// The logic corresponds to [`get_random_row_to_update`].
     fn can_update(&self) -> bool {
         if self.committed_inserted_rows.is_empty() {
             return false;
