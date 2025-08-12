@@ -145,6 +145,7 @@ enum EventKind {
     BeginNonStreamingTxn,
     Append,
     Delete,
+    Update,
     StreamAbort,
     StreamFlush,
     EndWithFlush,
@@ -420,6 +421,7 @@ impl ChaosState {
             choices.push(EventKind::Append);
             if self.can_delete() {
                 choices.push(EventKind::Delete);
+                choices.push(EventKind::Update);
             }
             if self.txn_state == TxnState::InStreaming {
                 choices.push(EventKind::StreamFlush);
@@ -477,6 +479,24 @@ impl ChaosState {
                 lsn: self.get_and_update_cur_lsn(),
                 is_recovery: false,
             }]),
+            EventKind::Update => {
+                let row = self.get_random_row_to_delete();
+                ChaosEvent::create_table_events(vec![
+                    TableEvent::Delete {
+                        row: row.clone(),
+                        xact_id: self.get_cur_xact_id(),
+                        lsn: self.get_and_update_cur_lsn(),
+                        is_recovery: false,
+                    },
+                    TableEvent::Append {
+                        row: row.clone(),
+                        xact_id: self.get_cur_xact_id(),
+                        lsn: self.get_and_update_cur_lsn(),
+                        is_copied: false,
+                        is_recovery: false,
+                    },
+                ])
+            }
             EventKind::StreamFlush => {
                 ChaosEvent::create_table_events(vec![TableEvent::StreamFlush {
                     xact_id: self.get_cur_xact_id().unwrap(),
