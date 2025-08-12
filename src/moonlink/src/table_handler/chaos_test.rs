@@ -647,7 +647,7 @@ impl TestEnvironment {
         // Start a background task to dump serialized mooncake table event.
         // TODO(hjiang): Synchronize the background task and gracefully shutdown.
         tokio::spawn(async move {
-            Self::dump_table_event(table_event_replay_rx).await;
+            Self::dump_table_event(table_event_replay_rx, config.test_name).await;
         });
 
         Self {
@@ -686,9 +686,10 @@ impl TestEnvironment {
     /// Continuously read from table replay channel and dump to local json file.
     async fn dump_table_event(
         mut table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
+        test_name: &str,
     ) {
         let filepath = format!("/tmp/{}", Self::generate_random_filename());
-        println!("Mooncake table events dumped to {filepath}");
+        println!("Mooncake table events for test {test_name} dumped to {filepath}");
 
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)

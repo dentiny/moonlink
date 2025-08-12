@@ -742,6 +742,7 @@ impl MooncakeTable {
         disk_slice: &mut DiskSliceWriter,
         table_notify_tx: Sender<TableEvent>,
         xact_id: Option<u32>,
+        flush_event_id: Option<BackgroundEventId>,
     ) {
         if let Some(lsn) = disk_slice.lsn() {
             self.insert_ongoing_flush_lsn(lsn);
@@ -753,8 +754,20 @@ impl MooncakeTable {
         }
 
         let mut disk_slice_clone = disk_slice.clone();
+        let event_replay_tx = self.event_replay_tx.clone();
         tokio::task::spawn(async move {
             let flush_result = disk_slice_clone.write().await;
+
+            // Record events for flush completion.
+            if let Some(event_replay_tx) = event_replay_tx {
+                let table_event =
+                    replay_events::create_flush_event_completion(flush_event_id.unwrap());
+                event_replay_tx
+                    .send(MooncakeTableEvent::FlushCompletion(table_event))
+                    .unwrap();
+            }
+
+            // Perform table flush completion notification.
             match flush_result {
                 Ok(()) => {
                     table_notify_tx
@@ -1039,7 +1052,7 @@ impl MooncakeTable {
                 .unwrap();
         }
 
-        // Perform delete operation.
+        // Perform commit operation.
         assert!(
             lsn >= self.next_snapshot_task.commit_lsn_baseline,
             "Commit LSN {} is less than the current commit LSN baseline {}",
@@ -1110,7 +1123,12 @@ impl MooncakeTable {
 
         let mut disk_slice = self.prepare_disk_slice(lsn)?;
 
-        self.flush_disk_slice(&mut disk_slice, table_notify_tx, None);
+        self.flush_disk_slice(
+            &mut disk_slice,
+            table_notify_tx,
+            /*xact_id=*/ None,
+            flush_event_id,
+        );
 
         Ok(())
     }
