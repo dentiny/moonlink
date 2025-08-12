@@ -288,6 +288,7 @@ async fn test_skip_iceberg_snapshot() {
     assert!(table.create_snapshot(SnapshotOption {
         uuid: uuid::Uuid::new_v4(),
         force_create: false,
+        dump_snapshot: false,
         skip_iceberg_snapshot: true,
         index_merge_option: MaintenanceOption::BestEffort,
         data_compaction_option: MaintenanceOption::BestEffort,

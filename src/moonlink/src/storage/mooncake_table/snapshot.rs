@@ -603,11 +603,7 @@ impl SnapshotTableState {
             data_compaction_payload,
             file_indices_merge_payload,
             evicted_data_files_to_delete,
-            current_snapshot: if opt.dump_snapshot {
-                self.current_snapshot.clone()
-            } else {
-                None
-            },
+            current_snapshot: opt.dump_snapshot.then(|| self.current_snapshot.clone()),
         }
     }
 

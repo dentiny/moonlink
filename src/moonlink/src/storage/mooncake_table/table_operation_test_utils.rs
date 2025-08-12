@@ -253,6 +253,7 @@ pub(crate) async fn sync_mooncake_snapshot(
     if let TableEvent::MooncakeTableSnapshotResult {
         lsn,
         uuid: _,
+        current_snapshot: _,
         iceberg_snapshot_payload,
         file_indice_merge_payload,
         data_compaction_payload,
