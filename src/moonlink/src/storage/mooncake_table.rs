@@ -38,6 +38,8 @@ use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::mooncake_table::batch_id_counter::BatchIdCounter;
 use crate::storage::mooncake_table::iceberg_persisted_records::IcebergPersistedRecords;
+use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
+use crate::storage::mooncake_table::replay::replay_events::{self, BackgroundEventId};
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 pub use crate::storage::mooncake_table::snapshot_read_output::ReadOutput as SnapshotReadOutput;
 #[cfg(test)]
@@ -67,7 +69,7 @@ use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
 #[cfg(test)]
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::mpsc::Sender;
+use tokio::sync::mpsc::{self, Sender};
 use tokio::sync::{watch, RwLock};
 use tracing::info_span;
 use tracing::Instrument;
@@ -430,6 +432,9 @@ pub struct MooncakeTable {
 
     /// LSN of ongoing flushes.
     pub ongoing_flush_lsns: BTreeSet<u64>,
+
+    /// Table replay sender.
+    event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
 }
 
 impl MooncakeTable {
@@ -526,6 +531,7 @@ impl MooncakeTable {
             table_notify: None,
             wal_manager,
             ongoing_flush_lsns: BTreeSet::new(),
+            event_replay_tx: None,
         })
     }
 
@@ -573,6 +579,16 @@ impl MooncakeTable {
             .write()
             .await
             .register_table_notify(table_notify);
+    }
+
+    /// Register event replay sender.
+    /// Notice it should be registered only once, which could be used to notify multiple events.
+    pub(crate) fn register_event_replay_tx(
+        &mut self,
+        event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
+    ) {
+        assert!(self.event_replay_tx.is_none());
+        self.event_replay_tx = event_replay_tx;
     }
 
     /// Assert flush LSN doesn't regress.
@@ -810,6 +826,16 @@ impl MooncakeTable {
 
     // Create a snapshot of the last committed version, return current snapshot's version and payload to perform iceberg snapshot.
     fn create_snapshot_impl(&mut self, opt: SnapshotOption) {
+        // Record mooncake snapshot event initiation.
+        let mut table_event_id = None;
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event = replay_events::create_mooncake_snapshot_event_initiation(opt.clone());
+            table_event_id = Some(table_event.id);
+            event_replay_tx
+                .send(MooncakeTableEvent::MooncakeSnapshotInitiation(table_event))
+                .unwrap();
+        }
+
         // Check invariant: there should be at most one ongoing mooncake snapshot.
         assert!(!self.mooncake_snapshot_ongoing);
         self.mooncake_snapshot_ongoing = true;
@@ -836,6 +862,8 @@ impl MooncakeTable {
                 next_snapshot_task,
                 opt,
                 self.table_notify.as_ref().unwrap().clone(),
+                table_event_id,
+                self.event_replay_tx.clone(),
             )
             .instrument(info_span!("create_snapshot_async")),
         );
@@ -948,6 +976,16 @@ impl MooncakeTable {
     ///
     /// The following events contains updates to the mooncake table, which will be recorded into event replay system if enabled.
     pub fn append(&mut self, row: MoonlinkRow) -> Result<()> {
+        // Record events for replay.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_append_event(row.clone(), /*xact_id=*/ None);
+            event_replay_tx
+                .send(MooncakeTableEvent::Append(table_event))
+                .unwrap();
+        }
+
+        // Perform append operation.
         let lookup_key = self.metadata.identity.get_lookup_key(&row);
         let identity_for_key = self.metadata.identity.extract_identity_for_key(&row);
         if let Some(batch) = self.mem_slice.append(lookup_key, row, identity_for_key)? {
@@ -963,6 +1001,19 @@ impl MooncakeTable {
     }
 
     pub async fn delete(&mut self, row: MoonlinkRow, lsn: u64) {
+        // Record events for replay.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event = replay_events::create_delete_event(
+                row.clone(),
+                /*lsn=*/ Some(lsn),
+                /*xact_id=*/ None,
+            );
+            event_replay_tx
+                .send(MooncakeTableEvent::Delete(table_event))
+                .unwrap();
+        }
+
+        // Perform delete operation.
         let lookup_key = self.metadata.identity.get_lookup_key(&row);
         let mut record = RawDeletionRecord {
             lookup_key,
@@ -979,6 +1030,16 @@ impl MooncakeTable {
     }
 
     pub fn commit(&mut self, lsn: u64) {
+        // Record events for commit.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_commit_event(/*lsn=*/ lsn, /*xact_id=*/ None);
+            event_replay_tx
+                .send(MooncakeTableEvent::Commit(table_event))
+                .unwrap();
+        }
+
+        // Perform delete operation.
         assert!(
             lsn >= self.next_snapshot_task.commit_lsn_baseline,
             "Commit LSN {} is less than the current commit LSN baseline {}",
@@ -1001,6 +1062,17 @@ impl MooncakeTable {
     /// Flushes the disk slice.
     /// Adds the disk slice to `next_snapshot_task`.
     pub fn flush(&mut self, lsn: u64) -> Result<()> {
+        // Record events for flush initiation.
+        let mut flush_event_id = None;
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_flush_event_initiation(/*xact_id=*/ None, Some(lsn));
+            flush_event_id = Some(table_event.id);
+            event_replay_tx
+                .send(MooncakeTableEvent::FlushInitiation(table_event))
+                .unwrap();
+        }
+
         // Sanity check flush LSN doesn't regress.
         assert!(
             self.next_snapshot_task.new_flush_lsn.is_none()
@@ -1013,6 +1085,16 @@ impl MooncakeTable {
         let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
 
         if self.mem_slice.is_empty() || self.ongoing_flush_lsns.contains(&lsn) {
+            // Record events for flush completion.
+            if let Some(event_replay_tx) = &self.event_replay_tx {
+                let table_event =
+                    replay_events::create_flush_event_completion(flush_event_id.unwrap());
+                event_replay_tx
+                    .send(MooncakeTableEvent::FlushCompletion(table_event))
+                    .unwrap();
+            }
+
+            // Perform table flush completion operation.
             self.try_set_next_flush_lsn(lsn);
             tokio::task::spawn(async move {
                 table_notify_tx
@@ -1038,12 +1120,25 @@ impl MooncakeTable {
         &mut self,
         file_indice_merge_payload: FileIndiceMergePayload,
     ) {
+        // Record index merge event initiation.
+        let mut table_event_id = None;
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_index_merge_event_initiation(&file_indice_merge_payload);
+            table_event_id = Some(table_event.id);
+            event_replay_tx
+                .send(MooncakeTableEvent::IndexMergeInitiation(table_event))
+                .unwrap();
+        }
+
+        // Perform index merge operation.
         let cur_file_id = self.next_file_id as u64;
         self.next_file_id += 1;
         let table_directory = std::path::PathBuf::from(self.metadata.path.to_str().unwrap());
         let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
 
         // Create a detached task, whose completion will be notified separately.
+        let event_replay_tx = self.event_replay_tx.clone();
         tokio::task::spawn(async move {
             let mut builder = GlobalIndexBuilder::new();
             builder.set_directory(table_directory);
@@ -1055,6 +1150,16 @@ impl MooncakeTable {
                 old_file_indices: file_indice_merge_payload.file_indices,
                 new_file_indices: vec![merged],
             };
+
+            // Record index merge event completion.
+            if let Some(event_replay_tx) = &event_replay_tx {
+                let table_event =
+                    replay_events::create_index_merge_event_completion(table_event_id.unwrap());
+                event_replay_tx
+                    .send(MooncakeTableEvent::IndexMergeCompletion(table_event))
+                    .unwrap();
+            }
+            // Send back completion notification to table handler.
             table_notify_tx_copy
                 .send(TableEvent::IndexMergeResult { index_merge_result })
                 .await
@@ -1064,6 +1169,18 @@ impl MooncakeTable {
 
     /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
+        // Record index merge event initiation.
+        let mut table_event_id = None;
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_data_compaction_event_initiation(&compaction_payload);
+            table_event_id = Some(table_event.id);
+            event_replay_tx
+                .send(MooncakeTableEvent::DataCompactionInitiation(table_event))
+                .unwrap();
+        }
+
+        // Perform data compaction operation.
         let data_compaction_new_file_ids =
             compaction_payload.get_new_compacted_data_file_ids_number();
         let table_auto_incr_ids =
@@ -1082,10 +1199,22 @@ impl MooncakeTable {
         let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
 
         // Create a detached task, whose completion will be notified separately.
+        let event_replay_tx = self.event_replay_tx.clone();
         tokio::task::spawn(
             async move {
                 let builder = CompactionBuilder::new(compaction_payload, schema_ref, file_params);
                 let data_compaction_result = builder.build().await;
+
+                // Record data compaction event completion.
+                if let Some(event_replay_tx) = &event_replay_tx {
+                    let table_event = replay_events::create_data_compaction_event_completion(
+                        table_event_id.unwrap(),
+                    );
+                    event_replay_tx
+                        .send(MooncakeTableEvent::DataCompactionCompletion(table_event))
+                        .unwrap();
+                }
+                // Send back completion notification to table handler.
                 table_notify_tx_copy
                     .send(TableEvent::DataCompactionResult {
                         data_compaction_result,
@@ -1112,6 +1241,8 @@ impl MooncakeTable {
         next_snapshot_task: SnapshotTask,
         mut opt: SnapshotOption,
         table_notify: Sender<TableEvent>,
+        table_event_id: Option<BackgroundEventId>,
+        event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
     ) {
         let uuid = std::mem::take(&mut opt.uuid);
         let snapshot_result = snapshot
@@ -1119,6 +1250,16 @@ impl MooncakeTable {
             .await
             .update_snapshot(next_snapshot_task, opt)
             .await;
+
+        // Record mooncake snapshot event completion.
+        if let Some(event_replay_tx) = &event_replay_tx {
+            let table_event =
+                replay_events::create_mooncake_snapshot_event_completion(table_event_id.unwrap());
+            event_replay_tx
+                .send(MooncakeTableEvent::MooncakeSnapshotCompletion(table_event))
+                .unwrap();
+        }
+        // Send back completion notification to table handler.
         table_notify
             .send(TableEvent::MooncakeTableSnapshotResult {
                 uuid,
@@ -1141,7 +1282,22 @@ impl MooncakeTable {
         snapshot_payload: IcebergSnapshotPayload,
         table_notify: Sender<TableEvent>,
         table_auto_incr_ids: std::ops::Range<u32>,
+        event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
     ) {
+        // Record index merge event initiation.
+        let mut table_event_id = None;
+        if let Some(event_replay_tx) = &event_replay_tx {
+            let table_event =
+                replay_events::create_iceberg_snapshot_event_initiation(&snapshot_payload);
+            table_event_id = Some(table_event.id);
+            event_replay_tx
+                .send(MooncakeTableEvent::IcebergSnapshotInitiation(Box::new(
+                    table_event,
+                )))
+                .unwrap();
+        }
+
+        // Perform iceberg snapshot operation.
         let uuid = snapshot_payload.uuid;
         let flush_lsn = snapshot_payload.flush_lsn;
         let new_table_schema = snapshot_payload.new_table_schema.clone();
@@ -1250,6 +1406,16 @@ impl MooncakeTable {
                 old_file_indices_removed: old_file_indices_to_remove_by_compaction,
             },
         };
+
+        // Record iceberg snapshot event completion.
+        if let Some(event_replay_tx) = &event_replay_tx {
+            let table_event =
+                replay_events::create_iceberg_snapshot_event_completion(table_event_id.unwrap());
+            event_replay_tx
+                .send(MooncakeTableEvent::IcebergSnapshotCompletion(table_event))
+                .unwrap();
+        }
+        // Send back completion notification to table handler.
         table_notify
             .send(TableEvent::IcebergSnapshotResult {
                 iceberg_snapshot_result: Ok(snapshot_result),
@@ -1273,6 +1439,7 @@ impl MooncakeTable {
                 snapshot_payload,
                 self.table_notify.as_ref().unwrap().clone(),
                 table_auto_incr_ids,
+                self.event_replay_tx.clone(),
             )
             .instrument(info_span!("persist_iceberg_snapshot")),
         );

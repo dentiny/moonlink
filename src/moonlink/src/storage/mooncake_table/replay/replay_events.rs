@@ -18,71 +18,77 @@ use crate::storage::storage_utils::{FileId, TableUniqueFileId};
 use crate::NonEvictableHandle;
 
 /// Type alias for background event id.
-pub(crate) type BackgroundEventId = u64;
+pub type BackgroundEventId = u64;
 
 /// =====================
 /// Foreground operations
 /// =====================
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct AppendEvent {
+pub struct AppendEvent {
     /// Moonlink row.
-    pub(crate) row: MoonlinkRow,
+    pub row: MoonlinkRow,
     /// Transaction id, only assigned on streaming ones.
-    pub(crate) xact_id: Option<u64>,
+    pub xact_id: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct DeleteEvent {
+pub struct DeleteEvent {
     /// Moonlink row.
-    pub(crate) row: MoonlinkRow,
+    pub row: MoonlinkRow,
     /// Deletion LSN.
-    pub(crate) lsn: u64,
+    pub lsn: Option<u64>,
     /// Transaction id, only assigned on streaming ones.
-    pub(crate) xact_id: Option<u64>,
+    pub xact_id: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct CommitEvent {
+pub struct CommitEvent {
     /// Transaction id, only assigned on streaming ones.
-    pub(crate) xact_id: Option<u64>,
+    pub xact_id: Option<u32>,
     /// Commit LSN.
-    pub(crate) lsn: u64,
+    pub lsn: u64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AbortEvent {
+    /// Transaction id, only assigned on streaming ones.
+    pub xact_id: u32,
 }
 
 /// =====================
 /// Flush operation
 /// =====================
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct FlushEventInitiation {
+pub struct FlushEventInitiation {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
     /// Transaction id, only assigned on streaming ones.
-    pub(crate) xact_id: Option<u64>,
+    pub xact_id: Option<u32>,
     /// Flush LSN.
-    pub(crate) lsn: u64,
+    pub lsn: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct FlushEventCompletion {
+pub struct FlushEventCompletion {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
 }
 
 /// =====================
 /// Mooncake snapshot
 /// =====================
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct MooncakeSnapshotEventInitiation {
+pub struct MooncakeSnapshotEventInitiation {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
     /// Mooncake snapshot options.
-    pub(crate) option: SnapshotOption,
+    pub option: SnapshotOption,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct MooncakeSnapshotEventCompletion {
+pub struct MooncakeSnapshotEventCompletion {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
 }
 
 /// =====================
@@ -91,63 +97,63 @@ pub(crate) struct MooncakeSnapshotEventCompletion {
 ///
 /// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotImportPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IcebergImportEvent {
+pub struct IcebergImportEvent {
     /// New data files to introduce to the iceberg table.
-    pub(crate) data_files: Vec<FileId>,
+    pub data_files: Vec<FileId>,
     /// Maps from data filepath to its latest deletion vector (row index to delete).
-    pub(crate) new_deletion_vector: HashMap<FileId, Vec<u64>>,
+    pub new_deletion_vector: HashMap<FileId, Vec<u64>>,
     /// New file indices to import.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) file_indices: Vec<Vec<FileId>>,
+    pub file_indices: Vec<Vec<FileId>>,
 }
 
 /// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotIndexMergePayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IcebergIndexMergeEvent {
+pub struct IcebergIndexMergeEvent {
     /// New file indices to import.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) new_file_indices: Vec<Vec<FileId>>,
+    pub new_file_indices: Vec<Vec<FileId>>,
     /// Old file indices to remove.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) old_file_indices: Vec<Vec<FileId>>,
+    pub old_file_indices: Vec<Vec<FileId>>,
 }
 
 /// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotDataCompactionPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IcebergDataCompactionEvent {
+pub struct IcebergDataCompactionEvent {
     /// New data files to import.
-    pub(crate) new_data_files_to_import: Vec<FileId>,
+    pub new_data_files_to_import: Vec<FileId>,
     /// Old data files to remove.
-    pub(crate) old_data_files_to_remove: Vec<FileId>,
+    pub old_data_files_to_remove: Vec<FileId>,
     /// New file indices to import.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) new_file_indices_to_import: Vec<Vec<FileId>>,
+    pub new_file_indices_to_import: Vec<Vec<FileId>>,
     /// Old file indices to remove.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) old_file_indices_to_remove: Vec<Vec<FileId>>,
+    pub old_file_indices_to_remove: Vec<Vec<FileId>>,
 }
 
 /// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IcebergSnapshotEventInitiation {
+pub struct IcebergSnapshotEventInitiation {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
     /// Flush LSN.
-    pub(crate) flush_lsn: u64,
+    pub flush_lsn: u64,
     /// Committed deletion logs included in the current iceberg snapshot persistence operation, which is used to prune after persistence completion.
-    pub(crate) committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
+    pub committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
     /// Import payload.
-    pub(crate) import_payload: IcebergImportEvent,
+    pub import_payload: IcebergImportEvent,
     /// Index merge payload.
-    pub(crate) index_merge_payload: IcebergIndexMergeEvent,
+    pub index_merge_payload: IcebergIndexMergeEvent,
     /// Data compaction payload.
-    pub(crate) data_compaction_payload: IcebergDataCompactionEvent,
+    pub data_compaction_payload: IcebergDataCompactionEvent,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IcebergSnapshotEventCompletion {
+pub struct IcebergSnapshotEventCompletion {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
 }
 
 /// =====================
@@ -156,18 +162,18 @@ pub(crate) struct IcebergSnapshotEventCompletion {
 ///
 /// For the ease of serde, replay event only stores necessary part of [`FileIndiceMergePayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IndexMergeEventInitiation {
+pub struct IndexMergeEventInitiation {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
     /// Index merge payload.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) index_merge_payload: Vec<Vec<FileId>>,
+    pub index_merge_payload: Vec<Vec<FileId>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct IndexMergeEventCompletion {
+pub struct IndexMergeEventCompletion {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
 }
 
 /// =====================
@@ -176,40 +182,40 @@ pub(crate) struct IndexMergeEventCompletion {
 ///
 /// For the ease of serde, replay event only stores necessary part of [`NonEvictableHandle`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct CacheHandleEvent {
+pub struct CacheHandleEvent {
     /// File handle id.
-    pub(crate) file_id: TableUniqueFileId,
+    pub file_id: TableUniqueFileId,
 }
 
 /// For the ease of serde, replay event only stores necessary part of [`SingleFileToCompact`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct SingleCompactionPayloadEvent {
+pub struct SingleCompactionPayloadEvent {
     /// File id.
-    pub(crate) file_id: TableUniqueFileId,
+    pub file_id: TableUniqueFileId,
     /// Deletion vector.
-    pub(crate) puffin_blob_ref: Option<CacheHandleEvent>,
+    pub puffin_blob_ref: Option<CacheHandleEvent>,
 }
 
 /// For the ease of serde, replay event only stores necessary part of [`DataCompactionPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct DataCompactionEventInitiation {
+pub struct DataCompactionEventInitiation {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
     /// Data files to compact.
-    pub(crate) data_files: Vec<SingleCompactionPayloadEvent>,
+    pub data_files: Vec<SingleCompactionPayloadEvent>,
     /// File indices to compact.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
-    pub(crate) file_indices: Vec<Vec<FileId>>,
+    pub file_indices: Vec<Vec<FileId>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) struct DataCompactionEventCompletion {
+pub struct DataCompactionEventCompletion {
     /// Unique event id, assigned globally.
-    pub(crate) id: BackgroundEventId,
+    pub id: BackgroundEventId,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub(crate) enum MooncakeTableEvent {
+pub enum MooncakeTableEvent {
     /// =====================
     /// Foreground operations
     /// =====================
@@ -220,6 +226,8 @@ pub(crate) enum MooncakeTableEvent {
     Delete(DeleteEvent),
     /// Commit operation.
     Commit(CommitEvent),
+    /// Abort operation.
+    Abort(AbortEvent),
     /// =====================
     /// Background operations
     /// =====================
@@ -242,21 +250,29 @@ pub(crate) enum MooncakeTableEvent {
 }
 
 /// Create append event.
-pub(crate) fn create_append_event(row: MoonlinkRow, xact_id: Option<u64>) -> AppendEvent {
+pub fn create_append_event(row: MoonlinkRow, xact_id: Option<u32>) -> AppendEvent {
     AppendEvent { row, xact_id }
 }
 /// Create delete event.
-pub(crate) fn create_delete_event(row: MoonlinkRow, lsn: u64, xact_id: Option<u64>) -> DeleteEvent {
+pub fn create_delete_event(
+    row: MoonlinkRow,
+    lsn: Option<u64>,
+    xact_id: Option<u32>,
+) -> DeleteEvent {
     DeleteEvent { row, lsn, xact_id }
 }
 /// Create commit event.
-pub(crate) fn create_commit_event(lsn: u64, xact_id: Option<u64>) -> CommitEvent {
+pub fn create_commit_event(lsn: u64, xact_id: Option<u32>) -> CommitEvent {
     CommitEvent { lsn, xact_id }
 }
+/// Create abort event.
+pub fn create_abort_event(xact_id: u32) -> AbortEvent {
+    AbortEvent { xact_id }
+}
 /// Create flush events.
-pub(crate) fn create_flush_event_initiation(
-    xact_id: Option<u64>,
-    lsn: u64,
+pub fn create_flush_event_initiation(
+    xact_id: Option<u32>,
+    lsn: Option<u64>,
 ) -> FlushEventInitiation {
     FlushEventInitiation {
         id: get_next_event_id(),
@@ -264,11 +280,11 @@ pub(crate) fn create_flush_event_initiation(
         lsn,
     }
 }
-pub(crate) fn create_flush_event_completion(id: BackgroundEventId) -> FlushEventCompletion {
+pub fn create_flush_event_completion(id: BackgroundEventId) -> FlushEventCompletion {
     FlushEventCompletion { id }
 }
 /// Create mooncake snapshot events.
-pub(crate) fn create_mooncake_snapshot_event_initiation(
+pub fn create_mooncake_snapshot_event_initiation(
     option: SnapshotOption,
 ) -> MooncakeSnapshotEventInitiation {
     MooncakeSnapshotEventInitiation {
@@ -276,13 +292,13 @@ pub(crate) fn create_mooncake_snapshot_event_initiation(
         option,
     }
 }
-pub(crate) fn create_mooncake_snapshot_event_completion(
+pub fn create_mooncake_snapshot_event_completion(
     id: BackgroundEventId,
 ) -> MooncakeSnapshotEventCompletion {
     MooncakeSnapshotEventCompletion { id }
 }
 /// Create iceberg snapshot events.
-pub(crate) fn get_iceberg_snapshot_import_payload(
+pub fn get_iceberg_snapshot_import_payload(
     payload: &IcebergSnapshotImportPayload,
 ) -> IcebergImportEvent {
     IcebergImportEvent {
@@ -309,7 +325,7 @@ pub(crate) fn get_iceberg_snapshot_import_payload(
             .collect::<Vec<_>>(),
     }
 }
-pub(crate) fn get_iceberg_index_merge_payload(
+pub fn get_iceberg_index_merge_payload(
     payload: &IcebergSnapshotIndexMergePayload,
 ) -> IcebergIndexMergeEvent {
     IcebergIndexMergeEvent {
@@ -337,7 +353,7 @@ pub(crate) fn get_iceberg_index_merge_payload(
             .collect::<Vec<_>>(),
     }
 }
-pub(crate) fn get_iceberg_data_compaction_payload(
+pub fn get_iceberg_data_compaction_payload(
     payload: &IcebergSnapshotDataCompactionPayload,
 ) -> IcebergDataCompactionEvent {
     IcebergDataCompactionEvent {
@@ -375,7 +391,7 @@ pub(crate) fn get_iceberg_data_compaction_payload(
             .collect::<Vec<_>>(),
     }
 }
-pub(crate) fn create_iceberg_snapshot_event_initiation(
+pub fn create_iceberg_snapshot_event_initiation(
     payload: &IcebergSnapshotPayload,
 ) -> IcebergSnapshotEventInitiation {
     IcebergSnapshotEventInitiation {
@@ -389,8 +405,13 @@ pub(crate) fn create_iceberg_snapshot_event_initiation(
         ),
     }
 }
+pub fn create_iceberg_snapshot_event_completion(
+    id: BackgroundEventId,
+) -> IcebergSnapshotEventCompletion {
+    IcebergSnapshotEventCompletion { id }
+}
 /// Create index merge events.
-pub(crate) fn create_index_merge_event_initiation(
+pub fn create_index_merge_event_initiation(
     payload: &FileIndiceMergePayload,
 ) -> IndexMergeEventInitiation {
     IndexMergeEventInitiation {
@@ -408,10 +429,11 @@ pub(crate) fn create_index_merge_event_initiation(
             .collect::<Vec<_>>(),
     }
 }
+pub fn create_index_merge_event_completion(id: BackgroundEventId) -> IndexMergeEventCompletion {
+    IndexMergeEventCompletion { id }
+}
 /// Create data compaction events.
-pub(crate) fn get_cache_handle_event(
-    cache_handle: &Option<PuffinBlobRef>,
-) -> Option<CacheHandleEvent> {
+pub fn get_cache_handle_event(cache_handle: &Option<PuffinBlobRef>) -> Option<CacheHandleEvent> {
     if let Some(cache_handle) = cache_handle {
         return Some(CacheHandleEvent {
             file_id: cache_handle.puffin_file_cache_handle.file_id,
@@ -419,7 +441,7 @@ pub(crate) fn get_cache_handle_event(
     }
     None
 }
-pub(crate) fn get_file_compaction_payload(
+pub fn get_file_compaction_payload(
     single_file_compaction: &SingleFileToCompact,
 ) -> SingleCompactionPayloadEvent {
     SingleCompactionPayloadEvent {
@@ -427,7 +449,7 @@ pub(crate) fn get_file_compaction_payload(
         puffin_blob_ref: get_cache_handle_event(&single_file_compaction.deletion_vector),
     }
 }
-pub(crate) fn create_data_compaction_event_initiation(
+pub fn create_data_compaction_event_initiation(
     payload: &DataCompactionPayload,
 ) -> DataCompactionEventInitiation {
     DataCompactionEventInitiation {
@@ -449,4 +471,9 @@ pub(crate) fn create_data_compaction_event_initiation(
             })
             .collect::<Vec<_>>(),
     }
+}
+pub fn create_data_compaction_event_completion(
+    id: BackgroundEventId,
+) -> DataCompactionEventCompletion {
+    DataCompactionEventCompletion { id }
 }

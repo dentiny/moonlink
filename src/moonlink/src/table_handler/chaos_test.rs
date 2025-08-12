@@ -15,6 +15,7 @@ use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
 use crate::storage::filesystem::s3::s3_test_utils::*;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
+use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
@@ -555,7 +556,8 @@ struct TestEnvironment {
     table_event_manager: TableEventManager,
     table_handler: TableHandler,
     event_sender: mpsc::Sender<TableEvent>,
-    event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
+    handler_event_replay_rx: mpsc::UnboundedReceiver<TableEvent>,
+    table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
     wal_flush_lsn_rx: watch::Receiver<u64>,
     last_commit_lsn_tx: watch::Sender<u64>,
     replication_lsn_tx: watch::Sender<u64>,
@@ -629,13 +631,15 @@ impl TestEnvironment {
             read_state_filepath_remap,
         );
         let (table_event_sync_sender, table_event_sync_receiver) = create_table_event_syncer();
-        let (event_replay_tx, event_replay_rx) = mpsc::unbounded_channel();
+        let (handler_event_replay_tx, handler_event_replay_rx) = mpsc::unbounded_channel();
+        let (table_event_replay_tx, table_event_replay_rx) = mpsc::unbounded_channel();
         let table_handler = TableHandler::new(
             table,
             table_event_sync_sender,
             create_table_handler_timers(),
             replication_lsn_rx.clone(),
-            Some(event_replay_tx),
+            Some(handler_event_replay_tx),
+            Some(table_event_replay_tx),
         )
         .await;
         let wal_flush_lsn_rx = table_event_sync_receiver.wal_flush_lsn_rx.clone();
@@ -653,7 +657,8 @@ impl TestEnvironment {
             read_state_manager,
             table_handler,
             event_sender,
-            event_replay_rx,
+            handler_event_replay_rx,
+            table_event_replay_rx,
             wal_flush_lsn_rx,
             replication_lsn_tx,
             last_commit_lsn_tx,

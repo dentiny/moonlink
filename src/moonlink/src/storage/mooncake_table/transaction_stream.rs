@@ -147,6 +147,15 @@ impl MooncakeTable {
     }
 
     pub fn append_in_stream_batch(&mut self, row: MoonlinkRow, xact_id: u32) -> Result<()> {
+        // Record events for replay.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event = replay_events::create_append_event(row.clone(), Some(xact_id));
+            event_replay_tx
+                .send(MooncakeTableEvent::Append(table_event))
+                .unwrap();
+        }
+
+        // Perform append operation.
         let lookup_key = self.metadata.identity.get_lookup_key(&row);
         let identity_for_key = self.metadata.identity.extract_identity_for_key(&row);
 
@@ -159,6 +168,16 @@ impl MooncakeTable {
     }
 
     pub async fn delete_in_stream_batch(&mut self, row: MoonlinkRow, xact_id: u32) {
+        // Record events for replay.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event =
+                replay_events::create_delete_event(row.clone(), /*lsn=*/ None, Some(xact_id));
+            event_replay_tx
+                .send(MooncakeTableEvent::Delete(table_event))
+                .unwrap();
+        }
+
+        // Perform delete operation.
         let lookup_key = self.metadata.identity.get_lookup_key(&row);
         let metadata_identity = self.metadata.identity.clone();
         let mut record = RawDeletionRecord {
@@ -278,6 +297,14 @@ impl MooncakeTable {
     }
 
     pub fn abort_in_stream_batch(&mut self, xact_id: u32) {
+        // Record events for replay.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event = replay_events::create_abort_event(xact_id);
+            event_replay_tx
+                .send(MooncakeTableEvent::Abort(table_event))
+                .unwrap();
+        }
+
         // Record abortion in snapshot task so we can remove any uncommitted deletions
         let stream_state = self
             .transaction_stream_states
