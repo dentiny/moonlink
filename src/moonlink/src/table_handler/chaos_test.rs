@@ -334,15 +334,13 @@ impl ChaosState {
         let deleted_uncommitted_rows = self.deleted_uncommitted_row_ids.len();
 
         // There're undeleted committed records, which are not deleted or updated in the current transaction.
-        if committed_inserted_rows > 0
-            && (committed_inserted_rows > deleted_committed_rows + uncommitted_updated_rows)
-        {
+        if committed_inserted_rows > deleted_committed_rows + uncommitted_updated_rows {
             return true;
         }
 
         // Streaming transactions are allowed to delete rows inserted in the current transaction.
         if self.txn_state == TxnState::InStreaming
-            && deleted_uncommitted_rows != uncommitted_inserted_rows
+            && uncommitted_inserted_rows != deleted_uncommitted_rows
         {
             ma::assert_lt!(
                 self.deleted_uncommitted_row_ids.len(),
@@ -358,10 +356,6 @@ impl ChaosState {
     ///
     /// The logic corresponds to [`get_random_row_to_update`].
     fn can_update(&self) -> bool {
-        if self.committed_inserted_rows.is_empty() {
-            return false;
-        }
-
         let committed_inserted_rows = self.committed_inserted_rows.len();
         let uncommitted_updated_rows = self.uncommitted_updated_rows.len();
         let deleted_committed_rows = self.deleted_committed_row_ids.len();
@@ -415,9 +409,9 @@ impl ChaosState {
             .committed_inserted_rows
             .iter()
             .filter(|(id, _)| {
-                !self.deleted_committed_row_ids.contains(id)
+                !self.uncommitted_updated_rows.contains_key(id)
+                    && !self.deleted_committed_row_ids.contains(id)
                     && !self.deleted_uncommitted_row_ids.contains(id)
-                    && !self.uncommitted_updated_rows.contains_key(id)
             })
             .map(|(id, row)| (*id, row.clone()))
             .collect();
