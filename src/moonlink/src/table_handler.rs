@@ -10,9 +10,9 @@
 ///   Suppose we have two tables, table-A has persisted all updated into iceberg; with table-B taking new updates. persisted table LSN for table-A grows with table-B.
 use crate::event_sync::EventSyncSender;
 use crate::storage::mooncake_table::AlterTableRequest;
-use crate::storage::mooncake_table::MaintenanceOption;
-use crate::storage::mooncake_table::SnapshotOption;
 use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
+use crate::storage::snapshot_options::MaintenanceOption;
+use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::{io_utils, MooncakeTable};
 use crate::table_handler_timer::TableHandlerTimer;
 use crate::table_notify::TableEvent;

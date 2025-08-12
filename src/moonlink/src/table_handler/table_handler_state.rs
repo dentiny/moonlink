@@ -1,8 +1,8 @@
 /// Table handler state manages table event process states.
 use crate::storage::mooncake_table::AlterTableRequest;
 use crate::storage::mooncake_table::DataCompactionResult;
-use crate::storage::mooncake_table::MaintenanceOption;
-use crate::storage::mooncake_table::SnapshotOption;
+use crate::storage::snapshot_options::MaintenanceOption;
+use crate::storage::snapshot_options::SnapshotOption;
 use crate::table_notify::TableEvent;
 use crate::Result;
 use tokio::sync::{broadcast, watch};

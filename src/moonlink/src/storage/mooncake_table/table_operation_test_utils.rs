@@ -8,9 +8,11 @@ use crate::storage::io_utils;
 use crate::storage::mooncake_table::disk_slice::DiskSliceWriter;
 use crate::storage::mooncake_table::{
     AlterTableRequest, DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload,
-    FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult, MaintenanceOption,
-    SnapshotOption, TableMetadata as MooncakeTableMetadata,
+    FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult,
+    TableMetadata as MooncakeTableMetadata,
 };
+use crate::storage::snapshot_options::MaintenanceOption;
+use crate::storage::snapshot_options::SnapshotOption;
 use crate::table_notify::{
     DataCompactionMaintenanceStatus, IndexMergeMaintenanceStatus, TableEvent,
 };

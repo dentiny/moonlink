@@ -5,6 +5,8 @@ use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::test_utils::{append_rows, test_row, test_table, TestContext};
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
+use crate::storage::snapshot_options::MaintenanceOption;
+use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
 use crate::table_handler::table_handler_state::MaintenanceProcessStatus;
 use crate::table_handler::table_handler_state::TableHandlerState;

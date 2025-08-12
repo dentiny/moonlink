@@ -10,8 +10,10 @@ use crate::storage::mooncake_table::replay::event_id_assigner::get_next_event_id
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, FileIndiceMergePayload, IcebergSnapshotImportPayload,
-    IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, SnapshotOption,
+    IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload,
 };
+use crate::storage::snapshot_options::MaintenanceOption;
+use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::storage_utils::{FileId, TableUniqueFileId};
 use crate::NonEvictableHandle;
 
