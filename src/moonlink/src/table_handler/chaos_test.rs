@@ -24,14 +24,13 @@ use crate::union_read::ReadStateManager;
 use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
 use crate::{StorageConfig, TableEventManager};
 
-use ahash::{HashMap, HashMapExt};
 use function_name::named;
 use more_asserts as ma;
 use pico_args::Arguments;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
-use std::collections::{HashSet, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
