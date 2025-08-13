@@ -162,7 +162,7 @@ mod tests {
     fn test_deserialize_storage_config_with_only_necessary() {
         let json = r#"
         {
-            "Gcs": {
+            "gcs": {
                 "project": "test-project",
                 "region": "us-west1",
                 "bucket": "test-bucket",
