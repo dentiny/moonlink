@@ -88,7 +88,8 @@ pub(crate) async fn replay() {
     let mut lines: tokio::io::Lines<tokio::io::BufReader<tokio::fs::File>> = buf_reader.lines();
 
     // Used to notify certain background table events have completed.
-    let event_notification = Notify::new();
+    let event_notification = Arc::new(Notify::new());
+    let event_notification_clone = event_notification.clone();
     // Current table states.
     let mut ongoing_flush_event_id = HashSet::new();
     let completed_flush_events: Arc<Mutex<HashMap<BackgroundEventId, CompletedFlush>>> =
@@ -185,6 +186,7 @@ pub(crate) async fn replay() {
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.
+                    event_notification_clone.notified().await;
                 }
             }
 
