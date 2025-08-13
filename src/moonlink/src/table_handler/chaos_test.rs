@@ -323,6 +323,27 @@ impl ChaosState {
             .collect::<Vec<_>>()
     }
 
+    /// Util function to decide whether there's any updated rows, which are not deleted in the current transaction.
+    fn has_updated_undeleted_row(&self) -> bool {
+        for (id, _) in self.uncommitted_updated_rows.iter() {
+            if !self.deleted_uncommitted_row_ids.contains(id)
+                && !self.deleted_committed_row_ids.contains(id)
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Util function to decide whether the given id indicates a row that has been committed or not.
+    fn is_committed_row(&self, id: i32) -> bool {
+        // Uncommitted rows have much less records, so search on uncommitted records instead of committed ones.
+        !self
+            .uncommitted_inserted_rows
+            .iter()
+            .any(|(cur_id, _)| *cur_id == id)
+    }
+
     /// Return whether we could delete a row in the next event.
     ///
     /// The logic corresponds to [`get_random_row_to_delete`].
@@ -338,15 +359,21 @@ impl ChaosState {
             return true;
         }
 
-        // Streaming transactions are allowed to delete rows inserted in the current transaction.
-        if self.txn_state == TxnState::InStreaming
-            && uncommitted_inserted_rows != deleted_uncommitted_rows
-        {
-            ma::assert_lt!(
-                self.deleted_uncommitted_row_ids.len(),
-                self.uncommitted_inserted_rows.len()
-            );
-            return true;
+        // Streaming transactions are allowed to update and deleted rows updated or appended in the current transaction.
+        if self.txn_state == TxnState::InStreaming {
+            // Streaming transactions are allowed to delete rows inserted in the current transaction.
+            if uncommitted_inserted_rows != deleted_uncommitted_rows {
+                ma::assert_lt!(
+                    self.deleted_uncommitted_row_ids.len(),
+                    self.uncommitted_inserted_rows.len()
+                );
+                return true;
+            }
+
+            // Streaming transactions are allowed to delete updated rows in the current transaction.
+            if self.has_updated_undeleted_row() {
+                return true;
+            }
         }
 
         false
@@ -368,15 +395,8 @@ impl ChaosState {
         }
 
         // If within a streaming transaction, it's allowed to update an already updated row.
-        if self.txn_state == TxnState::InStreaming {
-            // Check if there's any uncommitted row which gets updated but not deleted.
-            for (id, _) in self.uncommitted_updated_rows.iter() {
-                if !self.deleted_uncommitted_row_ids.contains(id)
-                    && !self.deleted_committed_row_ids.contains(id)
-                {
-                    return true;
-                }
-            }
+        if self.txn_state == TxnState::InStreaming && self.has_updated_undeleted_row() {
+            return true;
         }
 
         false
@@ -396,12 +416,28 @@ impl ChaosState {
 
         // If within a streaming transaction, could also delete from uncommitted inserted rows.
         if self.txn_state == TxnState::InStreaming {
+            // Allow to delete new rows appended in the current txn.
             candidates.extend(
                 self.uncommitted_inserted_rows
                     .iter()
-                    // TODO(hjiang): For now, we don't allow to delete updated rows, which is allowed for streaming transaction.
                     .filter(|(id, _)| !self.deleted_uncommitted_row_ids.contains(id))
                     .map(|(id, row)| (*id, row.clone(), /*committed=*/ false)),
+            );
+            // Allow to delete rows updated in the current txn.
+            candidates.extend(
+                self.uncommitted_updated_rows
+                    .iter()
+                    .filter(|(id, _)| {
+                        !self.deleted_uncommitted_row_ids.contains(id)
+                            && !self.deleted_committed_row_ids.contains(id)
+                    })
+                    .map(|(id, row)| {
+                        (
+                            *id,
+                            row.clone(),
+                            /*committed=*/ self.is_committed_row(*id),
+                        )
+                    }),
             );
         }
         assert!(!candidates.is_empty());
