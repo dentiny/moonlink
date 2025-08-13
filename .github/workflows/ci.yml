@@ -172,6 +172,17 @@ jobs:
         run: |
           ${{ matrix.cmd }}
 
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ matrix.target }}
+          path: |
+            /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn
+
   # ───────────────────────── 4 · TEST & COVERAGE ────────────────────────────
   coverage:
     name: Unit Tests + Coverage (llvm-cov + nextest)
@@ -256,6 +267,17 @@ jobs:
         run: |
           RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_chaos_on_local_fs --features=chaos-test -p moonlink -- --nocapture
 
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ matrix.target }}
+          path: |
+            /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn
+
   # ───────────── 6 · Chaos test with local fs optimization ─────────────
   chaos_test_with_local_fs_optimization:
     name: Chaos test with local filesystem optimization
@@ -268,6 +290,17 @@ jobs:
         timeout-minutes: 10
         run: |
           RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_local_system_optimization_chaos --features=chaos-test -p moonlink -- --nocapture
+
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ matrix.target }}
+          path: |
+            /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn
 
   # ───────────── 7 · Chaos test with chaos injection ─────────────
   chaos_test_with_chaos_injection:
@@ -291,6 +324,17 @@ jobs:
         run: |
           RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_chaos_injection --features=chaos-test -p moonlink -- --nocapture
 
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ matrix.target }}
+          path: |
+            /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn
+
   # ───────────── 8 · Chaos test for disk slice write ─────────────
   disk_slice_write_with_chaos:
     name: Chaos test for disk slice write
@@ -312,3 +356,14 @@ jobs:
         timeout-minutes: 10
         run: |
           RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_disk_slice_chaos --features=chaos-test -p moonlink -- --nocapture
+
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ matrix.target }}
+          path: |
+            /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn

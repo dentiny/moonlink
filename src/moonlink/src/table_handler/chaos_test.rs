@@ -840,7 +840,7 @@ impl TestEnvironment {
         mut table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
         test_name: &str,
     ) {
-        let filepath = format!("/tmp/{}", Self::generate_random_filename());
+        let filepath = format!("/tmp/chaos_test_{}", Self::generate_random_filename());
         println!("Mooncake table events for test {test_name} dumped to {filepath}");
 
         let mut file = tokio::fs::OpenOptions::new()
