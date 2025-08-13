@@ -104,6 +104,7 @@ pub(crate) async fn replay() {
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
         while let Some(table_event) = table_event_receiver.recv().await {
+            #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
                     id,
