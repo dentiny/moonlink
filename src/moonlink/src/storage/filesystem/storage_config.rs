@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Deserialize, PartialEq, Serialize)]
 pub enum StorageConfig {
     #[cfg(feature = "storage-fs")]
-    #[serde(rename = "file_system")]
+    #[serde(rename = "fs")]
     FileSystem {
         root_directory: String,
         // Used for atomic write operation: write files to a temporary directory and rename.
