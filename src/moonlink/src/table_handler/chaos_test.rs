@@ -189,10 +189,10 @@ struct ChaosState {
     /// 2. For simplicity, currently we don't support delete uncommitted rows inserted.
     uncommitted_updated_rows: HashMap<i32 /*id*/, MoonlinkRow>,
     /// Deleted committed row ids in the current uncommitted transaction.
-    deleted_committed_row_ids: HashSet<i32>,
+    deleted_committed_row_ids: HashSet<i32 /*id*/>,
     /// Deleted uncommitted row ids in the current uncommitted transaction.
     /// Notice: only stream transactions are able to delete uncommitted rows.
-    deleted_uncommitted_row_ids: HashSet<i32>,
+    deleted_uncommitted_row_ids: HashSet<i32 /*id*/>,
     /// Used to indicate whether there's an ongoing transaction.
     txn_state: TxnState,
     /// LSN to use for the next operation, including update operations and commits.
@@ -361,8 +361,23 @@ impl ChaosState {
         let deleted_committed_rows = self.deleted_committed_row_ids.len();
         let deleted_uncommitted_rows = self.deleted_uncommitted_row_ids.len();
 
-        committed_inserted_rows
+        if committed_inserted_rows
             > (uncommitted_updated_rows + deleted_committed_rows + deleted_uncommitted_rows)
+        {
+            return true;
+        }
+
+        // If within a streaming transaction, it's allowed to update an already updated row.
+        if self.txn_state == TxnState::InStreaming {
+            // Check if there's any uncommitted row which gets updated but not deleted.
+            for (id, _) in self.uncommitted_updated_rows.iter() {
+                if !self.deleted_uncommitted_row_ids.contains(id) {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Get a random row to delete.
@@ -405,7 +420,7 @@ impl ChaosState {
 
     /// Get a random row to update.
     fn get_random_row_to_update(&mut self) -> MoonlinkRow {
-        let candidates: Vec<(i32, MoonlinkRow)> = self
+        let mut candidates: Vec<(i32, MoonlinkRow)> = self
             .committed_inserted_rows
             .iter()
             .filter(|(id, _)| {
@@ -417,15 +432,27 @@ impl ChaosState {
             .collect();
         assert!(!candidates.is_empty());
 
+        // If within a streaming transaction, could also delete from uncommitted inserted rows, as long as it's not deleted in the current transaction.
+        if self.txn_state == TxnState::InStreaming {
+            candidates.extend(
+                self.uncommitted_updated_rows
+                    .iter()
+                    .filter(|(id, _)| !self.deleted_uncommitted_row_ids.contains(id))
+                    .map(|(id, row)| (*id, row.clone())),
+            );
+        }
+
         // Randomly pick one row from the candidates.
         let random_idx = self.rng.random_range(0..candidates.len());
         let (id, row) = candidates[random_idx].clone();
 
-        // Update update rows set.
-        assert!(self
-            .uncommitted_updated_rows
-            .insert(id, row.clone())
-            .is_none());
+        // Update update rows set; non-streaming transaction doesn't allow repeatedly update one row.
+        if self.txn_state == TxnState::InNonStreaming {
+            assert!(self
+                .uncommitted_updated_rows
+                .insert(id, row.clone())
+                .is_none());
+        }
 
         row
     }
