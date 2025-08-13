@@ -140,7 +140,7 @@ impl DiskSliceWriter {
     }
 
     /// Get the list of files in the DiskSlice
-    pub(super) fn output_files(&self) -> &[(MooncakeDataFileRef, DiskFileAttrs)] {
+    pub(crate) fn output_files(&self) -> &[(MooncakeDataFileRef, DiskFileAttrs)] {
         self.files.as_slice()
     }
 

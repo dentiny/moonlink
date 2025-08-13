@@ -83,7 +83,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_d0ra1c48aue6";
+    let replay_filepath = "/tmp/chaos_test_judqduy6fjd3";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let replay_env = ReplayEnvironment {
@@ -111,6 +111,9 @@ pub(crate) async fn replay() {
         Mutex<HashMap<BackgroundEventId, CompletedMooncakeSnapshot>>,
     > = Arc::new(Mutex::new(HashMap::new()));
     let completed_mooncake_snapshots_clone = completed_mooncake_snapshots.clone();
+
+    // Expected table snapshot.
+    let mut snapshot_disk_files = HashSet::new();
 
     let mut table = create_mooncake_table_for_replay(&replay_env, &mut lines).await;
     let (table_event_sender, mut table_event_receiver) = mpsc::channel(100);
@@ -214,11 +217,21 @@ pub(crate) async fn replay() {
                     if let Some(completed_flush_event) = completed_flush_event {
                         if let Some(disk_slice) = completed_flush_event.flush_result {
                             let disk_slice = disk_slice.unwrap();
+                            let new_disk_file_ids = disk_slice
+                                .output_files()
+                                .iter()
+                                .map(|f| f.0.file_id())
+                                .collect::<Vec<_>>();
                             if let Some(xact_id) = completed_flush_event.xact_id {
                                 table.apply_stream_flush_result(xact_id, disk_slice);
                             } else {
                                 table.apply_flush_result(disk_slice);
                             }
+                            // Check newly persisted disk files.
+                            let expected_disk_files_count =
+                                snapshot_disk_files.len() + new_disk_file_ids.len();
+                            snapshot_disk_files.extend(new_disk_file_ids);
+                            assert_eq!(expected_disk_files_count, snapshot_disk_files.len());
                         }
                         break;
                     }
@@ -243,8 +256,17 @@ pub(crate) async fn replay() {
                         let mut guard = completed_mooncake_snapshots.lock().await;
                         guard.remove(&snapshot_completion_event.id)
                     };
-                    if let Some(_completed_mooncake_snapshot) = completed_mooncake_snapshot {
-                        // TODO(hjiang): Check mooncake snapshot content.
+                    if let Some(completed_mooncake_snapshot) = completed_mooncake_snapshot {
+                        let actual_disk_files = completed_mooncake_snapshot
+                            .current_snapshot
+                            .disk_files
+                            .iter()
+                            .map(|cur_disk_file| cur_disk_file.0.file_id())
+                            .collect::<HashSet<_>>();
+                        assert_eq!(snapshot_disk_files, actual_disk_files);
+
+                        // Update mooncake table related states.
+                        table.mark_mooncake_snapshot_completed();
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.
