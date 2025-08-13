@@ -1587,6 +1587,7 @@ impl MooncakeTable {
     }
 
     /// Get flushed disk file ids by [`xact_id`].
+    #[cfg(feature = "chaos-test")]
     pub(crate) fn get_stream_transaction_disk_files(&self, xact_id: u32) -> Vec<FileId> {
         let disk_files = &self
             .transaction_stream_states
