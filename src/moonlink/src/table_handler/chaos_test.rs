@@ -736,21 +736,25 @@ impl TestEnvironment {
             config.disk_slice_write_chaos_enabled,
             chaos_test_arg.seed,
         );
+        let identity = get_random_identity(chaos_test_arg.seed);
         let mooncake_table_metadata = match &config.maintenance_option {
             TableMaintenanceOption::NoTableMaintenance => create_test_table_metadata_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
                 disk_slice_write_config,
+                identity,
             ),
             TableMaintenanceOption::IndexMerge => {
                 create_test_table_metadata_with_index_merge_disable_flush(
                     table_temp_dir.path().to_str().unwrap().to_string(),
                     disk_slice_write_config,
+                    identity,
                 )
             }
             TableMaintenanceOption::DataCompaction => {
                 create_test_table_metadata_with_data_compaction_disable_flush(
                     table_temp_dir.path().to_str().unwrap().to_string(),
                     disk_slice_write_config,
+                    identity,
                 )
             }
         };
