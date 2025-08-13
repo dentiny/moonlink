@@ -1315,6 +1315,7 @@ impl MooncakeTable {
         table_notify
             .send(TableEvent::MooncakeTableSnapshotResult {
                 uuid,
+                id: table_event_id,
                 lsn: snapshot_result.commit_lsn,
                 iceberg_snapshot_payload: snapshot_result.iceberg_snapshot_payload,
                 data_compaction_payload: snapshot_result.data_compaction_payload,

@@ -8,6 +8,7 @@ use crate::storage::mooncake_table::replay::replay_events::{
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::MooncakeTable;
+use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_notify::TableEvent;
@@ -21,10 +22,18 @@ use tokio::sync::{mpsc, Mutex};
 
 #[derive(Clone, Debug)]
 struct CompletedFlush {
-    // Transaction ID
+    // Transaction ID.
     xact_id: Option<u32>,
     /// Result for mem slice flush.
     flush_result: Option<Result<DiskSliceWriter>>,
+}
+#[allow(dead_code)]
+#[derive(Clone, Debug)]
+struct CompletedMooncakeSnapshot {
+    /// Mooncake snapshot LSN.
+    lsn: u64,
+    /// Mooncake snapshot dump.
+    current_snapshot: MooncakeSnapshot,
 }
 
 struct ReplayEnvironment {
@@ -90,11 +99,18 @@ pub(crate) async fn replay() {
     // Used to notify certain background table events have completed.
     let event_notification = Arc::new(Notify::new());
     let event_notification_clone = event_notification.clone();
+
     // Current table states.
     let mut ongoing_flush_event_id = HashSet::new();
     let completed_flush_events: Arc<Mutex<HashMap<BackgroundEventId, CompletedFlush>>> =
         Arc::new(Mutex::new(HashMap::new()));
     let completed_flush_events_clone = completed_flush_events.clone();
+
+    let mut ongoing_mooncake_snapshot_id = HashSet::new();
+    let completed_mooncake_snapshots: Arc<
+        Mutex<HashMap<BackgroundEventId, CompletedMooncakeSnapshot>>,
+    > = Arc::new(Mutex::new(HashMap::new()));
+    let completed_mooncake_snapshots_clone = completed_mooncake_snapshots.clone();
 
     let mut table = create_mooncake_table_for_replay(&replay_env, &mut lines).await;
     let (table_event_sender, mut table_event_receiver) = mpsc::channel(100);
@@ -119,6 +135,20 @@ pub(crate) async fn replay() {
                     assert!(guard.insert(id, completed_flush).is_none());
                     event_notification.notify_waiters();
                 }
+                TableEvent::MooncakeTableSnapshotResult {
+                    lsn,
+                    id,
+                    current_snapshot,
+                    ..
+                } => {
+                    let completed_mooncake_snapshot = CompletedMooncakeSnapshot {
+                        lsn,
+                        current_snapshot: current_snapshot.unwrap(),
+                    };
+                    let mut guard = completed_mooncake_snapshots_clone.lock().await;
+                    assert!(guard.insert(id, completed_mooncake_snapshot).is_none());
+                    event_notification.notify_waiters();
+                }
                 // TODO(hjiang): Implement other background events.
                 _ => {}
             }
@@ -129,6 +159,9 @@ pub(crate) async fn replay() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
         match replay_table_event {
+            // =====================
+            // Foreground operations
+            // =====================
             MooncakeTableEvent::Append(append_event) => {
                 if let Some(xact_id) = append_event.xact_id {
                     table
@@ -158,6 +191,9 @@ pub(crate) async fn replay() {
                     table.commit(commit_event.lsn);
                 }
             }
+            // =====================
+            // Flush operation
+            // =====================
             MooncakeTableEvent::FlushInitiation(flush_initiation_event) => {
                 assert!(ongoing_flush_event_id.insert(flush_initiation_event.id));
                 if let Some(xact_id) = flush_initiation_event.xact_id {
@@ -169,7 +205,7 @@ pub(crate) async fn replay() {
                 }
             }
             MooncakeTableEvent::FlushCompletion(flush_completion_event) => {
-                assert!(ongoing_flush_event_id.contains(&flush_completion_event.id));
+                assert!(ongoing_flush_event_id.remove(&flush_completion_event.id));
                 loop {
                     let completed_flush_event = {
                         let mut guard = completed_flush_events.lock().await;
@@ -184,6 +220,31 @@ pub(crate) async fn replay() {
                                 table.apply_flush_result(disk_slice);
                             }
                         }
+                        break;
+                    }
+                    // Otherwise block until the corresponding flush event completes.
+                    event_notification_clone.notified().await;
+                }
+            }
+            // =====================
+            // Mooncake snapshot
+            // =====================
+            MooncakeTableEvent::MooncakeSnapshotInitiation(snapshot_initiation_event) => {
+                assert!(ongoing_mooncake_snapshot_id.insert(snapshot_initiation_event.id));
+                let mut snapshot_option = snapshot_initiation_event.option.clone();
+                snapshot_option.dump_snapshot = true;
+                // Event only recorded when snapshot gets created in source run.
+                assert!(table.create_snapshot(snapshot_option));
+            }
+            MooncakeTableEvent::MooncakeSnapshotCompletion(snapshot_completion_event) => {
+                assert!(ongoing_mooncake_snapshot_id.remove(&snapshot_completion_event.id));
+                loop {
+                    let completed_mooncake_snapshot = {
+                        let mut guard = completed_mooncake_snapshots.lock().await;
+                        guard.remove(&snapshot_completion_event.id)
+                    };
+                    if let Some(_completed_mooncake_snapshot) = completed_mooncake_snapshot {
+                        // TODO(hjiang): Check mooncake snapshot content.
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.

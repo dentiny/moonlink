@@ -407,8 +407,9 @@ impl TableHandler {
                     table.persist_iceberg_snapshot(iceberg_snapshot_payload);
                 }
                 TableEvent::MooncakeTableSnapshotResult {
-                    lsn,
                     uuid: _,
+                    id: _,
+                    lsn,
                     iceberg_snapshot_payload,
                     data_compaction_payload,
                     file_indice_merge_payload,

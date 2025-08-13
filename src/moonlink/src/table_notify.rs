@@ -90,9 +90,9 @@ pub enum TableEvent {
     /// Abort current stream with given xact_id
     StreamAbort { xact_id: u32, is_recovery: bool },
     FlushResult {
-        // Background event id.
+        /// Background event id.
         id: BackgroundEventId,
-        // Transaction ID
+        /// Transaction ID
         xact_id: Option<u32>,
         /// Result for mem slice flush.
         flush_result: Option<Result<DiskSliceWriter>>,
@@ -142,10 +142,12 @@ pub enum TableEvent {
     PeriodicalMooncakeTableSnapshot(uuid::Uuid),
     /// Mooncake snapshot completes.
     MooncakeTableSnapshotResult {
-        /// Mooncake snapshot LSN.
-        lsn: u64,
         /// UUID for the current mooncake snapshot operation, used for observability purpose.
         uuid: uuid::Uuid,
+        /// Background event id.
+        id: BackgroundEventId,
+        /// Mooncake snapshot LSN.
+        lsn: u64,
         /// Payload used to create an iceberg snapshot.
         iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
         /// Payload used to trigger an index merge.

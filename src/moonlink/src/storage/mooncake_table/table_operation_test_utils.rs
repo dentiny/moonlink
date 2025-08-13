@@ -257,8 +257,9 @@ pub(crate) async fn sync_mooncake_snapshot(
     let notification = receiver.recv().await.unwrap();
     table.mark_mooncake_snapshot_completed();
     if let TableEvent::MooncakeTableSnapshotResult {
-        lsn,
         uuid: _,
+        id: _,
+        lsn,
         current_snapshot: _,
         iceberg_snapshot_payload,
         file_indice_merge_payload,
