@@ -468,7 +468,6 @@ impl ChaosState {
             })
             .map(|(id, row)| (*id, row.clone()))
             .collect();
-        assert!(!candidates.is_empty());
 
         // If within a streaming transaction, could also update from uncommitted updated rows, as long as it's not deleted in the current transaction.
         if self.txn_state == TxnState::InStreaming {
@@ -482,6 +481,7 @@ impl ChaosState {
                     .map(|(id, row)| (*id, row.clone())),
             );
         }
+        assert!(!candidates.is_empty());
 
         // Randomly pick one row from the candidates.
         let random_idx = self.rng.random_range(0..candidates.len());
