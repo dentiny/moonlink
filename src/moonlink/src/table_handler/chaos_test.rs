@@ -765,7 +765,7 @@ impl TestEnvironment {
         let object_storage_cache = if config.local_filesystem_optimization_enabled {
             let config = ObjectStorageCacheConfig::new(
                 /*max_bytes=*/ 1 << 30, // 1GiB
-                table_temp_dir.path().to_str().unwrap().to_string(),
+                cache_temp_dir.path().to_str().unwrap().to_string(),
                 /*optimize_local_filesystem=*/ true,
             );
             ObjectStorageCache::new(config)
