@@ -432,7 +432,7 @@ impl ChaosState {
             .collect();
         assert!(!candidates.is_empty());
 
-        // If within a streaming transaction, could also delete from uncommitted inserted rows, as long as it's not deleted in the current transaction.
+        // If within a streaming transaction, could also update from uncommitted updated rows, as long as it's not deleted in the current transaction.
         if self.txn_state == TxnState::InStreaming {
             candidates.extend(
                 self.uncommitted_updated_rows
