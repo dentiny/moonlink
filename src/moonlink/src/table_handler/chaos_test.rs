@@ -17,6 +17,7 @@ use crate::storage::filesystem::s3::s3_test_utils::*;
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
+use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::table_handler_timer::create_table_handler_timers;
@@ -741,20 +742,20 @@ impl TestEnvironment {
             TableMaintenanceOption::NoTableMaintenance => create_test_table_metadata_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
                 disk_slice_write_config,
-                identity,
+                identity.clone(),
             ),
             TableMaintenanceOption::IndexMerge => {
                 create_test_table_metadata_with_index_merge_disable_flush(
                     table_temp_dir.path().to_str().unwrap().to_string(),
                     disk_slice_write_config,
-                    identity,
+                    identity.clone(),
                 )
             }
             TableMaintenanceOption::DataCompaction => {
                 create_test_table_metadata_with_data_compaction_disable_flush(
                     table_temp_dir.path().to_str().unwrap().to_string(),
                     disk_slice_write_config,
-                    identity,
+                    identity.clone(),
                 )
             }
         };
@@ -816,8 +817,19 @@ impl TestEnvironment {
 
         // Start a background task to dump serialized mooncake table event.
         // TODO(hjiang): Synchronize the background task and gracefully shutdown.
+        let table_metadata_replay = ReplayTableMetadata {
+            config: mooncake_table_metadata.config.clone(),
+            identity,
+            local_filesystem_optimization_enabled: config.local_filesystem_optimization_enabled,
+            storage_config: config.storage_config.clone(),
+        };
         tokio::spawn(async move {
-            Self::dump_table_event(table_event_replay_rx, config.test_name).await;
+            Self::dump_table_event(
+                table_event_replay_rx,
+                config.test_name,
+                table_metadata_replay,
+            )
+            .await;
         });
 
         Self {
@@ -857,6 +869,7 @@ impl TestEnvironment {
     async fn dump_table_event(
         mut table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
         test_name: &str,
+        table_metadata_replay: ReplayTableMetadata,
     ) {
         let filepath = format!("/tmp/chaos_test_{}", Self::generate_random_filename());
         println!("Mooncake table events for test {test_name} dumped to {filepath}");
@@ -868,6 +881,12 @@ impl TestEnvironment {
             .await
             .unwrap();
 
+        // Persist table metadata for replay.
+        let json_str = serde_json::to_string(&table_metadata_replay).unwrap();
+        file.write_all(json_str.as_bytes()).await.unwrap();
+        file.write_all(b"\n").await.unwrap();
+
+        // Persist mooncake table events.
         let mut written_events_count: usize = 0;
         const WRITREN_EVENT_FLUSH_INTERVAL: usize = 100;
         while let Some(table_event) = table_event_replay_rx.recv().await {

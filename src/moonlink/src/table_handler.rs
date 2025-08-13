@@ -657,6 +657,7 @@ impl TableHandler {
                     }
                 }
                 TableEvent::FlushResult {
+                    id: _,
                     xact_id,
                     flush_result,
                 } => match flush_result {
@@ -893,4 +894,12 @@ mod failure_tests;
 
 #[cfg(test)]
 #[cfg(feature = "chaos-test")]
+mod chaos_table_metadata;
+
+#[cfg(test)]
+#[cfg(feature = "chaos-test")]
 mod chaos_test;
+
+#[cfg(test)]
+#[cfg(feature = "chaos-test")]
+mod chaos_replay;
