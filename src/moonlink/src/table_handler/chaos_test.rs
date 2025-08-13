@@ -371,7 +371,9 @@ impl ChaosState {
         if self.txn_state == TxnState::InStreaming {
             // Check if there's any uncommitted row which gets updated but not deleted.
             for (id, _) in self.uncommitted_updated_rows.iter() {
-                if !self.deleted_uncommitted_row_ids.contains(id) {
+                if !self.deleted_uncommitted_row_ids.contains(id)
+                    && !self.deleted_committed_row_ids.contains(id)
+                {
                     return true;
                 }
             }
@@ -437,7 +439,10 @@ impl ChaosState {
             candidates.extend(
                 self.uncommitted_updated_rows
                     .iter()
-                    .filter(|(id, _)| !self.deleted_uncommitted_row_ids.contains(id))
+                    .filter(|(id, _)| {
+                        !self.deleted_uncommitted_row_ids.contains(id)
+                            && !self.deleted_committed_row_ids.contains(id)
+                    })
                     .map(|(id, row)| (*id, row.clone())),
             );
         }
