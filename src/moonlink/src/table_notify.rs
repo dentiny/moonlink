@@ -91,7 +91,7 @@ pub enum TableEvent {
     StreamAbort { xact_id: u32, is_recovery: bool },
     FlushResult {
         // Background event id.
-        id: Option<BackgroundEventId>,
+        id: BackgroundEventId,
         // Transaction ID
         xact_id: Option<u32>,
         /// Result for mem slice flush.

@@ -3,13 +3,15 @@ use std::collections::{HashMap, HashSet};
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::mooncake_table::replay::replay_events::{
-    BackgroundEventId, FlushEventCompletion, MooncakeTableEvent,
+    BackgroundEventId, MooncakeTableEvent,
 };
 use crate::storage::mooncake_table::table_creation_test_utils::*;
+use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::MooncakeTable;
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
-use crate::table_notify::{CompletedFlush, TableEvent};
+use crate::table_notify::TableEvent;
+use crate::Result;
 
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
@@ -72,7 +74,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/98sux44dc4wc";
+    let replay_filepath = "/tmp/chaos_test_d0ra1c48aue6";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let replay_env = ReplayEnvironment {
@@ -89,31 +91,30 @@ pub(crate) async fn replay() {
     let event_notification = Notify::new();
     // Current table states.
     let mut ongoing_flush_event_id = HashSet::new();
-    let mut completed_flush_events: Arc<Mutex<HashMap<BackgroundEventId, CompletedFlush>>> =
+    let completed_flush_events: Arc<Mutex<HashMap<BackgroundEventId, CompletedFlush>>> =
         Arc::new(Mutex::new(HashMap::new()));
     let completed_flush_events_clone = completed_flush_events.clone();
 
     let mut table = create_mooncake_table_for_replay(&replay_env, &mut lines).await;
-    let (event_sender, mut event_receiver) = mpsc::channel(100);
-    table.register_table_notify(event_sender).await;
+    let (table_event_sender, mut table_event_receiver) = mpsc::channel(100);
+    let (event_replay_sender, _event_replay_receiver) = mpsc::unbounded_channel();
+    table.register_table_notify(table_event_sender).await;
+    table.register_event_replay_tx(Some(event_replay_sender));
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
-        while let Some(table_event) = event_receiver.recv().await {
-            match &table_event {
+        while let Some(table_event) = table_event_receiver.recv().await {
+            match table_event {
                 TableEvent::FlushResult {
                     id,
                     xact_id,
                     flush_result,
                 } => {
                     let completed_flush = CompletedFlush {
-                        xact_id: *xact_id,
+                        xact_id,
                         flush_result,
                     };
-
                     let mut guard = completed_flush_events_clone.lock().await;
-                    assert!(guard
-                        .insert(completed_flush.id.unwrap(), completed_flush)
-                        .is_none());
+                    assert!(guard.insert(id, completed_flush).is_none());
                     event_notification.notify_waiters();
                 }
                 // TODO(hjiang): Implement other background events.
@@ -194,4 +195,6 @@ pub(crate) async fn replay() {
 }
 
 #[tokio::test]
-async fn test_table_event_replay() {}
+async fn test_table_event_replay() {
+    replay().await;
+}

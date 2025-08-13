@@ -35,7 +35,7 @@ pub(crate) async fn flush_table_and_sync(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            id: None,
+            id: _,
             xact_id: _,
             flush_result,
         } => match flush_result {
@@ -68,7 +68,7 @@ pub(crate) async fn flush_table_and_sync_no_apply(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            id: None,
+            id: _,
             xact_id: _,
             flush_result,
         } => match flush_result {
@@ -100,7 +100,7 @@ pub(crate) async fn flush_stream_and_sync_no_apply(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            id: None,
+            id: _,
             xact_id: _,
             flush_result,
         } => match flush_result {
@@ -132,7 +132,7 @@ pub(crate) async fn commit_transaction_stream_and_sync(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            id: None,
+            id: _,
             xact_id: Some(xact_id),
             flush_result,
         } => match flush_result {
