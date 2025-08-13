@@ -446,13 +446,13 @@ impl ChaosState {
         let random_idx = self.rng.random_range(0..candidates.len());
         let (id, row) = candidates[random_idx].clone();
 
-        // Update update rows set; non-streaming transaction doesn't allow repeatedly update one row.
+        // Update update rows set.
+        let old_entry = self.uncommitted_updated_rows.insert(id, row.clone());
+        // For non-streaming transaction doesn't allow repeatedly update one row.
         if self.txn_state == TxnState::InNonStreaming {
-            assert!(self
-                .uncommitted_updated_rows
-                .insert(id, row.clone())
-                .is_none());
+            assert!(old_entry.is_none());
         }
+        // It's ok for streaming transaction to repeated update the same row.
 
         row
     }
