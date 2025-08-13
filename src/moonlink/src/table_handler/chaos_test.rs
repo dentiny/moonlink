@@ -183,10 +183,6 @@ struct ChaosState {
     uncommitted_inserted_rows: VecDeque<(i32 /*id*/, MoonlinkRow)>,
     /// Updated rows in the current uncommitted transaction.
     /// The row being deleted and appended is of the same content.
-    ///
-    /// TODO(hjiang):
-    /// 1. For simplicity, chaos test allows at most one update for each row within each transaction, which is the semantics non-streaming transaction provides.
-    /// 2. For simplicity, currently we don't support delete uncommitted rows inserted.
     uncommitted_updated_rows: HashMap<i32 /*id*/, MoonlinkRow>,
     /// Deleted committed row ids in the current uncommitted transaction.
     deleted_committed_row_ids: HashSet<i32 /*id*/>,
@@ -294,7 +290,6 @@ impl ChaosState {
                 && !self.deleted_uncommitted_row_ids.contains(id)
         });
 
-        // TODO(hjiang): For now, update operation only gets committed inserted rows, and it doesn't affect committed row set.
         self.clear_cur_transaction_buffered_rows();
     }
 
@@ -394,9 +389,16 @@ impl ChaosState {
             return true;
         }
 
-        // If within a streaming transaction, it's allowed to update an already updated row.
-        if self.txn_state == TxnState::InStreaming && self.has_updated_undeleted_row() {
-            return true;
+        if self.txn_state == TxnState::InStreaming {
+            // Streaming transaction allows to update an already updated row.
+            if self.has_updated_undeleted_row() {
+                return true;
+            }
+
+            // Streaming transaction allows to update an uncommitted row.
+            if self.uncommitted_inserted_rows.len() > self.deleted_uncommitted_row_ids.len() {
+                return true;
+            }
         }
 
         false
@@ -469,14 +471,26 @@ impl ChaosState {
             .map(|(id, row)| (*id, row.clone()))
             .collect();
 
-        // If within a streaming transaction, could also update from uncommitted updated rows, as long as it's not deleted in the current transaction.
         if self.txn_state == TxnState::InStreaming {
+            // Streaming transaction could update from uncommitted updated rows, as long as it's not deleted in the current transaction.
             candidates.extend(
                 self.uncommitted_updated_rows
                     .iter()
                     .filter(|(id, _)| {
                         !self.deleted_uncommitted_row_ids.contains(id)
                             && !self.deleted_committed_row_ids.contains(id)
+                    })
+                    .map(|(id, row)| (*id, row.clone())),
+            );
+
+            // Streaming transactuon allows to update uncommitted undeleted rows.
+            candidates.extend(
+                self.uncommitted_inserted_rows
+                    .iter()
+                    .filter(|(id, _)| {
+                        !self.deleted_uncommitted_row_ids.contains(id)
+                        // Uncommitted updated rows have been included above.
+                            && !self.uncommitted_updated_rows.contains_key(id)
                     })
                     .map(|(id, row)| (*id, row.clone())),
             );
