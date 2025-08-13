@@ -186,7 +186,7 @@ mod tests {
     fn test_deserialize_retry_config() {
         let input = json!({
             "storage_config": {
-                "FileSystem": {
+                "file_system": {
                     "root_directory": "/tmp"
                 },
             },
