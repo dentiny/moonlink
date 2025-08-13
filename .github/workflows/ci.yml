@@ -107,6 +107,16 @@ jobs:
         run: |
           ${{ matrix.cmd }}
 
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn
+
   # ──────────────────────── 3 · S3 test (feature, chaos) ───────────────────
   s3_test:
     name: S3 tests (feature, chaos)
@@ -177,9 +187,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chaos-dumps-${{ matrix.target }}
-          path: |
-            /tmp/chaos_test_*
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
           retention-days: 3
           if-no-files-found: warn
 
@@ -272,9 +281,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chaos-dumps-${{ matrix.target }}
-          path: |
-            /tmp/chaos_test_*
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
           retention-days: 3
           if-no-files-found: warn
 
@@ -296,9 +304,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chaos-dumps-${{ matrix.target }}
-          path: |
-            /tmp/chaos_test_*
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
           retention-days: 3
           if-no-files-found: warn
 
@@ -329,9 +336,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chaos-dumps-${{ matrix.target }}
-          path: |
-            /tmp/chaos_test_*
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
           retention-days: 3
           if-no-files-found: warn
 
@@ -362,8 +368,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: chaos-dumps-${{ matrix.target }}
-          path: |
-            /tmp/chaos_test_*
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
           retention-days: 3
           if-no-files-found: warn
