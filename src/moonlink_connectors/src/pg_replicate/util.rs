@@ -615,6 +615,35 @@ mod tests {
                     modifier: 0,
                     nullable: true,
                 },
+                // CREATE TYPE point AS (x int4, y int4);
+                // CREATE TYPE rectangle AS (top_left point);
+                //
+                // Column type: rectangle
+                // Arrow type: Struct {
+                //   top_left:  Struct { x: Int32, y: Int32 },
+                // }
+                ColumnSchema {
+                    name: "rectangle_field".to_string(),
+                    typ: Type::new(
+                        "rectangle".to_string(),
+                        0, // OID doesn't matter for this test
+                        Kind::Composite(vec![tokio_postgres::types::Field::new(
+                            "top_left".to_string(),
+                            Type::new(
+                                "point".to_string(),
+                                0, // OID doesn't matter for this test
+                                Kind::Composite(vec![
+                                    tokio_postgres::types::Field::new("x".to_string(), Type::INT4), // x coordinate
+                                    tokio_postgres::types::Field::new("y".to_string(), Type::INT4), // y coordinate
+                                ]),
+                                "public".to_string(),
+                            ),
+                        )]),
+                        "public".to_string(),
+                    ),
+                    modifier: 0,
+                    nullable: true,
+                },
             ],
             lookup_key: LookupKey::Key {
                 name: "uuid_field".to_string(),
@@ -623,7 +652,7 @@ mod tests {
         };
 
         let (arrow_schema, identity) = postgres_schema_to_moonlink_schema(&table_schema);
-        assert_eq!(arrow_schema.fields().len(), 25);
+        assert_eq!(arrow_schema.fields().len(), 26);
 
         assert_eq!(arrow_schema.field(0).name(), "bool_field");
         assert_eq!(arrow_schema.field(0).data_type(), &DataType::Boolean);
@@ -735,6 +764,12 @@ mod tests {
             DataType::List(_)
         ));
 
+        assert_eq!(arrow_schema.field(25).name(), "rectangle_field");
+        assert!(matches!(
+            arrow_schema.field(25).data_type(),
+            DataType::Struct(_)
+        ));
+
         // Check identity property.
         assert_eq!(identity, IdentityProp::Keys(vec![17]));
 
@@ -772,13 +807,19 @@ mod tests {
             (28, "point_array_field.element.y"),
             (29, "point_array_field.element"),
             (30, "point_array_field"),
+            (31, "rectangle_field.top_left.x"),
+            (32, "rectangle_field.top_left.y"),
+            (33, "rectangle_field.top_left"),
+            (34, "rectangle_field"),
         ] {
             assert_eq!(
                 iceberg_arrow.name_by_field_id(field_id).unwrap(),
-                expected_name
+                expected_name,
+                "field id {} mismatch",
+                field_id,
             );
         }
-        assert!(iceberg_arrow.name_by_field_id(31).is_none());
+        assert!(iceberg_arrow.name_by_field_id(35).is_none());
     }
 
     #[test]
