@@ -14,7 +14,7 @@ use more_asserts as ma;
 /// 3. row belong to main table's flushed files, directly pushed to snapshot_task.new_deletions and let snapshot handle it.
 /// 4. row belong to main table's memslice, add to `pending_deletions_in_main_mem_slice`, and handle at commit time`
 ///
-pub(super) struct TransactionStreamState {
+pub(crate) struct TransactionStreamState {
     mem_slice: MemSlice,
     local_deletions: Vec<ProcessedDeletionRecord>,
     pending_deletions_in_main_mem_slice: Vec<RawDeletionRecord>,

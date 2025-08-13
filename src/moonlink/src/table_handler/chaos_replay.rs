@@ -194,6 +194,14 @@ pub(crate) async fn replay() {
                     table.commit(commit_event.lsn);
                 }
             }
+            MooncakeTableEvent::Abort(abort_event) => {
+                let flushed_disk_files =
+                    table.get_stream_transaction_disk_files(abort_event.xact_id);
+                for cur_disk_file in flushed_disk_files.into_iter() {
+                    assert!(snapshot_disk_files.remove(&cur_disk_file));
+                }
+                table.abort_in_stream_batch(abort_event.xact_id);
+            }
             // =====================
             // Flush operation
             // =====================
