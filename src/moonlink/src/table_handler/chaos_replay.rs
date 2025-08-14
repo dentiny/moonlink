@@ -190,17 +190,11 @@ pub(crate) async fn replay() {
                     event_notification.notify_waiters();
                 }
                 TableEvent::MooncakeTableSnapshotResult {
-                    lsn,
-                    id,
-                    current_snapshot,
-                    iceberg_snapshot_payload,
-                    file_indice_merge_payload,
-                    data_compaction_payload,
-                    ..
+                    mooncake_snapshot_result,
                 } => {
                     let completed_mooncake_snapshot = CompletedMooncakeSnapshot {
-                        lsn,
-                        current_snapshot: current_snapshot.unwrap(),
+                        lsn: mooncake_snapshot_result.commit_lsn,
+                        current_snapshot: mooncake_snapshot_result.current_snapshot.unwrap(),
                     };
 
                     // Fill in backgroud tasks payload to fill in.
@@ -229,7 +223,9 @@ pub(crate) async fn replay() {
                     }
 
                     let mut guard = completed_mooncake_snapshots_clone.lock().await;
-                    assert!(guard.insert(id, completed_mooncake_snapshot).is_none());
+                    assert!(guard
+                        .insert(mooncake_snapshot_result.id, completed_mooncake_snapshot)
+                        .is_none());
                     event_notification.notify_waiters();
                 }
                 TableEvent::IcebergSnapshotResult {
@@ -353,9 +349,13 @@ pub(crate) async fn replay() {
                                 .map(|f| f.0.file_id())
                                 .collect::<Vec<_>>();
                             if let Some(xact_id) = completed_flush_event.xact_id {
-                                table.apply_stream_flush_result(xact_id, disk_slice);
+                                table.apply_stream_flush_result(
+                                    xact_id,
+                                    disk_slice,
+                                    flush_completion_event.id,
+                                );
                             } else {
-                                table.apply_flush_result(disk_slice);
+                                table.apply_flush_result(disk_slice, flush_completion_event.id);
                             }
                             // Check newly persisted disk files.
                             let expected_disk_files_count =

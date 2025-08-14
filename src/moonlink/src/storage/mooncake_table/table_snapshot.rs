@@ -356,6 +356,8 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
 }
 
 pub struct IcebergSnapshotResult {
+    /// Table event id.
+    pub(crate) id: BackgroundEventId,
     /// UUID for the current persistence operation, used for observability purpose.
     pub(crate) uuid: uuid::Uuid,
     /// Background event id.
@@ -379,6 +381,7 @@ pub struct IcebergSnapshotResult {
 impl Clone for IcebergSnapshotResult {
     fn clone(&self) -> Self {
         IcebergSnapshotResult {
+            id: self.id,
             uuid: self.uuid,
             id: self.id,
             table_manager: None,
@@ -408,6 +411,7 @@ impl IcebergSnapshotResult {
 impl std::fmt::Debug for IcebergSnapshotResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("IcebergSnapshotResult")
+            .field("id", &self.id)
             .field("uuid", &self.uuid)
             .field("id", &self.id)
             .field("flush_lsn", &self.flush_lsn)

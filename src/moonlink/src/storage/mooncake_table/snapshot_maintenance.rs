@@ -277,7 +277,7 @@ impl SnapshotTableState {
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
         if file_indices_to_merge.len() >= min_index_merge_file_num_threshold {
             let payload = FileIndiceMergePayload {
-                id: 0, // Unused.
+                id: self.event_id_assigner.get_next_event_id(),
                 uuid: uuid::Uuid::new_v4(),
                 file_indices: file_indices_to_merge
                     .into_iter()

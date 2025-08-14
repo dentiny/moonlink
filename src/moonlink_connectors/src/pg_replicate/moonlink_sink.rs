@@ -328,6 +328,7 @@ impl Sink {
                                 TableEvent::StreamAbort {
                                     xact_id,
                                     is_recovery: false,
+                                    closes_incomplete_wal_transaction: false,
                                 },
                             )
                             .await

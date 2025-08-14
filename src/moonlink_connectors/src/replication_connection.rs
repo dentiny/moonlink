@@ -9,6 +9,7 @@ use moonlink::{
     MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, ReadStateManager,
     TableEventManager, TableStatusReader,
 };
+
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -42,9 +43,11 @@ impl SourceType {
         }
     }
 
-    async fn finalize(&mut self) -> Result<()> {
+    /// If postgres drop all is false, then we will not drop the PostgreSQL publication and replication slot,
+    /// which allows for recovery from the PostgreSQL replication slot.
+    async fn finalize(&mut self, postgres_drop_all: bool) -> Result<()> {
         match self {
-            SourceType::Postgres(conn) => conn.shutdown().await,
+            SourceType::Postgres(conn) => conn.shutdown(postgres_drop_all).await,
             SourceType::RestApi(_) => Ok(()),
         }
     }
@@ -202,7 +205,7 @@ impl ReplicationConnection {
         arrow_schema: ArrowSchema,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
-        _is_recovery: bool,
+        is_recovery: bool,
     ) -> Result<SrcTableId> {
         match &mut self.source {
             SourceType::RestApi(conn) => {
@@ -227,6 +230,7 @@ impl ReplicationConnection {
                     // REST API doesn't have replication state, create a dummy one
                     &crate::pg_replicate::replication_state::ReplicationState::new(),
                     table_components,
+                    is_recovery,
                 )
                 .await?;
 
@@ -297,7 +301,11 @@ impl ReplicationConnection {
         Ok(())
     }
 
-    pub fn shutdown(mut self) -> JoinHandle<Result<()>> {
+    /// Shuts down the replication event loop and finalizes the source connection.
+    ///
+    /// If postgres drop all is false, then we will not drop the PostgreSQL publication and replication slot,
+    /// which allows for recovery from the PostgreSQL replication slot.
+    pub fn shutdown(mut self, postgres_drop_all: bool) -> JoinHandle<Result<()>> {
         tokio::spawn(async move {
             // Stop the replication event loop
             if self.replication_started {
@@ -311,7 +319,7 @@ impl ReplicationConnection {
             }
 
             // Finalize the source connection
-            self.source.finalize().await?;
+            self.source.finalize(postgres_drop_all).await?;
 
             debug!("replication connection shutdown complete");
             Ok(())

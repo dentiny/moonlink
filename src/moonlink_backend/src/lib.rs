@@ -318,10 +318,30 @@ where
         Ok(read_state.clone())
     }
 
-    /// Gracefully shutdown a replication connection identified by its URI.
-    pub async fn shutdown_connection(&self, uri: &str) {
+    /// Wait for the WAL flush LSN to reach the requested LSN. Note that WAL flush LSN will update
+    /// up till the latest commit that has been persisted in to the WAL.
+    pub async fn wait_for_wal_flush(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
         let mut manager = self.replication_manager.write().await;
-        manager.shutdown_connection(uri);
+        let mooncake_table_id = MooncakeTableId {
+            database_id,
+            table_id,
+        };
+        let writer = manager.get_table_event_manager(&mooncake_table_id)?;
+
+        // Wait for WAL flush LSN to reach the requested LSN
+        let mut rx = writer.subscribe_wal_flush_lsn();
+        while *rx.borrow() < lsn {
+            rx.changed().await.unwrap();
+        }
+        Ok(())
+    }
+
+    /// Gracefully shutdown a replication connection identified by its URI.
+    /// If postgres drop all is false, then we will not drop the PostgreSQL publication and replication slot,
+    /// which allows for recovery from the PostgreSQL replication slot.
+    pub async fn shutdown_connection(&self, uri: &str, postgres_drop_all: bool) {
+        let mut manager = self.replication_manager.write().await;
+        manager.shutdown_connection(uri, postgres_drop_all);
     }
 
     /// Initialize event API connection for data ingestion.
