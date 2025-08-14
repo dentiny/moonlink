@@ -36,10 +36,10 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         let rows = sqlx::query(
             r#"
             SELECT 
-                t.database_id,
-                t.table_id,
-                t.table_name,
-                t.uri,
+                t."schema",
+                t."table",
+                t.src_table_name,
+                t.src_table_uri,
                 t.config,
                 s.secret_type,
                 s.key_id,
@@ -49,8 +49,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 s.project
             FROM tables t
             LEFT JOIN secrets s
-                ON t.database_id = s.database_id
-                AND t.table_id = s.table_id
+                ON t."schema" = s."schema"
+                AND t."table" = s."table"
             "#,
         )
         .fetch_all(&sqlite_conn.pool)
@@ -58,10 +58,10 @@ impl MetadataStoreTrait for SqliteMetadataStore {
 
         let mut metadata_entries = Vec::with_capacity(rows.len());
         for row in rows {
-            let database_id: u32 = row.get("database_id");
-            let table_id: u32 = row.get("table_id");
-            let src_table_name: String = row.get("table_name");
-            let src_table_uri: String = row.get("uri");
+            let schema: String = row.get("schema");
+            let table: String = row.get("table");
+            let src_table_name: String = row.get("src_table_name");
+            let src_table_uri: String = row.get("src_table_uri");
             let serialized_config: String = row.get("config");
             let json_value: serde_json::Value = serde_json::from_str(&serialized_config)?;
 
@@ -80,8 +80,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 config_utils::deserialize_moonlink_table_config(json_value, secret_entry)?;
 
             metadata_entries.push(TableMetadataEntry {
-                database_id,
-                table_id,
+                schema,
+                table,
                 src_table_name,
                 src_table_uri,
                 moonlink_table_config,
@@ -93,10 +93,10 @@ impl MetadataStoreTrait for SqliteMetadataStore {
 
     async fn store_table_metadata(
         &self,
-        database_id: u32,
-        table_id: u32,
-        table_name: &str,
-        table_uri: &str,
+        schema: &str,
+        table: &str,
+        src_table_name: &str,
+        src_table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let (serialized_config, moonlink_table_secret) =
@@ -127,14 +127,14 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         // Insert into tables.
         let rows_affected = sqlx::query(
             r#"
-            INSERT INTO tables (database_id, table_id, table_name, uri, config)
+            INSERT INTO tables ("schema", "table", src_table_name, src_table_uri, config)
             VALUES (?, ?, ?, ?, ?);
             "#,
         )
-        .bind(database_id)
-        .bind(table_id)
-        .bind(table_name)
-        .bind(table_uri)
+        .bind(schema)
+        .bind(table)
+        .bind(src_table_name)
+        .bind(src_table_uri)
         .bind(serialized_config)
         .execute(&mut *tx)
         .await?
@@ -147,12 +147,12 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         if let Some(secret) = moonlink_table_secret {
             let rows_affected = sqlx::query(
                 r#"
-                INSERT INTO secrets (database_id, table_id, secret_type, key_id, secret, endpoint, region, project)
+                INSERT INTO secrets ("schema", "table", secret_type, key_id, secret, endpoint, region, project)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?);
                 "#,
             )
-            .bind(database_id)
-            .bind(table_id)
+            .bind(schema)
+            .bind(table)
             .bind(secret.get_secret_type())
             .bind(secret.key_id)
             .bind(secret.secret)
@@ -172,15 +172,15 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         Ok(())
     }
 
-    async fn delete_table_metadata(&self, database_id: u32, table_id: u32) -> Result<()> {
+    async fn delete_table_metadata(&self, schema: &str, table: &str) -> Result<()> {
         let sqlite_conn = SqliteConnWrapper::new(&self.database_uri).await?;
         let mut tx = sqlite_conn.pool.begin().await?;
 
         // Delete from metadata table.
         let rows_affected =
-            sqlx::query("DELETE FROM tables WHERE database_id = ? AND table_id = ?")
-                .bind(database_id)
-                .bind(table_id)
+            sqlx::query(r#"DELETE FROM tables  WHERE "schema" = ? AND "table" = ?"#)
+                .bind(schema)
+                .bind(table)
                 .execute(&mut *tx)
                 .await?
                 .rows_affected();
@@ -189,9 +189,9 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         }
 
         // Delete from secret table.
-        sqlx::query("DELETE FROM secrets WHERE database_id = ? AND table_id = ?")
-            .bind(database_id)
-            .bind(table_id)
+        sqlx::query(r#"DELETE FROM secrets WHERE "schema" = ? AND "table" = ?"#)
+            .bind(schema)
+            .bind(table)
             .execute(&mut *tx)
             .await?;
 

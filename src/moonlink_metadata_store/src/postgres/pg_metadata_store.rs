@@ -36,9 +36,9 @@ impl MetadataStoreTrait for PgMetadataStore {
             .query(
                 "
                 SELECT 
-                    t.database_id,
-                    t.table_id,
-                    t.table_name,
+                    t.schema,
+                    t.table,
+                    t.src_table_name,
                     t.uri,
                     t.config,
                     s.secret_type,
@@ -49,8 +49,8 @@ impl MetadataStoreTrait for PgMetadataStore {
                     s.project
                 FROM tables t
                 LEFT JOIN secrets s
-                    ON t.database_id = s.database_id
-                    AND t.table_id = s.table_id
+                    ON t.schema = s.schema
+                    AND t.table = s.table
                 ",
                 &[],
             )
@@ -58,9 +58,9 @@ impl MetadataStoreTrait for PgMetadataStore {
 
         let mut metadata_entries = Vec::with_capacity(rows.len());
         for row in rows {
-            let database_id: u32 = row.get("database_id");
-            let table_id: u32 = row.get("table_id");
-            let src_table_name: String = row.get("table_name");
+            let schema: String = row.get("schema");
+            let table: String = row.get("table");
+            let src_table_name: String = row.get("src_table_name");
             let src_table_uri: String = row.get("uri");
             let serialized_config: serde_json::Value = row.get("config");
             let secret_type: Option<String> = row.get("secret_type");
@@ -78,8 +78,8 @@ impl MetadataStoreTrait for PgMetadataStore {
                 config_utils::deserialize_moonlink_table_config(serialized_config, secret_entry)?;
 
             let metadata_entry = TableMetadataEntry {
-                database_id,
-                table_id,
+                schema,
+                table,
                 src_table_name,
                 src_table_uri,
                 moonlink_table_config,
@@ -92,10 +92,10 @@ impl MetadataStoreTrait for PgMetadataStore {
 
     async fn store_table_metadata(
         &self,
-        database_id: u32,
-        table_id: u32,
-        table_name: &str,
-        table_uri: &str,
+        schema: &str,
+        table: &str,
+        src_table_name: &str,
+        src_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
@@ -126,13 +126,13 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                "INSERT INTO tables (database_id, table_id, table_name, uri, config)
+                "INSERT INTO tables (schema, table, src_table_name, src_uri, config)
                 VALUES ($1, $2, $3, $4, $5)",
                 &[
-                    &database_id,
-                    &table_id,
-                    &table_name,
-                    &table_uri,
+                    &schema,
+                    &table,
+                    &src_table_name,
+                    &src_uri,
                     &PgJson(&serialized_config),
                 ],
             )
@@ -146,11 +146,11 @@ impl MetadataStoreTrait for PgMetadataStore {
             let rows_affected = pg_client
                 .postgres_client
                 .execute(
-                    "INSERT INTO secrets (database_id, table_id, secret_type, key_id, secret, endpoint, region, project)
+                    "INSERT INTO secrets (schema, table, secret_type, key_id, secret, endpoint, region, project)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
                     &[
-                        &database_id,
-                        &table_id,
+                        &schema,
+                        &table,
                         &table_secret.get_secret_type(),
                         &table_secret.key_id,
                         &table_secret.secret,
@@ -171,7 +171,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         Ok(())
     }
 
-    async fn delete_table_metadata(&self, database_id: u32, table_id: u32) -> Result<()> {
+    async fn delete_table_metadata(&self, schema: &str, table: &str) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
 
         // Start a transaction to insert rows into metadata table and secret table.
@@ -181,8 +181,8 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                "DELETE FROM tables WHERE database_id = $1 AND table_id = $2",
-                &[&database_id, &table_id],
+                "DELETE FROM tables WHERE schema = $1 AND table = $2",
+                &[&schema, &table],
             )
             .await?;
         if rows_affected != 1 {
@@ -193,8 +193,8 @@ impl MetadataStoreTrait for PgMetadataStore {
         pg_client
             .postgres_client
             .execute(
-                "DELETE FROM secrets WHERE database_id = $1 AND table_id = $2",
-                &[&database_id, &table_id],
+                "DELETE FROM secrets WHERE schema = $1 AND table = $2",
+                &[&schema, &table],
             )
             .await?;
 

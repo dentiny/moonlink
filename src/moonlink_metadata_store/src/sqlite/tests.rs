@@ -6,12 +6,12 @@ use tempfile::{tempdir, TempDir};
 
 /// Source table uri.
 const SRC_TABLE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
-/// Test database id.
-const DATABASE_ID: u32 = 0;
-/// Test table id.
-const TABLE_ID: u32 = 0;
 /// Test table name.
-const TABLE_NAME: &str = "table";
+const SRC_TABLE_NAME: &str = "src_table";
+/// Test destination table schema.
+const SCHEMA: &str = "dst_schema";
+/// Test destination table id.
+const TABLE: &str = "dst_table";
 
 /// Create a filesystem config for test.
 fn get_storage_config() -> StorageConfig {
@@ -79,8 +79,8 @@ async fn check_persisted_metadata(sqlite_metadata_store: &SqliteMetadataStore) {
         .unwrap();
     assert_eq!(metadata_entries.len(), 1);
     let table_metadata_entry = &metadata_entries[0];
-    assert_eq!(table_metadata_entry.table_id, TABLE_ID);
-    assert_eq!(table_metadata_entry.src_table_name, TABLE_NAME);
+    assert_eq!(table_metadata_entry.table, TABLE);
+    assert_eq!(table_metadata_entry.src_table_name, SRC_TABLE_NAME);
     assert_eq!(table_metadata_entry.src_table_uri, SRC_TABLE_URI);
     assert_eq!(
         table_metadata_entry.moonlink_table_config,
@@ -107,9 +107,9 @@ async fn test_table_metadata_store_and_load() {
     // Store moonlink table config to metadata storage.
     metadata_store
         .store_table_metadata(
-            DATABASE_ID,
-            TABLE_ID,
-            TABLE_NAME,
+            SCHEMA,
+            TABLE,
+            SRC_TABLE_NAME,
             SRC_TABLE_URI,
             moonlink_table_config.clone(),
         )
@@ -132,9 +132,9 @@ async fn test_table_metadata_store_for_duplicate_tables() {
     // Store moonlink table config to metadata storage.
     metadata_store
         .store_table_metadata(
-            DATABASE_ID,
-            TABLE_ID,
-            TABLE_NAME,
+            SCHEMA,
+            TABLE,
+            SRC_TABLE_NAME,
             SRC_TABLE_URI,
             moonlink_table_config.clone(),
         )
@@ -144,9 +144,9 @@ async fn test_table_metadata_store_for_duplicate_tables() {
     // Load and check moonlink table config from metadata config.
     let res = metadata_store
         .store_table_metadata(
-            DATABASE_ID,
-            TABLE_ID,
-            TABLE_NAME,
+            SCHEMA,
+            TABLE,
+            SRC_TABLE_NAME,
             SRC_TABLE_URI,
             moonlink_table_config.clone(),
         )
@@ -178,9 +178,9 @@ async fn test_delete_table_metadata_store() {
     // Store moonlink table config to metadata storage.
     metadata_store
         .store_table_metadata(
-            DATABASE_ID,
-            TABLE_ID,
-            TABLE_NAME,
+            SCHEMA,
+            TABLE,
+            SRC_TABLE_NAME,
             SRC_TABLE_URI,
             moonlink_table_config.clone(),
         )
@@ -192,7 +192,7 @@ async fn test_delete_table_metadata_store() {
 
     // Delete moonlink table config to metadata storage and check.
     metadata_store
-        .delete_table_metadata(DATABASE_ID, TABLE_ID)
+        .delete_table_metadata(SCHEMA, TABLE)
         .await
         .unwrap();
     let metadata_entries = metadata_store
@@ -202,8 +202,6 @@ async fn test_delete_table_metadata_store() {
     assert_eq!(metadata_entries.len(), 0);
 
     // Delete for the second time also fails.
-    let res = metadata_store
-        .delete_table_metadata(DATABASE_ID, TABLE_ID)
-        .await;
+    let res = metadata_store.delete_table_metadata(SCHEMA, TABLE).await;
     assert!(res.is_err());
 }
