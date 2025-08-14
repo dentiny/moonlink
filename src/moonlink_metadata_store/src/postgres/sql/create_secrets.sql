@@ -2,16 +2,16 @@
 BEGIN;
 
 CREATE TABLE secrets (
-    id SERIAL PRIMARY KEY,          -- Unique row identifier
-    database_id oid,                -- Database OID.
-    table_id oid,                   -- Table OID.
+    id SERIAL PRIMARY KEY,          -- Unique row identifier.
+    "schema" TEXT,                  -- Column store schema name.
+    "table" TEXT,                   -- Column store table name.
     secret_type TEXT,               -- One of (S3, GCS)
-    key_id TEXT,        
-    secret TEXT,        
-    project TEXT,          -- (optional)  
+    key_id TEXT,
+    secret TEXT,
+    project TEXT,          -- (optional)
     endpoint TEXT,         -- (optional)
     region TEXT            -- (optional)
 );
 
--- Index to enable query on (database_id, table_id).
-CREATE INDEX idx_secrets_uid_oid ON secrets (database_id, table_id);
+-- Index to enable query on ("schema", "table").
+CREATE INDEX idx_secrets_uid_oid ON secrets ("schema", "table");

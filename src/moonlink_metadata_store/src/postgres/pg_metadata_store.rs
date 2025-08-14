@@ -34,12 +34,12 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows = pg_client
             .postgres_client
             .query(
-                "
+                r#"
                 SELECT 
-                    t.schema,
-                    t.table,
+                    t."schema",
+                    t."table",
                     t.src_table_name,
-                    t.uri,
+                    t.src_table_uri,
                     t.config,
                     s.secret_type,
                     s.key_id,
@@ -49,9 +49,9 @@ impl MetadataStoreTrait for PgMetadataStore {
                     s.project
                 FROM tables t
                 LEFT JOIN secrets s
-                    ON t.schema = s.schema
-                    AND t.table = s.table
-                ",
+                    ON t."schema" = s."schema"
+                    AND t."table" = s."table"
+                "#,
                 &[],
             )
             .await?;
@@ -61,7 +61,7 @@ impl MetadataStoreTrait for PgMetadataStore {
             let schema: String = row.get("schema");
             let table: String = row.get("table");
             let src_table_name: String = row.get("src_table_name");
-            let src_table_uri: String = row.get("uri");
+            let src_table_uri: String = row.get("src_table_uri");
             let serialized_config: serde_json::Value = row.get("config");
             let secret_type: Option<String> = row.get("secret_type");
             let secret_entry: Option<MoonlinkTableSecret> = {
@@ -95,7 +95,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         schema: &str,
         table: &str,
         src_table_name: &str,
-        src_uri: &str,
+        src_table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
@@ -126,13 +126,13 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                "INSERT INTO tables (schema, table, src_table_name, src_uri, config)
-                VALUES ($1, $2, $3, $4, $5)",
+                r#"INSERT INTO tables ("schema", "table", src_table_name, src_table_uri, config)
+                VALUES ($1, $2, $3, $4, $5)"#,
                 &[
                     &schema,
                     &table,
                     &src_table_name,
-                    &src_uri,
+                    &src_table_uri,
                     &PgJson(&serialized_config),
                 ],
             )
@@ -146,8 +146,8 @@ impl MetadataStoreTrait for PgMetadataStore {
             let rows_affected = pg_client
                 .postgres_client
                 .execute(
-                    "INSERT INTO secrets (schema, table, secret_type, key_id, secret, endpoint, region, project)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                    r#"INSERT INTO secrets ("schema", "table", secret_type, key_id, secret, endpoint, region, project)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
                     &[
                         &schema,
                         &table,
@@ -181,7 +181,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                "DELETE FROM tables WHERE schema = $1 AND table = $2",
+                r#"DELETE FROM tables WHERE "schema" = $1 AND "table" = $2"#,
                 &[&schema, &table],
             )
             .await?;
@@ -193,7 +193,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         pg_client
             .postgres_client
             .execute(
-                "DELETE FROM secrets WHERE schema = $1 AND table = $2",
+                r#"DELETE FROM secrets WHERE "schema" = $1 AND "table" = $2"#,
                 &[&schema, &table],
             )
             .await?;
