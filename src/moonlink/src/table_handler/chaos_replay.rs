@@ -5,6 +5,7 @@ use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCa
 use crate::storage::mooncake_table::replay::replay_events::{
     BackgroundEventId, MooncakeTableEvent,
 };
+use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::MooncakeTable;
@@ -33,10 +34,8 @@ struct CompletedFlush {
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct CompletedMooncakeSnapshot {
-    /// Mooncake snapshot LSN.
-    lsn: u64,
-    /// Mooncake snapshot dump.
-    current_snapshot: MooncakeSnapshot,
+    /// Mooncake snapshot result.
+    mooncake_snapshot_result: MooncakeSnapshotOutput,
 }
 #[derive(Clone, Debug)]
 struct CompletedIcebergSnapshot {
@@ -113,7 +112,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_69qe84zbvcsj";
+    let replay_filepath = "/tmp/chaos_test_lf2x67o3m4mg";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -198,43 +197,36 @@ pub(crate) async fn replay() {
                     mooncake_snapshot_result,
                 } => {
                     let completed_mooncake_snapshot = CompletedMooncakeSnapshot {
-                        lsn: mooncake_snapshot_result.commit_lsn,
-                        current_snapshot: mooncake_snapshot_result.current_snapshot.unwrap(),
+                        mooncake_snapshot_result,
                     };
 
                     // Fill in background tasks payload to fill in.
                     if let Some(iceberg_snapshot_payload) =
-                        mooncake_snapshot_result.iceberg_snapshot_payload
+                        &completed_mooncake_snapshot.mooncake_snapshot_result.iceberg_snapshot_payload
                     {
-                        println!(
-                            "receive iceberg snapshot payload id = {}",
-                            iceberg_snapshot_payload.id
-                        );
                         let mut guard = pending_iceberg_snapshot_payloads.lock().await;
                         assert!(guard
-                            .insert(iceberg_snapshot_payload.id, iceberg_snapshot_payload)
+                            .insert(iceberg_snapshot_payload.id, iceberg_snapshot_payload.clone())
                             .is_none());
                     }
-                    match mooncake_snapshot_result.file_indices_merge_payload {
+                    match &completed_mooncake_snapshot.mooncake_snapshot_result.file_indices_merge_payload {
                         TableMaintenanceStatus::Payload(payload) => {
-                            println!("receive index merge payload id = {}", payload.id);
                             let mut guard = pending_index_merge_payloads.lock().await;
-                            assert!(guard.insert(payload.id, payload).is_none());
+                            assert!(guard.insert(payload.id, payload.clone()).is_none());
                         }
                         _ => {}
                     }
-                    match mooncake_snapshot_result.data_compaction_payload {
+                    match &completed_mooncake_snapshot.mooncake_snapshot_result.data_compaction_payload {
                         TableMaintenanceStatus::Payload(payload) => {
-                            println!("receive data compaction payload id = {}", payload.id);
                             let mut guard = pending_data_compaction_payloads.lock().await;
-                            assert!(guard.insert(payload.id, payload).is_none());
+                            assert!(guard.insert(payload.id, payload.clone()).is_none());
                         }
                         _ => {}
                     }
 
                     let mut guard = completed_mooncake_snapshots_clone.lock().await;
                     assert!(guard
-                        .insert(mooncake_snapshot_result.id, completed_mooncake_snapshot)
+                        .insert(completed_mooncake_snapshot.mooncake_snapshot_result.id, completed_mooncake_snapshot)
                         .is_none());
                     event_notification.notify_waiters();
                 }
@@ -242,10 +234,6 @@ pub(crate) async fn replay() {
                     iceberg_snapshot_result,
                 } => {
                     let iceberg_snapshot_result = iceberg_snapshot_result.unwrap();
-                    println!(
-                        "receive iceberg snapshot result id = {}",
-                        iceberg_snapshot_result.id
-                    );
                     let mut guard = completed_iceberg_snapshots_clone.lock().await;
                     assert!(guard
                         .insert(
@@ -291,7 +279,7 @@ pub(crate) async fn replay() {
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
-        println!("process replay event: {:?}", replay_table_event);
+        println!("process replay event: {:?}", replay_table_event); // DEBUG
         match replay_table_event {
             // =====================
             // Foreground operations
@@ -401,7 +389,10 @@ pub(crate) async fn replay() {
                     };
                     if let Some(completed_mooncake_snapshot) = completed_mooncake_snapshot {
                         let actual_disk_files = completed_mooncake_snapshot
+                            .mooncake_snapshot_result
                             .current_snapshot
+                            .as_ref()
+                            .unwrap()
                             .disk_files
                             .iter()
                             .map(|cur_disk_file| cur_disk_file.0.file_id())
@@ -410,6 +401,7 @@ pub(crate) async fn replay() {
 
                         // Update mooncake table related states.
                         table.mark_mooncake_snapshot_completed();
+                        table.record_mooncake_snapshot_completion(&completed_mooncake_snapshot.mooncake_snapshot_result);
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.
