@@ -1,5 +1,6 @@
 use crate::row::MoonlinkRow;
 use crate::storage::mooncake_table::replay::replay_events::BackgroundEventId;
+use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 use crate::storage::mooncake_table::DataCompactionPayload;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::DiskSliceWriter;
@@ -7,7 +8,6 @@ use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::FileIndiceMergeResult;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
-
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::wal::WalPersistenceUpdateResult;
 use crate::Result;
@@ -158,22 +158,8 @@ pub enum TableEvent {
     PeriodicalMooncakeTableSnapshot(uuid::Uuid),
     /// Mooncake snapshot completes.
     MooncakeTableSnapshotResult {
-        /// UUID for the current mooncake snapshot operation, used for observability purpose.
-        uuid: uuid::Uuid,
-        /// Background event id.
-        id: BackgroundEventId,
-        /// Mooncake snapshot LSN.
-        lsn: u64,
-        /// Payload used to create an iceberg snapshot.
-        iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
-        /// Payload used to trigger an index merge.
-        file_indice_merge_payload: IndexMergeMaintenanceStatus,
-        /// Payload used to trigger a data compaction.
-        data_compaction_payload: DataCompactionMaintenanceStatus,
-        /// Evicted files to delete.
-        evicted_files_to_delete: EvictedFiles,
-        /// Optional snapshot dump.
-        current_snapshot: Option<MooncakeSnapshot>,
+        /// Mooncake snapshot result.
+        mooncake_snapshot_result: MooncakeSnapshotOutput,
     },
     /// Regular iceberg persistence.
     RegularIcebergSnapshot {

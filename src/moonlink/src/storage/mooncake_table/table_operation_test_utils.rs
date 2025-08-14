@@ -191,6 +191,7 @@ pub(crate) async fn perform_index_merge_for_test(
 
     table.set_file_indices_merge_res(index_merge_result);
     assert!(table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -224,6 +225,7 @@ pub(crate) async fn perform_data_compaction_for_test(
 
     table.set_data_compaction_res(data_compaction_result);
     assert!(table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -258,22 +260,15 @@ pub(crate) async fn sync_mooncake_snapshot(
     let notification = receiver.recv().await.unwrap();
     table.mark_mooncake_snapshot_completed();
     if let TableEvent::MooncakeTableSnapshotResult {
-        uuid: _,
-        id: _,
-        lsn,
-        current_snapshot: _,
-        iceberg_snapshot_payload,
-        file_indice_merge_payload,
-        data_compaction_payload,
-        evicted_files_to_delete,
+        mooncake_snapshot_result
     } = notification
     {
         (
-            lsn,
-            iceberg_snapshot_payload,
-            file_indice_merge_payload,
-            data_compaction_payload,
-            evicted_files_to_delete.files,
+            mooncake_snapshot_result.lsn,
+            mooncake_snapshot_result.iceberg_snapshot_payload,
+            mooncake_snapshot_result.file_indice_merge_payload,
+            mooncake_snapshot_result.data_compaction_payload,
+            mooncake_snapshot_result.evicted_files_to_delete.files,
         )
     } else {
         panic!("Expected mooncake snapshot completion notification, but get others.");

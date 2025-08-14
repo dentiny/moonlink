@@ -13,6 +13,7 @@ use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedR
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
+use crate::storage::mooncake_table::replay::replay_events::BackgroundEventId;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::BatchIdCounter;
 use crate::storage::mooncake_table::MoonlinkRow;
@@ -93,7 +94,12 @@ pub struct PuffinDeletionBlobAtRead {
     pub blob_size: u32,
 }
 
+#[derive(Clone, Debug)]
 pub(crate) struct MooncakeSnapshotOutput {
+    /// Table event id.
+    pub(crate) id: BackgroundEventId,
+    /// UUID for the current mooncake snapshot result.
+    pub(crate) uuid: uuid::Uuid,
     /// Committed LSN for mooncake snapshot.
     pub(crate) commit_lsn: u64,
     /// Iceberg snapshot payload.
@@ -452,6 +458,8 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
+        // Validate event id is assigned.
+        assert!(opt.id.is_some());
         // Validate mooncake table operation invariants.
         self.validate_mooncake_table_invariants(&task, &opt);
         // Validate persistence results.
@@ -598,6 +606,8 @@ impl SnapshotTableState {
         }
 
         MooncakeSnapshotOutput {
+            id: opt.id,
+            uuid: opt.uuid,
             commit_lsn: self.current_snapshot.snapshot_version,
             iceberg_snapshot_payload,
             data_compaction_payload,
