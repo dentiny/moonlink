@@ -115,7 +115,7 @@ where
 
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
     /// If the requested database or table doesn't exist, return [`TableNotFound`] error.
-    pub async fn create_snapshot(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
+    pub async fn create_snapshot(&self, schema: String, table: String, lsn: u64) -> Result<()> {
         let rx = {
             let mut manager = self.replication_manager.write().await;
             let mooncake_table_id = MooncakeTableId {
@@ -140,19 +140,17 @@ where
     /// * table_config: json serialized table configuration.
     pub async fn create_table(
         &self,
-        database_id: D,
-        table_id: T,
+        schema: String,
+        table: String,
         src_table_name: String,
         src_uri: String,
         table_config: String,
         input_schema: Option<Schema>,
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
-            database_id: database_id.clone(),
-            table_id,
+            schema,
+            table,
         };
-        let database_id = mooncake_table_id.get_database_id_value();
-        let table_id = mooncake_table_id.get_table_id_value();
 
         // Add mooncake table to replication, and create corresponding mooncake table.
         let table_config = TableConfig::from_json_or_default(&table_config, &self.base_path)?;
@@ -203,9 +201,9 @@ where
         Ok(())
     }
 
-    pub async fn drop_table(&self, database_id: D, table_id: T) {
+    pub async fn drop_table(&self, schema: String, table: String) {
         let mooncake_table_id = MooncakeTableId {
-            database_id: database_id.clone(),
+            schema: Stringatabase_id.clone(),
             table_id,
         };
         let database_id = mooncake_table_id.get_database_id_value();
@@ -232,7 +230,7 @@ where
 
     /// Get the current mooncake table schema.
     /// If the requested database or table doesn't exist, return [`TableNotFound`] error.
-    pub async fn get_table_schema(&self, database_id: D, table_id: T) -> Result<Arc<Schema>> {
+    pub async fn get_table_schema(&self, schema: String, table: String) -> Result<Arc<Schema>> {
         let table_schema = {
             let manager = self.replication_manager.read().await;
             let mooncake_table_id = MooncakeTableId {
@@ -273,7 +271,7 @@ where
     /// - "data": perform a data compaction, only data files smaller than a threshold, or with too many deleted rows will be compacted.
     /// - "index": perform an index merge operation, only index files smaller than a threshold, or with too many deleted rows will be merged.    
     /// - "full": perform a full compaction, which merges all data files and all index files, whatever file size they are of.
-    pub async fn optimize_table(&self, database_id: D, table_id: T, mode: &str) -> Result<()> {
+    pub async fn optimize_table(&self, schema: String, table: String, mode: &str) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
             let mooncake_table_id = MooncakeTableId {
@@ -301,8 +299,8 @@ where
     /// If the requested database or table doesn't exist, return [`TableNotFound`] error.
     pub async fn scan_table(
         &self,
-        database_id: D,
-        table_id: T,
+        schema: String,
+        table: String,
         lsn: Option<u64>,
     ) -> Result<Arc<ReadState>> {
         let read_state = {
@@ -320,7 +318,7 @@ where
 
     /// Wait for the WAL flush LSN to reach the requested LSN. Note that WAL flush LSN will update
     /// up till the latest commit that has been persisted in to the WAL.
-    pub async fn wait_for_wal_flush(&self, database_id: D, table_id: T, lsn: u64) -> Result<()> {
+    pub async fn wait_for_wal_flush(&self, schema: String, table: String, lsn: u64) -> Result<()> {
         let mut manager = self.replication_manager.write().await;
         let mooncake_table_id = MooncakeTableId {
             database_id,
