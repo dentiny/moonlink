@@ -284,7 +284,7 @@ mod tests {
         let table_id: u32 = metadata_entries[0]
             .table
             .parse()
-            .expect(&format!("not a valid value: {}", metadata_entries[0].table));
+            .unwrap_or_else(|_| panic!("not a valid value: {}", metadata_entries[0].table));
         assert_eq!(table_id, TABLE_ID as u32);
         assert_eq!(
             metadata_entries[0]

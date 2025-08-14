@@ -29,19 +29,19 @@ where
             metadata_entry
                 .schema
                 .parse()
-                .expect(&format!("not a valid value: {}", metadata_entry.schema)),
+                .unwrap_or_else(|_| panic!("not a valid value: {}", metadata_entry.schema)),
         ),
         table_id: T::from(
             metadata_entry
                 .table
                 .parse()
-                .expect(&format!("not a valid value: {}", metadata_entry.table)),
+                .unwrap_or_else(|_| panic!("not a valid value: {}", metadata_entry.table)),
         ),
     };
     let table_id: u32 = metadata_entry
         .table
         .parse()
-        .expect(&format!("not a valid value: {}", metadata_entry.table));
+        .unwrap_or_else(|_| panic!("not a valid value: {}", metadata_entry.table));
     replication_manager
         .add_table(
             &metadata_entry.src_table_uri,
