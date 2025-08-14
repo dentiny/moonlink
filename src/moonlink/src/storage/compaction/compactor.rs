@@ -393,6 +393,7 @@ impl CompactionBuilder {
         // All rows have been deleted.
         if old_record_loc_to_new_mapping.is_empty() {
             return Ok(DataCompactionResult {
+                id: self.compaction_payload.id,
                 uuid: self.compaction_payload.uuid,
                 remapped_data_files: old_record_loc_to_new_mapping,
                 old_data_files,
@@ -417,6 +418,7 @@ impl CompactionBuilder {
             .await;
 
         Ok(DataCompactionResult {
+            id: self.compaction_payload.id,
             uuid: self.compaction_payload.uuid,
             remapped_data_files: old_record_loc_to_new_mapping,
             old_data_files,

@@ -507,6 +507,7 @@ impl MooncakeTable {
 
         let non_streaming_batch_id_counter = Arc::new(BatchIdCounter::new(false));
         let streaming_batch_id_counter = Arc::new(BatchIdCounter::new(true));
+        let event_id_assigner = EventIdAssigner::new();
 
         Ok(Self {
             mem_slice: MemSlice::new(
@@ -524,6 +525,7 @@ impl MooncakeTable {
                     table_filesystem_accessor,
                     current_snapshot,
                     Arc::clone(&non_streaming_batch_id_counter),
+                    event_id_assigner.clone(),
                 )
                 .await?,
             )),
@@ -541,7 +543,7 @@ impl MooncakeTable {
             wal_manager,
             ongoing_flush_lsns: BTreeSet::new(),
             event_replay_tx: None,
-            event_id_assigner: EventIdAssigner::new(),
+            event_id_assigner,
         })
     }
 
@@ -1199,6 +1201,7 @@ impl MooncakeTable {
                 .build_from_merge(file_indice_merge_payload.file_indices.clone(), cur_file_id)
                 .await;
             let index_merge_result = FileIndiceMergeResult {
+                id: table_event_id,
                 uuid: file_indice_merge_payload.uuid,
                 old_file_indices: file_indice_merge_payload.file_indices,
                 new_file_indices: vec![merged],
@@ -1438,6 +1441,7 @@ impl MooncakeTable {
         );
 
         let snapshot_result = IcebergSnapshotResult {
+            id: table_event_id,
             uuid,
             table_manager: Some(iceberg_table_manager),
             flush_lsn,
@@ -1519,6 +1523,7 @@ mod mooncake_tests {
     fn test_flush_lsn_assertion() {
         // Only iceberg imported result.
         let iceberg_snapshot_result = IcebergSnapshotResult {
+            id: 0, // Unused.
             uuid: uuid::Uuid::new_v4(),
             table_manager: None,
             flush_lsn: 1,
