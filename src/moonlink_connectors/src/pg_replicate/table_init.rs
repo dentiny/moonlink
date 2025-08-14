@@ -15,8 +15,18 @@ use moonlink::{
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, mpsc::Sender, oneshot, watch};
+
+/// Used to assign unique monotonically increasing id to mooncake table.
+static NEXT_TABLE_ID: AtomicU32 = AtomicU32::new(0);
+
+/// Get the next unique table id to use.
+#[inline]
+pub fn get_next_table_id() -> u32 {
+    NEXT_TABLE_ID.fetch_add(1, Ordering::SeqCst)
+}
 
 /// Components required to create a mooncake table.
 pub struct TableComponents {
@@ -61,10 +71,9 @@ async fn recreate_directory(dir: &PathBuf) -> Result<()> {
 /// Build all components needed to replicate `table_schema`.
 pub async fn build_table_components(
     mooncake_table_id: String,
-    table_id: u32,
     arrow_schema: ArrowSchema,
     identity: IdentityProp,
-    table_name: String,
+    src_table_name: String,
     src_table_id: SrcTableId,
     base_path: &str,
     replication_state: &ReplicationState,
@@ -110,8 +119,8 @@ pub async fn build_table_components(
 
     let table = MooncakeTable::new(
         arrow_schema,
-        table_name,
-        table_id,
+        mooncake_table_id,
+        get_next_table_id(),
         write_cache_path,
         identity,
         table_components

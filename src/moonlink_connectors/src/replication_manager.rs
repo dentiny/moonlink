@@ -53,7 +53,6 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         &mut self,
         src_uri: &str,
         mooncake_table_id: T,
-        table_id: u32,
         table_name: &str,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
@@ -81,7 +80,6 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
             .add_table_replication(
                 table_name,
                 &mooncake_table_id,
-                table_id,
                 moonlink_table_config,
                 read_state_filepath_remap,
                 is_recovery,
@@ -108,14 +106,13 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         &mut self,
         src_uri: &str,
         mooncake_table_id: T,
-        table_id: u32,
-        table_name: &str,
+        src_table_name: &str,
         arrow_schema: arrow_schema::Schema,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
         is_recovery: bool,
     ) -> Result<()> {
-        debug!(%src_uri, table_name, "adding REST API table through manager");
+        debug!(%src_uri, src_table_name, "adding REST API table through manager");
 
         // Fail if REST API connection doesn't exist
         if !self.connections.contains_key(src_uri) {
@@ -128,9 +125,8 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
 
         let src_table_id = replication_connection
             .add_table_api(
-                table_name,
+                src_table_name,
                 &mooncake_table_id,
-                table_id,
                 arrow_schema,
                 moonlink_table_config,
                 read_state_filepath_remap,

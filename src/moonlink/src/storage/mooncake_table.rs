@@ -87,6 +87,7 @@ pub struct TableMetadata {
     /// table name
     pub(crate) name: String,
     /// table id
+    /// Notice it's transient, which means it's subject to change after recovery.
     pub(crate) table_id: u32,
     /// table schema
     pub(crate) schema: Arc<Schema>,

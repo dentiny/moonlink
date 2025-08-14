@@ -165,7 +165,6 @@ where
                     .add_rest_table(
                         &src_uri,
                         mooncake_table_id,
-                        table_id,
                         &src_table_name,
                         input_schema.expect("arrow_schema is required for REST API"),
                         moonlink_table_config.clone(),
@@ -178,7 +177,6 @@ where
                     .add_table(
                         &src_uri,
                         mooncake_table_id,
-                        table_id,
                         &src_table_name,
                         moonlink_table_config.clone(),
                         self.read_state_filepath_remap.clone(),

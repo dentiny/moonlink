@@ -346,7 +346,6 @@ impl PostgresConnection {
         &self,
         table_name: &str,
         mooncake_table_id: &T,
-        table_id: u32,
         moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
         table_base_path: &str,
@@ -371,7 +370,6 @@ impl PostgresConnection {
 
         let mut table_resources = build_table_components(
             mooncake_table_id.to_string(),
-            table_id,
             arrow_schema,
             identity,
             table_name.to_string(),

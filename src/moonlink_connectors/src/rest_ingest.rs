@@ -23,7 +23,7 @@ pub type SrcTableId = u32;
 #[derive(Debug)]
 pub enum RestCommand {
     AddTable {
-        table_name: String,
+        src_table_name: String,
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
         event_sender: mpsc::Sender<TableEvent>,
@@ -32,7 +32,7 @@ pub enum RestCommand {
         wal_flush_lsn_rx: watch::Receiver<u64>,
     },
     DropTable {
-        table_name: String,
+        src_table_name: String,
         src_table_id: SrcTableId,
     },
     Shutdown,
@@ -74,7 +74,7 @@ impl RestApiConnection {
     #[allow(clippy::too_many_arguments)]
     pub async fn add_table(
         &self,
-        table_name: String,
+        src_table_name: String,
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
         event_sender: mpsc::Sender<TableEvent>,
@@ -83,7 +83,7 @@ impl RestApiConnection {
         wal_flush_lsn_rx: watch::Receiver<u64>,
     ) -> Result<()> {
         let command = RestCommand::AddTable {
-            table_name,
+            src_table_name,
             src_table_id,
             schema,
             event_sender,
@@ -101,9 +101,9 @@ impl RestApiConnection {
     }
 
     /// Drop a table from the REST source and sink (sends command to event loop)
-    pub async fn drop_table(&self, src_table_id: SrcTableId, table_name: &str) -> Result<()> {
+    pub async fn drop_table(&self, src_table_id: SrcTableId, src_table_name: &str) -> Result<()> {
         let command = RestCommand::DropTable {
-            table_name: table_name.to_string(),
+            src_table_name: src_table_name.to_string(),
             src_table_id,
         };
 
@@ -160,27 +160,27 @@ pub async fn run_rest_event_loop(
     loop {
         tokio::select! {
             Some(cmd) = cmd_rx.recv() => match cmd {
-                RestCommand::AddTable { table_name, src_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx, wal_flush_lsn_rx } => {
-                    debug!("Adding REST table '{}' with src_table_id {}", table_name, src_table_id);
+                RestCommand::AddTable { src_table_name, src_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx, wal_flush_lsn_rx } => {
+                    debug!("Adding REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Add to sink (handles table events)
                     sink.add_table(src_table_id, event_sender, commit_lsn_tx);
 
                     // Add to source (handles schema and request processing)
-                    rest_source.add_table(table_name.clone(), src_table_id, schema);
+                    rest_source.add_table(src_table_name.clone(), src_table_id, schema);
 
                     _flush_lsn_rxs.insert(src_table_id, flush_lsn_rx);
                     _wal_flush_lsn_rxs.insert(src_table_id, wal_flush_lsn_rx);
 
                 }
-                RestCommand::DropTable { table_name, src_table_id } => {
-                    debug!("Dropping REST table '{}' with src_table_id {}", table_name, src_table_id);
+                RestCommand::DropTable { src_table_name, src_table_id } => {
+                    debug!("Dropping REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Remove from sink
                     sink.drop_table(src_table_id);
 
                     // Remove from source
-                    rest_source.remove_table(&table_name);
+                    rest_source.remove_table(&src_table_name);
                     _flush_lsn_rxs.remove(&src_table_id);
                     _wal_flush_lsn_rxs.remove(&src_table_id);
                 }

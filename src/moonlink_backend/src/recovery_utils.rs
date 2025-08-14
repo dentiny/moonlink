@@ -38,15 +38,10 @@ where
                 .unwrap_or_else(|_| panic!("not a valid value: {}", metadata_entry.table)),
         ),
     };
-    let table_id: u32 = metadata_entry
-        .table
-        .parse()
-        .unwrap_or_else(|_| panic!("not a valid value: {}", metadata_entry.table));
     replication_manager
         .add_table(
             &metadata_entry.src_table_uri,
             mooncake_table_id,
-            table_id,
             &metadata_entry.src_table_name,
             metadata_entry.moonlink_table_config,
             read_state_filepath_remap,
