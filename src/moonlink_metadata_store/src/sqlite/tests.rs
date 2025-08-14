@@ -97,6 +97,36 @@ fn get_sqlite_database_filepath(tmp_dir: &TempDir) -> String {
 }
 
 #[tokio::test]
+async fn test_metadata_table_exists() {
+    let tmp_dir = tempdir().unwrap();
+    let sqlite_path = get_sqlite_database_filepath(&tmp_dir);
+
+    let metadata_store = SqliteMetadataStore::new(sqlite_path.clone()).await.unwrap();
+    let moonlink_table_config = get_moonlink_table_config();
+
+    // Check metadata table existence.
+    let exists = metadata_store.metadata_table_exists().await.unwrap();
+    assert!(!exists);
+
+    // Store moonlink table config to metadata storage.
+    metadata_store
+        .store_table_metadata(
+            SCHEMA,
+            TABLE,
+            SRC_TABLE_NAME,
+            SRC_TABLE_URI,
+            moonlink_table_config.clone(),
+        )
+        .await
+        .unwrap();
+
+    // Load moonlink table config from metadata config.
+    let exists = metadata_store.metadata_table_exists().await.unwrap();
+    assert!(exists);
+    check_persisted_metadata(&metadata_store).await;
+}
+
+#[tokio::test]
 async fn test_table_metadata_store_and_load() {
     let tmp_dir = tempdir().unwrap();
     let sqlite_path = get_sqlite_database_filepath(&tmp_dir);
