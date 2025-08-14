@@ -1360,7 +1360,6 @@ impl MooncakeTable {
         event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
         table_event_id: u64,
     ) {
-
         println!("iceberg snapshot initialtion at {}", table_event_id);
 
         // Record index merge event initiation.

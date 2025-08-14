@@ -356,12 +356,10 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
 }
 
 pub struct IcebergSnapshotResult {
-    /// Table event id.
+    /// Background event id.
     pub(crate) id: BackgroundEventId,
     /// UUID for the current persistence operation, used for observability purpose.
     pub(crate) uuid: uuid::Uuid,
-    /// Background event id.
-    pub(crate) id: BackgroundEventId,
     /// Table manager is (1) not `Sync` safe; (2) only used at iceberg snapshot creation, so we `move` it around every snapshot.
     pub(crate) table_manager: Option<Box<dyn TableManager>>,
     /// Iceberg flush LSN.
@@ -383,7 +381,6 @@ impl Clone for IcebergSnapshotResult {
         IcebergSnapshotResult {
             id: self.id,
             uuid: self.uuid,
-            id: self.id,
             table_manager: None,
             flush_lsn: self.flush_lsn,
             new_table_schema: self.new_table_schema.clone(),

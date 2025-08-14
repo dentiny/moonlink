@@ -99,7 +99,12 @@ async fn create_mooncake_table_for_replay(
     };
     // TODO(hjiang): Need to support remote storage and random bucket.
     let storage_config = StorageConfig::FileSystem {
-        root_directory: replay_env.iceberg_temp_dir.path().to_str().unwrap().to_string(), 
+        root_directory: replay_env
+            .iceberg_temp_dir
+            .path()
+            .to_str()
+            .unwrap()
+            .to_string(),
         atomic_write_dir: None,
     };
     let iceberg_table_config = get_iceberg_table_config_with_storage_config(storage_config);
@@ -108,7 +113,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_iyo52k8tsoj1";
+    let replay_filepath = "/tmp/chaos_test_69qe84zbvcsj";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -198,14 +203,19 @@ pub(crate) async fn replay() {
                     };
 
                     // Fill in backgroud tasks payload to fill in.
-                    if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
-                        println!("receive iceberg snapshot paylaod id = {}", iceberg_snapshot_payload.id);
+                    if let Some(iceberg_snapshot_payload) =
+                        mooncake_snapshot_result.iceberg_snapshot_payload
+                    {
+                        println!(
+                            "receive iceberg snapshot paylaod id = {}",
+                            iceberg_snapshot_payload.id
+                        );
                         let mut guard = pending_iceberg_snapshot_payloads.lock().await;
                         assert!(guard
                             .insert(iceberg_snapshot_payload.id, iceberg_snapshot_payload)
                             .is_none());
                     }
-                    match file_indice_merge_payload {
+                    match mooncake_snapshot_result.file_indices_merge_payload {
                         TableMaintenanceStatus::Payload(payload) => {
                             println!("receive index merge paylaod id = {}", payload.id);
                             let mut guard = pending_index_merge_payloads.lock().await;
@@ -213,7 +223,7 @@ pub(crate) async fn replay() {
                         }
                         _ => {}
                     }
-                    match data_compaction_payload {
+                    match mooncake_snapshot_result.data_compaction_payload {
                         TableMaintenanceStatus::Payload(payload) => {
                             println!("receive data compaction paylaod id = {}", payload.id);
                             let mut guard = pending_data_compaction_payloads.lock().await;
@@ -232,7 +242,10 @@ pub(crate) async fn replay() {
                     iceberg_snapshot_result,
                 } => {
                     let iceberg_snapshot_result = iceberg_snapshot_result.unwrap();
-                    println!("receive iceberg snapshot result id = {}", iceberg_snapshot_result.id);
+                    println!(
+                        "receive iceberg snapshot result id = {}",
+                        iceberg_snapshot_result.id
+                    );
                     let mut guard = completed_iceberg_snapshots_clone.lock().await;
                     assert!(guard
                         .insert(
