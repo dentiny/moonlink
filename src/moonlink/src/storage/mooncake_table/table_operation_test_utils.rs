@@ -6,6 +6,7 @@ use tokio::sync::mpsc::Receiver;
 use crate::row::MoonlinkRow;
 use crate::storage::io_utils;
 use crate::storage::mooncake_table::disk_slice::DiskSliceWriter;
+use crate::storage::mooncake_table::test_utils_commons::DUMMY_EVENT_ID;
 use crate::storage::mooncake_table::{
     AlterTableRequest, DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload,
     FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult,
@@ -40,7 +41,7 @@ pub(crate) async fn flush_table_and_sync(
             flush_result,
         } => match flush_result {
             Some(Ok(disk_slice)) => {
-                table.apply_flush_result(disk_slice);
+                table.apply_flush_result(disk_slice, DUMMY_EVENT_ID);
             }
             Some(Err(e)) => {
                 error!(error = ?e, "failed to flush disk slice");
@@ -137,7 +138,7 @@ pub(crate) async fn commit_transaction_stream_and_sync(
             flush_result,
         } => match flush_result {
             Some(Ok(disk_slice)) => {
-                table.apply_stream_flush_result(xact_id, disk_slice);
+                table.apply_stream_flush_result(xact_id, disk_slice, DUMMY_EVENT_ID);
             }
             Some(Err(e)) => {
                 error!(error = ?e, "failed to flush disk slice");

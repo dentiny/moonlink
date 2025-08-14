@@ -372,7 +372,28 @@ impl MooncakeTable {
     /// Decrements the pending flush count for this transaction.
     /// Handles commit and abort cleanup.
     /// Removes in memory indices and record batches from the stream state.
-    pub fn apply_stream_flush_result(&mut self, xact_id: u32, mut disk_slice: DiskSliceWriter) {
+    pub fn apply_stream_flush_result(
+        &mut self,
+        xact_id: u32,
+        mut disk_slice: DiskSliceWriter,
+        flush_event_id: BackgroundEventId,
+    ) {
+        // Record events for flush completion.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event = replay_events::create_flush_event_completion(
+                flush_event_id,
+                disk_slice
+                    .output_files()
+                    .iter()
+                    .map(|(file, _)| file.file_id)
+                    .collect(),
+            );
+            event_replay_tx
+                .send(MooncakeTableEvent::FlushCompletion(table_event))
+                .unwrap();
+        }
+
+        // Perform table flush completion notification.
         if let Some(lsn) = disk_slice.lsn() {
             self.remove_ongoing_flush_lsn(lsn);
             self.try_set_next_flush_lsn(lsn);

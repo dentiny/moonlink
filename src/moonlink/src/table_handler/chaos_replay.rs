@@ -83,7 +83,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_judqduy6fjd3";
+    let replay_filepath = "/tmp/chaos_test_iyo52k8tsoj1";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let replay_env = ReplayEnvironment {
@@ -231,9 +231,13 @@ pub(crate) async fn replay() {
                                 .map(|f| f.0.file_id())
                                 .collect::<Vec<_>>();
                             if let Some(xact_id) = completed_flush_event.xact_id {
-                                table.apply_stream_flush_result(xact_id, disk_slice);
+                                table.apply_stream_flush_result(
+                                    xact_id,
+                                    disk_slice,
+                                    flush_completion_event.id,
+                                );
                             } else {
-                                table.apply_flush_result(disk_slice);
+                                table.apply_flush_result(disk_slice, flush_completion_event.id);
                             }
                             // Check newly persisted disk files.
                             let expected_disk_files_count =

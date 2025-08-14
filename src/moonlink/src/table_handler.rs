@@ -660,15 +660,15 @@ impl TableHandler {
                     }
                 }
                 TableEvent::FlushResult {
-                    id: _,
+                    id,
                     xact_id,
                     flush_result,
                 } => match flush_result {
                     Some(Ok(disk_slice)) => {
                         if let Some(xact_id) = xact_id {
-                            table.apply_stream_flush_result(xact_id, disk_slice);
+                            table.apply_stream_flush_result(xact_id, disk_slice, id);
                         } else {
-                            table.apply_flush_result(disk_slice);
+                            table.apply_flush_result(disk_slice, id);
                         }
                     }
                     Some(Err(e)) => {
