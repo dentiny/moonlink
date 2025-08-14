@@ -1093,7 +1093,7 @@ async fn test_chaos_on_local_fs_with_no_background_maintenance() {
         disk_slice_write_chaos_enabled: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 30,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1115,7 +1115,7 @@ async fn test_chaos_on_local_fs_with_index_merge() {
         disk_slice_write_chaos_enabled: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 30,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1137,7 +1137,7 @@ async fn test_chaos_on_local_fs_with_data_compaction() {
         disk_slice_write_chaos_enabled: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 30,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,

@@ -9,7 +9,6 @@ use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::MooncakeTable;
-use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::{
     table_creation_test_utils::*, FileIndiceMergeResult, IcebergSnapshotResult,
 };
