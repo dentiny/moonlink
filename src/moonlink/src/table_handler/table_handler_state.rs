@@ -1,4 +1,3 @@
-use crate::storage::mooncake_table::replay::replay_events::BackgroundEventId;
 /// Table handler state manages table event process states.
 use crate::storage::mooncake_table::AlterTableRequest;
 use crate::storage::mooncake_table::DataCompactionResult;

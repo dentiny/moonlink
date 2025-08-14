@@ -8,7 +8,6 @@ use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::FileIndiceMergeResult;
 use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
-use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::wal::WalPersistenceUpdateResult;
 use crate::Result;
 

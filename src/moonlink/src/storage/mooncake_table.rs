@@ -57,7 +57,7 @@ use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::storage_utils::{FileId, TableId};
 use crate::storage::wal::{WalManager, WalPersistenceUpdateResult};
-use crate::table_notify::{EvictedFiles, TableEvent};
+use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
@@ -510,6 +510,7 @@ impl MooncakeTable {
 
         let non_streaming_batch_id_counter = Arc::new(BatchIdCounter::new(false));
         let streaming_batch_id_counter = Arc::new(BatchIdCounter::new(true));
+        let event_id_assigner = EventIdAssigner::new();
 
         Ok(Self {
             mem_slice: MemSlice::new(
@@ -527,6 +528,7 @@ impl MooncakeTable {
                     table_filesystem_accessor,
                     current_snapshot,
                     Arc::clone(&non_streaming_batch_id_counter),
+                    event_id_assigner.clone(),
                 )
                 .await?,
             )),
@@ -544,7 +546,7 @@ impl MooncakeTable {
             wal_manager,
             ongoing_flush_lsns: BTreeSet::new(),
             event_replay_tx: None,
-            event_id_assigner: EventIdAssigner::new(),
+            event_id_assigner,
         })
     }
 
@@ -698,7 +700,7 @@ impl MooncakeTable {
 
     /// Record index merge completion event.
     pub(crate) fn record_index_merge_completion(&self, file_indices_res: &FileIndiceMergeResult) {
-         if let Some(event_replay_tx) = &self.event_replay_tx {
+        if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event =
                 replay_events::create_index_merge_event_completion(file_indices_res.id);
             event_replay_tx
@@ -707,7 +709,10 @@ impl MooncakeTable {
         }
     }
     /// Record data compaction completion result.
-    pub(crate) fn record_data_compaction_completion(&self, data_compaction_res: &DataCompactionResult) {
+    pub(crate) fn record_data_compaction_completion(
+        &self,
+        data_compaction_res: &DataCompactionResult,
+    ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_data_compaction_event_completion(
                 data_compaction_res.id,
@@ -723,22 +728,26 @@ impl MooncakeTable {
         }
     }
     /// Record mooncake snapshot completion result.
-    pub(crate) fn record_mooncake_snapshot_completion(&self, mooncake_snapshot_res: &MooncakeSnapshotOutput) {
+    pub(crate) fn record_mooncake_snapshot_completion(
+        &self,
+        mooncake_snapshot_res: &MooncakeSnapshotOutput,
+    ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
-            let table_event = replay_events::create_mooncake_snapshot_event_completion(
-                mooncake_snapshot_res.id,
-            );
+            let table_event =
+                replay_events::create_mooncake_snapshot_event_completion(mooncake_snapshot_res.id);
             event_replay_tx
                 .send(MooncakeTableEvent::MooncakeSnapshotCompletion(table_event))
                 .unwrap();
         }
     }
     /// Record iceberg snapshot completion result.
-    pub(crate) fn record_iceberg_snapshot_completion(&self, iceberg_snapshot_res: &IcebergSnapshotResult) {
+    pub(crate) fn record_iceberg_snapshot_completion(
+        &self,
+        iceberg_snapshot_res: &IcebergSnapshotResult,
+    ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
-            let table_event = replay_events::create_iceberg_snapshot_event_completion(
-                iceberg_snapshot_res.id,
-            );
+            let table_event =
+                replay_events::create_iceberg_snapshot_event_completion(iceberg_snapshot_res.id);
             event_replay_tx
                 .send(MooncakeTableEvent::IcebergSnapshotCompletion(table_event))
                 .unwrap();
@@ -748,11 +757,6 @@ impl MooncakeTable {
     /// Get iceberg snapshot flush LSN.
     pub fn get_iceberg_snapshot_lsn(&self) -> Option<u64> {
         self.last_iceberg_snapshot_lsn
-    }
-
-    /// Get event id assigner, so all events are assigned monotonically increasing id.
-    pub fn get_event_id_assigner(&self) -> EventIdAssigner {
-        self.event_id_assigner.clone()
     }
 
     pub(crate) fn get_state_for_reader(
@@ -1228,7 +1232,7 @@ impl MooncakeTable {
         file_indice_merge_payload: FileIndiceMergePayload,
     ) {
         // Record index merge event initiation.
-        let table_event_id = self.event_id_assigner.get_next_event_id();
+        let table_event_id = file_indice_merge_payload.id;
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_index_merge_event_initiation(
                 table_event_id,
@@ -1246,7 +1250,6 @@ impl MooncakeTable {
         let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
 
         // Create a detached task, whose completion will be notified separately.
-        let event_replay_tx = self.event_replay_tx.clone();
         tokio::task::spawn(async move {
             let mut builder = GlobalIndexBuilder::new();
             builder.set_directory(table_directory);
@@ -1254,6 +1257,7 @@ impl MooncakeTable {
                 .build_from_merge(file_indice_merge_payload.file_indices.clone(), cur_file_id)
                 .await;
             let index_merge_result = FileIndiceMergeResult {
+                id: table_event_id,
                 uuid: file_indice_merge_payload.uuid,
                 old_file_indices: file_indice_merge_payload.file_indices,
                 new_file_indices: vec![merged],
@@ -1270,7 +1274,7 @@ impl MooncakeTable {
     /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
         // Record index merge event initiation.
-        let table_event_id = self.event_id_assigner.get_next_event_id();
+        let table_event_id = compaction_payload.id;
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_data_compaction_event_initiation(
                 table_event_id,
@@ -1328,7 +1332,7 @@ impl MooncakeTable {
     async fn create_snapshot_async(
         snapshot: Arc<RwLock<SnapshotTableState>>,
         next_snapshot_task: SnapshotTask,
-        mut opt: SnapshotOption,
+        opt: SnapshotOption,
         table_notify: Sender<TableEvent>,
     ) {
         assert!(opt.id.is_some());
@@ -1480,14 +1484,6 @@ impl MooncakeTable {
             },
         };
 
-        // Record iceberg snapshot event completion.
-        if let Some(event_replay_tx) = &event_replay_tx {
-            let table_event =
-                replay_events::create_iceberg_snapshot_event_completion(table_event_id);
-            event_replay_tx
-                .send(MooncakeTableEvent::IcebergSnapshotCompletion(table_event))
-                .unwrap();
-        }
         // Send back completion notification to table handler.
         table_notify
             .send(TableEvent::IcebergSnapshotResult {
@@ -1529,6 +1525,7 @@ mod mooncake_tests {
     fn test_flush_lsn_assertion() {
         // Only iceberg imported result.
         let iceberg_snapshot_result = IcebergSnapshotResult {
+            id: 0, // Unused.
             uuid: uuid::Uuid::new_v4(),
             table_manager: None,
             flush_lsn: 1,

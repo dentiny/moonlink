@@ -418,7 +418,7 @@ async fn test_state_1_1() {
 
     // Request to persist.
     assert!(!table.create_snapshot(SnapshotOption {
-        id: 0,
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         dump_snapshot: false,
         force_create: false,
@@ -447,7 +447,7 @@ async fn test_state_1_2() {
 
     // Request to persist.
     assert!(!table.create_snapshot(SnapshotOption {
-        id: 0,
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         dump_snapshot: false,
         force_create: false,

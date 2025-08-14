@@ -1937,6 +1937,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
 
     // Create a mooncake snapshot - this will create an iceberg payload
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -1975,6 +1976,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
 
     // Now test that iceberg snapshots can proceed
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2040,6 +2042,7 @@ async fn test_out_of_order_flush_completion_with_iceberg_snapshots() -> Result<(
 
     // Create snapshot and test constraint with min_ongoing_flush_lsn = 10
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2190,6 +2193,7 @@ async fn test_streaming_batch_id_mismatch_with_data_compaction() -> Result<()> {
 
     // Step 9: Force data compaction
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2261,6 +2265,7 @@ async fn test_streaming_empty_batch_filtering() -> Result<()> {
 
     // Create snapshot with data compaction
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2316,6 +2321,7 @@ async fn test_batch_id_removal_assertion_direct() -> Result<()> {
 
     // Step 6: Create a simple snapshot
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2394,6 +2400,7 @@ async fn test_puffin_deletion_blob_inconsistency_assertion() -> Result<()> {
 
     // Step 7: Force data compaction
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2456,6 +2463,7 @@ async fn test_stream_commit_with_ongoing_flush_deletion_remapping() -> Result<()
     // Without the fix, this would fail because deletions in committed_deletion_log
     // get remapped but not applied to batch_deletion_vector
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
@@ -2505,6 +2513,7 @@ async fn test_deletion_align_with_batch() -> Result<()> {
     commit_transaction_stream_and_sync(&mut table, &mut event_completion_rx, xact_id_1, 10).await; // LSN 10 - CommitFlush
 
     let created = table.create_snapshot(SnapshotOption {
+        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,

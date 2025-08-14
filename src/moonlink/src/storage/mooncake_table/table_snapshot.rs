@@ -425,6 +425,8 @@ impl std::fmt::Debug for IcebergSnapshotResult {
 ///
 #[derive(Clone)]
 pub struct FileIndiceMergePayload {
+    /// Table event id.
+    pub(crate) id: BackgroundEventId,
     /// UUID for current index merge operation, used for observability purpose.
     pub(crate) uuid: uuid::Uuid,
     /// File indices to merge.
@@ -434,6 +436,7 @@ pub struct FileIndiceMergePayload {
 impl std::fmt::Debug for FileIndiceMergePayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FileIndiceMergePayload")
+            .field("id", &self.id)
             .field("uuid", &self.uuid)
             .field("file indices count", &self.file_indices.len())
             .finish()

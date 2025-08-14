@@ -139,17 +139,16 @@ pub(crate) async fn replay() {
                     event_notification.notify_waiters();
                 }
                 TableEvent::MooncakeTableSnapshotResult {
-                    lsn,
-                    id,
-                    current_snapshot,
-                    ..
+                    mooncake_snapshot_result,
                 } => {
                     let completed_mooncake_snapshot = CompletedMooncakeSnapshot {
-                        lsn,
-                        current_snapshot: current_snapshot.unwrap(),
+                        lsn: mooncake_snapshot_result.commit_lsn,
+                        current_snapshot: mooncake_snapshot_result.current_snapshot.unwrap(),
                     };
                     let mut guard = completed_mooncake_snapshots_clone.lock().await;
-                    assert!(guard.insert(id, completed_mooncake_snapshot).is_none());
+                    assert!(guard
+                        .insert(mooncake_snapshot_result.id, completed_mooncake_snapshot)
+                        .is_none());
                     event_notification.notify_waiters();
                 }
                 // TODO(hjiang): Implement other background events.

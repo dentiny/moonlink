@@ -25,7 +25,7 @@ pub enum MaintenanceOption {
 /// Options to create mooncake snapshot.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SnapshotOption {
-    /// Table event id, only assigned when a mooncake snapshot creation operation gets created. 
+    /// Table event id, only assigned when a mooncake snapshot creation operation gets created.
     pub(crate) id: Option<BackgroundEventId>,
     /// UUID for the current mooncake snapshot operation.
     pub(crate) uuid: uuid::Uuid,
