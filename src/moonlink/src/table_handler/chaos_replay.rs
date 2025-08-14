@@ -112,7 +112,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_lf2x67o3m4mg";
+    let replay_filepath = "/tmp/chaos_test_jld110a1ijs3";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -201,22 +201,32 @@ pub(crate) async fn replay() {
                     };
 
                     // Fill in background tasks payload to fill in.
-                    if let Some(iceberg_snapshot_payload) =
-                        &completed_mooncake_snapshot.mooncake_snapshot_result.iceberg_snapshot_payload
+                    if let Some(iceberg_snapshot_payload) = &completed_mooncake_snapshot
+                        .mooncake_snapshot_result
+                        .iceberg_snapshot_payload
                     {
                         let mut guard = pending_iceberg_snapshot_payloads.lock().await;
                         assert!(guard
-                            .insert(iceberg_snapshot_payload.id, iceberg_snapshot_payload.clone())
+                            .insert(
+                                iceberg_snapshot_payload.id,
+                                iceberg_snapshot_payload.clone()
+                            )
                             .is_none());
                     }
-                    match &completed_mooncake_snapshot.mooncake_snapshot_result.file_indices_merge_payload {
+                    match &completed_mooncake_snapshot
+                        .mooncake_snapshot_result
+                        .file_indices_merge_payload
+                    {
                         TableMaintenanceStatus::Payload(payload) => {
                             let mut guard = pending_index_merge_payloads.lock().await;
                             assert!(guard.insert(payload.id, payload.clone()).is_none());
                         }
                         _ => {}
                     }
-                    match &completed_mooncake_snapshot.mooncake_snapshot_result.data_compaction_payload {
+                    match &completed_mooncake_snapshot
+                        .mooncake_snapshot_result
+                        .data_compaction_payload
+                    {
                         TableMaintenanceStatus::Payload(payload) => {
                             let mut guard = pending_data_compaction_payloads.lock().await;
                             assert!(guard.insert(payload.id, payload.clone()).is_none());
@@ -226,7 +236,10 @@ pub(crate) async fn replay() {
 
                     let mut guard = completed_mooncake_snapshots_clone.lock().await;
                     assert!(guard
-                        .insert(completed_mooncake_snapshot.mooncake_snapshot_result.id, completed_mooncake_snapshot)
+                        .insert(
+                            completed_mooncake_snapshot.mooncake_snapshot_result.id,
+                            completed_mooncake_snapshot
+                        )
                         .is_none());
                     event_notification.notify_waiters();
                 }
@@ -279,7 +292,6 @@ pub(crate) async fn replay() {
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
-        println!("process replay event: {:?}", replay_table_event); // DEBUG
         match replay_table_event {
             // =====================
             // Foreground operations
@@ -401,7 +413,9 @@ pub(crate) async fn replay() {
 
                         // Update mooncake table related states.
                         table.mark_mooncake_snapshot_completed();
-                        table.record_mooncake_snapshot_completion(&completed_mooncake_snapshot.mooncake_snapshot_result);
+                        table.record_mooncake_snapshot_completion(
+                            &completed_mooncake_snapshot.mooncake_snapshot_result,
+                        );
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.
