@@ -1350,6 +1350,9 @@ impl MooncakeTable {
         event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
         table_event_id: u64,
     ) {
+
+        println!("iceberg snapshot initialtion at {}", table_event_id);
+
         // Record index merge event initiation.
         if let Some(event_replay_tx) = &event_replay_tx {
             let table_event = replay_events::create_iceberg_snapshot_event_initiation(
@@ -1439,6 +1442,8 @@ impl MooncakeTable {
             new_file_indices_cutoff_index_3,
             iceberg_persistence_res.remote_file_indices.len()
         );
+
+        println!("iceberg snapshot completes at id {}", table_event_id);
 
         let snapshot_result = IcebergSnapshotResult {
             id: table_event_id,

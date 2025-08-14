@@ -15,7 +15,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_notify::{TableEvent, TableMaintenanceStatus};
-use crate::Result;
+use crate::{Result, StorageConfig};
 
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
@@ -59,6 +59,7 @@ struct CompletedDataCompaction {
 struct ReplayEnvironment {
     cache_temp_dir: TempDir,
     table_temp_dir: TempDir,
+    iceberg_temp_dir: TempDir,
 }
 
 fn create_disk_writer_config() -> DiskSliceWriterConfig {
@@ -96,19 +97,25 @@ async fn create_mooncake_table_for_replay(
     } else {
         ObjectStorageCache::default_for_test(&replay_env.cache_temp_dir)
     };
-    let iceberg_table_config =
-        get_iceberg_table_config_with_storage_config(replay_table_metadata.storage_config.clone());
+    // TODO(hjiang): Need to support remote storage and random bucket.
+    let storage_config = StorageConfig::FileSystem {
+        root_directory: replay_env.iceberg_temp_dir.path().to_str().unwrap().to_string(), 
+        atomic_write_dir: None,
+    };
+    let iceberg_table_config = get_iceberg_table_config_with_storage_config(storage_config);
     create_mooncake_table(table_metadata, iceberg_table_config, object_storage_cache).await
 }
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_fxcgmjl0kg4n";
+    let replay_filepath = "/tmp/chaos_test_iyo52k8tsoj1";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
+    let iceberg_temp_dir = tempdir().unwrap();
     let replay_env = ReplayEnvironment {
         cache_temp_dir,
         table_temp_dir,
+        iceberg_temp_dir,
     };
 
     // Table event reader.
@@ -198,6 +205,7 @@ pub(crate) async fn replay() {
 
                     // Fill in backgroud tasks payload to fill in.
                     if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
+                        println!("receive iceberg snapshot paylaod id = {}", iceberg_snapshot_payload.id);
                         let mut guard = pending_iceberg_snapshot_payloads.lock().await;
                         assert!(guard
                             .insert(iceberg_snapshot_payload.id, iceberg_snapshot_payload)
@@ -205,6 +213,7 @@ pub(crate) async fn replay() {
                     }
                     match file_indice_merge_payload {
                         TableMaintenanceStatus::Payload(payload) => {
+                            println!("receive index merge paylaod id = {}", payload.id);
                             let mut guard = pending_index_merge_payloads.lock().await;
                             assert!(guard.insert(payload.id, payload).is_none());
                         }
@@ -212,6 +221,7 @@ pub(crate) async fn replay() {
                     }
                     match data_compaction_payload {
                         TableMaintenanceStatus::Payload(payload) => {
+                            println!("receive data compaction paylaod id = {}", payload.id);
                             let mut guard = pending_data_compaction_payloads.lock().await;
                             assert!(guard.insert(payload.id, payload).is_none());
                         }
@@ -226,6 +236,7 @@ pub(crate) async fn replay() {
                     iceberg_snapshot_result,
                 } => {
                     let iceberg_snapshot_result = iceberg_snapshot_result.unwrap();
+                    println!("receive iceberg snapshot result id = {}", iceberg_snapshot_result.id);
                     let mut guard = completed_iceberg_snapshots_clone.lock().await;
                     assert!(guard
                         .insert(

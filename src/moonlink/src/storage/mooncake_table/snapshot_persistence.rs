@@ -33,7 +33,7 @@ impl SnapshotTableState {
         committed_deletion_to_persist: CommittedDeletionToPersist,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
-            id: 0, // Unused.
+            id: self.event_id_assigner.get_next_event_id(),
             uuid: uuid::Uuid::new_v4(),
             flush_lsn,
             new_table_schema: None,
