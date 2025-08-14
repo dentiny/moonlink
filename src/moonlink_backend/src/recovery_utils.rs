@@ -23,15 +23,30 @@ where
     D: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
     T: std::convert::From<u32> + Eq + Hash + Clone + std::fmt::Display,
 {
+    // TODO(hjiang): Store schema and table string in [`MooncakeTableId`].
     let mooncake_table_id = MooncakeTableId {
-        database_id: D::from(metadata_entry.database_id),
-        table_id: T::from(metadata_entry.table_id),
+        database_id: D::from(
+            metadata_entry
+                .schema
+                .parse()
+                .expect(&format!("not a valid value: {}", metadata_entry.schema)),
+        ),
+        table_id: T::from(
+            metadata_entry
+                .table
+                .parse()
+                .expect(&format!("not a valid value: {}", metadata_entry.table)),
+        ),
     };
+    let table_id: u32 = metadata_entry
+        .table
+        .parse()
+        .expect(&format!("not a valid value: {}", metadata_entry.table));
     replication_manager
         .add_table(
             &metadata_entry.src_table_uri,
             mooncake_table_id,
-            metadata_entry.table_id,
+            table_id,
             &metadata_entry.src_table_name,
             metadata_entry.moonlink_table_config,
             read_state_filepath_remap,

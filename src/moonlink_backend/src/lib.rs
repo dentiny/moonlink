@@ -190,10 +190,13 @@ where
         };
 
         // Create metadata store entry.
+        // TODO(hjiang): Cleanup in the followup PR.
+        let database_id_str = database_id.to_string();
+        let table_id_str = table_id.to_string();
         self.metadata_store_accessor
             .store_table_metadata(
-                database_id,
-                table_id,
+                &database_id_str,
+                &table_id_str,
                 &src_table_name,
                 &src_uri,
                 moonlink_table_config,
@@ -219,8 +222,11 @@ where
             return;
         }
 
+        // TODO(hjiang): Cleanup in the followup PR.
+        let database_id_str = database_id.to_string();
+        let table_id_str = table_id.to_string();
         self.metadata_store_accessor
-            .delete_table_metadata(database_id, table_id)
+            .delete_table_metadata(&database_id_str, &table_id_str)
             .await
             .unwrap()
     }

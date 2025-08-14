@@ -280,7 +280,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(metadata_entries.len(), 1);
-        assert_eq!(metadata_entries[0].table_id, TABLE_ID as u32);
+        // TODO(hjiang): Clanup in the followup PR.
+        let table_id: u32 = metadata_entries[0]
+            .table
+            .parse()
+            .expect(&format!("not a valid value: {}", metadata_entries[0].table));
+        assert_eq!(table_id, TABLE_ID as u32);
         assert_eq!(
             metadata_entries[0]
                 .moonlink_table_config
