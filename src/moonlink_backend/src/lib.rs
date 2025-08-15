@@ -189,21 +189,18 @@ impl MoonlinkBackend {
     }
 
     pub async fn drop_table(&self, schema: String, table: String) {
-        let mooncake_table_id = MooncakeTableId {
-            schema: schema.clone(),
-            table: table.clone(),
-        };
+        let mooncake_table_id = MooncakeTableId { schema, table };
 
         let table_exists = {
             let mut manager = self.replication_manager.write().await;
-            manager.drop_table(mooncake_table_id).await.unwrap()
+            manager.drop_table(&mooncake_table_id).await.unwrap()
         };
         if !table_exists {
             return;
         }
 
         self.metadata_store_accessor
-            .delete_table_metadata(&schema, &table)
+            .delete_table_metadata(&mooncake_table_id.schema, &mooncake_table_id.table)
             .await
             .unwrap()
     }
