@@ -17,7 +17,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const org = 'mooncakelabs';
+            const org = 'Mooncake-Labs';
             const pr = context.payload.pull_request;
             const prAuthor = pr.user.login;
 
