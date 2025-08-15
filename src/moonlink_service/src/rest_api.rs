@@ -87,8 +87,8 @@ pub struct HealthResponse {
 pub fn create_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health_check))
-        .route("/tables/:table", post(create_table))
-        .route("/ingest/:table", post(ingest_data))
+        .route("/tables/{table}", post(create_table))
+        .route("/ingest/{table}", post(ingest_data))
         .with_state(state)
         .layer(
             CorsLayer::new()

@@ -59,8 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 2: Create a table
     println!("\n🏗️ Creating table 'demo_users'...");
     let create_table_payload = json!({
-        "database_id": 1,
-        "table_id": 100,
+        "schema_name": "schema_name",
+        "table_name": "table_name",
         "schema": [
             {"name": "id", "data_type": "int32", "nullable": false},
             {"name": "name", "data_type": "string", "nullable": false},
