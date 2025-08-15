@@ -17,17 +17,15 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const org = 'Mooncake-Labs';
+            const org = 'mooncakelabs';
             const pr = context.payload.pull_request;
             const prAuthor = pr.user.login;
-
             // Skip if already labeled
             const existing = new Set((pr.labels || []).map(l => l.name));
             if (existing.has('community')) {
               core.info('Label "community" already present; skipping.');
               return;
             }
-
             // Option A: org membership check (404 => not a member)
             try {
               await github.rest.orgs.checkMembershipForUser({ org, username: prAuthor });
@@ -39,7 +37,6 @@ jobs:
                 return;
               }
             }
-
             // Ensure label exists (create if missing)
             const labelName = 'community';
             try {
@@ -62,7 +59,6 @@ jobs:
                 return;
               }
             }
-
             // Add label
             await github.rest.issues.addLabels({
               owner: context.repo.owner,
