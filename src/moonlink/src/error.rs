@@ -201,3 +201,34 @@ impl From<serde_json::Error> for Error {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test util functions to create error.
+    fn create_source_error() -> Result<()> {
+        std::fs::File::open("/some/non/existent/file")?;
+        Ok(())
+    }
+    fn propagate_error() -> Result<()> {
+        create_source_error()?;
+        Ok(())
+    }
+    fn another_propagate_error() -> Result<()> {
+        propagate_error()?;
+        Ok(())
+    }
+
+    /// Test location information is kept for the very source error.
+    #[test]
+    fn test_error_propagation_with_source() {
+        let io_error = another_propagate_error().unwrap_err();
+        if let Error::Io(ref inner) = io_error {
+            let loc = inner.location.unwrap();
+            assert_eq!(loc.file(), "src/moonlink/src/error.rs");
+            assert_eq!(loc.line(), 211);
+            assert_eq!(loc.column(), 9);
+        }
+    }
+}
