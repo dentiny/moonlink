@@ -1,14 +1,13 @@
 name: Label community PRs
 
 on:
-  pull_request:
-    # If you don't want to re-run on every push to the PR branch, remove "synchronize".
+  pull_request_target:
     types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
-  issues: write         # needed to add labels
-  pull-requests: write  # not strictly required just for labels, but fine to keep
+  issues: write
+  pull-requests: write
 
 jobs:
   label:
@@ -18,36 +17,57 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const org = 'mooncakelabs';
+            const org = 'Mooncake-Labs';
             const pr = context.payload.pull_request;
             const prAuthor = pr.user.login;
 
-            // Quick dedupe: skip if "community" is already present
+            // Skip if already labeled
             const existing = new Set((pr.labels || []).map(l => l.name));
             if (existing.has('community')) {
               core.info('Label "community" already present; skipping.');
               return;
             }
 
+            // Option A: org membership check (404 => not a member)
             try {
-              // 204 if member, 404 if not a member
-              await github.rest.orgs.checkMembershipForUser({
-                org,
-                username: prAuthor,
-              });
-
+              await github.rest.orgs.checkMembershipForUser({ org, username: prAuthor });
               core.info(`${prAuthor} is a member of ${org}; not adding label.`);
+              return;
             } catch (error) {
-              if (error.status === 404) {
-                core.info(`${prAuthor} is NOT a member of ${org}; adding label "community".`);
-                await github.rest.issues.addLabels({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: pr.number,
-                  labels: ['community'],
-                });
-              } else {
-                // Surface real failures (e.g., 403 if token can't read org membership)
+              if (error.status !== 404) {
                 core.setFailed(`Membership check failed: ${error.status} ${error.message}`);
+                return;
               }
             }
+
+            // Ensure label exists (create if missing)
+            const labelName = 'community';
+            try {
+              await github.rest.issues.getLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: labelName,
+              });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  name: labelName,
+                  color: 'ededed',           // neutral gray
+                  description: 'External contributor PR',
+                });
+              } else {
+                core.setFailed(`Failed to ensure label exists: ${e.status} ${e.message}`);
+                return;
+              }
+            }
+
+            // Add label
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              labels: [labelName],
+            });
+            core.info(`Added label "${labelName}" to PR #${pr.number}.`);
