@@ -577,6 +577,7 @@ impl ChaosState {
             choices.push(EventKind::EndWithFlush);
             choices.push(EventKind::EndNoFlush);
         }
+        assert!(!choices.is_empty());
 
         match *choices.choose(&mut self.rng).unwrap() {
             EventKind::ReadSnapshot => {
