@@ -228,20 +228,20 @@ impl WalTransactionState {
     fn is_captured_in_iceberg_snapshot(
         &self,
         iceberg_snapshot_lsn: u64,
-        lowest_file_kept: Option<u64>,
+        _lowest_file_kept: Option<u64>,
     ) -> bool {
         let completion_lsn_and_file = self.get_completion_lsn_and_file();
 
         // the xact has a known completion lsn by the iceberg snapshot lsn,
         // so it is captured in the iceberg snapshot
-        if let Some((completion_lsn, completion_file_number)) = completion_lsn_and_file {
+        if let Some((completion_lsn, _completion_file_number)) = completion_lsn_and_file {
             #[cfg(any(debug_assertions, test))]
             {
                 // here we do the check for consistency
-                if let Some(iceberg_snapshot_wal_file_num) = lowest_file_kept {
+                if let Some(iceberg_snapshot_wal_file_num) = _lowest_file_kept {
                     self.check_completed_xact_consistent_with_iceberg_snapshot(
                         completion_lsn,
-                        completion_file_number,
+                        _completion_file_number,
                         iceberg_snapshot_lsn,
                         iceberg_snapshot_wal_file_num,
                     );
@@ -254,6 +254,7 @@ impl WalTransactionState {
         false
     }
 
+    #[cfg(any(debug_assertions, test))]
     fn check_completed_xact_consistent_with_iceberg_snapshot(
         &self,
         completion_lsn: u64,
