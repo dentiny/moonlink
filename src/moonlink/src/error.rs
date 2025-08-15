@@ -27,10 +27,6 @@ pub enum Error {
     #[error("{0}")]
     IcebergError(ErrorStruct),
 
-    // TODO(hjiang): Improve error propagation.
-    #[error("Iceberg error: {0}")]
-    IcebergMessage(String),
-
     #[error("{0}")]
     OpenDal(ErrorStruct),
 
@@ -233,7 +229,7 @@ mod tests {
         if let Error::Io(ref inner) = io_error {
             let loc = inner.location.unwrap();
             assert_eq!(loc.file(), "src/moonlink/src/error.rs");
-            assert_eq!(loc.line(), 217);
+            assert_eq!(loc.line(), 213);
             assert_eq!(loc.column(), 9);
         }
     }

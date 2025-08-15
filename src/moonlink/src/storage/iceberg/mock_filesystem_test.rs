@@ -1,3 +1,5 @@
+use moonlink_error::ErrorStruct;
+
 use crate::storage::filesystem::accessor::base_filesystem_accessor::{
     BaseFileSystemAccess, MockBaseFileSystemAccess,
 };
@@ -36,9 +38,12 @@ async fn test_failed_iceberg_table_manager_drop_table() {
         .times(1)
         .returning(|_| {
             Box::pin(async move {
-                Err(Error::IcebergMessage(String::from(
-                    "Failed to delete object",
-                )))
+                Err(Error::IcebergError(ErrorStruct {
+                    message: "iceberg operation failure".to_string(),
+                    status: moonlink_error::ErrorStatus::Permanent,
+                    source: None,
+                    location: None,
+                }))
             })
         });
     let mut iceberg_table_manager =
@@ -55,9 +60,12 @@ async fn test_failed_recover_from_iceberg_table() {
         .times(1)
         .returning(|_| {
             Box::pin(async move {
-                Err(Error::IcebergMessage(String::from(
-                    "Failed to check object existence",
-                )))
+                Err(Error::IcebergError(ErrorStruct {
+                    message: "iceberg operation failure".to_string(),
+                    status: moonlink_error::ErrorStatus::Permanent,
+                    source: None,
+                    location: None,
+                }))
             })
         });
     let mut iceberg_table_manager =
