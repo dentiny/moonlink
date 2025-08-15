@@ -46,8 +46,6 @@ pub async fn start_unix_server(
 }
 
 /// Start the TCP socket RPC server and serve requests until the task is aborted.
-///
-/// TODO(hjiang): Better error handling.
 pub async fn start_tcp_server(backend: Arc<MoonlinkBackend>, addr: SocketAddr) -> Result<()> {
     let listener = TcpListener::bind(addr).await?;
     info!("Moonlink RPC server listening on TCP: {}", addr);
