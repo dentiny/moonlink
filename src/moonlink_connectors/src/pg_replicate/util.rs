@@ -225,7 +225,7 @@ fn convert_array_cell(cell: ArrayCell) -> Vec<RowValue> {
         ArrayCell::U32(values) => values
             .into_iter()
             .map(|v| {
-                v.map(|i| RowValue::Int32(i as i32))
+                v.map(|i| RowValue::Int64(i as i64))
                     .unwrap_or(RowValue::Null)
             })
             .collect(),
@@ -327,7 +327,7 @@ impl From<Cell> for RowValue {
         match cell {
             Cell::I16(value) => RowValue::Int32(value as i32),
             Cell::I32(value) => RowValue::Int32(value),
-            Cell::U32(value) => RowValue::Int32(value as i32),
+            Cell::U32(value) => RowValue::Int64(value as i64),
             Cell::I64(value) => RowValue::Int64(value),
             Cell::F32(value) => RowValue::Float32(value),
             Cell::F64(value) => RowValue::Float64(value),
@@ -785,8 +785,10 @@ mod tests {
     fn test_postgres_table_row_to_moonlink_row() {
         let postgres_table_row = PostgresTableRow(TableRow {
             values: vec![
+                Cell::I16(0),
                 Cell::I32(1),
-                Cell::I64(2),
+                Cell::U32(2),
+                Cell::I64(3),
                 Cell::F32(std::f32::consts::PI),
                 Cell::F64(std::f64::consts::E),
                 Cell::Bool(true),
@@ -802,37 +804,40 @@ mod tests {
                         .unwrap()
                         .with_timezone(&Utc),
                 ),
-                Cell::Null,
                 Cell::Uuid(uuid::Uuid::parse_str("123e4567-e89b-12d3-a456-426614174000").unwrap()),
+                Cell::Json(serde_json::from_str(r#"{"name":"Alice"}"#).unwrap()),
+                Cell::Null,
             ],
         });
 
         let moonlink_row: MoonlinkRow = postgres_table_row.into();
-        assert_eq!(moonlink_row.values.len(), 12);
-        assert_eq!(moonlink_row.values[0], RowValue::Int32(1));
-        assert_eq!(moonlink_row.values[1], RowValue::Int64(2));
+        assert_eq!(moonlink_row.values.len(), 15);
+        assert_eq!(moonlink_row.values[0], RowValue::Int32(0));
+        assert_eq!(moonlink_row.values[1], RowValue::Int32(1));
+        assert_eq!(moonlink_row.values[2], RowValue::Int64(2));
+        assert_eq!(moonlink_row.values[3], RowValue::Int64(3));
         assert_eq!(
-            moonlink_row.values[2],
+            moonlink_row.values[4],
             RowValue::Float32(std::f32::consts::PI)
         );
         assert_eq!(
-            moonlink_row.values[3],
+            moonlink_row.values[5],
             RowValue::Float64(std::f64::consts::E)
         );
-        assert_eq!(moonlink_row.values[4], RowValue::Bool(true));
+        assert_eq!(moonlink_row.values[6], RowValue::Bool(true));
         let vec = "test".as_bytes().to_vec();
-        assert_eq!(moonlink_row.values[5], RowValue::ByteArray(vec.clone()));
+        assert_eq!(moonlink_row.values[7], RowValue::ByteArray(vec.clone()));
         let string = unsafe { std::str::from_utf8_unchecked(&vec) };
         let array = StringArray::from(vec![string]);
         assert_eq!(array.value(0), "test");
-        assert_eq!(moonlink_row.values[6], RowValue::Int32(19723)); // 2024-01-01 days since epoch
+        assert_eq!(moonlink_row.values[8], RowValue::Int32(19723)); // 2024-01-01 days since epoch
         let array = Date32Array::from(vec![19723]);
         assert_eq!(
             array.value_as_date(0),
             Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap())
         );
-        assert_eq!(moonlink_row.values[7], RowValue::Int64(43200000000)); // 12:00:00 in microseconds
-        assert_eq!(moonlink_row.values[8], RowValue::Int64(1704110400000000)); // 2024-01-01 12:00:00 in microseconds
+        assert_eq!(moonlink_row.values[9], RowValue::Int64(43200000000)); // 12:00:00 in microseconds
+        assert_eq!(moonlink_row.values[10], RowValue::Int64(1704110400000000)); // 2024-01-01 12:00:00 in microseconds
         let array = TimestampMicrosecondArray::from(vec![1704110400000000]);
         assert_eq!(
             array.value_as_datetime(0),
@@ -840,7 +845,7 @@ mod tests {
                 NaiveDateTime::parse_from_str("2024-01-01 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
             )
         );
-        assert_eq!(moonlink_row.values[9], RowValue::Int64(1704110400000000)); // 2024-01-01 12:00:00 UTC in microseconds
+        assert_eq!(moonlink_row.values[11], RowValue::Int64(1704110400000000)); // 2024-01-01 12:00:00 UTC in microseconds
         let array = TimestampMicrosecondArray::from(vec![1704110400000000]);
         assert_eq!(
             array.value_as_datetime(0),
@@ -848,8 +853,7 @@ mod tests {
                 NaiveDateTime::parse_from_str("2024-01-01 12:00:00", "%Y-%m-%d %H:%M:%S").unwrap()
             )
         );
-        assert_eq!(moonlink_row.values[10], RowValue::Null);
-        if let RowValue::FixedLenByteArray(bytes) = moonlink_row.values[11] {
+        if let RowValue::FixedLenByteArray(bytes) = moonlink_row.values[12] {
             assert_eq!(
                 uuid::Uuid::from_bytes(bytes).to_string(),
                 "123e4567-e89b-12d3-a456-426614174000"
@@ -857,6 +861,9 @@ mod tests {
         } else {
             panic!("Expected fixed length byte array");
         };
+        let vec = r#"{"name":"Alice"}"#.to_string().as_bytes().to_vec();
+        assert_eq!(moonlink_row.values[13], RowValue::ByteArray(vec));
+        assert_eq!(moonlink_row.values[14], RowValue::Null);
     }
 
     #[test]
