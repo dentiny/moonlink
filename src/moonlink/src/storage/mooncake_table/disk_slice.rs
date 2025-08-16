@@ -221,7 +221,7 @@ impl DiskSliceWriter {
             writer.as_mut().unwrap().write(batch).await?;
             let estimated_total_size = {
                 let cur_writer = writer.as_ref().unwrap();
-                cur_writer.in_progress_size() + cur_writer.bytes_written()
+                cur_writer.memory_size()
             };
             if estimated_total_size > self.disk_slice_writer_config.parquet_file_size {
                 // Finalize the writer
