@@ -226,7 +226,7 @@ mod tests {
             // Completely no updates for the snapshot.
             Case {
                 snapshot_lsn: NO_SNAPSHOT_LSN,
-                commit_lsn: 0,
+                commit_lsn: NO_COMMIT_LSN,
                 expected: true,
             },
             // All commits are sync-ed to the snapshot.
