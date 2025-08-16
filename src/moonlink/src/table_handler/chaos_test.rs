@@ -981,6 +981,15 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
             "Test {} is with random seed {}",
             test_env_config.test_name, state.random_seed
         );
+
+        // Attempt read on empty table.
+        check_read_snapshot(
+            &state.read_state_manager,
+            /*requested_read_lsn=*/ Some(0),
+            /*expected_ids=*/ &[],
+        )
+        .await;
+
         for _ in 0..test_env_config.event_count {
             let chaos_events = state.generate_random_events();
 
