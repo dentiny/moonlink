@@ -36,7 +36,7 @@ datafusion-cli = "49"
 fastbloom = "0.12"
 futures = { version = "0.3", default-features = false }
 hashbrown = "0.15"
-iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "17e4351a4a4d52c8d33f7f791384bae467186cd7", default-features = false, features = [
+iceberg = { git = "https://github.com/apache/iceberg-rust.git", rev = "7cde26a7d793905bbbe4d7264b215ca9dc7e9567", default-features = false, features = [
   "storage-fs",
 ] }
 itertools = { version = "0.14" }
