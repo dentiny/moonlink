@@ -386,6 +386,7 @@ mod tests {
     use chrono::{DateTime, NaiveDate, NaiveDateTime, NaiveTime, Utc};
     use iceberg::arrow as IcebergArrow;
     use moonlink::row::RowValue;
+    use std::str::FromStr;
 
     #[test]
     fn test_table_schema_to_arrow_schema() {
@@ -864,6 +865,26 @@ mod tests {
         let vec = r#"{"name":"Alice"}"#.to_string().as_bytes().to_vec();
         assert_eq!(moonlink_row.values[13], RowValue::ByteArray(vec));
         assert_eq!(moonlink_row.values[14], RowValue::Null);
+    }
+
+    #[test]
+    fn test_postgres_numeric_row_to_moonlink_row() {
+        let postgres_table_row = PostgresTableRow(TableRow {
+            values: vec![
+                Cell::Numeric(PgNumeric::NaN),
+                Cell::Numeric(PgNumeric::NegativeInf),
+                Cell::Numeric(PgNumeric::PositiveInf),
+                Cell::Numeric(PgNumeric::Value(
+                    bigdecimal::BigDecimal::from_str("12345.6789").unwrap(),
+                )),
+            ],
+        });
+        let moonlink_row: MoonlinkRow = postgres_table_row.into();
+        assert_eq!(moonlink_row.values.len(), 4);
+        assert_eq!(moonlink_row.values[0], RowValue::Null);
+        assert_eq!(moonlink_row.values[1], RowValue::Null);
+        assert_eq!(moonlink_row.values[2], RowValue::Null);
+        assert_eq!(moonlink_row.values[3], RowValue::Decimal(123456789 as i128));
     }
 
     #[test]
