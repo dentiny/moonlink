@@ -24,7 +24,5 @@ pub(crate) fn get_default_parquet_properties() -> WriterProperties {
 /// Parquet option for already compacted files.
 pub(crate) fn get_parquet_properties_for_compaction() -> WriterProperties {
     let builder = get_default_parquet_properties_builder();
-    builder
-        .set_bloom_filter_enabled(true)
-        .build()
+    builder.set_bloom_filter_enabled(true).build()
 }
