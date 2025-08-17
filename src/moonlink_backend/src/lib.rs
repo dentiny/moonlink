@@ -151,8 +151,8 @@ impl MoonlinkBackend {
 
         // Add mooncake table to replication, and create corresponding mooncake table.
         let table_config = TableConfig::from_json_or_default(&table_config, &self.base_path)?;
-        let moonlink_table_config = table_config
-            .take_as_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
+        let moonlink_table_config =
+            table_config.take_as_moonlink_config(self.temp_files_dir.clone(), &mooncake_table_id);
         {
             let mut manager = self.replication_manager.write().await;
             if src_uri == REST_API_URI {

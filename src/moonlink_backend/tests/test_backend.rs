@@ -138,8 +138,8 @@ mod tests {
             .tmp()
             .unwrap()
             .path()
-            .join("default")
-            .join(format!("{DATABASE}.{TABLE}"))
+            .join(format!("{DATABASE}"))
+            .join(format!("{TABLE}"))
             .join("metadata");
         assert!(meta_dir.exists());
         assert!(meta_dir.read_dir().unwrap().next().is_some());
@@ -280,8 +280,15 @@ mod tests {
             metadata_entries[0]
                 .moonlink_table_config
                 .iceberg_table_config
+                .namespace,
+            vec![format!("{DATABASE}")],
+        );
+        assert_eq!(
+            metadata_entries[0]
+                .moonlink_table_config
+                .iceberg_table_config
                 .table_name,
-            format!("{DATABASE}.{TABLE}")
+            format!("{TABLE}")
         );
 
         // Drop table and check metadata storage.
