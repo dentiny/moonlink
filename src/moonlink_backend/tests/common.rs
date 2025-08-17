@@ -191,11 +191,14 @@ pub async fn create_backend_from_tempdir(tempdir: &TempDir) -> MoonlinkBackend {
 #[allow(dead_code)]
 pub async fn scan_ids(
     backend: &MoonlinkBackend,
-    schema: String,
-    table: String,
+    mooncake_database: String,
+    mooncake_table: String,
     lsn: u64,
 ) -> HashSet<i64> {
-    let state = backend.scan_table(schema, table, Some(lsn)).await.unwrap();
+    let state = backend
+        .scan_table(mooncake_database, mooncake_table, Some(lsn))
+        .await
+        .unwrap();
     ids_from_state(&state)
 }
 
@@ -204,11 +207,14 @@ pub async fn scan_ids(
 #[allow(dead_code)]
 pub async fn scan_id_counts(
     backend: &MoonlinkBackend,
-    schema: String,
-    table: String,
+    mooncake_database: String,
+    mooncake_table: String,
     lsn: u64,
 ) -> HashMap<i64, u64> {
-    let state = backend.scan_table(schema, table, Some(lsn)).await.unwrap();
+    let state = backend
+        .scan_table(mooncake_database, mooncake_table, Some(lsn))
+        .await
+        .unwrap();
     nonunique_ids_from_state(&state)
 }
 
@@ -217,13 +223,13 @@ pub async fn scan_id_counts(
 #[allow(dead_code)]
 pub async fn assert_scan_ids_eq(
     backend: &MoonlinkBackend,
-    schema: String,
-    table: String,
+    mooncake_database: String,
+    mooncake_table: String,
     lsn: u64,
     expected: impl IntoIterator<Item = i64>,
 ) {
     let expected: HashSet<i64> = expected.into_iter().collect();
-    let actual = scan_ids(backend, schema, table, lsn).await;
+    let actual = scan_ids(backend, mooncake_database, mooncake_table, lsn).await;
     assert_eq!(actual, expected);
 }
 
@@ -234,12 +240,12 @@ pub async fn assert_scan_ids_eq(
 #[allow(dead_code)]
 pub async fn assert_scan_nonunique_ids_eq(
     backend: &MoonlinkBackend,
-    schema: String,
-    table: String,
+    mooncake_database: String,
+    mooncake_table: String,
     lsn: u64,
     expected_counts: &HashMap<i64, u64>,
 ) {
-    let actual = scan_id_counts(backend, schema, table, lsn).await;
+    let actual = scan_id_counts(backend, mooncake_database, mooncake_table, lsn).await;
     assert_eq!(actual, *expected_counts);
 }
 
@@ -248,18 +254,26 @@ pub async fn assert_scan_nonunique_ids_eq(
 #[allow(dead_code)]
 pub async fn create_updated_iceberg_snapshot(
     backend: &MoonlinkBackend,
-    schema: &str,
-    table: &str,
+    mooncake_database: &str,
+    mooncake_table: &str,
     client: &Client,
 ) -> u64 {
     let lsn = current_wal_lsn(client).await;
     // Ensure changes are reflected in Mooncake snapshot first
     backend
-        .scan_table(schema.to_string(), table.to_string(), Some(lsn))
+        .scan_table(
+            mooncake_database.to_string(),
+            mooncake_table.to_string(),
+            Some(lsn),
+        )
         .await
         .unwrap();
     backend
-        .create_snapshot(schema.to_string(), table.to_string(), lsn)
+        .create_snapshot(
+            mooncake_database.to_string(),
+            mooncake_table.to_string(),
+            lsn,
+        )
         .await
         .unwrap();
     lsn
