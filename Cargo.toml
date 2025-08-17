@@ -81,7 +81,7 @@ tokio-postgres = { git = "https://github.com/Mooncake-labs/rust-postgres.git", r
 tracing = "0.1"
 typed-builder = "0.20"
 url = "2.5"
-uuid = { version = "1.17", default-features = false, features = ["v4"] }
+uuid = { version = "1.18", default-features = false, features = ["v4"] }
 
 [profile.release-with-debug]
 inherits = "release"
