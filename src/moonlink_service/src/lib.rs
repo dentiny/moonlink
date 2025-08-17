@@ -16,7 +16,7 @@ use tokio::{
 use tracing::{error, info};
 
 /// Default readiness probe port number.
-const READINESS_PROBE_PORT: u16 = 5050;
+pub(crate) const READINESS_PROBE_PORT: u16 = 5050;
 
 /// Service initiation and execution status.
 struct ServiceStatus {
@@ -24,6 +24,7 @@ struct ServiceStatus {
     ready: AtomicBool,
 }
 
+#[derive(Debug)]
 pub struct ServiceConfig {
     /// Base location for moonlink storage (including cache files, iceberg tables, etc).
     pub base_path: String,
@@ -79,6 +80,11 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
 
     // Initialize moonlink backend.
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
+
+    println!("start with config = {:?}", config);
+
+    println!("sqlite metadata store = {}", config.base_path);
+
     let sqlite_metadata_accessor = SqliteMetadataStore::new_with_directory(&config.base_path)
         .await
         .unwrap();
@@ -162,3 +168,6 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     info!("Moonlink service shut down complete");
     Ok(())
 }
+
+#[cfg(test)]
+mod test;

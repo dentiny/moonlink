@@ -306,7 +306,7 @@ async fn read_table_via_rpc() -> Result<(), Box<dyn std::error::Error>> {
 
         // Scan table data
         println!("   🔍 Scanning table data...");
-        let data_bytes = moonlink_rpc::scan_table_begin(
+        let data_bytes: Vec<u8> = moonlink_rpc::scan_table_begin(
             &mut stream,
             table.mooncake_database.clone(),
             table.mooncake_table.clone(),
