@@ -138,8 +138,8 @@ mod tests {
             .tmp()
             .unwrap()
             .path()
-            .join(format!("{DATABASE}"))
-            .join(format!("{TABLE}"))
+            .join(DATABASE)
+            .join(TABLE)
             .join("metadata");
         assert!(meta_dir.exists());
         assert!(meta_dir.read_dir().unwrap().next().is_some());
