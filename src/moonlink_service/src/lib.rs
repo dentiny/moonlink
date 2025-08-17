@@ -162,3 +162,6 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     info!("Moonlink service shut down complete");
     Ok(())
 }
+
+#[cfg(test)]
+mod moonlink_standalone_test;
