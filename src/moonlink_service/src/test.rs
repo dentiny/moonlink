@@ -17,7 +17,7 @@ use moonlink_rpc::{scan_table_begin, scan_table_end};
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
 
 /// Moonlink backend directory.
-const MOONLINK_BACKEND_DIR: &str = "/tmp/moonlink_service_test";
+const MOONLINK_BACKEND_DIR: &str = "/workspaces/moonlink/.shared-nginx";
 /// Local nginx server IP/port address.
 const NGINX_ADDR: &str = "http://nginx.local:80";
 /// Local moonlink REST API IP/port address.
@@ -59,26 +59,15 @@ async fn test_readiness_probe() {
 /// Util function to load all record batches inside of the given [`path`].
 pub async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     let resp = reqwest::get(url).await.unwrap();
-    println!("status = {}", resp.status());
-
     assert!(resp.status().is_success());
-
-    println!("content = {}", resp.text().await.unwrap());
-
-    vec![]
-
-    // let data: Bytes = resp.bytes().await.unwrap();
-    // println!("read len = {}", data.len());
-    // let mut reader = ParquetRecordBatchReaderBuilder::try_new(data).unwrap()
-    //     .build().unwrap();
-
-    // // Collect all record batches
-    // let batches = reader
-    //     .into_iter()
-    //     .map(|b| b.unwrap()) // handle Err properly in production
-    //     .collect();
-
-    // batches
+    let data: Bytes = resp.bytes().await.unwrap();
+    let reader = ParquetRecordBatchReaderBuilder::try_new(data).unwrap()
+        .build().unwrap();
+    let batches = reader
+        .into_iter()
+        .map(|b| b.unwrap())
+        .collect();
+    batches
 }
 
 /// Util function to create test arrow schema.
@@ -187,4 +176,7 @@ async fn test_moonlink_standalone() {
         DATABASE.to_string(),
         TABLE.to_string(),
     ).await.unwrap();
+
+    // Cleanup shared directory.
+    recreate_directory(MOONLINK_BACKEND_DIR);
 }

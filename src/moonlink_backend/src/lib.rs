@@ -55,6 +55,9 @@ impl MoonlinkBackend {
             let base_path_arc = Arc::clone(&base_path_arc);
             let data_server_uri_arc = Arc::clone(&data_server_uri_arc);
             Arc::new(move |local_filepath: String| {
+
+                println!("strip {}, but prepent {:?}", base_path_arc, data_server_uri_arc);
+
                 if let Some(ref data_server_uri) = *data_server_uri_arc {
                     if let Some(stripped) = local_filepath.strip_prefix(&*base_path_arc) {
                         return format!(

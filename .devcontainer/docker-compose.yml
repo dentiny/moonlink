@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ..:/workspaces/moonlink:cached
-      - shared-nginx:/tmp/moonlink_service_test
+      - ../.shared-nginx:/tmp/moonlink_service_test
     networks:
       - shared_network
     depends_on:
@@ -65,7 +65,7 @@ services:
         aliases:
           - nginx.local
     volumes:
-      - shared-nginx:/usr/share/nginx/html:ro
+      - ../.shared-nginx:/usr/share/nginx/html:ro
 
 volumes:
   minio-data:
