@@ -59,8 +59,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Test 2: Create a table
     println!("\n🏗️ Creating table 'demo_users'...");
     let create_table_payload = json!({
-        "schema_name": "schema_name",
-        "table_name": "table_name",
+        "mooncake_database": "database_name",
+        "mooncake_table": "schema_name",
         "schema": [
             {"name": "id", "data_type": "int32", "nullable": false},
             {"name": "name", "data_type": "string", "nullable": false},
@@ -270,9 +270,9 @@ async fn read_table_via_rpc() -> Result<(), Box<dyn std::error::Error>> {
     println!("   Found {} table(s):", tables.len());
     for table in &tables {
         println!(
-            "     - Schema: {}, Table: {}, Commit LSN: {}",
-            table.table.clone(),
-            table.table.clone(),
+            "     - Database: {}, Table: {}, Commit LSN: {}",
+            table.mooncake_database.clone(),
+            table.mooncake_table.clone(),
             table.commit_lsn
         );
     }
@@ -285,35 +285,43 @@ async fn read_table_via_rpc() -> Result<(), Box<dyn std::error::Error>> {
     // Find our demo table (database_id=1, table_id=100)
     let demo_table = tables
         .iter()
-        .find(|t| t.schema == "test_schema" && t.table == "test_table");
+        .find(|t| t.mooncake_database == "test_schema" && t.mooncake_table == "test_table");
 
     if let Some(table) = demo_table {
         println!(
-            "   📖 Reading from demo table (Schema: {}, Table: {})...",
-            table.table.clone(),
-            table.table.clone()
+            "   📖 Reading from demo table (Database: {}, Table: {})...",
+            table.mooncake_database.clone(),
+            table.mooncake_table.clone()
         );
 
         // Get table schema
         println!("   📐 Getting table schema...");
-        let schema_bytes =
-            moonlink_rpc::get_table_schema(&mut stream, table.table.clone(), table.table.clone())
-                .await?;
+        let schema_bytes = moonlink_rpc::get_table_schema(
+            &mut stream,
+            table.mooncake_database.clone(),
+            table.mooncake_table.clone(),
+        )
+        .await?;
         println!("   Schema size: {} bytes", schema_bytes.len());
 
         // Scan table data
         println!("   🔍 Scanning table data...");
         let data_bytes = moonlink_rpc::scan_table_begin(
             &mut stream,
-            table.table.clone(),
-            table.table.clone(),
+            table.mooncake_database.clone(),
+            table.mooncake_table.clone(),
             0,
         )
         .await?;
         println!("   Data size: {} bytes", data_bytes.len());
 
         // End scan
-        moonlink_rpc::scan_table_end(&mut stream, table.table.clone(), table.table.clone()).await?;
+        moonlink_rpc::scan_table_end(
+            &mut stream,
+            table.mooncake_database.clone(),
+            table.mooncake_table.clone(),
+        )
+        .await?;
         println!("   ✅ Table scan completed");
 
         // Try to decode the Arrow data (basic attempt)
