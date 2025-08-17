@@ -13,10 +13,10 @@ use moonlink::{decode_read_state_for_testing, AccessorConfig, StorageConfig};
 use moonlink_backend::file_utils::{recreate_directory, DEFAULT_MOONLINK_TEMP_FILE_PATH};
 use moonlink_backend::{MoonlinkBackend, ReadState};
 
-/// Mooncake table schema.
-pub const SCHEMA: &str = "mooncake-schema";
+/// Mooncake table database.
+pub const DATABASE: &str = "mooncake-database";
 /// Mooncake table name.
-pub const TABLE: &str = "mooncake-table";
+pub const TABLE: &str = "mooncake-schema.mooncake-table";
 
 pub const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
 
@@ -104,7 +104,7 @@ impl Drop for TestGuard {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
                 let _ = backend
-                    .drop_table(SCHEMA.to_string(), TABLE.to_string())
+                    .drop_table(DATABASE.to_string(), TABLE.to_string())
                     .await;
                 let _ = backend.shutdown_connection(SRC_URI, true).await;
                 let _ = recreate_directory(DEFAULT_MOONLINK_TEMP_FILE_PATH);
@@ -467,7 +467,7 @@ async fn setup_backend(
             .unwrap();
         backend
             .create_table(
-                SCHEMA.to_string(),
+                DATABASE.to_string(),
                 TABLE.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
@@ -518,7 +518,7 @@ pub async fn smoke_create_and_insert(
     // Re-create table.
     backend
         .create_table(
-            SCHEMA.to_string(),
+            DATABASE.to_string(),
             TABLE.to_string(),
             "public.test".to_string(),
             uri.to_string(),
@@ -535,12 +535,12 @@ pub async fn smoke_create_and_insert(
         .unwrap();
 
     let old = backend
-        .scan_table(SCHEMA.to_string(), TABLE.to_string(), None)
+        .scan_table(DATABASE.to_string(), TABLE.to_string(), None)
         .await
         .unwrap();
     let lsn = current_wal_lsn(client).await;
     let new = backend
-        .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+        .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
         .await
         .unwrap();
     assert_ne!(old.data, new.data);

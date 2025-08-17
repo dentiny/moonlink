@@ -9,10 +9,10 @@ use moonlink_metadata_store::PgMetadataStore;
 const SRC_TABLE_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
 /// Test table name.
 const SRC_TABLE_NAME: &str = "table";
-/// Test destination schema name.
-const SCHEMA: &str = "dst-schema";
+/// Test destination database name.
+const DATABASE: &str = "dst-database";
 /// Test destination table name.
-const TABLE: &str = "dst-table";
+const TABLE: &str = "dst-schema.dst-table";
 
 #[cfg(test)]
 mod tests {
@@ -35,7 +35,7 @@ mod tests {
             .unwrap();
         assert_eq!(metadata_entries.len(), 1);
         let table_metadata_entry = &metadata_entries[0];
-        assert_eq!(table_metadata_entry.table, TABLE);
+        assert_eq!(table_metadata_entry.mooncake_table, TABLE);
         assert_eq!(table_metadata_entry.src_table_name, SRC_TABLE_NAME);
         assert_eq!(table_metadata_entry.src_table_uri, get_table_uri());
         assert_eq!(
@@ -58,7 +58,7 @@ mod tests {
         // Store moonlink table config to metadata storage.
         metadata_store
             .store_table_metadata(
-                SCHEMA,
+                DATABASE,
                 TABLE,
                 SRC_TABLE_NAME,
                 &table_uri,
@@ -112,7 +112,7 @@ mod tests {
         // Store moonlink table config to metadata storage.
         metadata_store
             .store_table_metadata(
-                SCHEMA,
+                DATABASE,
                 TABLE,
                 SRC_TABLE_NAME,
                 &table_uri,
@@ -124,7 +124,7 @@ mod tests {
         // Store moonlink table config to metadata storage.
         let res = metadata_store
             .store_table_metadata(
-                SCHEMA,
+                DATABASE,
                 TABLE,
                 SRC_TABLE_NAME,
                 &table_uri,
@@ -146,7 +146,7 @@ mod tests {
         // Store moonlink table metadata to metadata storage.
         metadata_store
             .store_table_metadata(
-                SCHEMA,
+                DATABASE,
                 TABLE,
                 SRC_TABLE_NAME,
                 &table_uri,
@@ -160,7 +160,7 @@ mod tests {
 
         // Delete moonlink table config to metadata storage and check.
         metadata_store
-            .delete_table_metadata(SCHEMA, TABLE)
+            .delete_table_metadata(DATABASE, TABLE)
             .await
             .unwrap();
         let metadata_entries = metadata_store
@@ -170,7 +170,7 @@ mod tests {
         assert_eq!(metadata_entries.len(), 0);
 
         // Delete for the second time also fails.
-        let res = metadata_store.delete_table_metadata(SCHEMA, TABLE).await;
+        let res = metadata_store.delete_table_metadata(DATABASE, TABLE).await;
         assert!(res.is_err());
     }
 }

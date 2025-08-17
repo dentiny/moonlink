@@ -12,9 +12,9 @@ use moonlink::MoonlinkTableSecret;
 use async_trait::async_trait;
 use postgres_types::Json as PgJson;
 
-/// SQL statements for moonlink metadata table schema.
+/// SQL statements for moonlink metadata table mooncake_database.
 const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
-/// SQL statements for moonlink secret table schema.
+/// SQL statements for moonlink secret table mooncake_database.
 const CREATE_SECRET_SCHEMA_SQL: &str = include_str!("sql/create_secrets.sql");
 
 pub struct PgMetadataStore {
@@ -36,8 +36,8 @@ impl MetadataStoreTrait for PgMetadataStore {
             .query(
                 r#"
                 SELECT 
-                    t."schema",
-                    t."table",
+                    t.mooncake_database,
+                    t.mooncake_table,
                     t.src_table_name,
                     t.src_table_uri,
                     t.config,
@@ -49,8 +49,8 @@ impl MetadataStoreTrait for PgMetadataStore {
                     s.project
                 FROM tables t
                 LEFT JOIN secrets s
-                    ON t."schema" = s."schema"
-                    AND t."table" = s."table"
+                    ON t.mooncake_database = s.mooncake_database
+                    AND t.mooncake_table = s.mooncake_table
                 "#,
                 &[],
             )
@@ -58,8 +58,8 @@ impl MetadataStoreTrait for PgMetadataStore {
 
         let mut metadata_entries = Vec::with_capacity(rows.len());
         for row in rows {
-            let schema: String = row.get("schema");
-            let table: String = row.get("table");
+            let mooncake_database: String = row.get("mooncake_database");
+            let mooncake_table: String = row.get("mooncake_table");
             let src_table_name: String = row.get("src_table_name");
             let src_table_uri: String = row.get("src_table_uri");
             let serialized_config: serde_json::Value = row.get("config");
@@ -78,8 +78,8 @@ impl MetadataStoreTrait for PgMetadataStore {
                 config_utils::deserialize_moonlink_table_config(serialized_config, secret_entry)?;
 
             let metadata_entry = TableMetadataEntry {
-                schema,
-                table,
+                mooncake_database,
+                mooncake_table,
                 src_table_name,
                 src_table_uri,
                 moonlink_table_config,
@@ -92,8 +92,8 @@ impl MetadataStoreTrait for PgMetadataStore {
 
     async fn store_table_metadata(
         &self,
-        schema: &str,
-        table: &str,
+        mooncake_database: &str,
+        mooncake_table: &str,
         src_table_name: &str,
         src_table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
@@ -126,11 +126,11 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                r#"INSERT INTO tables ("schema", "table", src_table_name, src_table_uri, config)
+                r#"INSERT INTO tables (mooncake_database, mooncake_table, src_table_name, src_table_uri, config)
                 VALUES ($1, $2, $3, $4, $5)"#,
                 &[
-                    &schema,
-                    &table,
+                    &mooncake_database,
+                    &mooncake_table,
                     &src_table_name,
                     &src_table_uri,
                     &PgJson(&serialized_config),
@@ -146,11 +146,11 @@ impl MetadataStoreTrait for PgMetadataStore {
             let rows_affected = pg_client
                 .postgres_client
                 .execute(
-                    r#"INSERT INTO secrets ("schema", "table", secret_type, key_id, secret, endpoint, region, project)
+                    r#"INSERT INTO secrets (mooncake_database, mooncake_table, secret_type, key_id, secret, endpoint, region, project)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
                     &[
-                        &schema,
-                        &table,
+                        &mooncake_database,
+                        &mooncake_table,
                         &table_secret.get_secret_type(),
                         &table_secret.key_id,
                         &table_secret.secret,
@@ -171,7 +171,11 @@ impl MetadataStoreTrait for PgMetadataStore {
         Ok(())
     }
 
-    async fn delete_table_metadata(&self, schema: &str, table: &str) -> Result<()> {
+    async fn delete_table_metadata(
+        &self,
+        mooncake_database: &str,
+        mooncake_table: &str,
+    ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
 
         // Start a transaction to insert rows into metadata table and secret table.
@@ -181,8 +185,8 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                r#"DELETE FROM tables WHERE "schema" = $1 AND "table" = $2"#,
-                &[&schema, &table],
+                r#"DELETE FROM tables WHERE mooncake_database = $1 AND mooncake_table = $2"#,
+                &[&mooncake_database, &mooncake_table],
             )
             .await?;
         if rows_affected != 1 {
@@ -193,8 +197,8 @@ impl MetadataStoreTrait for PgMetadataStore {
         pg_client
             .postgres_client
             .execute(
-                r#"DELETE FROM secrets WHERE "schema" = $1 AND "table" = $2"#,
-                &[&schema, &table],
+                r#"DELETE FROM secrets WHERE mooncake_database = $1 AND mooncake_table = $2"#,
+                &[&mooncake_database, &mooncake_table],
             )
             .await?;
 
@@ -206,7 +210,7 @@ impl MetadataStoreTrait for PgMetadataStore {
 }
 
 impl PgMetadataStore {
-    /// Attempt to create a metadata storage; if [`mooncake`] schema doesn't exist, current database is not managed by moonlink, return None.
+    /// Attempt to create a metadata storage; if [`mooncake`] mooncake_database doesn't exist, current database is not managed by moonlink, return None.
     pub fn new(uri: String) -> Result<Self> {
         Ok(Self { uri })
     }

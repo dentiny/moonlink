@@ -19,8 +19,8 @@ async fn recover_table(
     read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()> {
     let mooncake_table_id = MooncakeTableId {
-        schema: metadata_entry.schema,
-        table: metadata_entry.table,
+        mooncake_database: metadata_entry.mooncake_database,
+        mooncake_table: metadata_entry.mooncake_table,
     };
     replication_manager
         .add_table(
