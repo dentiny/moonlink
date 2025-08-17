@@ -116,7 +116,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_jld110a1ijs3";
+    let replay_filepath = "/tmp/chaos_test_detvh4ycbnhi";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -182,6 +182,9 @@ pub(crate) async fn replay() {
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
         while let Some(table_event) = table_event_receiver.recv().await {
+
+            println!("receive table event : {:?}", table_event);
+
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
@@ -287,7 +290,6 @@ pub(crate) async fn replay() {
                         .is_none());
                     event_notification.notify_waiters();
                 }
-                // TODO(hjiang): Implement other background events.
                 _ => {}
             }
         }
@@ -296,6 +298,9 @@ pub(crate) async fn replay() {
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
+
+        println!("receive replay event {:?}", replay_table_event);
+
         match replay_table_event {
             // =====================
             // Foreground operations
