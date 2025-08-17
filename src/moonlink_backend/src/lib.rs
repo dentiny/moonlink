@@ -252,8 +252,8 @@ impl MoonlinkBackend {
             for cur_reader in cur_table_state_readers.iter() {
                 let table_snapshot_status = cur_reader.get_current_table_state().await?;
                 let table_status = TableStatus {
-                    schema: mooncake_table_id.mooncake_database.clone(),
-                    table: mooncake_table_id.mooncake_table.clone(),
+                    mooncake_database: mooncake_table_id.mooncake_database.clone(),
+                    mooncake_table: mooncake_table_id.mooncake_table.clone(),
                     commit_lsn: table_snapshot_status.commit_lsn,
                     flush_lsn: table_snapshot_status.flush_lsn,
                     iceberg_warehouse_location: table_snapshot_status.iceberg_warehouse_location,

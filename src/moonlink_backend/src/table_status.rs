@@ -1,10 +1,10 @@
 /// Current table status.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableStatus {
-    /// Schema name.
-    pub schema: String,
-    /// Table name.
-    pub table: String,
+    /// Mooncake database name.
+    pub mooncake_database: String,
+    /// Mooncake table name.
+    pub mooncake_table: String,
     /// Mooncake table commit LSN.
     pub commit_lsn: u64,
     /// Iceberg flush LSN.
