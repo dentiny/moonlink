@@ -70,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     let response = client
-        .post(format!("{base_url}/tables/source_table"))
+        .post(format!("{base_url}/tables/demo_users"))
         .header("content-type", "application/json")
         .json(&create_table_payload)
         .send()

@@ -206,13 +206,13 @@ async fn create_table(
 
 /// Data ingestion endpoint
 async fn ingest_data(
-    Path(table_name): Path<String>,
+    Path(src_table_name): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<IngestRequest>,
 ) -> Result<Json<IngestResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!(
         "Received ingestion request for table '{}': {:?}",
-        table_name, payload
+        src_table_name, payload
     );
 
     // Parse operation
@@ -236,7 +236,7 @@ async fn ingest_data(
 
     // Create REST request
     let rest_request = EventRequest {
-        table_name: table_name.clone(),
+        src_table_name: src_table_name.clone(),
         operation,
         payload: payload.data,
         timestamp: SystemTime::now(),
@@ -259,7 +259,7 @@ async fn ingest_data(
     Ok(Json(IngestResponse {
         status: "success".to_string(),
         message: "Data queued for ingestion".to_string(),
-        table: table_name,
+        table: src_table_name,
         operation: payload.operation,
     }))
 }

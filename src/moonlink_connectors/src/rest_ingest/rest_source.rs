@@ -26,7 +26,7 @@ pub enum RestSourceError {
 
 #[derive(Debug, Clone)]
 pub struct EventRequest {
-    pub table_name: String,
+    pub src_table_name: String,
     pub operation: EventOperation,
     pub payload: serde_json::Value,
     pub timestamp: SystemTime,
@@ -56,7 +56,7 @@ pub enum RestEvent {
 
 pub struct RestSource {
     table_schemas: HashMap<String, Arc<Schema>>,
-    table_name_to_src_id: HashMap<String, SrcTableId>,
+    src_table_name_to_src_id: HashMap<String, SrcTableId>,
     lsn_generator: AtomicU64,
 }
 
@@ -70,51 +70,54 @@ impl RestSource {
     pub fn new() -> Self {
         Self {
             table_schemas: HashMap::new(),
-            table_name_to_src_id: HashMap::new(),
+            src_table_name_to_src_id: HashMap::new(),
             lsn_generator: AtomicU64::new(1),
         }
     }
 
     pub fn add_table(
         &mut self,
-        table_name: String,
+        src_table_name: String,
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
     ) -> Result<()> {
         if self
             .table_schemas
-            .insert(table_name.clone(), schema)
+            .insert(src_table_name.clone(), schema)
             .is_some()
         {
-            return Err(RestSourceError::DuplicateTable(table_name).into());
+            return Err(RestSourceError::DuplicateTable(src_table_name).into());
         }
         // Invariant sanity check.
         assert!(self
-            .table_name_to_src_id
-            .insert(table_name, src_table_id)
+            .src_table_name_to_src_id
+            .insert(src_table_name, src_table_id)
             .is_none());
         Ok(())
     }
 
-    pub fn remove_table(&mut self, table_name: &str) -> Result<()> {
-        if self.table_schemas.remove(table_name).is_none() {
-            return Err(RestSourceError::NonExistentTable(table_name.to_string()).into());
+    pub fn remove_table(&mut self, src_table_name: &str) -> Result<()> {
+        if self.table_schemas.remove(src_table_name).is_none() {
+            return Err(RestSourceError::NonExistentTable(src_table_name.to_string()).into());
         }
         // Invariant sanity check.
-        assert!(self.table_name_to_src_id.remove(table_name).is_some());
+        assert!(self
+            .src_table_name_to_src_id
+            .remove(src_table_name)
+            .is_some());
         Ok(())
     }
 
     pub fn process_request(&self, request: EventRequest) -> Result<Vec<RestEvent>> {
         let schema = self
             .table_schemas
-            .get(&request.table_name)
-            .ok_or_else(|| RestSourceError::UnknownTable(request.table_name.clone()))?;
+            .get(&request.src_table_name)
+            .ok_or_else(|| RestSourceError::UnknownTable(request.src_table_name.clone()))?;
 
         let src_table_id = self
-            .table_name_to_src_id
-            .get(&request.table_name)
-            .ok_or_else(|| RestSourceError::UnknownTable(request.table_name.clone()))?;
+            .src_table_name_to_src_id
+            .get(&request.src_table_name)
+            .ok_or_else(|| RestSourceError::UnknownTable(request.src_table_name.clone()))?;
 
         let converter = JsonToMoonlinkRowConverter::new(schema.clone());
         let row = converter
@@ -164,7 +167,7 @@ mod tests {
     fn test_rest_source_creation() {
         let mut source = RestSource::new();
         assert_eq!(source.table_schemas.len(), 0);
-        assert_eq!(source.table_name_to_src_id.len(), 0);
+        assert_eq!(source.src_table_name_to_src_id.len(), 0);
 
         // Test adding table
         let schema = make_test_schema();
@@ -172,14 +175,14 @@ mod tests {
             .add_table("test_table".to_string(), 1, schema.clone())
             .unwrap();
         assert_eq!(source.table_schemas.len(), 1);
-        assert_eq!(source.table_name_to_src_id.len(), 1);
+        assert_eq!(source.src_table_name_to_src_id.len(), 1);
         assert!(source.table_schemas.contains_key("test_table"));
-        assert_eq!(source.table_name_to_src_id.get("test_table"), Some(&1));
+        assert_eq!(source.src_table_name_to_src_id.get("test_table"), Some(&1));
 
         // Test removing table
         source.remove_table("test_table").unwrap();
         assert_eq!(source.table_schemas.len(), 0);
-        assert_eq!(source.table_name_to_src_id.len(), 0);
+        assert_eq!(source.src_table_name_to_src_id.len(), 0);
     }
 
     #[test]
@@ -191,7 +194,7 @@ mod tests {
             .unwrap();
 
         let request = EventRequest {
-            table_name: "test_table".to_string(),
+            src_table_name: "test_table".to_string(),
             operation: EventOperation::Insert,
             payload: json!({
                 "id": 42,
@@ -260,7 +263,7 @@ mod tests {
         // No schema added
 
         let request = EventRequest {
-            table_name: "unknown_table".to_string(),
+            src_table_name: "unknown_table".to_string(),
             operation: EventOperation::Insert,
             payload: json!({"id": 1}),
             timestamp: SystemTime::now(),
@@ -287,14 +290,14 @@ mod tests {
             .unwrap();
 
         let request1 = EventRequest {
-            table_name: "test_table".to_string(),
+            src_table_name: "test_table".to_string(),
             operation: EventOperation::Insert,
             payload: json!({"id": 1, "name": "first"}),
             timestamp: SystemTime::now(),
         };
 
         let request2 = EventRequest {
-            table_name: "test_table".to_string(),
+            src_table_name: "test_table".to_string(),
             operation: EventOperation::Insert,
             payload: json!({"id": 2, "name": "second"}),
             timestamp: SystemTime::now(),
