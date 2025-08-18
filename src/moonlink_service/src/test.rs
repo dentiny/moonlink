@@ -1,20 +1,17 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use moonlink::decode_serialized_read_state_for_testing;
-use serde_json::json;
-use bytes::Bytes;
-use tokio::net::TcpStream;
-use arrow_array::{Int32Array, RecordBatch, StringArray};
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow::datatypes::{DataType, Field};
-use tempfile::TempDir;
+use arrow_array::{Int32Array, RecordBatch, StringArray};
+use bytes::Bytes;
+use moonlink::decode_serialized_read_state_for_testing;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-use std::io::Cursor;
-use reqwest;
+use serde_json::json;
+use tokio::net::TcpStream;
 
-use moonlink_rpc::{scan_table_begin, scan_table_end};
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
+use moonlink_rpc::{scan_table_begin, scan_table_end};
 
 /// Moonlink backend directory.
 const MOONLINK_BACKEND_DIR: &str = "/workspaces/moonlink/.shared-nginx";
@@ -27,25 +24,25 @@ const MOONLINK_ADDR: &str = "127.0.0.1:3031";
 /// Test database name.
 const DATABASE: &str = "test-database";
 /// Test table name.
-const TABLE: &str = "test-table";
+const TABLE: &str = "test-schema.test-table";
 
-/// Util function to delete and re-create the given directory.
-fn recreate_directory(dir: &str) {
-    // Clean up directory to place moonlink temporary files.
-    match std::fs::remove_dir_all(dir) {
-        Ok(()) => {}
-        Err(e) => {
-            if e.kind() != std::io::ErrorKind::NotFound {
-                return;
-            }
+/// Util function to delete and all subdirectories and files in the given directory.
+async fn cleanup_directory(dir: &str) {
+    let dir = std::path::Path::new(dir);
+    let mut entries = tokio::fs::read_dir(dir).await.unwrap();
+    while let Some(entry) = entries.next_entry().await.unwrap() {
+        let entry_path = entry.path();
+        if entry_path.is_dir() {
+            tokio::fs::remove_dir_all(&entry_path).await.unwrap();
+        } else {
+            tokio::fs::remove_file(&entry_path).await.unwrap();
         }
     }
-    std::fs::create_dir_all(dir).unwrap();
 }
 
 /// Send request to readiness endpoint.
 async fn test_readiness_probe() {
-    let url = format!("http://127.0.0.1:{}/ready", READINESS_PROBE_PORT);
+    let url = format!("http://127.0.0.1:{READINESS_PROBE_PORT}/ready");
     loop {
         if let Ok(resp) = reqwest::get(&url).await {
             if resp.status() == reqwest::StatusCode::OK {
@@ -61,31 +58,30 @@ pub async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     let resp = reqwest::get(url).await.unwrap();
     assert!(resp.status().is_success());
     let data: Bytes = resp.bytes().await.unwrap();
-    let reader = ParquetRecordBatchReaderBuilder::try_new(data).unwrap()
-        .build().unwrap();
-    let batches = reader
-        .into_iter()
-        .map(|b| b.unwrap())
-        .collect();
-    batches
+    let reader = ParquetRecordBatchReaderBuilder::try_new(data)
+        .unwrap()
+        .build()
+        .unwrap();
+
+    reader.into_iter().map(|b| b.unwrap()).collect()
 }
 
 /// Util function to create test arrow schema.
 fn create_test_arrow_schema() -> Arc<ArrowSchema> {
     Arc::new(ArrowSchema::new(vec![
-        Field::new("id", DataType::Int32, /*nullable=*/false).with_metadata(HashMap::from([(
+        Field::new("id", DataType::Int32, /*nullable=*/ false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
             "0".to_string(),
         )])),
-        Field::new("name", DataType::Utf8, /*nullable=*/false).with_metadata(HashMap::from([(
+        Field::new("name", DataType::Utf8, /*nullable=*/ false).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
             "1".to_string(),
         )])),
-        Field::new("email", DataType::Utf8, /*nullable=*/true).with_metadata(HashMap::from([(
+        Field::new("email", DataType::Utf8, /*nullable=*/ true).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
             "2".to_string(),
         )])),
-        Field::new("age", DataType::Int32, /*nullable=*/true).with_metadata(HashMap::from([(
+        Field::new("age", DataType::Int32, /*nullable=*/ true).with_metadata(HashMap::from([(
             "PARQUET:field_id".to_string(),
             "3".to_string(),
         )])),
@@ -94,7 +90,7 @@ fn create_test_arrow_schema() -> Arc<ArrowSchema> {
 
 #[tokio::test]
 async fn test_moonlink_standalone() {
-    recreate_directory(MOONLINK_BACKEND_DIR);
+    cleanup_directory(MOONLINK_BACKEND_DIR).await;
     let config = ServiceConfig {
         base_path: MOONLINK_BACKEND_DIR.to_string(),
         data_server_uri: Some(NGINX_ADDR.to_string()),
@@ -123,7 +119,8 @@ async fn test_moonlink_standalone() {
         .header("content-type", "application/json")
         .json(&create_table_payload)
         .send()
-        .await.unwrap();
+        .await
+        .unwrap();
     assert!(response.status().is_success());
 
     // Ingest some data.
@@ -141,7 +138,8 @@ async fn test_moonlink_standalone() {
         .header("content-type", "application/json")
         .json(&insert_payload)
         .send()
-        .await.unwrap();
+        .await
+        .unwrap();
     assert!(response.status().is_success());
 
     // Scan table and get data file and puffin files back.
@@ -151,8 +149,11 @@ async fn test_moonlink_standalone() {
         DATABASE.to_string(),
         TABLE.to_string(),
         0,
-    ).await.unwrap();
-    let (data_file_paths, puffin_file_paths, puffin_deletion, positional_deletion) = decode_serialized_read_state_for_testing(bytes);
+    )
+    .await
+    .unwrap();
+    let (data_file_paths, puffin_file_paths, puffin_deletion, positional_deletion) =
+        decode_serialized_read_state_for_testing(bytes);
     assert_eq!(data_file_paths.len(), 1);
     let record_batches = read_all_batches(&data_file_paths[0]).await;
     let expected_arrow_batch = RecordBatch::try_new(
@@ -170,13 +171,15 @@ async fn test_moonlink_standalone() {
     assert!(puffin_file_paths.is_empty());
     assert!(puffin_deletion.is_empty());
     assert!(positional_deletion.is_empty());
-    
+
     scan_table_end(
         &mut moonlink_stream,
         DATABASE.to_string(),
         TABLE.to_string(),
-    ).await.unwrap();
+    )
+    .await
+    .unwrap();
 
     // Cleanup shared directory.
-    recreate_directory(MOONLINK_BACKEND_DIR);
+    cleanup_directory(MOONLINK_BACKEND_DIR).await;
 }

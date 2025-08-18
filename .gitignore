@@ -1,3 +1,4 @@
 /.history
 /target/
 .vscode/
+.shared-nginx/

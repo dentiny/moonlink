@@ -94,16 +94,10 @@ impl ReadState {
             .collect::<Vec<_>>();
 
         // Map from local filepath to remote file path if needed and if possible.
-
-        println!("data files = {:?}", data_files);
-
         let remapped_data_files = data_files
             .into_iter()
             .map(|path| read_state_filepath_remap(path))
             .collect::<Vec<_>>();
-
-        println!("remapped data files = {:?}", remapped_data_files);
-
         let remapped_puffin_files = puffin_files
             .into_iter()
             .map(|path| read_state_filepath_remap(path))

@@ -80,11 +80,6 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
 
     // Initialize moonlink backend.
     let mut sigterm = signal(SignalKind::terminate()).unwrap();
-
-    println!("start with config = {:?}", config);
-
-    println!("sqlite metadata store = {}", config.base_path);
-
     let sqlite_metadata_accessor = SqliteMetadataStore::new_with_directory(&config.base_path)
         .await
         .unwrap();
