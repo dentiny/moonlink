@@ -70,7 +70,7 @@ async fn create_mooncake_table_for_replay(
 ) -> MooncakeTable {
     let line = lines.next_line().await.unwrap().unwrap();
     let replay_table_metadata: ReplayTableMetadata = serde_json::from_str(&line).unwrap();
-    let table_metadata = create_test_table_metadata_disable_flush(
+    let table_metadata = create_test_table_metadata_disable_flush_with_full_config(
         replay_env
             .table_temp_dir
             .path()
@@ -78,6 +78,8 @@ async fn create_mooncake_table_for_replay(
             .unwrap()
             .to_string(),
         create_disk_writer_config(),
+        replay_table_metadata.config.file_index_config,
+        replay_table_metadata.config.data_compaction_config,
         replay_table_metadata.identity.clone(),
     );
     let object_storage_cache = if replay_table_metadata.local_filesystem_optimization_enabled {
@@ -116,7 +118,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_detvh4ycbnhi";
+    let replay_filepath = "/tmp/chaos_test_5fl4gg617x7v";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -182,9 +184,6 @@ pub(crate) async fn replay() {
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
         while let Some(table_event) = table_event_receiver.recv().await {
-
-            println!("receive table event : {:?}", table_event);
-
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
@@ -298,9 +297,6 @@ pub(crate) async fn replay() {
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
-
-        println!("receive replay event {:?}", replay_table_event);
-
         match replay_table_event {
             // =====================
             // Foreground operations

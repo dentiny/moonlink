@@ -1166,7 +1166,7 @@ async fn test_chaos_on_local_fs_with_data_compaction() {
         deletion_enabled: true,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 20,
+        event_count: 3500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
