@@ -8,6 +8,7 @@ use bytes::Bytes;
 use moonlink::decode_serialized_read_state_for_testing;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde_json::json;
+use serial_test::serial;
 use tokio::net::TcpStream;
 
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
@@ -53,8 +54,39 @@ async fn test_readiness_probe() {
     }
 }
 
+/// Util function to get table creation payload.
+fn get_create_table_payload(mooncake_database: &str, mooncake_table: &str) -> serde_json::Value {
+    let create_table_payload = json!({
+        "mooncake_database": mooncake_database,
+        "mooncake_table": mooncake_table,
+        "schema": [
+            {"name": "id", "data_type": "int32", "nullable": false},
+            {"name": "name", "data_type": "string", "nullable": false},
+            {"name": "email", "data_type": "string", "nullable": true},
+            {"name": "age", "data_type": "int32", "nullable": true}
+        ]
+    });
+    create_table_payload
+}
+
+/// Util function to create table via REST API.
+async fn create_table(client: &reqwest::Client, mooncake_database: &str, mooncake_table: &str) {
+    // REST API doesn't allow duplicate source table name.
+    let crafted_src_table_name = format!("{mooncake_database}.{mooncake_table}");
+
+    let payload = get_create_table_payload(mooncake_database, mooncake_table);
+    let response = client
+        .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(response.status().is_success());
+}
+
 /// Util function to load all record batches inside of the given [`path`].
-pub async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
+async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     let resp = reqwest::get(url).await.unwrap();
     assert!(resp.status().is_success());
     let data: Bytes = resp.bytes().await.unwrap();
@@ -88,7 +120,9 @@ fn create_test_arrow_schema() -> Arc<ArrowSchema> {
     ]))
 }
 
+/// Test basic table creation, insertion and query.
 #[tokio::test]
+#[serial]
 async fn test_moonlink_standalone() {
     cleanup_directory(MOONLINK_BACKEND_DIR).await;
     let config = ServiceConfig {
@@ -104,24 +138,7 @@ async fn test_moonlink_standalone() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    let create_table_payload = json!({
-        "database": DATABASE,
-        "table": TABLE,
-        "schema": [
-            {"name": "id", "data_type": "int32", "nullable": false},
-            {"name": "name", "data_type": "string", "nullable": false},
-            {"name": "email", "data_type": "string", "nullable": true},
-            {"name": "age", "data_type": "int32", "nullable": true}
-        ]
-    });
-    let response = client
-        .post(format!("{REST_ADDR}/tables/{TABLE}"))
-        .header("content-type", "application/json")
-        .json(&create_table_payload)
-        .send()
-        .await
-        .unwrap();
-    assert!(response.status().is_success());
+    create_table(&client, DATABASE, TABLE).await;
 
     // Ingest some data.
     let insert_payload = json!({
@@ -182,4 +199,28 @@ async fn test_moonlink_standalone() {
 
     // Cleanup shared directory.
     cleanup_directory(MOONLINK_BACKEND_DIR).await;
+}
+
+/// Testing scenario: two tables with the same name, but under different databases are created.
+#[tokio::test]
+#[serial]
+async fn test_multiple_tables_creation() {
+    cleanup_directory(MOONLINK_BACKEND_DIR).await;
+    let config = ServiceConfig {
+        base_path: MOONLINK_BACKEND_DIR.to_string(),
+        data_server_uri: Some(NGINX_ADDR.to_string()),
+        rest_api_port: Some(3030),
+        tcp_port: Some(3031),
+    };
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create the first test table.
+    let client: reqwest::Client = reqwest::Client::new();
+    create_table(&client, DATABASE, TABLE).await;
+
+    // Create the second test table.
+    create_table(&client, "second-database", TABLE).await;
 }

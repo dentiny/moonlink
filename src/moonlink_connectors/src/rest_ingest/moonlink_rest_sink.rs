@@ -1,6 +1,6 @@
 use crate::rest_ingest::rest_source::SrcTableId;
 use crate::rest_ingest::rest_source::{EventOperation, RestEvent};
-use crate::Result;
+use crate::{Error, Result};
 use moonlink::TableEvent;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, watch};
@@ -34,15 +34,30 @@ impl RestSink {
         src_table_id: SrcTableId,
         event_sender: mpsc::Sender<TableEvent>,
         commit_lsn_tx: watch::Sender<u64>,
-    ) {
-        self.event_senders.insert(src_table_id, event_sender);
-        self.commit_lsn_txs.insert(src_table_id, commit_lsn_tx);
+    ) -> Result<()> {
+        if self
+            .event_senders
+            .insert(src_table_id, event_sender)
+            .is_some()
+        {
+            return Err(Error::RestDuplicateTable(src_table_id));
+        }
+        // Invariant sanity check.
+        assert!(self
+            .commit_lsn_txs
+            .insert(src_table_id, commit_lsn_tx)
+            .is_none());
+        Ok(())
     }
 
     /// Remove a table from the REST sink
-    pub fn drop_table(&mut self, src_table_id: SrcTableId) {
-        self.event_senders.remove(&src_table_id);
-        self.commit_lsn_txs.remove(&src_table_id);
+    pub fn drop_table(&mut self, src_table_id: SrcTableId) -> Result<()> {
+        if self.event_senders.remove(&src_table_id).is_none() {
+            return Err(Error::RestNonExistentTable(src_table_id));
+        }
+        // Invariant sanity check.
+        assert!(self.commit_lsn_txs.remove(&src_table_id).is_some());
+        Ok(())
     }
 
     /// Process a REST event and send appropriate table events
@@ -196,7 +211,8 @@ mod tests {
         let src_table_id = 1;
 
         // Add table to sink
-        sink.add_table(src_table_id, event_tx, commit_lsn_tx);
+        sink.add_table(src_table_id, event_tx, commit_lsn_tx)
+            .unwrap();
 
         // Create a test event
         let test_row = MoonlinkRow::new(vec![
@@ -257,7 +273,7 @@ mod tests {
             .contains("No event sender found"));
 
         // Test drop table
-        sink.drop_table(src_table_id);
+        sink.drop_table(src_table_id).unwrap();
 
         // Verify table was dropped by trying to send another event
         let result = sink
@@ -296,7 +312,8 @@ mod tests {
         let (commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
 
         let src_table_id = 1;
-        sink.add_table(src_table_id, event_tx, commit_lsn_tx);
+        sink.add_table(src_table_id, event_tx, commit_lsn_tx)
+            .unwrap();
 
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(42)]);
 
@@ -364,8 +381,8 @@ mod tests {
         let (commit_lsn_tx2, _commit_lsn_rx2) = watch::channel(0u64);
 
         // Add two tables
-        sink.add_table(1, event_tx1, commit_lsn_tx1);
-        sink.add_table(2, event_tx2, commit_lsn_tx2);
+        sink.add_table(1, event_tx1, commit_lsn_tx1).unwrap();
+        sink.add_table(2, event_tx2, commit_lsn_tx2).unwrap();
 
         // Test different operation types
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(1)]);
