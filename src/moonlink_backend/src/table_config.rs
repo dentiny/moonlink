@@ -81,8 +81,8 @@ impl TableConfig {
                 .mooncake_config
                 .take_as_mooncake_table_config(temp_files_dir),
             iceberg_table_config: IcebergTableConfig {
-                namespace: vec![mooncake_table_id.mooncake_database.clone()],
-                table_name: mooncake_table_id.mooncake_table.clone(),
+                namespace: vec![mooncake_table_id.database.clone()],
+                table_name: mooncake_table_id.table.clone(),
                 accessor_config: self.iceberg_config.unwrap(),
             },
         }

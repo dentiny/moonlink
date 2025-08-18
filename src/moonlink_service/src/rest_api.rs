@@ -30,8 +30,8 @@ impl ApiState {
 /// Request structure for table creation
 #[derive(Debug, Deserialize)]
 pub struct CreateTableRequest {
-    pub mooncake_database: String,
-    pub mooncake_table: String,
+    pub database: String,
+    pub table: String,
     pub schema: Vec<FieldSchema>,
 }
 
@@ -170,8 +170,8 @@ async fn create_table(
     match state
         .backend
         .create_table(
-            payload.mooncake_database.clone(),
-            payload.mooncake_table.clone(),
+            payload.database.clone(),
+            payload.table.clone(),
             table_name.clone(),
             REST_API_URI.to_string(),
             "{}".to_string(),
@@ -182,13 +182,13 @@ async fn create_table(
         Ok(()) => {
             info!(
                 "Successfully created table '{}' with ID {}:{}",
-                table_name, payload.mooncake_database, payload.mooncake_table,
+                table_name, payload.database, payload.table,
             );
             Ok(Json(CreateTableResponse {
                 status: "success".to_string(),
                 message: "Table created successfully".to_string(),
                 table_name,
-                schema: payload.mooncake_database.clone(),
+                schema: payload.database.clone(),
             }))
         }
         Err(e) => {

@@ -105,8 +105,8 @@ async fn test_moonlink_standalone() {
     // Create test table.
     let client = reqwest::Client::new();
     let create_table_payload = json!({
-        "mooncake_database": DATABASE,
-        "mooncake_table": TABLE,
+        "database": DATABASE,
+        "table": TABLE,
         "schema": [
             {"name": "id", "data_type": "int32", "nullable": false},
             {"name": "name", "data_type": "string", "nullable": false},

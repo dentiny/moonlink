@@ -90,15 +90,12 @@ impl TestEnvironment {
     }
 
     /// Create a new test environment with the given mooncake table.
-    pub(crate) async fn new_with_mooncake_table(
-        temp_dir: TempDir,
-        mooncake_table: MooncakeTable,
-    ) -> Self {
+    pub(crate) async fn new_with_mooncake_table(temp_dir: TempDir, table: MooncakeTable) -> Self {
         let (replication_tx, replication_rx) = watch::channel(0u64);
         let (last_commit_tx, last_commit_rx) = watch::channel(0u64);
-        let snapshot_lsn_tx = mooncake_table.get_snapshot_watch_sender().clone();
+        let snapshot_lsn_tx = table.get_snapshot_watch_sender().clone();
         let read_state_manager = Some(Arc::new(ReadStateManager::new(
-            &mooncake_table,
+            &table,
             replication_rx.clone(),
             last_commit_rx,
             get_read_state_filepath_remap(),
@@ -117,7 +114,7 @@ impl TestEnvironment {
         let table_handler_timer = create_table_handler_timers();
 
         let handler = TableHandler::new(
-            mooncake_table,
+            table,
             table_event_sync_sender,
             table_handler_timer,
             replication_rx.clone(),

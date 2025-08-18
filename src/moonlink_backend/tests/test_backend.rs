@@ -147,8 +147,8 @@ mod tests {
         // Check table status.
         let table_statuses = backend.list_tables().await.unwrap();
         let expected_table_status = TableStatus {
-            mooncake_database: DATABASE.to_string(),
-            mooncake_table: TABLE.to_string(),
+            database: DATABASE.to_string(),
+            table: TABLE.to_string(),
             commit_lsn: lsn,
             flush_lsn: Some(lsn),
             iceberg_warehouse_location: guard.tmp().unwrap().path().to_str().unwrap().to_string(),
@@ -274,8 +274,8 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(metadata_entries.len(), 1);
-        let mooncake_table = &metadata_entries[0].mooncake_table;
-        assert_eq!(mooncake_table, TABLE);
+        let table = &metadata_entries[0].table;
+        assert_eq!(table, TABLE);
         assert_eq!(
             metadata_entries[0]
                 .moonlink_table_config
