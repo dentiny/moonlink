@@ -1,4 +1,5 @@
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
+use crate::{Error, Result};
 use arrow_schema::Schema;
 use moonlink::row::MoonlinkRow;
 use std::collections::HashMap;
@@ -17,6 +18,10 @@ pub enum RestSourceError {
     UnknownTable(String),
     #[error("invalid operation for table: {0}")]
     InvalidOperation(String),
+    #[error("duplicate table created: {0}")]
+    DuplicateTable(String),
+    #[error("non-existent table to remove: {0}")]
+    NonExistentTable(String),
 }
 
 #[derive(Debug, Clone)]
@@ -70,26 +75,37 @@ impl RestSource {
         }
     }
 
-    pub fn add_table(&mut self, table_name: String, src_table_id: SrcTableId, schema: Arc<Schema>) {
-        assert!(self
+    pub fn add_table(
+        &mut self,
+        table_name: String,
+        src_table_id: SrcTableId,
+        schema: Arc<Schema>,
+    ) -> Result<()> {
+        if self
             .table_schemas
             .insert(table_name.clone(), schema)
-            .is_none());
+            .is_some()
+        {
+            return Err(RestSourceError::DuplicateTable(table_name).into());
+        }
+        // Invariant sanity check.
         assert!(self
             .table_name_to_src_id
             .insert(table_name, src_table_id)
             .is_none());
+        Ok(())
     }
 
-    pub fn remove_table(&mut self, table_name: &str) {
-        assert!(self.table_schemas.remove(table_name).is_some());
+    pub fn remove_table(&mut self, table_name: &str) -> Result<()> {
+        if self.table_schemas.remove(table_name).is_none() {
+            return Err(RestSourceError::NonExistentTable(table_name.to_string()).into());
+        }
+        // Invariant sanity check.
         assert!(self.table_name_to_src_id.remove(table_name).is_some());
+        Ok(())
     }
 
-    pub fn process_request(
-        &self,
-        request: EventRequest,
-    ) -> Result<Vec<RestEvent>, RestSourceError> {
+    pub fn process_request(&self, request: EventRequest) -> Result<Vec<RestEvent>> {
         let schema = self
             .table_schemas
             .get(&request.table_name)
@@ -101,7 +117,11 @@ impl RestSource {
             .ok_or_else(|| RestSourceError::UnknownTable(request.table_name.clone()))?;
 
         let converter = JsonToMoonlinkRowConverter::new(schema.clone());
-        let row = converter.convert(&request.payload)?;
+        let row = converter
+            .convert(&request.payload)
+            .map_err(|e| Error::RestSource {
+                source: Arc::new(RestSourceError::JsonConversion(e)),
+            })?;
 
         let row_lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
         let commit_lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
@@ -148,14 +168,16 @@ mod tests {
 
         // Test adding table
         let schema = make_test_schema();
-        source.add_table("test_table".to_string(), 1, schema.clone());
+        source
+            .add_table("test_table".to_string(), 1, schema.clone())
+            .unwrap();
         assert_eq!(source.table_schemas.len(), 1);
         assert_eq!(source.table_name_to_src_id.len(), 1);
         assert!(source.table_schemas.contains_key("test_table"));
         assert_eq!(source.table_name_to_src_id.get("test_table"), Some(&1));
 
         // Test removing table
-        source.remove_table("test_table");
+        source.remove_table("test_table").unwrap();
         assert_eq!(source.table_schemas.len(), 0);
         assert_eq!(source.table_name_to_src_id.len(), 0);
     }
@@ -164,7 +186,9 @@ mod tests {
     fn test_process_request_success() {
         let mut source = RestSource::new();
         let schema = make_test_schema();
-        source.add_table("test_table".to_string(), 1, schema);
+        source
+            .add_table("test_table".to_string(), 1, schema)
+            .unwrap();
 
         let request = EventRequest {
             table_name: "test_table".to_string(),
@@ -208,6 +232,29 @@ mod tests {
     }
 
     #[test]
+    fn test_create_existing_table() {
+        let mut source = RestSource::new();
+        let schema = make_test_schema();
+        source
+            .add_table(
+                "test_table".to_string(),
+                /*src_table_id=*/ 1,
+                schema.clone(),
+            )
+            .unwrap();
+
+        let res = source.add_table("test_table".to_string(), /*src_table_id=*/ 1, schema);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_drop_non_existent_table() {
+        let mut source = RestSource::new();
+        let res = source.remove_table("test_table");
+        assert!(res.is_err());
+    }
+
+    #[test]
     fn test_process_request_unknown_table() {
         let source = RestSource::new();
         // No schema added
@@ -221,10 +268,13 @@ mod tests {
 
         let err = source.process_request(request).unwrap_err();
         match err {
-            RestSourceError::UnknownTable(table_name) => {
-                assert_eq!(table_name, "unknown_table");
-            }
-            _ => panic!("Expected UnknownTable error"),
+            Error::RestSource { source } => match source.as_ref() {
+                RestSourceError::UnknownTable(table_name) => {
+                    assert_eq!(table_name, "unknown_table");
+                }
+                other => panic!("Expected UnknownTable, got {other:?}"),
+            },
+            other => panic!("Expected Error::RestSource, got {other:?}"),
         }
     }
 
@@ -232,7 +282,9 @@ mod tests {
     fn test_lsn_generation() {
         let mut source = RestSource::new();
         let schema = make_test_schema();
-        source.add_table("test_table".to_string(), 1, schema);
+        source
+            .add_table("test_table".to_string(), 1, schema)
+            .unwrap();
 
         let request1 = EventRequest {
             table_name: "test_table".to_string(),
