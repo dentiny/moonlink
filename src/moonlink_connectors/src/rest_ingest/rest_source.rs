@@ -81,7 +81,11 @@ impl RestSource {
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
     ) -> Result<()> {
-        if let Some(_) = self.table_schemas.insert(table_name.clone(), schema) {
+        if self
+            .table_schemas
+            .insert(table_name.clone(), schema)
+            .is_some()
+        {
             return Err(RestSourceError::DuplicateTable(table_name).into());
         }
         // Invariant sanity check.
@@ -237,10 +241,13 @@ mod tests {
 
         let err = source.process_request(request).unwrap_err();
         match err {
-            RestSourceError::UnknownTable(table_name) => {
-                assert_eq!(table_name, "unknown_table");
-            }
-            _ => panic!("Expected UnknownTable error"),
+            Error::RestSource { source } => match source.as_ref() {
+                RestSourceError::UnknownTable(table_name) => {
+                    assert_eq!(table_name, "unknown_table");
+                }
+                other => panic!("Expected UnknownTable, got {other:?}"),
+            },
+            other => panic!("Expected Error::RestSource, got {other:?}"),
         }
     }
 
