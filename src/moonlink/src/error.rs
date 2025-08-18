@@ -1,5 +1,6 @@
 use arrow::error::ArrowError;
 use iceberg::Error as IcebergError;
+use moonlink_error::io_error_utils::get_io_error_status;
 use moonlink_error::{ErrorStatus, ErrorStruct};
 use parquet::errors::ParquetError;
 use std::io;
@@ -85,22 +86,7 @@ impl From<IcebergError> for Error {
 impl From<io::Error> for Error {
     #[track_caller]
     fn from(source: io::Error) -> Self {
-        let status = match source.kind() {
-            io::ErrorKind::TimedOut
-            | io::ErrorKind::Interrupted
-            | io::ErrorKind::WouldBlock
-            | io::ErrorKind::ConnectionRefused
-            | io::ErrorKind::ConnectionAborted
-            | io::ErrorKind::ConnectionReset
-            | io::ErrorKind::BrokenPipe
-            | io::ErrorKind::NetworkDown
-            | io::ErrorKind::ResourceBusy
-            | io::ErrorKind::QuotaExceeded => ErrorStatus::Temporary,
-
-            // All other errors are permanent
-            _ => ErrorStatus::Permanent,
-        };
-
+        let status = get_io_error_status(&source);
         Error::Io(ErrorStruct::new("IO error".to_string(), status).with_source(source))
     }
 }
@@ -200,7 +186,7 @@ mod tests {
         if let Error::Io(ref inner) = io_error {
             let loc = inner.location.as_ref().unwrap();
             assert!(loc.contains("src/moonlink/src/error.rs"));
-            assert!(loc.contains("184"));
+            assert!(loc.contains("170"));
             assert!(loc.contains("9"));
         }
     }

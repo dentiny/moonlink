@@ -1,7 +1,7 @@
 -- SQL statements to store moonlink secret related fields.
 CREATE TABLE secrets (
     id SERIAL PRIMARY KEY,      -- Unique row identifier
-    "schema" TEXT,              -- column store schema name
+    "database" TEXT,            -- column store database name
     "table" TEXT,               -- column store table name
     secret_type TEXT,           -- One of (S3, GCS)
     key_id TEXT,
@@ -11,5 +11,5 @@ CREATE TABLE secrets (
     region TEXT            -- (optional)
 );
 
--- Index to enable query on ("schema", "table").
-CREATE INDEX idx_secrets_uid_oid ON secrets ("schema", "table");
+-- Index to enable query on ("database", "table").
+CREATE INDEX idx_secrets_uid_oid ON secrets ("database", "table");

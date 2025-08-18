@@ -3,7 +3,7 @@ use arrow_ipc::writer::StreamWriter;
 use moonlink_backend::MoonlinkBackend;
 use moonlink_rpc::{read, write, Request, Table};
 use std::collections::HashMap;
-use std::error;
+use std::error::Error as StdError;
 use std::io::ErrorKind::{BrokenPipe, ConnectionReset, UnexpectedEof};
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -31,14 +31,15 @@ pub async fn start_unix_server(
         let backend = Arc::clone(&backend);
         tokio::spawn(async move {
             match handle_stream(backend, stream).await {
-                Err(Error::Rpc(moonlink_rpc::Error::Io(e)))
-                    if error::Error::source(&e)
+                Err(Error::Rpc(error_struct))
+                    if error_struct
+                        .source()
                         .and_then(|src| src.downcast_ref::<std::io::Error>())
                         .map(|io_err| {
                             matches!(io_err.kind(), BrokenPipe | ConnectionReset | UnexpectedEof)
                         })
                         .unwrap_or(false) => {}
-                Err(e) => panic!("{e}"),
+                Err(e) => panic!("Unexpected Unix RPC server error: {e}"),
                 Ok(()) => {}
             }
         });
@@ -55,14 +56,15 @@ pub async fn start_tcp_server(backend: Arc<MoonlinkBackend>, addr: SocketAddr) -
         let backend = Arc::clone(&backend);
         tokio::spawn(async move {
             match handle_stream(backend, stream).await {
-                Err(Error::Rpc(moonlink_rpc::Error::Io(e)))
-                    if error::Error::source(&e)
+                Err(Error::Rpc(error_struct))
+                    if error_struct
+                        .source()
                         .and_then(|src| src.downcast_ref::<std::io::Error>())
                         .map(|io_err| {
                             matches!(io_err.kind(), BrokenPipe | ConnectionReset | UnexpectedEof)
                         })
                         .unwrap_or(false) => {}
-                Err(e) => panic!("{e}"),
+                Err(e) => panic!("Unexpected TCP RPC server error: {e}"),
                 Ok(()) => {}
             }
         });
@@ -77,12 +79,16 @@ where
     loop {
         let request = read(&mut stream).await?;
         match request {
-            Request::CreateSnapshot { schema, table, lsn } => {
-                backend.create_snapshot(schema, table, lsn).await.unwrap();
+            Request::CreateSnapshot {
+                database,
+                table,
+                lsn,
+            } => {
+                backend.create_snapshot(database, table, lsn).await.unwrap();
                 write(&mut stream, &()).await?;
             }
             Request::CreateTable {
-                schema,
+                database,
                 table,
                 src,
                 src_uri,
@@ -91,24 +97,24 @@ where
                 // Use default mooncake config, and local filesystem for storage layer.
                 backend
                     .create_table(
-                        schema,
+                        database,
                         table,
                         src,
                         src_uri,
                         table_config,
-                        None, /* input_schema */
+                        None, /* input_database */
                     )
                     .await
                     .unwrap();
                 write(&mut stream, &()).await?;
             }
-            Request::DropTable { schema, table } => {
-                backend.drop_table(schema, table).await;
+            Request::DropTable { database, table } => {
+                backend.drop_table(database, table).await;
                 write(&mut stream, &()).await?;
             }
-            Request::GetTableSchema { schema, table } => {
-                let schema = backend.get_table_schema(schema, table).await?;
-                let writer = StreamWriter::try_new(vec![], &schema)?;
+            Request::GetTableSchema { database, table } => {
+                let database = backend.get_table_schema(database, table).await?;
+                let writer = StreamWriter::try_new(vec![], &database)?;
                 let data = writer.into_inner()?;
                 write(&mut stream, &data).await?;
             }
@@ -117,7 +123,7 @@ where
                 let tables: Vec<Table> = tables
                     .into_iter()
                     .map(|table| Table {
-                        schema: table.schema,
+                        database: table.database,
                         table: table.table,
                         commit_lsn: table.commit_lsn,
                         flush_lsn: table.flush_lsn,
@@ -127,23 +133,30 @@ where
                 write(&mut stream, &tables).await?;
             }
             Request::OptimizeTable {
-                schema,
+                database,
                 table,
                 mode,
             } => {
-                backend.optimize_table(schema, table, &mode).await.unwrap();
+                backend
+                    .optimize_table(database, table, &mode)
+                    .await
+                    .unwrap();
                 write(&mut stream, &()).await?;
             }
-            Request::ScanTableBegin { schema, table, lsn } => {
+            Request::ScanTableBegin {
+                database,
+                table,
+                lsn,
+            } => {
                 let state = backend
-                    .scan_table(schema.to_string(), table.to_string(), Some(lsn))
+                    .scan_table(database.to_string(), table.to_string(), Some(lsn))
                     .await
                     .unwrap();
                 write(&mut stream, &state.data).await?;
-                assert!(map.insert((schema, table), state).is_none());
+                assert!(map.insert((database, table), state).is_none());
             }
-            Request::ScanTableEnd { schema, table } => {
-                assert!(map.remove(&(schema, table)).is_some());
+            Request::ScanTableEnd { database, table } => {
+                assert!(map.remove(&(database, table)).is_some());
                 write(&mut stream, &()).await?;
             }
         }

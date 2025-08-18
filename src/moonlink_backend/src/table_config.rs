@@ -1,3 +1,4 @@
+use crate::mooncake_table_id::MooncakeTableId;
 use crate::Result;
 use moonlink::{
     AccessorConfig as IcebergConfig, DataCompactionConfig, FileIndexMergeConfig,
@@ -5,9 +6,6 @@ use moonlink::{
 };
 /// Configuration on table creation.
 use serde::{Deserialize, Serialize};
-
-/// Default namespace for all iceberg tables.
-const DEFAULT_ICEBERG_NAMESPACE: &str = "default";
 
 /// Mooncake table config.
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Default)]
@@ -76,15 +74,15 @@ impl TableConfig {
     pub(crate) fn take_as_moonlink_config(
         self,
         temp_files_dir: String,
-        mooncake_table_id: String,
+        mooncake_table_id: &MooncakeTableId,
     ) -> MoonlinkTableConfig {
         MoonlinkTableConfig {
             mooncake_table_config: self
                 .mooncake_config
                 .take_as_mooncake_table_config(temp_files_dir),
             iceberg_table_config: IcebergTableConfig {
-                namespace: vec![DEFAULT_ICEBERG_NAMESPACE.to_string()],
-                table_name: mooncake_table_id,
+                namespace: vec![mooncake_table_id.database.clone()],
+                table_name: mooncake_table_id.table.clone(),
                 accessor_config: self.iceberg_config.unwrap(),
             },
         }

@@ -1,9 +1,9 @@
 /// Current table status.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableStatus {
-    /// Schema name.
-    pub schema: String,
-    /// Table name.
+    /// Mooncake database name.
+    pub database: String,
+    /// Mooncake table name.
     pub table: String,
     /// Mooncake table commit LSN.
     pub commit_lsn: u64,

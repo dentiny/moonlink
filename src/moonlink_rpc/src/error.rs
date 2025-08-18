@@ -1,3 +1,4 @@
+use moonlink_error::io_error_utils::get_io_error_status;
 use moonlink_error::{ErrorStatus, ErrorStruct};
 use std::io;
 use std::result;
@@ -43,21 +44,7 @@ impl From<bincode::error::EncodeError> for Error {
 impl From<io::Error> for Error {
     #[track_caller]
     fn from(source: io::Error) -> Self {
-        let status = match source.kind() {
-            io::ErrorKind::TimedOut
-            | io::ErrorKind::Interrupted
-            | io::ErrorKind::WouldBlock
-            | io::ErrorKind::ConnectionRefused
-            | io::ErrorKind::ConnectionAborted
-            | io::ErrorKind::ConnectionReset
-            | io::ErrorKind::BrokenPipe
-            | io::ErrorKind::NetworkDown
-            | io::ErrorKind::ResourceBusy
-            | io::ErrorKind::QuotaExceeded => ErrorStatus::Temporary,
-
-            _ => ErrorStatus::Permanent,
-        };
-
+        let status = get_io_error_status(&source);
         Error::Io(ErrorStruct::new("IO error".to_string(), status).with_source(source))
     }
 }

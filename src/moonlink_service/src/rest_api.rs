@@ -30,8 +30,8 @@ impl ApiState {
 /// Request structure for table creation
 #[derive(Debug, Deserialize)]
 pub struct CreateTableRequest {
-    pub schema_name: String,
-    pub table_name: String,
+    pub database: String,
+    pub table: String,
     pub schema: Vec<FieldSchema>,
 }
 
@@ -170,8 +170,8 @@ async fn create_table(
     match state
         .backend
         .create_table(
-            payload.schema_name.clone(),
-            payload.table_name.clone(),
+            payload.database.clone(),
+            payload.table.clone(),
             table_name.clone(),
             REST_API_URI.to_string(),
             "{}".to_string(),
@@ -182,13 +182,13 @@ async fn create_table(
         Ok(()) => {
             info!(
                 "Successfully created table '{}' with ID {}:{}",
-                table_name, payload.schema_name, payload.table_name,
+                table_name, payload.database, payload.table,
             );
             Ok(Json(CreateTableResponse {
                 status: "success".to_string(),
                 message: "Table created successfully".to_string(),
                 table_name,
-                schema: payload.schema_name.clone(),
+                schema: payload.database.clone(),
             }))
         }
         Err(e) => {
@@ -206,13 +206,13 @@ async fn create_table(
 
 /// Data ingestion endpoint
 async fn ingest_data(
-    Path(table_name): Path<String>,
+    Path(src_table_name): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<IngestRequest>,
 ) -> Result<Json<IngestResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!(
         "Received ingestion request for table '{}': {:?}",
-        table_name, payload
+        src_table_name, payload
     );
 
     // Parse operation
@@ -236,7 +236,7 @@ async fn ingest_data(
 
     // Create REST request
     let rest_request = EventRequest {
-        table_name: table_name.clone(),
+        src_table_name: src_table_name.clone(),
         operation,
         payload: payload.data,
         timestamp: SystemTime::now(),
@@ -259,7 +259,7 @@ async fn ingest_data(
     Ok(Json(IngestResponse {
         status: "success".to_string(),
         message: "Data queued for ingestion".to_string(),
-        table: table_name,
+        table: src_table_name,
         operation: payload.operation,
     }))
 }

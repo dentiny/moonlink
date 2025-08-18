@@ -164,10 +164,10 @@ pub async fn run_rest_event_loop(
                     debug!("Adding REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Add to sink (handles table events)
-                    sink.add_table(src_table_id, event_sender, commit_lsn_tx);
+                    sink.add_table(src_table_id, event_sender, commit_lsn_tx).unwrap();
 
                     // Add to source (handles schema and request processing)
-                    rest_source.add_table(src_table_name.clone(), src_table_id, schema);
+                    rest_source.add_table(src_table_name.clone(), src_table_id, schema)?;
 
                     _flush_lsn_rxs.insert(src_table_id, flush_lsn_rx);
                     _wal_flush_lsn_rxs.insert(src_table_id, wal_flush_lsn_rx);
@@ -177,10 +177,10 @@ pub async fn run_rest_event_loop(
                     debug!("Dropping REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Remove from sink
-                    sink.drop_table(src_table_id);
+                    sink.drop_table(src_table_id).unwrap();
 
                     // Remove from source
-                    rest_source.remove_table(&src_table_name);
+                    rest_source.remove_table(&src_table_name)?;
                     _flush_lsn_rxs.remove(&src_table_id);
                     _wal_flush_lsn_rxs.remove(&src_table_id);
                 }

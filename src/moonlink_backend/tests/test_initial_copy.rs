@@ -3,7 +3,7 @@ mod common;
 #[cfg(test)]
 mod tests {
     use super::common::{
-        current_wal_lsn, ids_from_state, ids_from_state_with_deletes, TestGuard, SCHEMA, SRC_URI,
+        current_wal_lsn, ids_from_state, ids_from_state_with_deletes, TestGuard, DATABASE, SRC_URI,
         TABLE,
     };
     use serial_test::serial;
@@ -49,7 +49,7 @@ mod tests {
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -74,7 +74,7 @@ mod tests {
         let ids = ids_from_state(
             &backend
                 .scan_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     Some(lsn_after_insert),
                 )
@@ -90,7 +90,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -131,7 +131,7 @@ mod tests {
         // Register the table - this kicks off *initial copy* in the background
         backend
             .create_table(
-                SCHEMA.to_string(),
+                DATABASE.to_string(),
                 TABLE.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
@@ -149,7 +149,7 @@ mod tests {
         let ids = ids_from_state(
             &backend
                 .scan_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     Some(lsn_after_insert),
                 )
@@ -166,7 +166,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -202,7 +202,7 @@ mod tests {
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -230,7 +230,7 @@ mod tests {
 
         let ids = ids_from_state(
             &backend
-                .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+                .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
                 .await
                 .unwrap(),
         );
@@ -246,7 +246,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -282,7 +282,7 @@ mod tests {
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -334,7 +334,7 @@ mod tests {
         let lsn = current_wal_lsn(&initial_client).await;
         let ids = ids_from_state(
             &backend
-                .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+                .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
                 .await
                 .unwrap(),
         );
@@ -351,7 +351,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -391,7 +391,7 @@ mod tests {
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -424,7 +424,7 @@ mod tests {
         let lsn = current_wal_lsn(&initial_client).await;
         let ids = ids_from_state_with_deletes(
             &backend
-                .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+                .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
                 .await
                 .unwrap(),
         )
@@ -440,7 +440,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -474,7 +474,7 @@ mod tests {
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -501,7 +501,7 @@ mod tests {
         let lsn = current_wal_lsn(&initial_client).await;
         let ids = ids_from_state_with_deletes(
             &backend
-                .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+                .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
                 .await
                 .unwrap(),
         )
@@ -518,7 +518,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -546,7 +546,7 @@ mod tests {
         let backend = guard.backend();
         backend
             .create_table(
-                SCHEMA.to_string(),
+                DATABASE.to_string(),
                 TABLE.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
@@ -559,7 +559,7 @@ mod tests {
         // Scan should yield empty set; also exercises the early no-copy branch
         let ids = ids_from_state(
             &backend
-                .scan_table(SCHEMA.to_string(), TABLE.to_string(), None)
+                .scan_table(DATABASE.to_string(), TABLE.to_string(), None)
                 .await
                 .unwrap(),
         );
@@ -571,7 +571,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -614,7 +614,7 @@ mod tests {
         let create_handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -682,7 +682,7 @@ mod tests {
         let lsn = current_wal_lsn(&initial_client).await;
         let observed_ids = ids_from_state_with_deletes(
             &backend
-                .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+                .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
                 .await
                 .unwrap(),
         )
@@ -722,7 +722,7 @@ mod tests {
             .await
             .unwrap();
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -755,7 +755,7 @@ mod tests {
         let handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -781,7 +781,7 @@ mod tests {
 
         // Best-effort cleanup of mooncake table if it was partially created
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 
@@ -814,7 +814,7 @@ mod tests {
         let handle = tokio::spawn(async move {
             backend_clone
                 .create_table(
-                    SCHEMA.to_string(),
+                    DATABASE.to_string(),
                     TABLE.to_string(),
                     format!("public.{table_name}"),
                     SRC_URI.to_string(),
@@ -836,7 +836,7 @@ mod tests {
         let _ = handle.await; // ignore result; best-effort
 
         let _ = backend
-            .drop_table(SCHEMA.to_string(), TABLE.to_string())
+            .drop_table(DATABASE.to_string(), TABLE.to_string())
             .await;
     }
 }

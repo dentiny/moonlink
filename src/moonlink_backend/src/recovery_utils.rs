@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::mooncake_table_id::MooncakeTableId;
 use moonlink::ReadStateFilepathRemap;
-use moonlink_connectors::ReplicationManager;
+use moonlink_connectors::{ReplicationManager, REST_API_URI};
 use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMetadataEntry};
 
 use std::collections::HashSet;
@@ -18,8 +18,13 @@ async fn recover_table(
     replication_manager: &mut ReplicationManager<MooncakeTableId>,
     read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()> {
+    // Table created by REST API doesn't support recovery.
+    if metadata_entry.src_table_uri == REST_API_URI {
+        return Ok(());
+    }
+
     let mooncake_table_id = MooncakeTableId {
-        schema: metadata_entry.schema,
+        database: metadata_entry.database,
         table: metadata_entry.table,
     };
     replication_manager

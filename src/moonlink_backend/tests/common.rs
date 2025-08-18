@@ -13,10 +13,10 @@ use moonlink::{decode_read_state_for_testing, AccessorConfig, StorageConfig};
 use moonlink_backend::file_utils::{recreate_directory, DEFAULT_MOONLINK_TEMP_FILE_PATH};
 use moonlink_backend::{MoonlinkBackend, ReadState};
 
-/// Mooncake table schema.
-pub const SCHEMA: &str = "mooncake-schema";
+/// Mooncake table database.
+pub const DATABASE: &str = "mooncake-database";
 /// Mooncake table name.
-pub const TABLE: &str = "mooncake-table";
+pub const TABLE: &str = "mooncake-schema.mooncake-table";
 
 pub const SRC_URI: &str = "postgresql://postgres:postgres@postgres:5432/postgres";
 
@@ -104,7 +104,7 @@ impl Drop for TestGuard {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
                 let _ = backend
-                    .drop_table(SCHEMA.to_string(), TABLE.to_string())
+                    .drop_table(DATABASE.to_string(), TABLE.to_string())
                     .await;
                 let _ = backend.shutdown_connection(SRC_URI, true).await;
                 let _ = recreate_directory(DEFAULT_MOONLINK_TEMP_FILE_PATH);
@@ -191,11 +191,14 @@ pub async fn create_backend_from_tempdir(tempdir: &TempDir) -> MoonlinkBackend {
 #[allow(dead_code)]
 pub async fn scan_ids(
     backend: &MoonlinkBackend,
-    schema: String,
+    database: String,
     table: String,
     lsn: u64,
 ) -> HashSet<i64> {
-    let state = backend.scan_table(schema, table, Some(lsn)).await.unwrap();
+    let state = backend
+        .scan_table(database, table, Some(lsn))
+        .await
+        .unwrap();
     ids_from_state(&state)
 }
 
@@ -204,11 +207,14 @@ pub async fn scan_ids(
 #[allow(dead_code)]
 pub async fn scan_id_counts(
     backend: &MoonlinkBackend,
-    schema: String,
+    database: String,
     table: String,
     lsn: u64,
 ) -> HashMap<i64, u64> {
-    let state = backend.scan_table(schema, table, Some(lsn)).await.unwrap();
+    let state = backend
+        .scan_table(database, table, Some(lsn))
+        .await
+        .unwrap();
     nonunique_ids_from_state(&state)
 }
 
@@ -217,13 +223,13 @@ pub async fn scan_id_counts(
 #[allow(dead_code)]
 pub async fn assert_scan_ids_eq(
     backend: &MoonlinkBackend,
-    schema: String,
+    database: String,
     table: String,
     lsn: u64,
     expected: impl IntoIterator<Item = i64>,
 ) {
     let expected: HashSet<i64> = expected.into_iter().collect();
-    let actual = scan_ids(backend, schema, table, lsn).await;
+    let actual = scan_ids(backend, database, table, lsn).await;
     assert_eq!(actual, expected);
 }
 
@@ -234,12 +240,12 @@ pub async fn assert_scan_ids_eq(
 #[allow(dead_code)]
 pub async fn assert_scan_nonunique_ids_eq(
     backend: &MoonlinkBackend,
-    schema: String,
+    database: String,
     table: String,
     lsn: u64,
     expected_counts: &HashMap<i64, u64>,
 ) {
-    let actual = scan_id_counts(backend, schema, table, lsn).await;
+    let actual = scan_id_counts(backend, database, table, lsn).await;
     assert_eq!(actual, *expected_counts);
 }
 
@@ -248,18 +254,18 @@ pub async fn assert_scan_nonunique_ids_eq(
 #[allow(dead_code)]
 pub async fn create_updated_iceberg_snapshot(
     backend: &MoonlinkBackend,
-    schema: &str,
+    database: &str,
     table: &str,
     client: &Client,
 ) -> u64 {
     let lsn = current_wal_lsn(client).await;
     // Ensure changes are reflected in Mooncake snapshot first
     backend
-        .scan_table(schema.to_string(), table.to_string(), Some(lsn))
+        .scan_table(database.to_string(), table.to_string(), Some(lsn))
         .await
         .unwrap();
     backend
-        .create_snapshot(schema.to_string(), table.to_string(), lsn)
+        .create_snapshot(database.to_string(), table.to_string(), lsn)
         .await
         .unwrap();
     lsn
@@ -467,7 +473,7 @@ async fn setup_backend(
             .unwrap();
         backend
             .create_table(
-                SCHEMA.to_string(),
+                DATABASE.to_string(),
                 TABLE.to_string(),
                 format!("public.{table_name}"),
                 SRC_URI.to_string(),
@@ -518,7 +524,7 @@ pub async fn smoke_create_and_insert(
     // Re-create table.
     backend
         .create_table(
-            SCHEMA.to_string(),
+            DATABASE.to_string(),
             TABLE.to_string(),
             "public.test".to_string(),
             uri.to_string(),
@@ -535,12 +541,12 @@ pub async fn smoke_create_and_insert(
         .unwrap();
 
     let old = backend
-        .scan_table(SCHEMA.to_string(), TABLE.to_string(), None)
+        .scan_table(DATABASE.to_string(), TABLE.to_string(), None)
         .await
         .unwrap();
     let lsn = current_wal_lsn(client).await;
     let new = backend
-        .scan_table(SCHEMA.to_string(), TABLE.to_string(), Some(lsn))
+        .scan_table(DATABASE.to_string(), TABLE.to_string(), Some(lsn))
         .await
         .unwrap();
     assert_ne!(old.data, new.data);

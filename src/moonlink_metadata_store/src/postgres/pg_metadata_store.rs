@@ -8,13 +8,14 @@ use crate::postgres::pg_client_wrapper::PgClientWrapper;
 use crate::postgres::utils;
 use moonlink::MoonlinkTableConfig;
 use moonlink::MoonlinkTableSecret;
+use moonlink_error::{ErrorStatus, ErrorStruct};
 
 use async_trait::async_trait;
 use postgres_types::Json as PgJson;
 
-/// SQL statements for moonlink metadata table schema.
+/// SQL statements for moonlink metadata table database.
 const CREATE_TABLE_SCHEMA_SQL: &str = include_str!("sql/create_tables.sql");
-/// SQL statements for moonlink secret table schema.
+/// SQL statements for moonlink secret table database.
 const CREATE_SECRET_SCHEMA_SQL: &str = include_str!("sql/create_secrets.sql");
 
 pub struct PgMetadataStore {
@@ -36,7 +37,7 @@ impl MetadataStoreTrait for PgMetadataStore {
             .query(
                 r#"
                 SELECT 
-                    t."schema",
+                    t."database",
                     t."table",
                     t.src_table_name,
                     t.src_table_uri,
@@ -49,7 +50,7 @@ impl MetadataStoreTrait for PgMetadataStore {
                     s.project
                 FROM tables t
                 LEFT JOIN secrets s
-                    ON t."schema" = s."schema"
+                    ON t."database" = s."database"
                     AND t."table" = s."table"
                 "#,
                 &[],
@@ -58,7 +59,7 @@ impl MetadataStoreTrait for PgMetadataStore {
 
         let mut metadata_entries = Vec::with_capacity(rows.len());
         for row in rows {
-            let schema: String = row.get("schema");
+            let database: String = row.get("database");
             let table: String = row.get("table");
             let src_table_name: String = row.get("src_table_name");
             let src_table_uri: String = row.get("src_table_uri");
@@ -78,7 +79,7 @@ impl MetadataStoreTrait for PgMetadataStore {
                 config_utils::deserialize_moonlink_table_config(serialized_config, secret_entry)?;
 
             let metadata_entry = TableMetadataEntry {
-                schema,
+                database,
                 table,
                 src_table_name,
                 src_table_uri,
@@ -92,7 +93,7 @@ impl MetadataStoreTrait for PgMetadataStore {
 
     async fn store_table_metadata(
         &self,
-        schema: &str,
+        database: &str,
         table: &str,
         src_table_name: &str,
         src_table_uri: &str,
@@ -126,10 +127,10 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                r#"INSERT INTO tables ("schema", "table", src_table_name, src_table_uri, config)
+                r#"INSERT INTO tables ("database", "table", src_table_name, src_table_uri, config)
                 VALUES ($1, $2, $3, $4, $5)"#,
                 &[
-                    &schema,
+                    &database,
                     &table,
                     &src_table_name,
                     &src_table_uri,
@@ -138,7 +139,10 @@ impl MetadataStoreTrait for PgMetadataStore {
             )
             .await?;
         if rows_affected != 1 {
-            return Err(Error::PostgresRowCountError(1, rows_affected as u32));
+            return Err(Error::PostgresRowCountError(ErrorStruct::new(
+                format!("expected 1 row affected, but got {rows_affected}"),
+                ErrorStatus::Permanent,
+            )));
         }
 
         // Persist table secrets.
@@ -146,10 +150,10 @@ impl MetadataStoreTrait for PgMetadataStore {
             let rows_affected = pg_client
                 .postgres_client
                 .execute(
-                    r#"INSERT INTO secrets ("schema", "table", secret_type, key_id, secret, endpoint, region, project)
+                    r#"INSERT INTO secrets ("database", "table", secret_type, key_id, secret, endpoint, region, project)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"#,
                     &[
-                        &schema,
+                        &database,
                         &table,
                         &table_secret.get_secret_type(),
                         &table_secret.key_id,
@@ -161,7 +165,10 @@ impl MetadataStoreTrait for PgMetadataStore {
                 )
                 .await?;
             if rows_affected != 1 {
-                return Err(Error::PostgresRowCountError(1, rows_affected as u32));
+                return Err(Error::PostgresRowCountError(ErrorStruct::new(
+                    format!("expected 1 row affected, but got {rows_affected}"),
+                    ErrorStatus::Permanent,
+                )));
             }
         }
 
@@ -171,7 +178,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         Ok(())
     }
 
-    async fn delete_table_metadata(&self, schema: &str, table: &str) -> Result<()> {
+    async fn delete_table_metadata(&self, database: &str, table: &str) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
 
         // Start a transaction to insert rows into metadata table and secret table.
@@ -181,20 +188,23 @@ impl MetadataStoreTrait for PgMetadataStore {
         let rows_affected = pg_client
             .postgres_client
             .execute(
-                r#"DELETE FROM tables WHERE "schema" = $1 AND "table" = $2"#,
-                &[&schema, &table],
+                r#"DELETE FROM tables WHERE "database" = $1 AND "table" = $2"#,
+                &[&database, &table],
             )
             .await?;
         if rows_affected != 1 {
-            return Err(Error::PostgresRowCountError(1, rows_affected as u32));
+            return Err(Error::PostgresRowCountError(ErrorStruct::new(
+                format!("expected 1 row affected, but got {rows_affected}"),
+                ErrorStatus::Permanent,
+            )));
         }
 
         // Delete rows for secret table, intentionally no check affected row counts.
         pg_client
             .postgres_client
             .execute(
-                r#"DELETE FROM secrets WHERE "schema" = $1 AND "table" = $2"#,
-                &[&schema, &table],
+                r#"DELETE FROM secrets WHERE "database" = $1 AND "table" = $2"#,
+                &[&database, &table],
             )
             .await?;
 
@@ -206,7 +216,7 @@ impl MetadataStoreTrait for PgMetadataStore {
 }
 
 impl PgMetadataStore {
-    /// Attempt to create a metadata storage; if [`mooncake`] schema doesn't exist, current database is not managed by moonlink, return None.
+    /// Attempt to create a metadata storage; if [`mooncake`] database doesn't exist, current database is not managed by moonlink, return None.
     pub fn new(uri: String) -> Result<Self> {
         Ok(Self { uri })
     }

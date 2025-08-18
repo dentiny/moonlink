@@ -107,10 +107,10 @@ impl MoonlinkBackend {
 
     /// Create an iceberg snapshot with the given LSN, return when the a snapshot is successfully created.
     /// If the requested database or table doesn't exist, return [`TableNotFound`] error.
-    pub async fn create_snapshot(&self, schema: String, table: String, lsn: u64) -> Result<()> {
+    pub async fn create_snapshot(&self, database: String, table: String, lsn: u64) -> Result<()> {
         let rx = {
             let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId { schema, table };
+            let mooncake_table_id = MooncakeTableId { database, table };
             let writer = manager.get_table_event_manager(&mooncake_table_id)?;
             writer.initiate_snapshot(lsn).await
         };
@@ -129,7 +129,7 @@ impl MoonlinkBackend {
     /// * table_config: json serialized table configuration.
     pub async fn create_table(
         &self,
-        schema: String,
+        database: String,
         table: String,
         src_table_name: String,
         src_uri: String,
@@ -137,14 +137,14 @@ impl MoonlinkBackend {
         input_schema: Option<Schema>,
     ) -> Result<()> {
         let mooncake_table_id = MooncakeTableId {
-            schema: schema.clone(),
+            database: database.clone(),
             table: table.clone(),
         };
 
         // Add mooncake table to replication, and create corresponding mooncake table.
         let table_config = TableConfig::from_json_or_default(&table_config, &self.base_path)?;
-        let moonlink_table_config = table_config
-            .take_as_moonlink_config(self.temp_files_dir.clone(), mooncake_table_id.to_string());
+        let moonlink_table_config =
+            table_config.take_as_moonlink_config(self.temp_files_dir.clone(), &mooncake_table_id);
         {
             let mut manager = self.replication_manager.write().await;
             if src_uri == REST_API_URI {
@@ -177,7 +177,7 @@ impl MoonlinkBackend {
         // Create metadata store entry.
         self.metadata_store_accessor
             .store_table_metadata(
-                &schema,
+                &database,
                 &table,
                 &src_table_name,
                 &src_uri,
@@ -188,8 +188,8 @@ impl MoonlinkBackend {
         Ok(())
     }
 
-    pub async fn drop_table(&self, schema: String, table: String) {
-        let mooncake_table_id = MooncakeTableId { schema, table };
+    pub async fn drop_table(&self, database: String, table: String) {
+        let mooncake_table_id = MooncakeTableId { database, table };
 
         let table_exists = {
             let mut manager = self.replication_manager.write().await;
@@ -200,7 +200,7 @@ impl MoonlinkBackend {
         }
 
         self.metadata_store_accessor
-            .delete_table_metadata(&mooncake_table_id.schema, &mooncake_table_id.table)
+            .delete_table_metadata(&mooncake_table_id.database, &mooncake_table_id.table)
             .await
             .unwrap()
     }
@@ -212,10 +212,10 @@ impl MoonlinkBackend {
 
     /// Get the current mooncake table schema.
     /// If the requested database or table doesn't exist, return [`TableNotFound`] error.
-    pub async fn get_table_schema(&self, schema: String, table: String) -> Result<Arc<Schema>> {
+    pub async fn get_table_schema(&self, database: String, table: String) -> Result<Arc<Schema>> {
         let table_schema = {
             let manager = self.replication_manager.read().await;
-            let mooncake_table_id = MooncakeTableId { schema, table };
+            let mooncake_table_id = MooncakeTableId { database, table };
             let table_state_reader = manager.get_table_state_reader(&mooncake_table_id)?;
             table_state_reader.get_current_table_schema().await?
         };
@@ -231,7 +231,7 @@ impl MoonlinkBackend {
             for cur_reader in cur_table_state_readers.iter() {
                 let table_snapshot_status = cur_reader.get_current_table_state().await?;
                 let table_status = TableStatus {
-                    schema: mooncake_table_id.schema.clone(),
+                    database: mooncake_table_id.database.clone(),
                     table: mooncake_table_id.table.clone(),
                     commit_lsn: table_snapshot_status.commit_lsn,
                     flush_lsn: table_snapshot_status.flush_lsn,
@@ -250,10 +250,10 @@ impl MoonlinkBackend {
     /// - "data": perform a data compaction, only data files smaller than a threshold, or with too many deleted rows will be compacted.
     /// - "index": perform an index merge operation, only index files smaller than a threshold, or with too many deleted rows will be merged.    
     /// - "full": perform a full compaction, which merges all data files and all index files, whatever file size they are of.
-    pub async fn optimize_table(&self, schema: String, table: String, mode: &str) -> Result<()> {
+    pub async fn optimize_table(&self, database: String, table: String, mode: &str) -> Result<()> {
         let mut rx = {
             let mut manager = self.replication_manager.write().await;
-            let mooncake_table_id = MooncakeTableId { schema, table };
+            let mooncake_table_id = MooncakeTableId { database, table };
             let writer = manager.get_table_event_manager(&mooncake_table_id)?;
 
             match mode {
@@ -275,13 +275,13 @@ impl MoonlinkBackend {
     /// If the requested database or table doesn't exist, return [`TableNotFound`] error.
     pub async fn scan_table(
         &self,
-        schema: String,
+        database: String,
         table: String,
         lsn: Option<u64>,
     ) -> Result<Arc<ReadState>> {
         let read_state = {
             let manager = self.replication_manager.read().await;
-            let mooncake_table_id = MooncakeTableId { schema, table };
+            let mooncake_table_id = MooncakeTableId { database, table };
             let table_reader = manager.get_table_reader(&mooncake_table_id)?;
             table_reader.try_read(lsn).await?
         };
@@ -292,9 +292,14 @@ impl MoonlinkBackend {
     /// Wait for the WAL flush LSN to reach the requested LSN. Note that WAL flush LSN will update
     /// up till the latest commit that has been persisted in to the WAL.
     #[cfg(feature = "test-utils")]
-    pub async fn wait_for_wal_flush(&self, schema: String, table: String, lsn: u64) -> Result<()> {
+    pub async fn wait_for_wal_flush(
+        &self,
+        database: String,
+        table: String,
+        lsn: u64,
+    ) -> Result<()> {
         let mut manager = self.replication_manager.write().await;
-        let mooncake_table_id = MooncakeTableId { schema, table };
+        let mooncake_table_id = MooncakeTableId { database, table };
         let writer = manager.get_table_event_manager(&mooncake_table_id)?;
 
         // Wait for WAL flush LSN to reach the requested LSN
