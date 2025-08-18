@@ -1,6 +1,7 @@
 use crate::pg_replicate::postgres_source::{
     CdcStreamError, PostgresSourceError, TableCopyStreamError,
 };
+use crate::rest_ingest::rest_source::RestSourceError;
 use moonlink::Error as MoonlinkError;
 use std::result;
 use std::sync::Arc;
@@ -38,6 +39,10 @@ pub enum Error {
     // REST API error.
     #[error("REST API error: {0}")]
     RestApi(String),
+
+    // REST source error.
+    #[error("REST source error: {source}")]
+    RestSource { source: Arc<RestSourceError> },
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -75,6 +80,14 @@ impl From<CdcStreamError> for Error {
 impl From<TableCopyStreamError> for Error {
     fn from(source: TableCopyStreamError) -> Self {
         Error::TableCopyStream {
+            source: Arc::new(source),
+        }
+    }
+}
+
+impl From<RestSourceError> for Error {
+    fn from(source: RestSourceError) -> Self {
+        Error::RestSource {
             source: Arc::new(source),
         }
     }

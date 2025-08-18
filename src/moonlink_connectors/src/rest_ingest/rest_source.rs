@@ -1,4 +1,5 @@
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
+use crate::{Error, Result};
 use arrow_schema::Schema;
 use moonlink::row::MoonlinkRow;
 use std::collections::HashMap;
@@ -17,6 +18,10 @@ pub enum RestSourceError {
     UnknownTable(String),
     #[error("invalid operation for table: {0}")]
     InvalidOperation(String),
+    #[error("duplicate table created: {0}")]
+    DuplicateTable(String),
+    #[error("non-existent table to remove: {0}")]
+    NonExistentTable(String),
 }
 
 #[derive(Debug, Clone)]
@@ -70,26 +75,33 @@ impl RestSource {
         }
     }
 
-    pub fn add_table(&mut self, table_name: String, src_table_id: SrcTableId, schema: Arc<Schema>) {
-        assert!(self
-            .table_schemas
-            .insert(table_name.clone(), schema)
-            .is_none());
+    pub fn add_table(
+        &mut self,
+        table_name: String,
+        src_table_id: SrcTableId,
+        schema: Arc<Schema>,
+    ) -> Result<()> {
+        if let Some(_) = self.table_schemas.insert(table_name.clone(), schema) {
+            return Err(RestSourceError::DuplicateTable(table_name).into());
+        }
+        // Invariant sanity check.
         assert!(self
             .table_name_to_src_id
             .insert(table_name, src_table_id)
             .is_none());
+        Ok(())
     }
 
-    pub fn remove_table(&mut self, table_name: &str) {
-        assert!(self.table_schemas.remove(table_name).is_some());
+    pub fn remove_table(&mut self, table_name: &str) -> Result<()> {
+        if self.table_schemas.remove(table_name).is_none() {
+            return Err(RestSourceError::NonExistentTable(table_name.to_string()).into());
+        }
+        // Invariant sanity check.
         assert!(self.table_name_to_src_id.remove(table_name).is_some());
+        Ok(())
     }
 
-    pub fn process_request(
-        &self,
-        request: EventRequest,
-    ) -> Result<Vec<RestEvent>, RestSourceError> {
+    pub fn process_request(&self, request: EventRequest) -> Result<Vec<RestEvent>> {
         let schema = self
             .table_schemas
             .get(&request.table_name)
@@ -101,7 +113,11 @@ impl RestSource {
             .ok_or_else(|| RestSourceError::UnknownTable(request.table_name.clone()))?;
 
         let converter = JsonToMoonlinkRowConverter::new(schema.clone());
-        let row = converter.convert(&request.payload)?;
+        let row = converter
+            .convert(&request.payload)
+            .map_err(|e| Error::RestSource {
+                source: Arc::new(RestSourceError::JsonConversion(e)),
+            })?;
 
         let row_lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
         let commit_lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
