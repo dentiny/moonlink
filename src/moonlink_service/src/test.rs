@@ -8,6 +8,7 @@ use bytes::Bytes;
 use moonlink::decode_serialized_read_state_for_testing;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde_json::json;
+use serial_test::serial;
 use tokio::net::TcpStream;
 
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
@@ -121,6 +122,7 @@ fn create_test_arrow_schema() -> Arc<ArrowSchema> {
 
 /// Test basic table creation, insertion and query.
 #[tokio::test]
+#[serial]
 async fn test_moonlink_standalone() {
     cleanup_directory(MOONLINK_BACKEND_DIR).await;
     let config = ServiceConfig {
@@ -201,6 +203,7 @@ async fn test_moonlink_standalone() {
 
 /// Testing scenario: two tables with the same name, but under different databases are created.
 #[tokio::test]
+#[serial]
 async fn test_multiple_tables_creation() {
     cleanup_directory(MOONLINK_BACKEND_DIR).await;
     let config = ServiceConfig {

@@ -35,7 +35,11 @@ impl RestSink {
         event_sender: mpsc::Sender<TableEvent>,
         commit_lsn_tx: watch::Sender<u64>,
     ) -> Result<()> {
-        if let Some(_) = self.event_senders.insert(src_table_id, event_sender) {
+        if self
+            .event_senders
+            .insert(src_table_id, event_sender)
+            .is_some()
+        {
             return Err(Error::RestDuplicateTable(src_table_id));
         }
         // Invariant sanity check.
