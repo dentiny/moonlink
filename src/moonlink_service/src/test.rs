@@ -25,7 +25,7 @@ const MOONLINK_ADDR: &str = "127.0.0.1:3031";
 /// Test database name.
 const DATABASE: &str = "test-database";
 /// Test table name.
-const TABLE: &str = "test-schema.test-table";
+const TABLE: &str = "test-table";
 
 /// Util function to delete and all subdirectories and files in the given directory.
 async fn cleanup_directory(dir: &str) {
@@ -55,10 +55,10 @@ async fn test_readiness_probe() {
 }
 
 /// Util function to get table creation payload.
-fn get_create_table_payload(mooncake_database: &str, mooncake_table: &str) -> serde_json::Value {
+fn get_create_table_payload(database: &str, table: &str) -> serde_json::Value {
     let create_table_payload = json!({
-        "mooncake_database": mooncake_database,
-        "mooncake_table": mooncake_table,
+        "database": database,
+        "table": table,
         "schema": [
             {"name": "id", "data_type": "int32", "nullable": false},
             {"name": "name", "data_type": "string", "nullable": false},
@@ -70,11 +70,11 @@ fn get_create_table_payload(mooncake_database: &str, mooncake_table: &str) -> se
 }
 
 /// Util function to create table via REST API.
-async fn create_table(client: &reqwest::Client, mooncake_database: &str, mooncake_table: &str) {
+async fn create_table(client: &reqwest::Client, database: &str, table: &str) {
     // REST API doesn't allow duplicate source table name.
-    let crafted_src_table_name = format!("{mooncake_database}.{mooncake_table}");
+    let crafted_src_table_name = format!("{database}.{table}");
 
-    let payload = get_create_table_payload(mooncake_database, mooncake_table);
+    let payload = get_create_table_payload(database, table);
     let response = client
         .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
         .header("content-type", "application/json")
@@ -150,8 +150,9 @@ async fn test_moonlink_standalone() {
             "age": 30
         }
     });
+    let crafted_src_table_name = format!("{DATABASE}.{TABLE}");
     let response = client
-        .post(format!("{REST_ADDR}/ingest/{TABLE}"))
+        .post(format!("{REST_ADDR}/ingest/{crafted_src_table_name}"))
         .header("content-type", "application/json")
         .json(&insert_payload)
         .send()
