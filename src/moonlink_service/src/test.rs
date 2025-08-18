@@ -70,15 +70,18 @@ fn get_create_table_payload(mooncake_database: &str, mooncake_table: &str) -> se
 
 /// Util function to create table via REST API.
 async fn create_table(client: &reqwest::Client, mooncake_database: &str, mooncake_table: &str) {
+    // REST API doesn't allow duplicate source table name.
+    let crafted_src_table_name = format!("{mooncake_database}.{mooncake_table}");
+
     let payload = get_create_table_payload(mooncake_database, mooncake_table);
     let response = client
-        .post(format!("{REST_ADDR}/tables/{TABLE}"))
+        .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
         .header("content-type", "application/json")
         .json(&payload)
         .send()
         .await
         .unwrap();
-    assert!(response.status().is_success());   
+    assert!(response.status().is_success());
 }
 
 /// Util function to load all record batches inside of the given [`path`].
@@ -216,5 +219,5 @@ async fn test_multiple_tables_creation() {
     create_table(&client, DATABASE, TABLE).await;
 
     // Create the second test table.
-    create_table(&client, "non-existent-database", TABLE).await;
+    create_table(&client, "second-database", TABLE).await;
 }
