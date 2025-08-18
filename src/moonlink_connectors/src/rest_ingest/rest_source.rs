@@ -168,14 +168,16 @@ mod tests {
 
         // Test adding table
         let schema = make_test_schema();
-        source.add_table("test_table".to_string(), 1, schema.clone());
+        source
+            .add_table("test_table".to_string(), 1, schema.clone())
+            .unwrap();
         assert_eq!(source.table_schemas.len(), 1);
         assert_eq!(source.table_name_to_src_id.len(), 1);
         assert!(source.table_schemas.contains_key("test_table"));
         assert_eq!(source.table_name_to_src_id.get("test_table"), Some(&1));
 
         // Test removing table
-        source.remove_table("test_table");
+        source.remove_table("test_table").unwrap();
         assert_eq!(source.table_schemas.len(), 0);
         assert_eq!(source.table_name_to_src_id.len(), 0);
     }
@@ -184,7 +186,9 @@ mod tests {
     fn test_process_request_success() {
         let mut source = RestSource::new();
         let schema = make_test_schema();
-        source.add_table("test_table".to_string(), 1, schema);
+        source
+            .add_table("test_table".to_string(), 1, schema)
+            .unwrap();
 
         let request = EventRequest {
             table_name: "test_table".to_string(),
@@ -228,6 +232,29 @@ mod tests {
     }
 
     #[test]
+    fn test_create_existing_table() {
+        let mut source = RestSource::new();
+        let schema = make_test_schema();
+        source
+            .add_table(
+                "test_table".to_string(),
+                /*src_table_id=*/ 1,
+                schema.clone(),
+            )
+            .unwrap();
+
+        let res = source.add_table("test_table".to_string(), /*src_table_id=*/ 1, schema);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn test_drop_non_existent_table() {
+        let mut source = RestSource::new();
+        let res = source.remove_table("test_table");
+        assert!(res.is_err());
+    }
+
+    #[test]
     fn test_process_request_unknown_table() {
         let source = RestSource::new();
         // No schema added
@@ -255,7 +282,9 @@ mod tests {
     fn test_lsn_generation() {
         let mut source = RestSource::new();
         let schema = make_test_schema();
-        source.add_table("test_table".to_string(), 1, schema);
+        source
+            .add_table("test_table".to_string(), 1, schema)
+            .unwrap();
 
         let request1 = EventRequest {
             table_name: "test_table".to_string(),
