@@ -30,6 +30,7 @@ rpcs! {
     drop_table(database: String, table: String) -> ();
     get_table_schema(database: String, table: String) -> Vec<u8>;
     list_tables() -> Vec<Table>;
+    load_files(database: String, table: String, files: Vec<String>) -> ();
     optimize_table(database: String, table: String, mode: String) -> ();
     scan_table_begin(database: String, table: String, lsn: u64) -> Vec<u8>;
     scan_table_end(database: String, table: String) -> ();

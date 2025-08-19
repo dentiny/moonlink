@@ -7,7 +7,7 @@ use moonlink::{
     AccessorConfig, BaseFileSystemAccess, FileSystemAccessor, FsRetryConfig, FsTimeoutConfig,
     StorageConfig,
 };
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -94,7 +94,7 @@ pub enum RestEvent {
     },
     FileEvent {
         operation: FileEventOperation,
-        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
+        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
     },
     Commit {
         lsn: u64,
@@ -164,13 +164,25 @@ impl RestSource {
         }
     }
 
+    /// Get arrow record batch reader from the given [`file_path`] and [`filesystem_accessor`].
+    async fn read_record_batches(
+        filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+        file_path: String,
+    ) -> Result<ParquetRecordBatchReader> {
+        let content = filesystem_accessor.read_object(&file_path).await?;
+        let content = Bytes::from(content);
+        let builder = ParquetRecordBatchReaderBuilder::try_new(content)?;
+        let record_batch_reader = builder.build()?;
+        Ok(record_batch_reader)
+    }
+
     /// Read parquet files and send parsed moonlink rows to channel.
     async fn generate_table_events_for_file_upload(
         src_table_id: SrcTableId,
         lsn_generator: Arc<AtomicU64>,
         storage_config: StorageConfig,
         parquet_files: Vec<String>,
-        event_sender: tokio::sync::mpsc::UnboundedSender<RestEvent>,
+        event_sender: tokio::sync::mpsc::UnboundedSender<Result<RestEvent>>,
     ) {
         let accessor_config = AccessorConfig {
             storage_config,
@@ -178,37 +190,39 @@ impl RestSource {
             retry_config: FsRetryConfig::default(),
             chaos_config: None,
         };
-        let filesystem_accessor = FileSystemAccessor::new(accessor_config);
+        let filesystem_accessor: Arc<dyn BaseFileSystemAccess> =
+            Arc::new(FileSystemAccessor::new(accessor_config));
         // TODO(hjiang): Handle parallel read and error propagation.
         for cur_file in parquet_files.into_iter() {
-            let content = filesystem_accessor.read_object(&cur_file).await.unwrap();
-            let content = Bytes::from(content);
-            let builder = ParquetRecordBatchReaderBuilder::try_new(content).unwrap();
-            let record_batches = builder.build().unwrap();
+            let res = Self::read_record_batches(filesystem_accessor.clone(), cur_file).await;
+            if let Err(ref err) = res {
+                event_sender.send(Err(err.clone())).unwrap();
+            }
 
             // Send row append events.
-            for batch in record_batches {
+            let record_batch_reader = res.unwrap();
+            for batch in record_batch_reader {
                 let batch = batch.unwrap();
                 let moonlink_rows = MoonlinkRow::from_record_batch(&batch);
                 for cur_row in moonlink_rows.into_iter() {
                     event_sender
-                        .send(RestEvent::RowEvent {
+                        .send(Ok(RestEvent::RowEvent {
                             src_table_id,
                             operation: RowEventOperation::Insert,
                             row: cur_row,
                             lsn: lsn_generator.fetch_add(1, Ordering::SeqCst),
                             timestamp: std::time::SystemTime::now(),
-                        })
+                        }))
                         .unwrap();
                 }
             }
 
             // To avoid large transaction, send commit event after all events ingested.
             event_sender
-                .send(RestEvent::Commit {
+                .send(Ok(RestEvent::Commit {
                     lsn: lsn_generator.fetch_add(1, Ordering::SeqCst),
                     timestamp: std::time::SystemTime::now(),
-                })
+                }))
                 .unwrap();
         }
     }
@@ -338,14 +352,14 @@ mod tests {
 
     /// Test util to get all rest events out of event channel.
     async fn get_all_rest_events(
-        events_rx: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
-    ) -> Vec<RestEvent> {
+        events_rx: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
+    ) -> Result<Vec<RestEvent>> {
         let mut rest_events = vec![];
         let mut guard = events_rx.lock().await;
         while let Some(event) = guard.recv().await {
-            rest_events.push(event);
+            rest_events.push(event?);
         }
-        rest_events
+        Ok(rest_events)
     }
 
     #[test]
@@ -453,7 +467,7 @@ mod tests {
                 table_events,
             } => {
                 assert_eq!(*operation, FileEventOperation::Upload);
-                let rest_events = get_all_rest_events(table_events.clone()).await;
+                let rest_events = get_all_rest_events(table_events.clone()).await.unwrap();
                 // There're 3 append events and 1 commit event.
                 assert_eq!(rest_events.len(), 4);
 
@@ -481,6 +495,43 @@ mod tests {
                         _ => panic!("Receive unexpected rest event {cur_rest_event:?}"),
                     }
                 }
+            }
+            _ => panic!("Receive unexpected rest event {:?}", events[0]),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_file_upload_request_failed() {
+        let mut source = RestSource::new();
+        let schema = make_test_schema();
+        source
+            .add_table(
+                /*src_table_name=*/ "test_table".to_string(),
+                /*src_table_id=*/ 1,
+                schema,
+            )
+            .unwrap();
+
+        let request = FileEventRequest {
+            src_table_name: "test_table".to_string(),
+            storage_config: StorageConfig::FileSystem {
+                root_directory: "/non_existent_dir".to_string(),
+                atomic_write_dir: None,
+            },
+            files: vec!["non_existent_file".to_string()],
+        };
+        let events = source.process_file_request(&request).unwrap();
+        assert_eq!(events.len(), 1);
+
+        // Check file events.
+        match &events[0] {
+            RestEvent::FileEvent {
+                operation,
+                table_events,
+            } => {
+                assert_eq!(*operation, FileEventOperation::Upload);
+                let rest_events = get_all_rest_events(table_events.clone()).await;
+                assert!(rest_events.is_err());
             }
             _ => panic!("Receive unexpected rest event {:?}", events[0]),
         }

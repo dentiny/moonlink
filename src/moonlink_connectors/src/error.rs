@@ -61,6 +61,10 @@ pub enum Error {
     // REST source error: conversion from payload to moonlink row fails.
     #[error("{0}")]
     RestPayloadConversion(ErrorStruct),
+
+    // Parquet parse error.
+    #[error("{0}")]
+    ParquetError(ErrorStruct),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -176,6 +180,18 @@ impl From<json_converter::JsonToMoonlinkRowError> for Error {
     fn from(source: json_converter::JsonToMoonlinkRowError) -> Self {
         Error::RestPayloadConversion(ErrorStruct {
             message: "REST API payload conversion error".to_string(),
+            status: ErrorStatus::Permanent,
+            source: Some(Arc::new(source.into())),
+            location: Some(Location::caller().to_string()),
+        })
+    }
+}
+
+impl From<parquet::errors::ParquetError> for Error {
+    #[track_caller]
+    fn from(source: parquet::errors::ParquetError) -> Self {
+        Error::ParquetError(ErrorStruct {
+            message: "Parquet error".to_string(),
             status: ErrorStatus::Permanent,
             source: Some(Arc::new(source.into())),
             location: Some(Location::caller().to_string()),

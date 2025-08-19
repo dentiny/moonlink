@@ -104,19 +104,19 @@ impl RestSink {
     fn process_file_event_boxed<'a>(
         &'a mut self,
         operation: FileEventOperation,
-        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
+        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
         Box::pin(async move { self.process_file_event_impl(operation, table_events).await })
     }
     async fn process_file_event_impl(
         &mut self,
         operation: FileEventOperation,
-        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
+        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
     ) -> Result<()> {
         assert_eq!(operation, FileEventOperation::Upload);
         let mut guard = table_events.lock().await;
         while let Some(event) = guard.recv().await {
-            self.process_rest_event(event).await?;
+            self.process_rest_event(event?).await?;
         }
         Ok(())
     }
