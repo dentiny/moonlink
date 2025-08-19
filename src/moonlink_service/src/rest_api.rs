@@ -5,7 +5,10 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use moonlink_backend::{EventRequest, RowEventOperation, RowEventRequest, REST_API_URI};
+use moonlink_backend::{
+    table_config::{MooncakeConfig, TableConfig},
+    EventRequest, RowEventOperation, RowEventRequest, REST_API_URI,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -166,6 +169,19 @@ async fn create_table(
 
     let arrow_schema = Schema::new(fields);
 
+    // TODO(hjiang):
+    // 1. Moonlink compaction doesn't support sort key, which breaks ordering for bulk ingestion.
+    // 2. A better API is to enable config in `CreateTableRequest`, but that requires moonlink repo to extract all configs out of "moonlink" crate.
+    let table_config = TableConfig {
+        mooncake_config: MooncakeConfig {
+            skip_data_compaction: true,
+            skip_index_merge: true,
+        },
+        iceberg_config: None,
+    };
+    // Serialization not expect to fail.
+    let serialized_table_config = serde_json::to_string(&table_config).unwrap();
+
     // Create table in backend
     match state
         .backend
@@ -174,7 +190,7 @@ async fn create_table(
             payload.table.clone(),
             table_name.clone(),
             REST_API_URI.to_string(),
-            "{}".to_string(),
+            serialized_table_config,
             Some(arrow_schema),
         )
         .await
