@@ -108,7 +108,7 @@ impl RestSource {
         Ok(())
     }
 
-    pub fn process_request(&self, request: EventRequest) -> Result<Vec<RestEvent>> {
+    pub fn process_request(&self, request: &EventRequest) -> Result<Vec<RestEvent>> {
         let schema = self
             .table_schemas
             .get(&request.src_table_name)
@@ -133,7 +133,7 @@ impl RestSource {
         let events = vec![
             RestEvent::RowEvent {
                 src_table_id: *src_table_id,
-                operation: request.operation,
+                operation: request.operation.clone(),
                 row,
                 lsn: row_lsn,
                 timestamp: request.timestamp,
@@ -203,7 +203,7 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        let events = source.process_request(request).unwrap();
+        let events = source.process_request(&request).unwrap();
         assert_eq!(events.len(), 2); // Should have row event + commit event
 
         // Check row event (first event)
@@ -269,7 +269,7 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        let err = source.process_request(request).unwrap_err();
+        let err = source.process_request(&request).unwrap_err();
         match err {
             Error::RestSource { source } => match source.as_ref() {
                 RestSourceError::UnknownTable(table_name) => {
@@ -303,8 +303,8 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        let events1 = source.process_request(request1).unwrap();
-        let events2 = source.process_request(request2).unwrap();
+        let events1 = source.process_request(&request1).unwrap();
+        let events2 = source.process_request(&request2).unwrap();
 
         // Each request should generate 2 events (row + commit)
         assert_eq!(events1.len(), 2);

@@ -192,7 +192,7 @@ pub async fn run_rest_event_loop(
             // Process REST requests directly (similar to how PostgreSQL processes CDC events)
             Some(request) = rest_request_rx.recv() => {
                 // Process the request and generate events
-                match rest_source.process_request(request) {
+                match rest_source.process_request(&request) {
                     Ok(rest_events) => {
                         // Send all events to be processed by the sink
                         for rest_event in rest_events {
@@ -203,7 +203,7 @@ pub async fn run_rest_event_loop(
                         }
                     }
                     Err(e) => {
-                        warn!(error = ?e, "failed to process REST request");
+                        warn!(error = ?e, "failed to process REST request {:?}", request);
                     }
                 }
             }
