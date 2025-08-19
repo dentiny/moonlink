@@ -159,6 +159,13 @@ where
                 assert!(map.remove(&(database, table)).is_some());
                 write(&mut stream, &()).await?;
             }
+            Request::LoadFiles {
+                database,
+                table,
+                files,
+            } => {
+                backend.load_tables(database, table, files).await.unwrap();
+            }
         }
     }
 }

@@ -243,6 +243,16 @@ impl MoonlinkBackend {
         Ok(table_statuses)
     }
 
+    /// Load the provided files directly into mooncake table and iceberg table in batch mode.
+    pub async fn load_tables(
+        &self,
+        _database: String,
+        _table: String,
+        _files: Vec<String>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
     /// Perform a table maintenance operation based on requested mode, block wait until maintenance results have been persisted.
     /// Notice, it's only exposed for debugging, testing and admin usage.
     ///

@@ -33,6 +33,7 @@ rpcs! {
     optimize_table(database: String, table: String, mode: String) -> ();
     scan_table_begin(database: String, table: String, lsn: u64) -> Vec<u8>;
     scan_table_end(database: String, table: String) -> ();
+    load_files(database: String, table: String, files: Vec<String>) -> ();
 }
 
 pub async fn write<W: AsyncWrite + Unpin, S: Serialize>(writer: &mut W, data: &S) -> Result<()> {
