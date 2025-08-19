@@ -2,7 +2,7 @@ use crate::pg_replicate::postgres_source::{
     CdcStreamError, PostgresSourceError, TableCopyStreamError,
 };
 use crate::rest_ingest::rest_source::RestSourceError;
-use crate::rest_ingest::SrcTableId;
+use crate::rest_ingest::{json_converter, SrcTableId};
 use moonlink::Error as MoonlinkError;
 use moonlink_error::{io_error_utils, ErrorStatus, ErrorStruct};
 use std::panic::Location;
@@ -31,6 +31,9 @@ pub enum Error {
     #[error("{0}")]
     Io(ErrorStruct),
 
+    #[error("{0}")]
+    MpscChannelSendError(ErrorStruct),
+
     // Requested database table not found.
     #[error("Table {0} not found")]
     TableNotFound(String),
@@ -44,16 +47,20 @@ pub enum Error {
     RestApi(String),
 
     // REST source error.
-    #[error("REST source error: {source}")]
-    RestSource { source: Arc<RestSourceError> },
+    #[error("{0}")]
+    RestSource(ErrorStruct),
 
-    /// REST source error: duplicate source table to add.
+    // REST source error: duplicate source table to add.
     #[error("REST source error: duplicate source table to add with table id {0}")]
     RestDuplicateTable(SrcTableId),
 
-    /// REST source error: non-existent source table to remove.
+    // REST source error: non-existent source table to remove.
     #[error("REST source error: non-existent source table to remove with table id {0}")]
     RestNonExistentTable(SrcTableId),
+
+    // REST source error: conversion from payload to moonlink row fails.
+    #[error("{0}")]
+    RestPayloadConversion(ErrorStruct),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -128,14 +135,6 @@ impl From<TableCopyStreamError> for Error {
     }
 }
 
-impl From<RestSourceError> for Error {
-    fn from(source: RestSourceError) -> Self {
-        Error::RestSource {
-            source: Arc::new(source),
-        }
-    }
-}
-
 impl From<std::io::Error> for Error {
     #[track_caller]
     fn from(source: std::io::Error) -> Self {
@@ -148,13 +147,37 @@ impl From<std::io::Error> for Error {
     }
 }
 
-impl<T> From<tokio::sync::mpsc::error::SendError<T>> for Error {
+impl<T: Send + Sync + 'static> From<tokio::sync::mpsc::error::SendError<T>> for Error {
     #[track_caller]
-    fn from(err: tokio::sync::mpsc::error::SendError<T>) -> Self {
-        Error::Io(ErrorStruct {
-            message: format!("Channel send error: {err:?}"),
+    fn from(source: tokio::sync::mpsc::error::SendError<T>) -> Self {
+        Error::MpscChannelSendError(ErrorStruct {
+            message: "mpsc channel send error".to_string(),
             status: ErrorStatus::Permanent,
-            source: None,
+            source: Some(Arc::new(source.into())),
+            location: Some(Location::caller().to_string()),
+        })
+    }
+}
+
+impl From<RestSourceError> for Error {
+    #[track_caller]
+    fn from(source: RestSourceError) -> Self {
+        Error::RestSource(ErrorStruct {
+            message: "rest source error".to_string(),
+            status: ErrorStatus::Permanent,
+            source: Some(Arc::new(source.into())),
+            location: Some(Location::caller().to_string()),
+        })
+    }
+}
+
+impl From<json_converter::JsonToMoonlinkRowError> for Error {
+    #[track_caller]
+    fn from(source: json_converter::JsonToMoonlinkRowError) -> Self {
+        Error::RestPayloadConversion(ErrorStruct {
+            message: "REST API payload conversion error".to_string(),
+            status: ErrorStatus::Permanent,
+            source: Some(Arc::new(source.into())),
             location: Some(Location::caller().to_string()),
         })
     }

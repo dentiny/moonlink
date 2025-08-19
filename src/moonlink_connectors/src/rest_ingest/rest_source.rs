@@ -1,5 +1,5 @@
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
-use crate::{Error, Result};
+use crate::Result;
 use arrow_schema::Schema;
 use moonlink::row::MoonlinkRow;
 use std::collections::HashMap;
@@ -120,11 +120,7 @@ impl RestSource {
             .ok_or_else(|| RestSourceError::UnknownTable(request.src_table_name.clone()))?;
 
         let converter = JsonToMoonlinkRowConverter::new(schema.clone());
-        let row = converter
-            .convert(&request.payload)
-            .map_err(|e| Error::RestSource {
-                source: Arc::new(RestSourceError::JsonConversion(e)),
-            })?;
+        let row = converter.convert(&request.payload)?;
 
         let row_lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
         let commit_lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
@@ -151,6 +147,7 @@ impl RestSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::Error;
     use arrow_schema::{DataType, Field, Schema};
     use moonlink::row::RowValue;
     use serde_json::json;
@@ -271,12 +268,20 @@ mod tests {
 
         let err = source.process_request(&request).unwrap_err();
         match err {
-            Error::RestSource { source } => match source.as_ref() {
-                RestSourceError::UnknownTable(table_name) => {
-                    assert_eq!(table_name, "unknown_table");
+            Error::RestSource(es) => {
+                let inner = es
+                    .source
+                    .as_deref()
+                    .and_then(|e| e.downcast_ref::<RestSourceError>())
+                    .expect("expected inner RestSourceError");
+
+                match inner {
+                    RestSourceError::UnknownTable(table_name) => {
+                        assert_eq!(table_name, "unknown_table");
+                    }
+                    other => panic!("Expected UnknownTable, got {other:?}"),
                 }
-                other => panic!("Expected UnknownTable, got {other:?}"),
-            },
+            }
             other => panic!("Expected Error::RestSource, got {other:?}"),
         }
     }
