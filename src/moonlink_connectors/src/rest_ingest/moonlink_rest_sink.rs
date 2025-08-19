@@ -1,5 +1,5 @@
 use crate::rest_ingest::rest_source::SrcTableId;
-use crate::rest_ingest::rest_source::{FileEventOperation, RestEvent, RowEventOperation};
+use crate::rest_ingest::rest_source::{RestEvent, RowEventOperation};
 use crate::{Error, Result};
 use moonlink::TableEvent;
 use std::collections::HashMap;
@@ -93,31 +93,44 @@ impl RestSink {
             // Table events
             // ==================
             //
-            RestEvent::FileEvent {
-                operation,
-                table_events,
-            } => self.process_file_event_boxed(operation, table_events).await,
+            RestEvent::FileInsertEvent { table_events } => {
+                self.process_file_insertion_boxed(table_events).await
+            }
+            RestEvent::FileUploadEvent {
+                src_table_id,
+                files,
+                lsn,
+            } => self.process_file_upload(src_table_id, files, lsn).await,
         }
     }
 
     /// Process a file event (upload files).
-    fn process_file_event_boxed<'a>(
+    fn process_file_insertion_boxed<'a>(
         &'a mut self,
-        operation: FileEventOperation,
         table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<()>> + Send + 'a>> {
-        Box::pin(async move { self.process_file_event_impl(operation, table_events).await })
+        Box::pin(async move { self.process_file_insertion_impl(table_events).await })
     }
-    async fn process_file_event_impl(
+    async fn process_file_insertion_impl(
         &mut self,
-        operation: FileEventOperation,
         table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
     ) -> Result<()> {
-        assert_eq!(operation, FileEventOperation::Upload);
         let mut guard = table_events.lock().await;
         while let Some(event) = guard.recv().await {
             self.process_rest_event(event?).await?;
         }
+        Ok(())
+    }
+
+    /// Process file upload event.
+    async fn process_file_upload(
+        &self,
+        src_table_id: SrcTableId,
+        files: Vec<String>,
+        lsn: u64,
+    ) -> Result<()> {
+        let table_event = TableEvent::LoadFiles { files, lsn };
+        self.send_table_event(src_table_id, table_event).await?;
         Ok(())
     }
 
