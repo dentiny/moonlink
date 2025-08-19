@@ -6,7 +6,7 @@ pub mod rest_source;
 
 use crate::rest_ingest::moonlink_rest_sink::RestSink;
 use crate::rest_ingest::rest_source::{EventRequest, RestSource};
-use crate::Result;
+use crate::{Error, Result};
 use arrow_schema::Schema;
 use moonlink::TableEvent;
 use std::collections::HashMap;
@@ -154,8 +154,8 @@ pub async fn run_rest_event_loop(
     let mut rest_source = RestSource::new();
 
     // UNDON, send status back for REST API if wait=true
-    let mut _flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
-    let mut _wal_flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
+    let mut flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
+    let mut wal_flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -164,25 +164,32 @@ pub async fn run_rest_event_loop(
                     debug!("Adding REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Add to sink (handles table events)
-                    sink.add_table(src_table_id, event_sender, commit_lsn_tx).unwrap();
+                    sink.add_table(src_table_id, event_sender, commit_lsn_tx)?;
 
                     // Add to source (handles schema and request processing)
                     rest_source.add_table(src_table_name.clone(), src_table_id, schema)?;
 
-                    _flush_lsn_rxs.insert(src_table_id, flush_lsn_rx);
-                    _wal_flush_lsn_rxs.insert(src_table_id, wal_flush_lsn_rx);
+                    if flush_lsn_rxs.insert(src_table_id, flush_lsn_rx).is_some() {
+                        return Err(Error::RestDuplicateTable(src_table_id));
+                    }
+                    // Invariant sanity check.
+                    assert!(wal_flush_lsn_rxs.insert(src_table_id, wal_flush_lsn_rx).is_none());
 
                 }
                 RestCommand::DropTable { src_table_name, src_table_id } => {
                     debug!("Dropping REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Remove from sink
-                    sink.drop_table(src_table_id).unwrap();
+                    sink.drop_table(src_table_id)?;
 
                     // Remove from source
                     rest_source.remove_table(&src_table_name)?;
-                    _flush_lsn_rxs.remove(&src_table_id);
-                    _wal_flush_lsn_rxs.remove(&src_table_id);
+
+                    if flush_lsn_rxs.remove(&src_table_id).is_none() {
+                        return Err(Error::RestNonExistentTable(src_table_id));
+                    }
+                    // Invariant sanity check.
+                    assert!(wal_flush_lsn_rxs.remove(&src_table_id).is_some());
                 }
                 RestCommand::Shutdown => {
                     debug!("received shutdown command");
