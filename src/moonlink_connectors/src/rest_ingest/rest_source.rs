@@ -35,7 +35,7 @@ pub enum RestSourceError {
 /// Row event request
 /// ======================
 ///
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RowEventOperation {
     Insert,
     Update,
@@ -185,6 +185,8 @@ impl RestSource {
             let content = Bytes::from(content);
             let builder = ParquetRecordBatchReaderBuilder::try_new(content).unwrap();
             let record_batches = builder.build().unwrap();
+
+            // Send row append events.
             for batch in record_batches {
                 let batch = batch.unwrap();
                 let moonlink_rows = MoonlinkRow::from_record_batch(&batch);
@@ -200,6 +202,14 @@ impl RestSource {
                         .unwrap();
                 }
             }
+
+            // To avoid large transaction, send commit event after all events ingested.
+            event_sender
+                .send(RestEvent::Commit {
+                    lsn: lsn_generator.fetch_add(1, Ordering::SeqCst),
+                    timestamp: std::time::SystemTime::now(),
+                })
+                .unwrap();
         }
     }
 
@@ -276,16 +286,66 @@ impl RestSource {
 mod tests {
     use super::*;
     use crate::Error;
+    use arrow::record_batch::RecordBatch;
+    use arrow_array::{Int32Array, StringArray};
     use arrow_schema::{DataType, Field, Schema};
     use moonlink::row::RowValue;
+    use parquet::arrow::AsyncArrowWriter;
     use serde_json::json;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
     fn make_test_schema() -> Arc<Schema> {
         Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, false),
         ]))
+    }
+
+    /// Test util function to generate a parquet under the given [`tempdir`].
+    async fn generate_parquet_file(tempdir: &TempDir) -> String {
+        let schema = make_test_schema();
+        let ids = Int32Array::from(vec![1, 2, 3]);
+        let names = StringArray::from(vec!["Alice", "Bob", "Charlie"]);
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(ids), Arc::new(names)]).unwrap();
+        let file_path = tempdir.path().join("test.parquet");
+        let file_path_str = file_path.to_str().unwrap().to_string();
+        let file = tokio::fs::File::create(file_path).await.unwrap();
+        let mut writer: AsyncArrowWriter<tokio::fs::File> =
+            AsyncArrowWriter::try_new(file, schema, /*props=*/ None).unwrap();
+        writer.write(&batch).await.unwrap();
+        writer.close().await.unwrap();
+        file_path_str
+    }
+
+    /// Test util function to get moonlink rows included in the generated parquet file.
+    fn generate_moonlink_rows() -> Vec<MoonlinkRow> {
+        let row_1 = MoonlinkRow::new(vec![
+            RowValue::Int32(1),
+            RowValue::ByteArray("Alice".as_bytes().to_vec()),
+        ]);
+        let row_2 = MoonlinkRow::new(vec![
+            RowValue::Int32(2),
+            RowValue::ByteArray("Bob".as_bytes().to_vec()),
+        ]);
+        let row_3 = MoonlinkRow::new(vec![
+            RowValue::Int32(3),
+            RowValue::ByteArray("Charlie".as_bytes().to_vec()),
+        ]);
+        vec![row_1, row_2, row_3]
+    }
+
+    /// Test util to get all rest events out of event channel.
+    async fn get_all_rest_events(
+        events_rx: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
+    ) -> Vec<RestEvent> {
+        let mut rest_events = vec![];
+        let mut guard = events_rx.lock().await;
+        while let Some(event) = guard.recv().await {
+            rest_events.push(event);
+        }
+        rest_events
     }
 
     #[test]
@@ -311,7 +371,7 @@ mod tests {
     }
 
     #[test]
-    fn test_process_request_success() {
+    fn test_process_row_append_request_success() {
         let mut source = RestSource::new();
         let schema = make_test_schema();
         source
@@ -356,6 +416,73 @@ mod tests {
                 assert_eq!(*lsn, 2);
             }
             _ => panic!("Expected Commit event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_file_upload_request_success() {
+        let tempdir = TempDir::new().unwrap();
+        let filepath = generate_parquet_file(&tempdir).await;
+
+        let mut source = RestSource::new();
+        let schema = make_test_schema();
+        source
+            .add_table(
+                /*src_table_name=*/ "test_table".to_string(),
+                /*src_table_id=*/ 1,
+                schema,
+            )
+            .unwrap();
+
+        let request = FileEventRequest {
+            src_table_name: "test_table".to_string(),
+            storage_config: StorageConfig::FileSystem {
+                root_directory: tempdir.path().to_str().unwrap().to_string(),
+                atomic_write_dir: None,
+            },
+            files: vec![filepath],
+        };
+        let events = source.process_file_request(&request).unwrap();
+        assert_eq!(events.len(), 1);
+        let moonlink_rows = generate_moonlink_rows();
+
+        // Check file events.
+        match &events[0] {
+            RestEvent::FileEvent {
+                operation,
+                table_events,
+            } => {
+                assert_eq!(*operation, FileEventOperation::Upload);
+                let rest_events = get_all_rest_events(table_events.clone()).await;
+                // There're 3 append events and 1 commit event.
+                assert_eq!(rest_events.len(), 4);
+
+                for (idx, cur_rest_event) in rest_events.into_iter().enumerate() {
+                    match cur_rest_event {
+                        RestEvent::RowEvent {
+                            src_table_id,
+                            operation,
+                            row,
+                            lsn,
+                            ..
+                        } => {
+                            // LSN starts with 1.
+                            let expected_lsn = idx + 1;
+
+                            assert_eq!(src_table_id, 1);
+                            assert_eq!(operation, RowEventOperation::Insert);
+                            assert_eq!(row, moonlink_rows[idx]);
+                            assert_eq!(lsn, expected_lsn as u64);
+                        }
+                        RestEvent::Commit { lsn, .. } => {
+                            // Three table append events are with LSN 1, 2, 3.
+                            assert_eq!(lsn, 4);
+                        }
+                        _ => panic!("Receive unexpected rest event {cur_rest_event:?}"),
+                    }
+                }
+            }
+            _ => panic!("Receive unexpected rest event {:?}", events[0]),
         }
     }
 
