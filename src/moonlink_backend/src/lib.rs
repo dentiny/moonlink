@@ -244,7 +244,7 @@ impl MoonlinkBackend {
     }
 
     /// Load the provided files directly into mooncake table and iceberg table in batch mode.
-    pub async fn load_tables(
+    pub async fn load_files(
         &self,
         _database: String,
         _table: String,
