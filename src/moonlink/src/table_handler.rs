@@ -214,6 +214,13 @@ impl TableHandler {
                         .await;
                 }
                 // ==============================
+                // Bulk ingestion events
+                // ==============================
+                TableEvent::LoadFiles { files, lsn } => {
+                    
+                }
+                
+                // ==============================
                 // Interactive blocking events
                 // ==============================
                 //
