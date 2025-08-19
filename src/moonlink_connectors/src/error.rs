@@ -62,7 +62,7 @@ pub enum Error {
     #[error("{0}")]
     RestPayloadConversion(ErrorStruct),
 
-    // Parse parse error.
+    // Parquet parse error.
     #[error("{0}")]
     ParquetError(ErrorStruct),
 }
