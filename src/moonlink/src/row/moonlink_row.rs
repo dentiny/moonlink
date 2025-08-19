@@ -1,4 +1,5 @@
 use super::moonlink_type::RowValue;
+use crate::row::arrow_converter;
 use ahash::AHasher;
 use arrow::array::Array;
 use arrow::datatypes::Field;
@@ -18,6 +19,11 @@ pub struct MoonlinkRow {
 impl MoonlinkRow {
     pub fn new(values: Vec<RowValue>) -> Self {
         Self { values }
+    }
+
+    /// Convert an arrow RecordBatch into moonlink rows.
+    pub fn from_record_batch(batch: &RecordBatch) -> Vec<MoonlinkRow> {
+        arrow_converter::from_record_batch(batch)
     }
 
     fn is_extracted_identity_row(&self, identity: &IdentityProp) -> bool {
