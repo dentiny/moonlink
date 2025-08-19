@@ -9,11 +9,16 @@ macro_rules! rpcs {
         $($func:ident($($name:ident: $type:ty),*) -> $res:ty;)*
     ) => {
         paste::paste! {
-            #[derive(Debug, Serialize, Deserialize)]
+            #[derive(Debug, Serialize, Deserialize, Clone)]
             pub enum Request {
-                $([<$func:camel>] {
-                    $($name: $type),*
-                },)*
+                $(
+                    [<$func:camel>] {
+                        $(
+                            #[serde(default)]
+                            $name: $type
+                        ),*
+                    },
+                )*
             }
 
             $(pub async fn $func<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S, $($name: $type),*) -> Result<$res> {
