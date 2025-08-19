@@ -176,6 +176,7 @@ async fn create_table(
         mooncake_config: MooncakeConfig {
             skip_data_compaction: true,
             skip_index_merge: true,
+            append_only: true,
         },
         iceberg_config: None,
     };
