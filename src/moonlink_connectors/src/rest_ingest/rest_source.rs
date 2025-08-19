@@ -460,7 +460,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_process_file_upload_request_success() {
+    async fn test_process_file_insertion_request_success() {
         let tempdir = TempDir::new().unwrap();
         let filepath = generate_parquet_file(&tempdir).await;
 
@@ -518,6 +518,48 @@ mod tests {
                         _ => panic!("Receive unexpected rest event {cur_rest_event:?}"),
                     }
                 }
+            }
+            _ => panic!("Receive unexpected rest event {:?}", events[0]),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_file_upload_request_success() {
+        let tempdir = TempDir::new().unwrap();
+        let filepath = generate_parquet_file(&tempdir).await;
+
+        let mut source = RestSource::new();
+        let schema = make_test_schema();
+        source
+            .add_table(
+                /*src_table_name=*/ "test_table".to_string(),
+                /*src_table_id=*/ 1,
+                schema,
+            )
+            .unwrap();
+
+        let request = FileEventRequest {
+            src_table_name: "test_table".to_string(),
+            operation: FileEventOperation::Upload,
+            storage_config: StorageConfig::FileSystem {
+                root_directory: tempdir.path().to_str().unwrap().to_string(),
+                atomic_write_dir: None,
+            },
+            files: vec![filepath.clone()],
+        };
+        let events = source.process_file_request(&request).unwrap();
+        assert_eq!(events.len(), 1);
+
+        // Check file events.
+        match &events[0] {
+            RestEvent::FileUploadEvent {
+                src_table_id,
+                files,
+                lsn,
+            } => {
+                assert_eq!(*src_table_id, 1);
+                assert_eq!(*files, vec![filepath]);
+                assert_eq!(*lsn, 1);
             }
             _ => panic!("Receive unexpected rest event {:?}", events[0]),
         }
