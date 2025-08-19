@@ -165,6 +165,7 @@ where
                 files,
             } => {
                 backend.load_tables(database, table, files).await.unwrap();
+                write(&mut stream, &()).await?
             }
         }
     }

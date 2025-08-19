@@ -9,16 +9,11 @@ macro_rules! rpcs {
         $($func:ident($($name:ident: $type:ty),*) -> $res:ty;)*
     ) => {
         paste::paste! {
-            #[derive(Debug, Serialize, Deserialize, Clone)]
+            #[derive(Debug, Serialize, Deserialize)]
             pub enum Request {
-                $(
-                    [<$func:camel>] {
-                        $(
-                            #[serde(default)]
-                            $name: $type
-                        ),*
-                    },
-                )*
+                $([<$func:camel>] {
+                    $($name: $type),*
+                },)*
             }
 
             $(pub async fn $func<S: AsyncRead + AsyncWrite + Unpin>(stream: &mut S, $($name: $type),*) -> Result<$res> {
@@ -35,10 +30,10 @@ rpcs! {
     drop_table(database: String, table: String) -> ();
     get_table_schema(database: String, table: String) -> Vec<u8>;
     list_tables() -> Vec<Table>;
+    load_files(database: String, table: String, files: Vec<String>) -> ();
     optimize_table(database: String, table: String, mode: String) -> ();
     scan_table_begin(database: String, table: String, lsn: u64) -> Vec<u8>;
     scan_table_end(database: String, table: String) -> ();
-    load_files(database: String, table: String, files: Vec<String>) -> ();
 }
 
 pub async fn write<W: AsyncWrite + Unpin, S: Serialize>(writer: &mut W, data: &S) -> Result<()> {
