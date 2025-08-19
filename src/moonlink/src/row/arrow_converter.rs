@@ -6,7 +6,8 @@ use arrow_array::{
     Int64Array, RecordBatch, StringArray,
 };
 
-pub(super) fn from_record_batch(batch: &RecordBatch) -> Vec<MoonlinkRow> {
+/// Convert arrow record batch to moonlink rows.
+pub(super) fn record_batch_to_moonlink_row(batch: &RecordBatch) -> Vec<MoonlinkRow> {
     let num_rows = batch.num_rows();
     let num_cols = batch.num_columns();
     let mut rows = Vec::with_capacity(num_rows);
@@ -23,6 +24,7 @@ pub(super) fn from_record_batch(batch: &RecordBatch) -> Vec<MoonlinkRow> {
     rows
 }
 
+/// From arrow value to moonlink row value.
 fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
     if arr.is_null(row_idx) {
         return RowValue::Null;

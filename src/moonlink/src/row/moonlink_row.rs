@@ -23,7 +23,7 @@ impl MoonlinkRow {
 
     /// Convert an arrow RecordBatch into moonlink rows.
     pub fn from_record_batch(batch: &RecordBatch) -> Vec<MoonlinkRow> {
-        arrow_converter::from_record_batch(batch)
+        arrow_converter::record_batch_to_moonlink_row(batch)
     }
 
     fn is_extracted_identity_row(&self, identity: &IdentityProp) -> bool {
