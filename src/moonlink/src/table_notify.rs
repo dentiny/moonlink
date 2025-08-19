@@ -107,7 +107,7 @@ pub enum TableEvent {
     /// ==============================
     /// Bulk ingestion events
     /// ==============================
-    /// 
+    ///
     LoadFiles {
         /// Parquet files to directly load into mooncake table, without schema validation, index construction, etc.
         files: Vec<String>,

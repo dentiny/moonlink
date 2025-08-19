@@ -4214,6 +4214,7 @@ dependencies = [
  "base64 0.22.1",
  "bincode",
  "bitstream-io",
+ "bytes",
  "chrono",
  "crc32fast",
  "criterion",

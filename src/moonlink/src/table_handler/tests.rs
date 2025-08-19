@@ -2114,3 +2114,14 @@ async fn test_commit_flush_streaming_transaction_with_deletes() {
 
     env.shutdown().await;
 }
+
+/// Testing scenario: batch upload parquet files into mooncake table.
+#[tokio::test]
+async fn test_batch_ingestion() {
+    let env = TestEnvironment::default().await;
+    let disk_file = generate_parquet_file(&env.temp_dir).await;
+    env.bulk_upload_files(vec![disk_file], /*lsn=*/ 10).await;
+
+    env.set_readable_lsn(10);
+    env.verify_snapshot(101, &[1, 2, 3]).await;
+}
