@@ -325,6 +325,8 @@ impl SnapshotTask {
         // If mooncake has new transaction commits.
         (self.commit_lsn_baseline > 0 && self.commit_lsn_baseline != self.prev_commit_lsn_baseline)
             || self.force_empty_iceberg_payload
+        // If mooncake table has completed streaming transactions.
+            || !self.new_streaming_xact.is_empty()
         // If mooncake table accumulated large enough writes.
             || !self.new_disk_slices.is_empty()
             || self.new_deletions.len()

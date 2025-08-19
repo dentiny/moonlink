@@ -71,6 +71,8 @@ impl SnapshotTableState {
     /// Util function to validate data files and file indices match each other.
     #[cfg(any(test, debug_assertions))]
     fn assert_data_files_and_file_indices_match(&self) {
+        if self.mooncake_table_metadata.config.appen
+
         let mut all_data_files_1 = HashSet::new();
         let mut all_data_files_2 = HashSet::new();
         for (cur_data_file, _) in self.current_snapshot.disk_files.iter() {

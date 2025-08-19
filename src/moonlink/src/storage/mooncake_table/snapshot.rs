@@ -484,6 +484,9 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
+
+        println!("update snapshot, streaming state # ? {}", task.new_streaming_xact.len());
+
         // Validate event id is assigned.
         assert!(opt.id.is_some());
         // Validate mooncake table operation invariants.
@@ -568,6 +571,8 @@ impl SnapshotTableState {
             self.last_commit = cp;
         }
 
+        println!("new flush lsn = {:?}, commit lsn = {:?}", self.current_snapshot.flush_lsn, self.current_snapshot.snapshot_version);
+
         // Till this point, committed changes have been reflected to current snapshot; sync the latest change to iceberg.
         // To reduce iceberg persistence overhead, there're certain cases an iceberg snapshot will be triggered:
         // (1) there're persisted data files
@@ -603,6 +608,9 @@ impl SnapshotTableState {
             && (force_empty_iceberg_payload || flush_by_table_write)
             && flush_lsn < task.min_ongoing_flush_lsn
         {
+
+            println!("create iceberg snapshot");
+
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.
             let committed_deletion_logs = self.aggregate_committed_deletion_logs(flush_lsn);
@@ -616,6 +624,8 @@ impl SnapshotTableState {
                 iceberg_snapshot_payload =
                     Some(self.get_iceberg_snapshot_payload(flush_lsn, committed_deletion_logs));
             }
+        } else {
+            println!("no create snapshot");
         }
 
         // Validate disk files count is as expected.

@@ -55,5 +55,7 @@ impl MooncakeTable {
         self.next_snapshot_task
             .new_streaming_xact
             .push(TransactionStreamOutput::Commit(commit));
+        self.next_snapshot_task.new_flush_lsn = Some(lsn);
+        self.next_snapshot_task.commit_lsn_baseline = lsn;
     }
 }
