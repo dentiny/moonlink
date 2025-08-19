@@ -41,15 +41,6 @@ impl MooncakeTable {
                 .is_none());
         }
 
-        // let mut stream_state = TransactionStreamState::new(
-        //     self.metadata.schema.clone(),
-        //     self.metadata.config.batch_size,
-        //     self.metadata.identity.clone(),
-        //     Arc::clone(&self.streaming_batch_id_counter),
-        // );
-        // stream_state.flushed_files = disk_files;
-        // stream_state.commit_lsn = Some(lsn);
-
         // Commit the current crafted streaming transaction.
         let commit = TransactionStreamCommit::from_disk_files(disk_files, lsn);
         self.next_snapshot_task
