@@ -5,7 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use moonlink_backend::{EventOperation, EventRequest, REST_API_URI};
+use moonlink_backend::{EventRequest, RowEventOperation, RowEventRequest, REST_API_URI};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -217,9 +217,9 @@ async fn ingest_data(
 
     // Parse operation
     let operation = match payload.operation.as_str() {
-        "insert" => EventOperation::Insert,
-        "update" => EventOperation::Update,
-        "delete" => EventOperation::Delete,
+        "insert" => RowEventOperation::Insert,
+        "update" => RowEventOperation::Update,
+        "delete" => RowEventOperation::Delete,
         _ => {
             return Err((
                 StatusCode::BAD_REQUEST,
@@ -235,16 +235,17 @@ async fn ingest_data(
     };
 
     // Create REST request
-    let rest_request = EventRequest {
+    let row_event_request = RowEventRequest {
         src_table_name: src_table_name.clone(),
         operation,
         payload: payload.data,
         timestamp: SystemTime::now(),
     };
+    let rest_event_request = EventRequest::RowRequest(row_event_request);
 
     state
         .backend
-        .send_event_request(rest_request)
+        .send_event_request(rest_event_request)
         .await
         .map_err(|e| {
             error!("Failed to send event request: {}", e);

@@ -11,11 +11,11 @@ pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink::{ReadStateFilepathRemap, TableEventManager};
-use moonlink_connectors::ReplicationManager;
-pub use moonlink_connectors::{
-    rest_ingest::rest_source::{EventOperation, EventRequest},
-    REST_API_URI,
+pub use moonlink_connectors::rest_ingest::rest_source::{
+    EventRequest, FileEventOperation, RowEventOperation, RowEventRequest,
 };
+use moonlink_connectors::ReplicationManager;
+pub use moonlink_connectors::REST_API_URI;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;
 use std::sync::Arc;
 use tokio::sync::RwLock;

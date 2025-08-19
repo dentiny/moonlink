@@ -1,12 +1,19 @@
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
 use crate::Result;
 use arrow_schema::Schema;
+use bytes::Bytes;
 use moonlink::row::MoonlinkRow;
+use moonlink::{
+    AccessorConfig, BaseFileSystemAccess, FileSystemAccessor, FsRetryConfig, FsTimeoutConfig,
+    StorageConfig,
+};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::SystemTime;
 use thiserror::Error;
+use tokio::sync::Mutex;
 
 pub type SrcTableId = u32;
 
@@ -24,29 +31,70 @@ pub enum RestSourceError {
     NonExistentTable(String),
 }
 
-#[derive(Debug, Clone)]
-pub struct EventRequest {
-    pub src_table_name: String,
-    pub operation: EventOperation,
-    pub payload: serde_json::Value,
-    pub timestamp: SystemTime,
-}
-
-#[derive(Debug, Clone)]
-pub enum EventOperation {
+/// ======================
+/// Row event request
+/// ======================
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RowEventOperation {
     Insert,
     Update,
     Delete,
 }
 
 #[derive(Debug, Clone)]
+pub struct RowEventRequest {
+    pub src_table_name: String,
+    pub operation: RowEventOperation,
+    pub payload: serde_json::Value,
+    pub timestamp: SystemTime,
+}
+
+/// ======================
+/// File event request
+/// ======================
+///
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FileEventOperation {
+    Upload,
+}
+
+#[derive(Debug, Clone)]
+pub struct FileEventRequest {
+    /// Src table name.
+    pub src_table_name: String,
+    /// Storage config, which provides access to storage backend.
+    pub storage_config: StorageConfig,
+    /// Parquet files to upload, which will be processed in order.
+    pub files: Vec<String>,
+}
+
+/// ======================
+/// Event request
+/// ======================
+///
+#[derive(Debug, Clone)]
+pub enum EventRequest {
+    RowRequest(RowEventRequest),
+    FileRequest(FileEventRequest),
+}
+
+/// ======================
+/// Rest event
+/// ======================
+///
+#[derive(Debug, Clone)]
 pub enum RestEvent {
     RowEvent {
         src_table_id: SrcTableId,
-        operation: EventOperation,
+        operation: RowEventOperation,
         row: MoonlinkRow,
         lsn: u64,
         timestamp: SystemTime,
+    },
+    FileEvent {
+        operation: FileEventOperation,
+        table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
     },
     Commit {
         lsn: u64,
@@ -57,7 +105,7 @@ pub enum RestEvent {
 pub struct RestSource {
     table_schemas: HashMap<String, Arc<Schema>>,
     src_table_name_to_src_id: HashMap<String, SrcTableId>,
-    lsn_generator: AtomicU64,
+    lsn_generator: Arc<AtomicU64>,
 }
 
 impl Default for RestSource {
@@ -71,7 +119,7 @@ impl RestSource {
         Self {
             table_schemas: HashMap::new(),
             src_table_name_to_src_id: HashMap::new(),
-            lsn_generator: AtomicU64::new(1),
+            lsn_generator: Arc::new(AtomicU64::new(1)),
         }
     }
 
@@ -108,7 +156,97 @@ impl RestSource {
         Ok(())
     }
 
+    /// Process an event request.
     pub fn process_request(&self, request: &EventRequest) -> Result<Vec<RestEvent>> {
+        match request {
+            EventRequest::FileRequest(request) => self.process_file_request(request),
+            EventRequest::RowRequest(request) => self.process_row_request(request),
+        }
+    }
+
+    /// Read parquet files and send parsed moonlink rows to channel.
+    async fn generate_table_events_for_file_upload(
+        src_table_id: SrcTableId,
+        lsn_generator: Arc<AtomicU64>,
+        storage_config: StorageConfig,
+        parquet_files: Vec<String>,
+        event_sender: tokio::sync::mpsc::UnboundedSender<RestEvent>,
+    ) {
+        let accessor_config = AccessorConfig {
+            storage_config,
+            timeout_config: FsTimeoutConfig::default(),
+            retry_config: FsRetryConfig::default(),
+            chaos_config: None,
+        };
+        let filesystem_accessor = FileSystemAccessor::new(accessor_config);
+        // TODO(hjiang): Handle parallel read and error propagation.
+        for cur_file in parquet_files.into_iter() {
+            let content = filesystem_accessor.read_object(&cur_file).await.unwrap();
+            let content = Bytes::from(content);
+            let builder = ParquetRecordBatchReaderBuilder::try_new(content).unwrap();
+            let record_batches = builder.build().unwrap();
+
+            // Send row append events.
+            for batch in record_batches {
+                let batch = batch.unwrap();
+                let moonlink_rows = MoonlinkRow::from_record_batch(&batch);
+                for cur_row in moonlink_rows.into_iter() {
+                    event_sender
+                        .send(RestEvent::RowEvent {
+                            src_table_id,
+                            operation: RowEventOperation::Insert,
+                            row: cur_row,
+                            lsn: lsn_generator.fetch_add(1, Ordering::SeqCst),
+                            timestamp: std::time::SystemTime::now(),
+                        })
+                        .unwrap();
+                }
+            }
+
+            // To avoid large transaction, send commit event after all events ingested.
+            event_sender
+                .send(RestEvent::Commit {
+                    lsn: lsn_generator.fetch_add(1, Ordering::SeqCst),
+                    timestamp: std::time::SystemTime::now(),
+                })
+                .unwrap();
+        }
+    }
+
+    /// Process an event request, which is operated on a file.
+    fn process_file_request(&self, request: &FileEventRequest) -> Result<Vec<RestEvent>> {
+        let src_table_id = self
+            .src_table_name_to_src_id
+            .get(&request.src_table_name)
+            .ok_or_else(|| RestSourceError::UnknownTable(request.src_table_name.clone()))?;
+        let src_table_id = *src_table_id;
+
+        let (file_upload_row_tx, file_upload_row_rx) = tokio::sync::mpsc::unbounded_channel();
+        let lsn_generator = self.lsn_generator.clone();
+        let storage_config = request.storage_config.clone();
+        let parquet_files = request.files.clone();
+
+        tokio::task::spawn(async move {
+            Self::generate_table_events_for_file_upload(
+                src_table_id,
+                lsn_generator,
+                storage_config,
+                parquet_files,
+                file_upload_row_tx,
+            )
+            .await;
+        });
+
+        let file_upload_row_rx = Arc::new(Mutex::new(file_upload_row_rx));
+        let file_rest_event = RestEvent::FileEvent {
+            operation: FileEventOperation::Upload,
+            table_events: file_upload_row_rx,
+        };
+        Ok(vec![file_rest_event])
+    }
+
+    /// Process an event request, which is operated on a row.
+    fn process_row_request(&self, request: &RowEventRequest) -> Result<Vec<RestEvent>> {
         let schema = self
             .table_schemas
             .get(&request.src_table_name)
@@ -148,16 +286,66 @@ impl RestSource {
 mod tests {
     use super::*;
     use crate::Error;
+    use arrow::record_batch::RecordBatch;
+    use arrow_array::{Int32Array, StringArray};
     use arrow_schema::{DataType, Field, Schema};
     use moonlink::row::RowValue;
+    use parquet::arrow::AsyncArrowWriter;
     use serde_json::json;
     use std::sync::Arc;
+    use tempfile::TempDir;
 
     fn make_test_schema() -> Arc<Schema> {
         Arc::new(Schema::new(vec![
             Field::new("id", DataType::Int32, false),
             Field::new("name", DataType::Utf8, false),
         ]))
+    }
+
+    /// Test util function to generate a parquet under the given [`tempdir`].
+    async fn generate_parquet_file(tempdir: &TempDir) -> String {
+        let schema = make_test_schema();
+        let ids = Int32Array::from(vec![1, 2, 3]);
+        let names = StringArray::from(vec!["Alice", "Bob", "Charlie"]);
+        let batch =
+            RecordBatch::try_new(schema.clone(), vec![Arc::new(ids), Arc::new(names)]).unwrap();
+        let file_path = tempdir.path().join("test.parquet");
+        let file_path_str = file_path.to_str().unwrap().to_string();
+        let file = tokio::fs::File::create(file_path).await.unwrap();
+        let mut writer: AsyncArrowWriter<tokio::fs::File> =
+            AsyncArrowWriter::try_new(file, schema, /*props=*/ None).unwrap();
+        writer.write(&batch).await.unwrap();
+        writer.close().await.unwrap();
+        file_path_str
+    }
+
+    /// Test util function to get moonlink rows included in the generated parquet file.
+    fn generate_moonlink_rows() -> Vec<MoonlinkRow> {
+        let row_1 = MoonlinkRow::new(vec![
+            RowValue::Int32(1),
+            RowValue::ByteArray("Alice".as_bytes().to_vec()),
+        ]);
+        let row_2 = MoonlinkRow::new(vec![
+            RowValue::Int32(2),
+            RowValue::ByteArray("Bob".as_bytes().to_vec()),
+        ]);
+        let row_3 = MoonlinkRow::new(vec![
+            RowValue::Int32(3),
+            RowValue::ByteArray("Charlie".as_bytes().to_vec()),
+        ]);
+        vec![row_1, row_2, row_3]
+    }
+
+    /// Test util to get all rest events out of event channel.
+    async fn get_all_rest_events(
+        events_rx: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<RestEvent>>>,
+    ) -> Vec<RestEvent> {
+        let mut rest_events = vec![];
+        let mut guard = events_rx.lock().await;
+        while let Some(event) = guard.recv().await {
+            rest_events.push(event);
+        }
+        rest_events
     }
 
     #[test]
@@ -183,16 +371,16 @@ mod tests {
     }
 
     #[test]
-    fn test_process_request_success() {
+    fn test_process_row_append_request_success() {
         let mut source = RestSource::new();
         let schema = make_test_schema();
         source
             .add_table("test_table".to_string(), 1, schema)
             .unwrap();
 
-        let request = EventRequest {
+        let request = RowEventRequest {
             src_table_name: "test_table".to_string(),
-            operation: EventOperation::Insert,
+            operation: RowEventOperation::Insert,
             payload: json!({
                 "id": 42,
                 "name": "test"
@@ -200,7 +388,7 @@ mod tests {
             timestamp: SystemTime::now(),
         };
 
-        let events = source.process_request(&request).unwrap();
+        let events = source.process_row_request(&request).unwrap();
         assert_eq!(events.len(), 2); // Should have row event + commit event
 
         // Check row event (first event)
@@ -213,7 +401,7 @@ mod tests {
                 ..
             } => {
                 assert_eq!(*src_table_id, 1);
-                assert!(matches!(operation, EventOperation::Insert));
+                assert!(matches!(operation, RowEventOperation::Insert));
                 assert_eq!(row.values.len(), 2);
                 assert_eq!(row.values[0], RowValue::Int32(42));
                 assert_eq!(row.values[1], RowValue::ByteArray(b"test".to_vec()));
@@ -228,6 +416,73 @@ mod tests {
                 assert_eq!(*lsn, 2);
             }
             _ => panic!("Expected Commit event"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_file_upload_request_success() {
+        let tempdir = TempDir::new().unwrap();
+        let filepath = generate_parquet_file(&tempdir).await;
+
+        let mut source = RestSource::new();
+        let schema = make_test_schema();
+        source
+            .add_table(
+                /*src_table_name=*/ "test_table".to_string(),
+                /*src_table_id=*/ 1,
+                schema,
+            )
+            .unwrap();
+
+        let request = FileEventRequest {
+            src_table_name: "test_table".to_string(),
+            storage_config: StorageConfig::FileSystem {
+                root_directory: tempdir.path().to_str().unwrap().to_string(),
+                atomic_write_dir: None,
+            },
+            files: vec![filepath],
+        };
+        let events = source.process_file_request(&request).unwrap();
+        assert_eq!(events.len(), 1);
+        let moonlink_rows = generate_moonlink_rows();
+
+        // Check file events.
+        match &events[0] {
+            RestEvent::FileEvent {
+                operation,
+                table_events,
+            } => {
+                assert_eq!(*operation, FileEventOperation::Upload);
+                let rest_events = get_all_rest_events(table_events.clone()).await;
+                // There're 3 append events and 1 commit event.
+                assert_eq!(rest_events.len(), 4);
+
+                for (idx, cur_rest_event) in rest_events.into_iter().enumerate() {
+                    match cur_rest_event {
+                        RestEvent::RowEvent {
+                            src_table_id,
+                            operation,
+                            row,
+                            lsn,
+                            ..
+                        } => {
+                            // LSN starts with 1.
+                            let expected_lsn = idx + 1;
+
+                            assert_eq!(src_table_id, 1);
+                            assert_eq!(operation, RowEventOperation::Insert);
+                            assert_eq!(row, moonlink_rows[idx]);
+                            assert_eq!(lsn, expected_lsn as u64);
+                        }
+                        RestEvent::Commit { lsn, .. } => {
+                            // Three table append events are with LSN 1, 2, 3.
+                            assert_eq!(lsn, 4);
+                        }
+                        _ => panic!("Receive unexpected rest event {cur_rest_event:?}"),
+                    }
+                }
+            }
+            _ => panic!("Receive unexpected rest event {:?}", events[0]),
         }
     }
 
@@ -259,14 +514,14 @@ mod tests {
         let source = RestSource::new();
         // No schema added
 
-        let request = EventRequest {
+        let request = RowEventRequest {
             src_table_name: "unknown_table".to_string(),
-            operation: EventOperation::Insert,
+            operation: RowEventOperation::Insert,
             payload: json!({"id": 1}),
             timestamp: SystemTime::now(),
         };
 
-        let err = source.process_request(&request).unwrap_err();
+        let err = source.process_row_request(&request).unwrap_err();
         match err {
             Error::RestSource(es) => {
                 let inner = es
@@ -294,22 +549,22 @@ mod tests {
             .add_table("test_table".to_string(), 1, schema)
             .unwrap();
 
-        let request1 = EventRequest {
+        let request1 = RowEventRequest {
             src_table_name: "test_table".to_string(),
-            operation: EventOperation::Insert,
+            operation: RowEventOperation::Insert,
             payload: json!({"id": 1, "name": "first"}),
             timestamp: SystemTime::now(),
         };
 
-        let request2 = EventRequest {
+        let request2 = RowEventRequest {
             src_table_name: "test_table".to_string(),
-            operation: EventOperation::Insert,
+            operation: RowEventOperation::Insert,
             payload: json!({"id": 2, "name": "second"}),
             timestamp: SystemTime::now(),
         };
 
-        let events1 = source.process_request(&request1).unwrap();
-        let events2 = source.process_request(&request2).unwrap();
+        let events1 = source.process_row_request(&request1).unwrap();
+        let events2 = source.process_row_request(&request2).unwrap();
 
         // Each request should generate 2 events (row + commit)
         assert_eq!(events1.len(), 2);
