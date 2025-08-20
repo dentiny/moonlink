@@ -88,15 +88,14 @@ async fn create_table(client: &reqwest::Client, database: &str, table: &str) {
         .unwrap();
     assert!(
         response.status().is_success(),
-        "Response status is {:?}",
-        response
+        "Response status is {response:?}"
     );
 }
 
 /// Util function to load all record batches inside of the given [`path`].
 async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     let resp = reqwest::get(url).await.unwrap();
-    assert!(resp.status().is_success(), "Response status is {:?}", resp);
+    assert!(resp.status().is_success(), "Response status is {resp:?}");
     let data: Bytes = resp.bytes().await.unwrap();
     let reader = ParquetRecordBatchReaderBuilder::try_new(data)
         .unwrap()
@@ -146,8 +145,7 @@ async fn test_moonlink_standalone_data_ingestion() {
         .unwrap();
     assert!(
         response.status().is_success(),
-        "Response status is {:?}",
-        response
+        "Response status is {response:?}"
     );
 
     // Scan table and get data file and puffin files back.
@@ -235,8 +233,7 @@ async fn test_moonlink_standalone_file_upload() {
         .unwrap();
     assert!(
         response.status().is_success(),
-        "Response status is {:?}",
-        response
+        "Response status is {response:?}"
     );
 
     // Scan table and get data file and puffin files back.
@@ -329,8 +326,7 @@ async fn test_moonlink_standalone_file_insert() {
         .unwrap();
     assert!(
         response.status().is_success(),
-        "Response status is {:?}",
-        response
+        "Response status is {response:?}"
     );
 
     // Scan table and get data file and puffin files back.
@@ -339,7 +335,7 @@ async fn test_moonlink_standalone_file_insert() {
         &mut moonlink_stream,
         DATABASE.to_string(),
         TABLE.to_string(),
-        // Four events generated: three apppends and one commit, with commit LSN 4.
+        // Four events generated: three appends and one commit, with commit LSN 4.
         /*lsn=*/
         4,
     )

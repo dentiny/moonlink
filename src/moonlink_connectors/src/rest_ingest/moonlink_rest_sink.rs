@@ -259,14 +259,25 @@ mod tests {
 
     #[tokio::test]
     async fn test_rest_sink_basic_operations() {
-        let mut sink = RestSink::new(ReplicationState::new());
+        let replication_state = ReplicationState::new();
+        let _replication_state_rx = replication_state.subscribe();
+        let mut sink = RestSink::new(replication_state.clone());
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
-        let src_table_id = 1;
+        let (_commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
+        let (_wal_flush_lsn_tx, _wal_flush_lsn_rx) = watch::channel(0u64);
+        let (_flush_lsn_tx, _flush_lsn_rx) = watch::channel(0u64);
+        let table_status = TableStatus {
+            _wal_flush_lsn_rx,
+            _flush_lsn_rx,
+            event_sender: event_tx,
+            commit_lsn_tx: _commit_lsn_tx,
+        };
 
         // Add table to sink
-        sink.add_table(src_table_id, event_tx).unwrap();
+        let src_table_id = 1;
+        sink.add_table(src_table_id, table_status).unwrap();
 
         // Create a test event
         let test_row = MoonlinkRow::new(vec![
@@ -348,13 +359,24 @@ mod tests {
 
     #[tokio::test]
     async fn test_rest_sink_process_rest_event() {
-        let mut sink = RestSink::new(ReplicationState::new());
+        let replication_state = ReplicationState::new();
+        let _replication_state_rx = replication_state.subscribe();
+        let mut sink = RestSink::new(replication_state.clone());
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
+        let (_commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
+        let (_wal_flush_lsn_tx, _wal_flush_lsn_rx) = watch::channel(0u64);
+        let (_flush_lsn_tx, _flush_lsn_rx) = watch::channel(0u64);
+        let table_status = TableStatus {
+            _wal_flush_lsn_rx,
+            _flush_lsn_rx,
+            event_sender: event_tx,
+            commit_lsn_tx: _commit_lsn_tx,
+        };
 
         let src_table_id = 1;
-        sink.add_table(src_table_id, event_tx).unwrap();
+        sink.add_table(src_table_id, table_status).unwrap();
 
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(42)]);
 
@@ -413,15 +435,36 @@ mod tests {
 
     #[tokio::test]
     async fn test_rest_sink_operations() {
-        let mut sink = RestSink::new(ReplicationState::new());
+        let replication_state = ReplicationState::new();
+        let _replication_state_rx = replication_state.subscribe();
+        let mut sink = RestSink::new(replication_state.clone());
 
         // Create channels for testing
-        let (event_tx1, mut event_rx1) = mpsc::channel::<TableEvent>(10);
-        let (event_tx2, mut event_rx2) = mpsc::channel::<TableEvent>(10);
+        let (event_tx_1, mut event_rx_1) = mpsc::channel::<TableEvent>(10);
+        let (_commit_lsn_tx_1, _commit_lsn_rx_1) = watch::channel(0u64);
+        let (_wal_flush_lsn_tx_1, _wal_flush_lsn_rx_1) = watch::channel(0u64);
+        let (_flush_lsn_tx_1, _flush_lsn_rx_1) = watch::channel(0u64);
+        let table_status_1 = TableStatus {
+            _wal_flush_lsn_rx: _wal_flush_lsn_rx_1,
+            _flush_lsn_rx: _flush_lsn_rx_1,
+            event_sender: event_tx_1,
+            commit_lsn_tx: _commit_lsn_tx_1,
+        };
+
+        let (event_tx_2, mut event_rx_2) = mpsc::channel::<TableEvent>(10);
+        let (_commit_lsn_tx_2, _commit_lsn_rx_2) = watch::channel(0u64);
+        let (_wal_flush_lsn_tx_2, _wal_flush_lsn_rx_2) = watch::channel(0u64);
+        let (_flush_lsn_tx_2, _flush_lsn_rx_2) = watch::channel(0u64);
+        let table_status_2 = TableStatus {
+            _wal_flush_lsn_rx: _wal_flush_lsn_rx_2,
+            _flush_lsn_rx: _flush_lsn_rx_2,
+            event_sender: event_tx_2,
+            commit_lsn_tx: _commit_lsn_tx_2,
+        };
 
         // Add two tables
-        sink.add_table(1, event_tx1).unwrap();
-        sink.add_table(2, event_tx2).unwrap();
+        sink.add_table(1, table_status_1).unwrap();
+        sink.add_table(2, table_status_2).unwrap();
 
         // Test different operation types
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(1)]);
@@ -446,13 +489,13 @@ mod tests {
         sink.send_table_event(2, delete_event).await.unwrap();
 
         // Verify events were received correctly
-        let received1 = event_rx1.recv().await.unwrap();
+        let received1 = event_rx_1.recv().await.unwrap();
         match received1 {
             TableEvent::Append { lsn, .. } => assert_eq!(lsn, 10),
             _ => panic!("Expected Append event for table 1"),
         }
 
-        let received2 = event_rx2.recv().await.unwrap();
+        let received2 = event_rx_2.recv().await.unwrap();
         match received2 {
             TableEvent::Delete { lsn, .. } => assert_eq!(lsn, 11),
             _ => panic!("Expected Delete event for table 2"),
