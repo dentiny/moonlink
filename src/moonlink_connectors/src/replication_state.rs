@@ -1,12 +1,8 @@
-use std::collections::HashSet;
 use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc,
 };
 use tokio::sync::watch;
-use tokio_postgres::types::PgLsn;
-
-use super::table::SrcTableId;
 
 /// Tracks replication progress and notifies listeners when the replicated
 /// LSN advances.
@@ -27,11 +23,10 @@ impl ReplicationState {
 
     /// Mark the replication position as `lsn` if it is newer than the current
     /// value.
-    pub fn mark(&self, lsn: PgLsn) {
-        let lsn_u64: u64 = lsn.into();
-        if lsn_u64 > self.current.load(Ordering::Relaxed) {
-            self.current.store(lsn_u64, Ordering::Release);
-            let _ = self.tx.send(lsn_u64);
+    pub fn mark(&self, lsn: u64) {
+        if lsn > self.current.load(Ordering::Relaxed) {
+            self.current.store(lsn, Ordering::Release);
+            self.tx.send(lsn).unwrap();
         }
     }
 

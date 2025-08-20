@@ -1,6 +1,7 @@
 use crate::pg_replicate::table_init::build_table_components;
 use crate::pg_replicate::PostgresConnection;
 use crate::pg_replicate::{table::SrcTableId, table_init::TableComponents};
+use crate::replication_state::ReplicationState;
 use crate::rest_ingest::rest_source::EventRequest;
 use crate::rest_ingest::RestApiConnection;
 use crate::Result;
@@ -224,7 +225,7 @@ impl ReplicationConnection {
                     src_table_id,
                     &self.table_base_path,
                     // REST API doesn't have replication state, create a dummy one
-                    &crate::pg_replicate::replication_state::ReplicationState::new(),
+                    &ReplicationState::new(),
                     table_components,
                     is_recovery,
                 )
