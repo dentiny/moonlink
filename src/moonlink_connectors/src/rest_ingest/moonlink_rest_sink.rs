@@ -258,7 +258,7 @@ mod tests {
     use crate::rest_ingest::rest_source::{RestEvent, RowEventOperation};
     use moonlink::row::{MoonlinkRow, RowValue};
     use std::time::SystemTime;
-    use tokio::sync::{mpsc, watch};
+    use tokio::sync::mpsc;
 
     #[tokio::test]
     async fn test_rest_sink_basic_operations() {
@@ -266,13 +266,10 @@ mod tests {
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
-        let (commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
-
         let src_table_id = 1;
 
         // Add table to sink
-        sink.add_table(src_table_id, event_tx, commit_lsn_tx)
-            .unwrap();
+        sink.add_table(src_table_id, event_tx).unwrap();
 
         // Create a test event
         let test_row = MoonlinkRow::new(vec![
@@ -358,7 +355,6 @@ mod tests {
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
-        let (commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
 
         let src_table_id = 1;
         sink.add_table(src_table_id, event_tx).unwrap();
@@ -424,13 +420,11 @@ mod tests {
 
         // Create channels for testing
         let (event_tx1, mut event_rx1) = mpsc::channel::<TableEvent>(10);
-        let (commit_lsn_tx1, _commit_lsn_rx1) = watch::channel(0u64);
         let (event_tx2, mut event_rx2) = mpsc::channel::<TableEvent>(10);
-        let (commit_lsn_tx2, _commit_lsn_rx2) = watch::channel(0u64);
 
         // Add two tables
-        sink.add_table(1, event_tx1, commit_lsn_tx1).unwrap();
-        sink.add_table(2, event_tx2, commit_lsn_tx2).unwrap();
+        sink.add_table(1, event_tx1).unwrap();
+        sink.add_table(2, event_tx2).unwrap();
 
         // Test different operation types
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(1)]);
