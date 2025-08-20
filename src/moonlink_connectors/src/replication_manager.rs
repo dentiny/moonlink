@@ -3,6 +3,7 @@ use crate::ReplicationConnection;
 use crate::{Error, Result};
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
 use moonlink::{ReadStateFilepathRemap, TableStatusReader};
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::hash::Hash;
 use tokio::task::JoinHandle;
@@ -59,22 +60,23 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         is_recovery: bool,
     ) -> Result<()> {
         debug!(%src_uri, table_name, "adding table through manager");
-        if !self.connections.contains_key(src_uri) {
-            debug!(%src_uri, "creating replication connection");
-            // Lazily create the directory that will hold all tables.
-            // This will not overwrite any existing directory.
-            tokio::fs::create_dir_all(&self.table_base_path).await?;
-            let base_path = tokio::fs::canonicalize(&self.table_base_path).await?;
-            let replication_connection = ReplicationConnection::new(
-                src_uri.to_string(),
-                base_path.to_str().unwrap().to_string(),
-                self.object_storage_cache.clone(),
-            )
-            .await?;
-            self.connections
-                .insert(src_uri.to_string(), replication_connection);
-        }
-        let replication_connection = self.connections.get_mut(src_uri).unwrap();
+        let (replication_connection, is_new_repl_conn): (&mut ReplicationConnection, bool) =
+            match self.connections.entry(src_uri.to_string()) {
+                Entry::Occupied(entry) => (entry.into_mut(), false),
+                Entry::Vacant(entry) => {
+                    debug!(%src_uri, "creating replication connection");
+
+                    tokio::fs::create_dir_all(&self.table_base_path).await?;
+                    let base_path = tokio::fs::canonicalize(&self.table_base_path).await?;
+                    let replication_connection = ReplicationConnection::new(
+                        src_uri.to_string(),
+                        base_path.to_str().unwrap().to_string(),
+                        self.object_storage_cache.clone(),
+                    )
+                    .await?;
+                    (entry.insert(replication_connection), true)
+                }
+            };
 
         let src_table_id = replication_connection
             .add_table_replication(
@@ -85,8 +87,14 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 is_recovery,
             )
             .await?;
-        self.table_info
-            .insert(mooncake_table_id, (src_uri.to_string(), src_table_id));
+
+        // Error handling: don't allow duplicate mooncake table id be registered.
+        if self.table_info.contains_key(&mooncake_table_id) {
+            replication_connection.drop_table(src_table_id).await?;
+            if is_new_repl_conn {
+                assert!(self.connections.remove(src_uri).is_some());
+            }
+        }
 
         debug!(src_table_id, "table added through manager");
 

@@ -42,6 +42,10 @@ pub enum Error {
     #[error("Invalid source type: {0}")]
     InvalidSourceType(String),
 
+    // Table replication error: duplicate table.
+    #[error("Duplicate table added to replication: {0}")]
+    ReplDuplicateTable(String),
+
     // REST API error.
     #[error("REST API error: {0}")]
     RestApi(String),

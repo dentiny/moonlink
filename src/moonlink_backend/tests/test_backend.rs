@@ -116,6 +116,26 @@ mod tests {
         assert_eq!(ids, HashSet::new());
     }
 
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn test_create_duplicate_table() {
+        let (guard, _client) = TestGuard::new(Some("duplicate_table"), true).await;
+        let backend = guard.backend();
+        // Till now, the table has been created in mooncake backend.
+
+        let res = backend
+            .create_table(
+                DATABASE.to_string(),
+                TABLE.to_string(),
+                "public.duplicate_table".to_string(),
+                SRC_URI.to_string(),
+                /*table_config=*/ "{}".to_string(),
+                /*input_schema=*/ None,
+            )
+            .await;
+        assert!(res.is_err());
+    }
+
     /// Validates that `create_iceberg_snapshot` writes Iceberg metadata.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
