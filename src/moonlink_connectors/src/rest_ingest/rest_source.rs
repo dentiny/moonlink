@@ -102,6 +102,8 @@ pub enum RestEvent {
         timestamp: SystemTime,
     },
     FileInsertEvent {
+        /// Source table id.
+        src_table_id: SrcTableId,
         /// Used for file row insertion operation.
         table_events: Arc<Mutex<tokio::sync::mpsc::UnboundedReceiver<Result<RestEvent>>>>,
     },
@@ -269,6 +271,7 @@ impl RestSource {
 
                 let file_upload_row_rx = Arc::new(Mutex::new(file_upload_row_rx));
                 let file_rest_event = RestEvent::FileInsertEvent {
+                    src_table_id,
                     table_events: file_upload_row_rx,
                 };
                 Ok(vec![file_rest_event])
@@ -489,7 +492,7 @@ mod tests {
 
         // Check file events.
         match &events[0] {
-            RestEvent::FileInsertEvent { table_events } => {
+            RestEvent::FileInsertEvent { table_events, .. } => {
                 let rest_events = get_all_rest_events(table_events.clone()).await.unwrap();
                 // There're 3 append events and 1 commit event.
                 assert_eq!(rest_events.len(), 4);
@@ -591,7 +594,7 @@ mod tests {
 
         // Check file events.
         match &events[0] {
-            RestEvent::FileInsertEvent { table_events } => {
+            RestEvent::FileInsertEvent { table_events, .. } => {
                 let rest_events = get_all_rest_events(table_events.clone()).await;
                 assert!(rest_events.is_err());
             }
