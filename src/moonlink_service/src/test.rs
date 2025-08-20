@@ -476,3 +476,58 @@ async fn test_invalid_operation() {
         .unwrap();
     assert!(!response.status().is_success());
 }
+
+/// Error case: non-existent source table.
+#[tokio::test]
+#[serial]
+async fn test_non_existent_table() {
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create the test table.
+    let client: reqwest::Client = reqwest::Client::new();
+    create_table(&client, DATABASE, TABLE).await;
+
+    // Test invalid operation to upload a file.
+    let file_upload_payload = json!({
+        "operation": "upload",
+        "files": ["parquet_file"],
+        "storage_config": {
+            "fs": {
+                "root_directory": get_moonlink_backend_dir(),
+                "atomic_write_dir": get_moonlink_backend_dir()
+            }
+        }
+    });
+    let _response = client
+        .post(format!("{REST_ADDR}/upload/non_existent_source_table"))
+        .header("content-type", "application/json")
+        .json(&file_upload_payload)
+        .send()
+        .await
+        .unwrap();
+    // Make sure service doesn't crash.
+
+    // Test invalid operation to ingest data.
+    let insert_payload = json!({
+        "operation": "invalid_ingest_operation",
+        "data": {
+            "id": 1,
+            "name": "Alice Johnson",
+            "email": "alice@example.com",
+            "age": 30
+        }
+    });
+    let _response = client
+        .post(format!("{REST_ADDR}/ingest/non_existent_source_table"))
+        .header("content-type", "application/json")
+        .json(&insert_payload)
+        .send()
+        .await
+        .unwrap();
+    // Make sure service doesn't crash.
+}
