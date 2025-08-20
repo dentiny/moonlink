@@ -123,6 +123,8 @@ impl ReadStateManager {
                     .await;
             }
 
+            println!("requested = {:?}, repl lsn = {:?}", requested_lsn, current_replication_lsn);
+
             self.wait_for_relevant_lsn_change(
                 requested_lsn.unwrap(),
                 current_replication_lsn,

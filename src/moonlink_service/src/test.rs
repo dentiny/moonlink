@@ -245,7 +245,7 @@ async fn test_moonlink_standalone_file_upload() {
         &mut moonlink_stream,
         DATABASE.to_string(),
         TABLE.to_string(),
-        0,
+        /*lsn=*/1,
     )
     .await
     .unwrap();
