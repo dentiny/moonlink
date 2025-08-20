@@ -11,6 +11,14 @@ pub struct ReplicationState {
     tx: watch::Sender<u64>,
 }
 
+impl std::fmt::Debug for ReplicationState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ReplicationState")
+            .field("current", &self.current.load(Ordering::SeqCst))
+            .finish()
+    }
+}
+
 impl ReplicationState {
     /// Create a new state initialised to LSN 0.
     pub fn new() -> Arc<Self> {

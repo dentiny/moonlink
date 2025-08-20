@@ -4,6 +4,7 @@ pub mod json_converter;
 pub mod moonlink_rest_sink;
 pub mod rest_source;
 
+use crate::replication_state::ReplicationState;
 use crate::rest_ingest::moonlink_rest_sink::RestSink;
 use crate::rest_ingest::rest_source::{EventRequest, RestSource};
 use crate::{Error, Result};
@@ -30,6 +31,7 @@ pub enum RestCommand {
         commit_lsn_tx: watch::Sender<u64>,
         flush_lsn_rx: watch::Receiver<u64>,
         wal_flush_lsn_rx: watch::Receiver<u64>,
+        replication_state: Arc<ReplicationState>,
     },
     DropTable {
         src_table_name: String,
@@ -81,6 +83,7 @@ impl RestApiConnection {
         commit_lsn_tx: watch::Sender<u64>,
         flush_lsn_rx: watch::Receiver<u64>,
         wal_flush_lsn_rx: watch::Receiver<u64>,
+        replication_state: Arc<ReplicationState>,
     ) -> Result<()> {
         let command = RestCommand::AddTable {
             src_table_name,
@@ -90,6 +93,7 @@ impl RestApiConnection {
             commit_lsn_tx,
             flush_lsn_rx,
             wal_flush_lsn_rx,
+            replication_state,
         };
 
         self.cmd_tx
@@ -156,11 +160,12 @@ pub async fn run_rest_event_loop(
     // UNDON, send status back for REST API if wait=true
     let mut flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
     let mut wal_flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
+    let mut replication_states: HashMap<SrcTableId, Arc<ReplicationState>> = HashMap::new();
 
     loop {
         tokio::select! {
             Some(cmd) = cmd_rx.recv() => match cmd {
-                RestCommand::AddTable { src_table_name, src_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx, wal_flush_lsn_rx } => {
+                RestCommand::AddTable { src_table_name, src_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx, wal_flush_lsn_rx, replication_state } => {
                     debug!("Adding REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Add to sink (handles table events)
@@ -174,7 +179,7 @@ pub async fn run_rest_event_loop(
                     }
                     // Invariant sanity check.
                     assert!(wal_flush_lsn_rxs.insert(src_table_id, wal_flush_lsn_rx).is_none());
-
+                    assert!(replication_states.insert(src_table_id, replication_state).is_none());
                 }
                 RestCommand::DropTable { src_table_name, src_table_id } => {
                     debug!("Dropping REST table '{}' with src_table_id {}", src_table_name, src_table_id);
@@ -190,6 +195,7 @@ pub async fn run_rest_event_loop(
                     }
                     // Invariant sanity check.
                     assert!(wal_flush_lsn_rxs.remove(&src_table_id).is_some());
+                    assert!(replication_states.remove(&src_table_id).is_some());
                 }
                 RestCommand::Shutdown => {
                     debug!("received shutdown command");
@@ -203,9 +209,16 @@ pub async fn run_rest_event_loop(
                     Ok(rest_events) => {
                         // Send all events to be processed by the sink
                         for rest_event in rest_events {
-                            if let Err(e) = sink.process_rest_event(rest_event).await {
+                            let rest_event_proc_result = sink.process_rest_event(rest_event).await;
+                            if let Err(e) = &rest_event_proc_result {
                                 warn!(error = ?e, "failed to process REST event");
                                 break; // Stop processing further events on error
+                            }
+
+                            // Update replication LSN if applicable.
+                            let rest_event_proc_result = rest_event_proc_result.unwrap();
+                            if let Some(commit_lsn) = rest_event_proc_result.commit_lsn {
+                                replication_states.get(&rest_event_proc_result.src_table_id).as_ref().unwrap().mark(commit_lsn);
                             }
                         }
                     }

@@ -8,6 +8,14 @@ use tokio::sync::Mutex;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, warn};
 
+/// Result for rest event processing.
+pub struct RestEventProcResult {
+    /// Source table id.
+    pub src_table_id: SrcTableId,
+    /// Commit LSN, only assigned if committed.
+    pub commit_lsn: Option<u64>,
+}
+
 /// REST-specific sink for handling REST API table events
 pub struct RestSink {
     event_senders: HashMap<SrcTableId, mpsc::Sender<TableEvent>>,
@@ -64,7 +72,10 @@ impl RestSink {
 
     /// Process a REST event and send appropriate table events
     /// This is the main entry point for REST event processing, similar to moonlink_sink's process_cdc_event
-    pub async fn process_rest_event(&mut self, rest_event: RestEvent) -> Result<()> {
+    pub async fn process_rest_event(
+        &mut self,
+        rest_event: RestEvent,
+    ) -> Result<RestEventProcResult> {
         match rest_event {
             // ==================
             // Row events
@@ -79,7 +90,11 @@ impl RestSink {
             } => {
                 self.tables_in_progress = Some(src_table_id);
                 self.process_row_event(src_table_id, operation, row, lsn)
-                    .await
+                    .await?;
+                Ok(RestEventProcResult {
+                    src_table_id,
+                    commit_lsn: None,
+                })
             }
             RestEvent::Commit { lsn, timestamp } => {
                 let src_table_id = self
@@ -87,20 +102,37 @@ impl RestSink {
                     .take()
                     .expect("tables_in_progress not set");
                 self.process_commit_event(lsn, src_table_id, timestamp)
-                    .await
+                    .await?;
+                Ok(RestEventProcResult {
+                    src_table_id,
+                    commit_lsn: Some(lsn),
+                })
             }
             // ==================
             // Table events
             // ==================
             //
-            RestEvent::FileInsertEvent { table_events } => {
-                self.process_file_insertion_boxed(table_events).await
+            RestEvent::FileInsertEvent {
+                src_table_id,
+                table_events,
+            } => {
+                self.process_file_insertion_boxed(table_events).await?;
+                Ok(RestEventProcResult {
+                    src_table_id,
+                    commit_lsn: None,
+                })
             }
             RestEvent::FileUploadEvent {
                 src_table_id,
                 files,
                 lsn,
-            } => self.process_file_upload(src_table_id, files, lsn).await,
+            } => {
+                self.process_file_upload(src_table_id, files, lsn).await?;
+                Ok(RestEventProcResult {
+                    src_table_id,
+                    commit_lsn: Some(lsn),
+                })
+            }
         }
     }
 
