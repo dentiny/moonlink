@@ -6,15 +6,13 @@ pub mod rest_source;
 
 use crate::replication_state::ReplicationState;
 use crate::rest_ingest::moonlink_rest_sink::RestSink;
+use crate::rest_ingest::moonlink_rest_sink::TableStatus;
 use crate::rest_ingest::rest_source::{EventRequest, RestSource};
-use crate::{Error, Result};
+use crate::Result;
 use arrow_schema::Schema;
 use moonlink::TableEvent;
-use std::collections::HashMap;
-use std::sync::{
-    atomic::{AtomicU32, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 use tracing::{debug, warn};
 
@@ -141,13 +139,10 @@ impl RestApiConnection {
 
     /// Spawn REST API event loop task (following PostgreSQL's spawn_replication_task pattern)
     pub async fn spawn_rest_task(&mut self) -> tokio::task::JoinHandle<Result<()>> {
-        let sink = RestSink::new();
+        let sink = RestSink::new(self.replication_state.clone());
         let (cmd_rx, rest_request_rx) = self.start_replication();
 
-        let replication_state = self.replication_state.clone();
-        tokio::spawn(async move {
-            run_rest_event_loop(sink, cmd_rx, rest_request_rx, replication_state).await
-        })
+        tokio::spawn(async move { run_rest_event_loop(sink, cmd_rx, rest_request_rx).await })
     }
 }
 
@@ -157,21 +152,11 @@ pub async fn run_rest_event_loop(
     mut sink: RestSink,
     mut cmd_rx: mpsc::Receiver<RestCommand>,
     mut rest_request_rx: mpsc::Receiver<EventRequest>,
-    replication_state: Arc<ReplicationState>,
 ) -> Result<()> {
     debug!("REST API event loop started");
 
     // Create RestSource that we'll use for processing
     let mut rest_source = RestSource::new();
-
-    // UNDON, send status back for REST API if wait=true
-    let mut flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
-    let mut wal_flush_lsn_rxs: HashMap<SrcTableId, watch::Receiver<u64>> = HashMap::new();
-
-    // Difference on commit LSN and replication LSN:
-    // - Commit LSN is used per-table
-    // - Replication LSN is used per-database
-    let mut commit_lsn_txs: HashMap<SrcTableId, watch::Sender<u64>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -180,17 +165,16 @@ pub async fn run_rest_event_loop(
                     debug!("Adding REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Add to sink (handles table events)
-                    sink.add_table(src_table_id, event_sender)?;
+                    let table_status = TableStatus {
+                        _wal_flush_lsn_rx: wal_flush_lsn_rx,
+                        _flush_lsn_rx: flush_lsn_rx,
+                        event_sender,
+                        commit_lsn_tx,
+                    };
+                    sink.add_table(src_table_id, table_status)?;
 
                     // Add to source (handles schema and request processing)
                     rest_source.add_table(src_table_name.clone(), src_table_id, schema)?;
-
-                    if flush_lsn_rxs.insert(src_table_id, flush_lsn_rx).is_some() {
-                        return Err(Error::RestDuplicateTable(src_table_id));
-                    }
-                    // Invariant sanity check.
-                    assert!(wal_flush_lsn_rxs.insert(src_table_id, wal_flush_lsn_rx).is_none());
-                    assert!(commit_lsn_txs.insert(src_table_id, commit_lsn_tx).is_none());
                 }
                 RestCommand::DropTable { src_table_name, src_table_id } => {
                     debug!("Dropping REST table '{}' with src_table_id {}", src_table_name, src_table_id);
@@ -200,13 +184,6 @@ pub async fn run_rest_event_loop(
 
                     // Remove from source
                     rest_source.remove_table(&src_table_name)?;
-
-                    if flush_lsn_rxs.remove(&src_table_id).is_none() {
-                        return Err(Error::RestNonExistentTable(src_table_id));
-                    }
-                    // Invariant sanity check.
-                    assert!(wal_flush_lsn_rxs.remove(&src_table_id).is_some());
-                    assert!(commit_lsn_txs.remove(&src_table_id).is_some());
                 }
                 RestCommand::Shutdown => {
                     debug!("received shutdown command");
@@ -224,13 +201,6 @@ pub async fn run_rest_event_loop(
                             if let Err(e) = &rest_event_proc_result {
                                 warn!(error = ?e, "failed to process REST event");
                                 break; // Stop processing further events on error
-                            }
-
-                            // Update replication LSN if applicable.
-                            let rest_event_proc_result = rest_event_proc_result.unwrap();
-                            if let Some(commit_lsn) = rest_event_proc_result.commit_lsn {
-                                commit_lsn_txs.get(&rest_event_proc_result.src_table_id).as_ref().unwrap().send(commit_lsn).unwrap();
-                                replication_state.mark(commit_lsn);
                             }
                         }
                     }

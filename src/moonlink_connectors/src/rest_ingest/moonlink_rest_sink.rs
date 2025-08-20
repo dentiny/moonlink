@@ -1,3 +1,4 @@
+use crate::replication_state::ReplicationState;
 use crate::rest_ingest::rest_source::SrcTableId;
 use crate::rest_ingest::rest_source::{RestEvent, RowEventOperation};
 use crate::{Error, Result};
@@ -5,46 +6,38 @@ use moonlink::TableEvent;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
+use tokio::sync::watch;
 use tokio::sync::Mutex;
 use tracing::debug;
 
-/// Result for rest event processing.
-pub struct RestEventProcResult {
-    /// Source table id.
-    pub src_table_id: SrcTableId,
-    /// Commit LSN, only assigned if committed.
-    pub commit_lsn: Option<u64>,
+pub struct TableStatus {
+    pub(crate) _wal_flush_lsn_rx: watch::Receiver<u64>,
+    pub(crate) _flush_lsn_rx: watch::Receiver<u64>,
+    pub(crate) event_sender: mpsc::Sender<TableEvent>,
+    pub(crate) commit_lsn_tx: watch::Sender<u64>,
 }
 
 /// REST-specific sink for handling REST API table events
 pub struct RestSink {
-    event_senders: HashMap<SrcTableId, mpsc::Sender<TableEvent>>,
+    table_status: HashMap<SrcTableId, TableStatus>,
     tables_in_progress: Option<SrcTableId>,
-}
-
-impl Default for RestSink {
-    fn default() -> Self {
-        Self::new()
-    }
+    replication_state: Arc<ReplicationState>,
 }
 
 impl RestSink {
-    pub fn new() -> Self {
+    pub fn new(replication_state: Arc<ReplicationState>) -> Self {
         Self {
-            event_senders: HashMap::new(),
+            table_status: HashMap::new(),
             tables_in_progress: None,
+            replication_state,
         }
     }
 
     /// Add a table to the REST sink
-    pub fn add_table(
-        &mut self,
-        src_table_id: SrcTableId,
-        event_sender: mpsc::Sender<TableEvent>,
-    ) -> Result<()> {
+    pub fn add_table(&mut self, src_table_id: SrcTableId, table_status: TableStatus) -> Result<()> {
         if self
-            .event_senders
-            .insert(src_table_id, event_sender)
+            .table_status
+            .insert(src_table_id, table_status)
             .is_some()
         {
             return Err(Error::RestDuplicateTable(src_table_id));
@@ -54,18 +47,32 @@ impl RestSink {
 
     /// Remove a table from the REST sink
     pub fn drop_table(&mut self, src_table_id: SrcTableId) -> Result<()> {
-        if self.event_senders.remove(&src_table_id).is_none() {
+        if self.table_status.remove(&src_table_id).is_none() {
             return Err(Error::RestNonExistentTable(src_table_id));
         }
         Ok(())
     }
 
+    /// Update commit LSN and replication LSN for the given table.
+    ///
+    /// Difference on commit LSN and replication LSN:
+    /// - Commit LSN is used per-table
+    /// - Replication LSN is used per-database
+    fn mark_commit(&self, src_table_id: SrcTableId, lsn: u64) -> Result<()> {
+        if let Some(table_status) = self.table_status.get(&src_table_id) {
+            table_status.commit_lsn_tx.send(lsn).unwrap();
+        } else {
+            return Err(crate::Error::RestApi(format!(
+                "No table status found for src_table_id: {src_table_id}"
+            )));
+        }
+        self.replication_state.mark(lsn);
+        Ok(())
+    }
+
     /// Process a REST event and send appropriate table events
     /// This is the main entry point for REST event processing, similar to moonlink_sink's process_cdc_event
-    pub async fn process_rest_event(
-        &mut self,
-        rest_event: RestEvent,
-    ) -> Result<RestEventProcResult> {
+    pub async fn process_rest_event(&mut self, rest_event: RestEvent) -> Result<()> {
         match rest_event {
             // ==================
             // Row events
@@ -81,10 +88,7 @@ impl RestSink {
                 self.tables_in_progress = Some(src_table_id);
                 self.process_row_event(src_table_id, operation, row, lsn)
                     .await?;
-                Ok(RestEventProcResult {
-                    src_table_id,
-                    commit_lsn: None,
-                })
+                Ok(())
             }
             RestEvent::Commit { lsn, timestamp } => {
                 let src_table_id = self
@@ -93,24 +97,19 @@ impl RestSink {
                     .expect("tables_in_progress not set");
                 self.process_commit_event(lsn, src_table_id, timestamp)
                     .await?;
-                Ok(RestEventProcResult {
-                    src_table_id,
-                    commit_lsn: Some(lsn),
-                })
+                self.mark_commit(src_table_id, lsn)?;
+                Ok(())
             }
             // ==================
             // Table events
             // ==================
             //
             RestEvent::FileInsertEvent {
-                src_table_id,
+                src_table_id: _,
                 table_events,
             } => {
                 self.process_file_insertion_boxed(table_events).await?;
-                Ok(RestEventProcResult {
-                    src_table_id,
-                    commit_lsn: None,
-                })
+                Ok(())
             }
             RestEvent::FileUploadEvent {
                 src_table_id,
@@ -118,10 +117,8 @@ impl RestSink {
                 lsn,
             } => {
                 self.process_file_upload(src_table_id, files, lsn).await?;
-                Ok(RestEventProcResult {
-                    src_table_id,
-                    commit_lsn: Some(lsn),
-                })
+                self.mark_commit(src_table_id, lsn)?;
+                Ok(())
             }
         }
     }
@@ -239,8 +236,8 @@ impl RestSink {
 
     /// Send a table event to the appropriate table handler (internal helper)
     async fn send_table_event(&self, src_table_id: SrcTableId, event: TableEvent) -> Result<()> {
-        if let Some(event_sender) = self.event_senders.get(&src_table_id) {
-            event_sender.send(event).await.map_err(|e| {
+        if let Some(table_status) = self.table_status.get(&src_table_id) {
+            table_status.event_sender.send(event).await.map_err(|e| {
                 crate::Error::RestApi(format!("Failed to send event to table {src_table_id}: {e}"))
             })?;
             Ok(())
@@ -262,7 +259,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rest_sink_basic_operations() {
-        let mut sink = RestSink::new();
+        let mut sink = RestSink::new(ReplicationState::new());
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
@@ -351,7 +348,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rest_sink_process_rest_event() {
-        let mut sink = RestSink::new();
+        let mut sink = RestSink::new(ReplicationState::new());
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
@@ -416,7 +413,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rest_sink_operations() {
-        let mut sink = RestSink::new();
+        let mut sink = RestSink::new(ReplicationState::new());
 
         // Create channels for testing
         let (event_tx1, mut event_rx1) = mpsc::channel::<TableEvent>(10);
