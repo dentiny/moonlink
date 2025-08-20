@@ -160,7 +160,7 @@ fn recover_storage_config(
                     secret_access_key: secret_entry.secret,
                     endpoint: secret_entry.endpoint,
                     disable_auth: false,
-                    multipart_upload_threshold: None,
+                    write_option: None,
                 };
             }
             #[cfg(feature = "storage-s3")]

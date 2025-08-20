@@ -200,7 +200,7 @@ mod tests {
                     secret_access_key: "secret".to_string(),
                     endpoint: None,
                     disable_auth: false,
-                    multipart_upload_threshold: None,
+                    write_option: None,
                 },
             )),
         };

@@ -20,6 +20,8 @@ use crate::storage::filesystem::accessor::metadata::ObjectMetadata;
 use crate::storage::filesystem::accessor::operator_utils;
 use crate::storage::filesystem::accessor::unbuffered_stream_writer::UnbufferedStreamWriter;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
+#[cfg(feature = "storage-gcs")]
+use crate::storage::filesystem::storage_config::StorageConfig;
 use crate::Result;
 
 use std::pin::Pin;
@@ -60,8 +62,9 @@ impl FileSystemAccessor {
     #[cfg(test)]
     pub fn default_for_test(temp_dir: &TempDir) -> std::sync::Arc<dyn BaseFileSystemAccess> {
         use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
+        use crate::storage::filesystem::storage_config::StorageConfig;
 
-        let storage_config = crate::StorageConfig::FileSystem {
+        let storage_config = StorageConfig::FileSystem {
             root_directory: temp_dir.path().to_str().unwrap().to_string(),
             atomic_write_dir: None,
         };
@@ -120,17 +123,23 @@ impl FileSystemAccessor {
         Ok(ObjectMetadata { size: file_size })
     }
 
-    fn get_write_option(&self) -> WriteOptions {
-        match self.config.storage_config {
+    /// Get multi-part upload trigger threshold.
+    fn get_multipart_upload_threshold(&self) -> Option<usize> {
+        match &self.config.storage_config {
             #[cfg(feature = "storage-gcs")]
-            crate::storage::filesystem::storage_config::StorageConfig::Gcs {
-                multipart_upload_threshold,
+            StorageConfig::Gcs {
+                write_option: Some(opt),
                 ..
-            } => WriteOptions {
-                chunk: multipart_upload_threshold,
-                ..Default::default()
-            },
-            _ => WriteOptions::default(),
+            } => opt.multipart_upload_threshold,
+            _ => None,
+        }
+    }
+
+    /// Get option for write options, use default if unspecified.
+    fn get_write_option(&self) -> WriteOptions {
+        WriteOptions {
+            chunk: self.get_multipart_upload_threshold(),
+            ..Default::default()
         }
     }
 }
