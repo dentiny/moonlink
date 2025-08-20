@@ -86,13 +86,17 @@ async fn create_table(client: &reqwest::Client, database: &str, table: &str) {
         .send()
         .await
         .unwrap();
-    assert!(response.status().is_success());
+    assert!(
+        response.status().is_success(),
+        "Response status is {:?}",
+        response
+    );
 }
 
 /// Util function to load all record batches inside of the given [`path`].
 async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     let resp = reqwest::get(url).await.unwrap();
-    assert!(resp.status().is_success());
+    assert!(resp.status().is_success(), "Response status is {:?}", resp);
     let data: Bytes = resp.bytes().await.unwrap();
     let reader = ParquetRecordBatchReaderBuilder::try_new(data)
         .unwrap()
@@ -140,7 +144,11 @@ async fn test_moonlink_standalone_data_ingestion() {
         .send()
         .await
         .unwrap();
-    assert!(response.status().is_success());
+    assert!(
+        response.status().is_success(),
+        "Response status is {:?}",
+        response
+    );
 
     // Scan table and get data file and puffin files back.
     let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();
@@ -225,7 +233,11 @@ async fn test_moonlink_standalone_file_upload() {
         .send()
         .await
         .unwrap();
-    assert!(response.status().is_success());
+    assert!(
+        response.status().is_success(),
+        "Response status is {:?}",
+        response
+    );
 
     // Scan table and get data file and puffin files back.
     let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();

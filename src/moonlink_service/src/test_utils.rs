@@ -34,7 +34,22 @@ pub(crate) async fn generate_parquet_file(directory: &str) -> String {
     let schema = create_test_arrow_schema();
     let ids = Int32Array::from(vec![1, 2, 3]);
     let names = StringArray::from(vec!["Alice", "Bob", "Charlie"]);
-    let batch = RecordBatch::try_new(schema.clone(), vec![Arc::new(ids), Arc::new(names)]).unwrap();
+    let emails = StringArray::from(vec![
+        "Alice@gmail.com",
+        "Bob@gmail.com",
+        "Charlie@gmail.com",
+    ]);
+    let ages = Int32Array::from(vec![10, 20, 30]);
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(ids),
+            Arc::new(names),
+            Arc::new(emails),
+            Arc::new(ages),
+        ],
+    )
+    .unwrap();
     let dir_path = std::path::Path::new(directory);
     let file_path = dir_path.join("test.parquet");
     let file_path_str = file_path.to_str().unwrap().to_string();
