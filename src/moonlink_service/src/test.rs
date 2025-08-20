@@ -217,7 +217,7 @@ async fn test_moonlink_standalone_file_upload() {
     let parquet_file = generate_parquet_file(&moonlink_backend_dir).await;
     let file_upload_payload = json!({
         "operation": "upload",
-        "files": parquet_file,
+        "files": [parquet_file],
         "storage_config": {
             "fs": {
                 "root_directory": get_moonlink_backend_dir(),
