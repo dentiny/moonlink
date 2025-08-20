@@ -7,7 +7,10 @@ use axum::{
 };
 use moonlink::StorageConfig;
 use moonlink_backend::table_config::{MooncakeConfig, TableConfig};
-use moonlink_backend::{EventRequest, FileEventOperation, FileEventRequest, RowEventOperation, RowEventRequest, REST_API_URI};
+use moonlink_backend::{
+    EventRequest, FileEventOperation, FileEventRequest, RowEventOperation, RowEventRequest,
+    REST_API_URI,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -32,7 +35,7 @@ impl ApiState {
 /// ====================
 /// Error message
 /// ====================
-/// 
+///
 /// Error response structure
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
@@ -43,7 +46,7 @@ pub struct ErrorResponse {
 /// ====================
 /// Create table
 /// ====================
-/// 
+///
 /// Request structure for table creation
 #[derive(Debug, Deserialize)]
 pub struct CreateTableRequest {
@@ -72,7 +75,7 @@ pub struct CreateTableResponse {
 /// ====================
 /// Data ingestion
 /// ====================
-/// 
+///
 /// Request structure for data ingestion
 #[derive(Debug, Deserialize)]
 pub struct IngestRequest {
@@ -92,7 +95,7 @@ pub struct IngestResponse {
 /// ====================
 /// File upload
 /// ====================
-/// 
+///
 #[derive(Debug, Deserialize)]
 pub struct FileUploadRequest {
     /// Ingestion operation.
@@ -112,7 +115,7 @@ pub struct FileUploadResponse {
 /// ====================
 /// Health check
 /// ====================
-/// 
+///
 /// Health check response
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
@@ -127,7 +130,7 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/health", get(health_check))
         .route("/tables/{table}", post(create_table))
         .route("/ingest/{table}", post(ingest_data))
-        .route("/upload/{table}", post())
+        .route("/upload/{table}", post(upload_files))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -283,7 +286,7 @@ async fn upload_files(
                 }),
             ));
         }
-    }
+    };
 
     // Create REST request.
     let file_event_request = FileEventRequest {

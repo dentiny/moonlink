@@ -1,8 +1,5 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
-use arrow::datatypes::Schema as ArrowSchema;
-use arrow::datatypes::{DataType, Field};
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use bytes::Bytes;
 use moonlink::decode_serialized_read_state_for_testing;
@@ -11,6 +8,7 @@ use serde_json::json;
 use serial_test::serial;
 use tokio::net::TcpStream;
 
+use crate::test_utils::*;
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
 use moonlink_rpc::{load_files, scan_table_begin, scan_table_end};
 
@@ -104,28 +102,6 @@ async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     reader.into_iter().map(|b| b.unwrap()).collect()
 }
 
-/// Util function to create test arrow schema.
-fn create_test_arrow_schema() -> Arc<ArrowSchema> {
-    Arc::new(ArrowSchema::new(vec![
-        Field::new("id", DataType::Int32, /*nullable=*/ false).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "0".to_string(),
-        )])),
-        Field::new("name", DataType::Utf8, /*nullable=*/ false).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "1".to_string(),
-        )])),
-        Field::new("email", DataType::Utf8, /*nullable=*/ true).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "2".to_string(),
-        )])),
-        Field::new("age", DataType::Int32, /*nullable=*/ true).with_metadata(HashMap::from([(
-            "PARQUET:field_id".to_string(),
-            "3".to_string(),
-        )])),
-    ]))
-}
-
 /// Test basic table creation, insertion and query.
 #[tokio::test]
 #[serial]
@@ -212,9 +188,10 @@ async fn test_moonlink_standalone_data_ingestion() {
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_file_upload() {
-    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let moonlink_backend_dir = get_moonlink_backend_dir();
+    cleanup_directory(&moonlink_backend_dir).await;
     let config = ServiceConfig {
-        base_path: get_moonlink_backend_dir(),
+        base_path: moonlink_backend_dir.clone(),
         data_server_uri: Some(NGINX_ADDR.to_string()),
         rest_api_port: Some(3030),
         tcp_port: Some(3031),
@@ -229,20 +206,22 @@ async fn test_moonlink_standalone_file_upload() {
     create_table(&client, DATABASE, TABLE).await;
 
     // Upload a file.
+    let parquet_file = generate_parquet_file(&moonlink_backend_dir).await;
     let file_upload_payload = json!({
         "operation": "upload",
-        "data": {
-            "id": 1,
-            "name": "Alice Johnson",
-            "email": "alice@example.com",
-            "age": 30
+        "files": parquet_file,
+        "storage_config": {
+            "fs": {
+                "root_directory": get_moonlink_backend_dir(),
+                "atomic_write_dir": get_moonlink_backend_dir()
+            }
         }
     });
     let crafted_src_table_name = format!("{DATABASE}.{TABLE}");
     let response = client
-        .post(format!("{REST_ADDR}/ingest/{crafted_src_table_name}"))
+        .post(format!("{REST_ADDR}/upload/{crafted_src_table_name}"))
         .header("content-type", "application/json")
-        .json(&insert_payload)
+        .json(&file_upload_payload)
         .send()
         .await
         .unwrap();
@@ -287,7 +266,7 @@ async fn test_moonlink_standalone_file_upload() {
     .unwrap();
 
     // Cleanup shared directory.
-    cleanup_directory(&get_moonlink_backend_dir()).await;
+    cleanup_directory(&moonlink_backend_dir).await;
 }
 
 /// Testing scenario: two tables with the same name, but under different databases are created.
