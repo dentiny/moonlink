@@ -1,7 +1,6 @@
 use crate::pg_replicate::table_init::build_table_components;
 use crate::pg_replicate::PostgresConnection;
 use crate::pg_replicate::{table::SrcTableId, table_init::TableComponents};
-use crate::replication_state::ReplicationState;
 use crate::rest_ingest::rest_source::EventRequest;
 use crate::rest_ingest::RestApiConnection;
 use crate::Result;
@@ -216,8 +215,8 @@ impl ReplicationConnection {
                     moonlink_table_config,
                 };
 
-                // Create MooncakeTable resources using the table init function
-                let replication_state = ReplicationState::new();
+                // Create MooncakeTable resources using the table init function.
+                let replication_state = conn.get_replication_state();
                 let mut table_resources = build_table_components(
                     mooncake_table_id.to_string(),
                     arrow_schema.clone(),
@@ -249,7 +248,6 @@ impl ReplicationConnection {
                         .wal_flush_lsn_rx
                         .take()
                         .expect("wal_flush_lsn_rx not set"),
-                    replication_state,
                 )
                 .await?;
 

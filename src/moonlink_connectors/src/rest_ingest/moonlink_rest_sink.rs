@@ -4,9 +4,9 @@ use crate::{Error, Result};
 use moonlink::TableEvent;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 use tokio::sync::Mutex;
-use tokio::sync::{mpsc, watch};
-use tracing::{debug, warn};
+use tracing::debug;
 
 /// Result for rest event processing.
 pub struct RestEventProcResult {
@@ -19,7 +19,6 @@ pub struct RestEventProcResult {
 /// REST-specific sink for handling REST API table events
 pub struct RestSink {
     event_senders: HashMap<SrcTableId, mpsc::Sender<TableEvent>>,
-    commit_lsn_txs: HashMap<SrcTableId, watch::Sender<u64>>,
     tables_in_progress: Option<SrcTableId>,
 }
 
@@ -33,7 +32,6 @@ impl RestSink {
     pub fn new() -> Self {
         Self {
             event_senders: HashMap::new(),
-            commit_lsn_txs: HashMap::new(),
             tables_in_progress: None,
         }
     }
@@ -43,7 +41,6 @@ impl RestSink {
         &mut self,
         src_table_id: SrcTableId,
         event_sender: mpsc::Sender<TableEvent>,
-        commit_lsn_tx: watch::Sender<u64>,
     ) -> Result<()> {
         if self
             .event_senders
@@ -52,11 +49,6 @@ impl RestSink {
         {
             return Err(Error::RestDuplicateTable(src_table_id));
         }
-        // Invariant sanity check.
-        assert!(self
-            .commit_lsn_txs
-            .insert(src_table_id, commit_lsn_tx)
-            .is_none());
         Ok(())
     }
 
@@ -65,8 +57,6 @@ impl RestSink {
         if self.event_senders.remove(&src_table_id).is_none() {
             return Err(Error::RestNonExistentTable(src_table_id));
         }
-        // Invariant sanity check.
-        assert!(self.commit_lsn_txs.remove(&src_table_id).is_some());
         Ok(())
     }
 
@@ -244,7 +234,6 @@ impl RestSink {
             is_recovery: false,
         };
         self.send_table_event(src_table_id, commit_event).await?;
-        self.send_commit_lsn(lsn);
         Ok(())
     }
 
@@ -259,15 +248,6 @@ impl RestSink {
             Err(crate::Error::RestApi(format!(
                 "No event sender found for src_table_id: {src_table_id}"
             )))
-        }
-    }
-
-    /// Send commit LSN to all active tables
-    fn send_commit_lsn(&self, lsn: u64) {
-        for (src_table_id, commit_lsn_tx) in &self.commit_lsn_txs {
-            if let Err(e) = commit_lsn_tx.send(lsn) {
-                warn!(error = ?e, src_table_id, lsn, "failed to send commit LSN");
-            }
         }
     }
 }
@@ -372,17 +352,6 @@ mod tests {
         assert!(result.is_err());
     }
 
-    #[test]
-    fn test_rest_sink_commit_lsn() {
-        let sink = RestSink::new();
-
-        // Test sending commit LSN to empty sink (should not panic)
-        sink.send_commit_lsn(100);
-
-        // TODO: Could extend this test to verify commit LSN is actually sent
-        // to tables, but that would require more complex test setup
-    }
-
     #[tokio::test]
     async fn test_rest_sink_process_rest_event() {
         let mut sink = RestSink::new();
@@ -392,8 +361,7 @@ mod tests {
         let (commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
 
         let src_table_id = 1;
-        sink.add_table(src_table_id, event_tx, commit_lsn_tx)
-            .unwrap();
+        sink.add_table(src_table_id, event_tx).unwrap();
 
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(42)]);
 

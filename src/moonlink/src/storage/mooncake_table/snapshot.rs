@@ -484,10 +484,6 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
-
-        println!("update snapshot with stream txn # {}, flush lsn = {:?}, commit lsn = {}", 
-            task.new_streaming_xact.len(), task.new_flush_lsn, task.commit_lsn_baseline);
-
         // Validate event id is assigned.
         assert!(opt.id.is_some());
         // Validate mooncake table operation invariants.

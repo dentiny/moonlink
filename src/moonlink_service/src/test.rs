@@ -245,7 +245,7 @@ async fn test_moonlink_standalone_file_upload() {
         &mut moonlink_stream,
         DATABASE.to_string(),
         TABLE.to_string(),
-        /*lsn=*/1,
+        /*lsn=*/ 1,
     )
     .await
     .unwrap();
@@ -256,10 +256,14 @@ async fn test_moonlink_standalone_file_upload() {
     let expected_arrow_batch = RecordBatch::try_new(
         create_test_arrow_schema(),
         vec![
-            Arc::new(Int32Array::from(vec![1])),
-            Arc::new(StringArray::from(vec!["Alice Johnson".to_string()])),
-            Arc::new(StringArray::from(vec!["alice@example.com".to_string()])),
-            Arc::new(Int32Array::from(vec![30])),
+            Arc::new(Int32Array::from(vec![1, 2, 3])),
+            Arc::new(StringArray::from(vec!["Alice", "Bob", "Charlie"])),
+            Arc::new(StringArray::from(vec![
+                "Alice@gmail.com",
+                "Bob@gmail.com",
+                "Charlie@gmail.com",
+            ])),
+            Arc::new(Int32Array::from(vec![10, 20, 30])),
         ],
     )
     .unwrap();
