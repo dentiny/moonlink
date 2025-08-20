@@ -5,10 +5,9 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use moonlink_backend::{
-    table_config::{MooncakeConfig, TableConfig},
-    EventRequest, RowEventOperation, RowEventRequest, REST_API_URI,
-};
+use moonlink::StorageConfig;
+use moonlink_backend::table_config::{MooncakeConfig, TableConfig};
+use moonlink_backend::{EventRequest, FileEventOperation, FileEventRequest, RowEventOperation, RowEventRequest, REST_API_URI};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -30,6 +29,21 @@ impl ApiState {
     }
 }
 
+/// ====================
+/// Error message
+/// ====================
+/// 
+/// Error response structure
+#[derive(Debug, Serialize)]
+pub struct ErrorResponse {
+    pub error: String,
+    pub message: String,
+}
+
+/// ====================
+/// Create table
+/// ====================
+/// 
 /// Request structure for table creation
 #[derive(Debug, Deserialize)]
 pub struct CreateTableRequest {
@@ -55,6 +69,10 @@ pub struct CreateTableResponse {
     pub schema: String,
 }
 
+/// ====================
+/// Data ingestion
+/// ====================
+/// 
 /// Request structure for data ingestion
 #[derive(Debug, Deserialize)]
 pub struct IngestRequest {
@@ -71,13 +89,30 @@ pub struct IngestResponse {
     pub operation: String,
 }
 
-/// Error response structure
+/// ====================
+/// File upload
+/// ====================
+/// 
+#[derive(Debug, Deserialize)]
+pub struct FileUploadRequest {
+    /// Ingestion operation.
+    pub operation: String,
+    /// Files to ingest into mooncake table.
+    pub files: Vec<String>,
+    /// Storage configuration to access files.
+    pub storage_config: StorageConfig,
+}
+
 #[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    pub error: String,
+pub struct FileUploadResponse {
+    pub status: String,
     pub message: String,
 }
 
+/// ====================
+/// Health check
+/// ====================
+/// 
 /// Health check response
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
@@ -92,6 +127,7 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/health", get(health_check))
         .route("/tables/{table}", post(create_table))
         .route("/ingest/{table}", post(ingest_data))
+        .route("/upload/{table}", post())
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -219,6 +255,62 @@ async fn create_table(
             ))
         }
     }
+}
+
+/// File upload endpoint.
+async fn upload_files(
+    Path(src_table_name): Path<String>,
+    State(state): State<ApiState>,
+    Json(payload): Json<FileUploadRequest>,
+) -> Result<Json<FileUploadResponse>, (StatusCode, Json<ErrorResponse>)> {
+    debug!(
+        "Received file upload request for table '{}': {:?}",
+        src_table_name, payload
+    );
+
+    let operation = match payload.operation.as_str() {
+        "insert" => FileEventOperation::Insert,
+        "upload" => FileEventOperation::Upload,
+        _ => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    error: "invalid_operation".to_string(),
+                    message: format!(
+                        "Invalid operation '{}'. Must be 'insert' or 'upload'",
+                        payload.operation
+                    ),
+                }),
+            ));
+        }
+    }
+
+    // Create REST request.
+    let file_event_request = FileEventRequest {
+        src_table_name: src_table_name.clone(),
+        operation,
+        storage_config: payload.storage_config,
+        files: payload.files,
+    };
+    let rest_event_request = EventRequest::FileRequest(file_event_request);
+    state
+        .backend
+        .send_event_request(rest_event_request)
+        .await
+        .map_err(|e| {
+            error!("Failed to send event request: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "file_upload_failed".to_string(),
+                    message: format!("Failed to process request: {e}"),
+                }),
+            )
+        })?;
+    Ok(Json(FileUploadResponse {
+        status: "success".to_string(),
+        message: "File queued for ingestion".to_string(),
+    }))
 }
 
 /// Data ingestion endpoint
