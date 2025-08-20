@@ -31,6 +31,17 @@ const DATABASE: &str = "test-database";
 /// Test table name.
 const TABLE: &str = "test-table";
 
+fn get_service_config() -> ServiceConfig {
+    let moonlink_backend_dir = get_moonlink_backend_dir();
+
+    ServiceConfig {
+        base_path: moonlink_backend_dir.clone(),
+        data_server_uri: Some(NGINX_ADDR.to_string()),
+        rest_api_port: Some(3030),
+        tcp_port: Some(3031),
+    }
+}
+
 /// Util function to delete and all subdirectories and files in the given directory.
 async fn cleanup_directory(dir: &str) {
     let dir = std::path::Path::new(dir);
@@ -110,12 +121,7 @@ async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
 #[serial]
 async fn test_moonlink_standalone_data_ingestion() {
     cleanup_directory(&get_moonlink_backend_dir()).await;
-    let config = ServiceConfig {
-        base_path: get_moonlink_backend_dir(),
-        data_server_uri: Some(NGINX_ADDR.to_string()),
-        rest_api_port: Some(3030),
-        tcp_port: Some(3031),
-    };
+    let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
     });
@@ -194,14 +200,8 @@ async fn test_moonlink_standalone_data_ingestion() {
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_file_upload() {
-    let moonlink_backend_dir = get_moonlink_backend_dir();
-    cleanup_directory(&moonlink_backend_dir).await;
-    let config = ServiceConfig {
-        base_path: moonlink_backend_dir.clone(),
-        data_server_uri: Some(NGINX_ADDR.to_string()),
-        rest_api_port: Some(3030),
-        tcp_port: Some(3031),
-    };
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
     });
@@ -212,7 +212,7 @@ async fn test_moonlink_standalone_file_upload() {
     create_table(&client, DATABASE, TABLE).await;
 
     // Upload a file.
-    let parquet_file = generate_parquet_file(&moonlink_backend_dir).await;
+    let parquet_file = generate_parquet_file(&get_moonlink_backend_dir()).await;
     let file_upload_payload = json!({
         "operation": "upload",
         "files": [parquet_file],
@@ -280,21 +280,15 @@ async fn test_moonlink_standalone_file_upload() {
     .unwrap();
 
     // Cleanup shared directory.
-    cleanup_directory(&moonlink_backend_dir).await;
+    cleanup_directory(&get_moonlink_backend_dir()).await;
 }
 
 /// Test basic table creation, file insert and query.
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_file_insert() {
-    let moonlink_backend_dir = get_moonlink_backend_dir();
-    cleanup_directory(&moonlink_backend_dir).await;
-    let config = ServiceConfig {
-        base_path: moonlink_backend_dir.clone(),
-        data_server_uri: Some(NGINX_ADDR.to_string()),
-        rest_api_port: Some(3030),
-        tcp_port: Some(3031),
-    };
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
     });
@@ -305,7 +299,7 @@ async fn test_moonlink_standalone_file_insert() {
     create_table(&client, DATABASE, TABLE).await;
 
     // Upload a file.
-    let parquet_file = generate_parquet_file(&moonlink_backend_dir).await;
+    let parquet_file = generate_parquet_file(&get_moonlink_backend_dir()).await;
     let file_upload_payload = json!({
         "operation": "insert",
         "files": [parquet_file],
@@ -374,7 +368,7 @@ async fn test_moonlink_standalone_file_insert() {
     .unwrap();
 
     // Cleanup shared directory.
-    cleanup_directory(&moonlink_backend_dir).await;
+    cleanup_directory(&get_moonlink_backend_dir()).await;
 }
 
 /// Testing scenario: two tables with the same name, but under different databases are created.
@@ -382,12 +376,7 @@ async fn test_moonlink_standalone_file_insert() {
 #[serial]
 async fn test_multiple_tables_creation() {
     cleanup_directory(&get_moonlink_backend_dir()).await;
-    let config = ServiceConfig {
-        base_path: get_moonlink_backend_dir(),
-        data_server_uri: Some(NGINX_ADDR.to_string()),
-        rest_api_port: Some(3030),
-        tcp_port: Some(3031),
-    };
+    let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
     });
@@ -406,12 +395,7 @@ async fn test_multiple_tables_creation() {
 #[serial]
 async fn test_bulk_ingest_files() {
     cleanup_directory(&get_moonlink_backend_dir()).await;
-    let config = ServiceConfig {
-        base_path: get_moonlink_backend_dir(),
-        data_server_uri: Some(NGINX_ADDR.to_string()),
-        rest_api_port: Some(3030),
-        tcp_port: Some(3031),
-    };
+    let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
     });
@@ -430,4 +414,65 @@ async fn test_bulk_ingest_files() {
     )
     .await
     .unwrap();
+}
+
+/// ==========================
+/// Failure tests
+/// ==========================
+///
+/// Error case: invalid operation name.
+#[tokio::test]
+#[serial]
+async fn test_invalid_operation() {
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create test table.
+    let client = reqwest::Client::new();
+    create_table(&client, DATABASE, TABLE).await;
+
+    // Test invalid operation to upload a file.
+    let file_upload_payload = json!({
+        "operation": "invalid_upload_operation",
+        "files": ["parquet_file"],
+        "storage_config": {
+            "fs": {
+                "root_directory": get_moonlink_backend_dir(),
+                "atomic_write_dir": get_moonlink_backend_dir()
+            }
+        }
+    });
+    let crafted_src_table_name = format!("{DATABASE}.{TABLE}");
+    let response = client
+        .post(format!("{REST_ADDR}/upload/{crafted_src_table_name}"))
+        .header("content-type", "application/json")
+        .json(&file_upload_payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+
+    // Test invalid operation to ingest data.
+    let insert_payload = json!({
+        "operation": "invalid_ingest_operation",
+        "data": {
+            "id": 1,
+            "name": "Alice Johnson",
+            "email": "alice@example.com",
+            "age": 30
+        }
+    });
+    let crafted_src_table_name = format!("{DATABASE}.{TABLE}");
+    let response = client
+        .post(format!("{REST_ADDR}/ingest/{crafted_src_table_name}"))
+        .header("content-type", "application/json")
+        .json(&insert_payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
 }
