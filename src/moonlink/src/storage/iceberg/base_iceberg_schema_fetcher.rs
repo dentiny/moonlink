@@ -11,6 +11,5 @@ use mockall::*;
 #[cfg_attr(test, automock)]
 pub trait BaseIcebergSchemaFetcher {
     /// Get the latest iceberg table schema.
-    #[allow(dead_code)]
     async fn fetch_table_schema(&self) -> Result<Option<ArrowSchema>>;
 }

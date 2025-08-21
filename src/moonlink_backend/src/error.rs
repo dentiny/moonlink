@@ -4,6 +4,7 @@ use moonlink_connectors::PostgresSourceError;
 use moonlink_error::io_error_utils;
 use moonlink_error::{ErrorStatus, ErrorStruct};
 use moonlink_metadata_store::error::Error as MoonlinkMetadataStoreError;
+use serde::{Deserialize, Serialize};
 use std::num::ParseIntError;
 use std::panic::Location;
 use std::result;
@@ -11,7 +12,7 @@ use std::sync::Arc;
 use thiserror::Error;
 
 /// Custom error type for moonlink_backend
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
     #[error("{0}")]
     ParseIntError(ErrorStruct),
@@ -149,7 +150,6 @@ impl From<serde_json::Error> for Error {
     fn from(source: serde_json::Error) -> Self {
         let status = match source.classify() {
             serde_json::error::Category::Io => ErrorStatus::Temporary,
-
             _ => ErrorStatus::Permanent,
         };
 

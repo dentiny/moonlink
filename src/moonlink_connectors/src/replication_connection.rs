@@ -193,7 +193,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
         Ok(())
     }
 
-    /// Add a table for PostgreSQL CDC replication
+    /// Add a table for replication
     pub async fn add_table_replication(
         &mut self,
         src_table_name: &str,

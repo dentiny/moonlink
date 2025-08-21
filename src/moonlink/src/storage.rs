@@ -26,6 +26,8 @@ pub use filesystem::accessor_config::{
     TimeoutConfig as FsTimeoutConfig,
 };
 pub use filesystem::storage_config::StorageConfig;
+pub use iceberg::base_iceberg_schema_fetcher::BaseIcebergSchemaFetcher;
+pub use iceberg::iceberg_schema_fetcher::IcebergSchemaFetcher;
 pub use iceberg::iceberg_table_config::IcebergTableConfig;
 pub use iceberg::iceberg_table_manager::IcebergTableManager;
 pub use iceberg::table_event_manager::TableEventManager;

@@ -8,7 +8,6 @@ use crate::Result;
 use arrow_schema::Schema as ArrowSchema;
 use async_trait::async_trait;
 use iceberg::arrow as IcebergArrow;
-use iceberg::Result as IcebergResult;
 
 #[allow(dead_code)]
 pub struct IcebergSchemaFetcher {
@@ -19,8 +18,7 @@ pub struct IcebergSchemaFetcher {
 }
 
 impl IcebergSchemaFetcher {
-    #[allow(dead_code)]
-    pub fn new(config: IcebergTableConfig) -> IcebergResult<Self> {
+    pub fn new(config: IcebergTableConfig) -> Result<Self> {
         let catalog = catalog_utils::create_catalog_without_schema(config.accessor_config.clone())?;
         Ok(Self { config, catalog })
     }
