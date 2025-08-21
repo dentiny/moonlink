@@ -394,7 +394,7 @@ mod tests {
         );
         let object_storage_cache = ObjectStorageCache::new(cache_config);
 
-        let mut connection = ReplicationConnection::new(
+        let mut connection = ReplicationConnection::<u32>::new(
             crate::replication_manager::REST_API_URI.to_string(),
             temp_dir.path().join("tables").to_string_lossy().to_string(),
             object_storage_cache,
