@@ -3,13 +3,14 @@ use iceberg::Error as IcebergError;
 use moonlink_error::io_error_utils::get_io_error_status;
 use moonlink_error::{ErrorStatus, ErrorStruct};
 use parquet::errors::ParquetError;
+use serde::{Deserialize, Serialize};
 use std::io;
 use std::result;
 use thiserror::Error;
 use tokio::sync::watch;
 
 /// Custom error type for moonlink
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
     #[error("{0}")]
     Arrow(ErrorStruct),

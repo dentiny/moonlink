@@ -1,11 +1,12 @@
 use arrow_schema::ArrowError;
 use moonlink_error::io_error_utils::get_io_error_status;
 use moonlink_error::{ErrorStatus, ErrorStruct};
+use serde::{Deserialize, Serialize};
 use std::io;
 use std::result;
 use thiserror::Error;
 
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
     #[error("{0}")]
     Arrow(ErrorStruct),

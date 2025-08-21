@@ -1,12 +1,13 @@
 use moonlink_error::io_error_utils::get_io_error_status;
 use moonlink_error::{ErrorStatus, ErrorStruct};
+use serde::{Deserialize, Serialize};
 use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 
 #[cfg(feature = "metadata-postgres")]
 use tokio_postgres::Error as TokioPostgresError;
 
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
     #[cfg(feature = "metadata-postgres")]
     #[error("{0}")]

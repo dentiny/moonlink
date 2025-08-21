@@ -5,13 +5,14 @@ use crate::rest_ingest::rest_source::RestSourceError;
 use crate::rest_ingest::{json_converter, SrcTableId};
 use moonlink::Error as MoonlinkError;
 use moonlink_error::{io_error_utils, ErrorStatus, ErrorStruct};
+use serde::{Deserialize, Serialize};
 use std::panic::Location;
 use std::result;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio_postgres::Error as TokioPostgresError;
 
-#[derive(Clone, Debug, Error)]
+#[derive(Clone, Debug, Error, Deserialize, Serialize)]
 pub enum Error {
     #[error("{0}")]
     PostgresSourceError(ErrorStruct),

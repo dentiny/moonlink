@@ -4312,6 +4312,7 @@ dependencies = [
  "pin-project-lite",
  "postgres-native-tls",
  "postgres-replication",
+ "serde",
  "serde_json",
  "serial_test",
  "tempfile",
