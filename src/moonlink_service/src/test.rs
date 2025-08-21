@@ -148,7 +148,9 @@ async fn test_schema() {
             {"name": "float64", "data_type": "float64", "nullable": false},
             {"name": "date32", "data_type": "date32", "nullable": false},
             // TODO(hjiang): add test cases for negative scale, which is not supported for now.
-            {"name": "decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false}
+            {"name": "decimal(10)", "data_type": "decimal(10,2)", "nullable": false}, // only precision value
+            {"name": "decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false}, // lowercase
+            {"name": "Decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false} // uppercase
         ],
         "table_config": {
             "mooncake": {
