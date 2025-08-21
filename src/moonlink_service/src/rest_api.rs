@@ -69,8 +69,8 @@ pub struct FieldSchema {
 pub struct CreateTableResponse {
     pub status: String,
     pub message: String,
-    pub table_name: String,
-    pub schema: String,
+    pub database: String,
+    pub table: String,
 }
 
 /// ====================
@@ -155,13 +155,13 @@ async fn health_check() -> Json<HealthResponse> {
 
 /// Table creation endpoint
 async fn create_table(
-    Path(table_name): Path<String>,
+    Path(table): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<CreateTableRequest>,
 ) -> Result<Json<CreateTableResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!(
         "Received table creation request for '{}': {:?}",
-        table_name, payload
+        table, payload
     );
 
     // Convert field schemas to Arrow schema with proper field IDs (like PostgreSQL)
@@ -218,7 +218,7 @@ async fn create_table(
         .create_table(
             payload.database.clone(),
             payload.table.clone(),
-            table_name.clone(),
+            table.clone(),
             REST_API_URI.to_string(),
             serialized_table_config,
             Some(arrow_schema),
@@ -228,17 +228,17 @@ async fn create_table(
         Ok(()) => {
             info!(
                 "Successfully created table '{}' with ID {}:{}",
-                table_name, payload.database, payload.table,
+                table, payload.database, payload.table,
             );
             Ok(Json(CreateTableResponse {
                 status: "success".to_string(),
                 message: "Table created successfully".to_string(),
-                table_name,
-                schema: payload.database.clone(),
+                database: payload.database.clone(),
+                table,
             }))
         }
         Err(e) => {
-            error!("Failed to create table '{}': {}", table_name, e);
+            error!("Failed to create table '{}': {}", table, e);
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
