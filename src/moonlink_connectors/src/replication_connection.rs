@@ -3,7 +3,7 @@ use crate::pg_replicate::PostgresConnection;
 use crate::pg_replicate::{table::SrcTableId, table_init::TableComponents};
 use crate::rest_ingest::rest_source::EventRequest;
 use crate::rest_ingest::RestApiConnection;
-use crate::Result;
+use crate::{Error, Result};
 use moonlink::{
     MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, ReadStateManager,
     TableEventManager, TableStatusReader,
@@ -336,7 +336,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
         let table_state = self
             .table_states
             .remove(&unique_table_id)
-            .expect("table not found");
+            .ok_or(Error::TableNotFound(mooncake_table_id.to_string()))?;
 
         let table_name = &table_state.src_table_name;
 

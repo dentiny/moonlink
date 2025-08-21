@@ -37,6 +37,22 @@ mod tests {
         smoke_create_and_insert(guard.tmp().unwrap(), backend, &client, SRC_URI).await;
     }
 
+    /// Testing scenario: drop a non-existent table shouldn't crash.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[serial]
+    async fn test_drop_non_existent_table() {
+        let (guard, _client) = TestGuard::new(Some("test"), true).await;
+        let backend = guard.backend();
+
+        // We're good as long as backend doesn't crash.
+        backend
+            .drop_table(
+                "non_existent_database".to_string(),
+                "non_existent_table".to_string(),
+            )
+            .await;
+    }
+
     /// End-to-end: inserts should appear in `scan_table`.
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
