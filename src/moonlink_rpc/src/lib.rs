@@ -61,5 +61,6 @@ pub struct Table {
     pub table: String,
     pub commit_lsn: u64,
     pub flush_lsn: Option<u64>,
+    pub cardinality: u64,
     pub iceberg_warehouse_location: String,
 }
