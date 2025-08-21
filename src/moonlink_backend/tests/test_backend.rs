@@ -2,7 +2,7 @@ mod common;
 
 #[cfg(test)]
 mod tests {
-    use crate::common::{ids_from_state, setup_backend, SRC_URI};
+    use crate::common::{ids_from_state, SRC_URI};
 
     use super::common::{
         assert_scan_ids_eq, crash_and_recover_backend_with_guard, create_backend_from_base_path,
@@ -497,8 +497,6 @@ mod tests {
     use crate::common::nonunique_ids_from_state;
     #[cfg(feature = "test-utils")]
     use rstest::*;
-    #[cfg(feature = "test-utils")]
-    use std::collections::HashMap;
 
     /// Multiple failures and recovery from just the WAL
     #[cfg(feature = "test-utils")]
