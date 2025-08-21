@@ -470,9 +470,9 @@ mod tests {
             .await
             .unwrap();
 
-        // Force snapshot with LSN 1.
+        // Force snapshot with LSN 2, LSN 1 = row insertion, LSN 2 = commit.
         backend
-            .create_snapshot(DATABASE.to_string(), TABLE.to_string(), /*lsn=*/ 1)
+            .create_snapshot(DATABASE.to_string(), TABLE.to_string(), /*lsn=*/ 2)
             .await
             .unwrap();
 
@@ -480,12 +480,11 @@ mod tests {
         backend.shutdown_connection(REST_API_URI, false).await;
         backend =
             create_backend_from_base_path(temp_dir.path().to_str().unwrap().to_string()).await;
-        backend.initialize_event_api().await.unwrap();
         assert_scan_ids_eq(
             &backend,
             DATABASE.to_string(),
             TABLE.to_string(),
-            /*lsn=*/ 1,
+            /*lsn=*/ 2,
             [1],
         )
         .await;
