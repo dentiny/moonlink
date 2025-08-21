@@ -4,13 +4,14 @@ use crate::pg_replicate::{table::SrcTableId, table_init::TableComponents};
 use crate::rest_ingest::rest_source::EventRequest;
 use crate::rest_ingest::RestApiConnection;
 use crate::Result;
-use arrow_schema::Schema as ArrowSchema;
 use moonlink::{
     MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, ReadStateManager,
     TableEventManager, TableStatusReader,
 };
 
+use arrow_schema::Schema as ArrowSchema;
 use std::collections::HashMap;
+use std::hash::Hash;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, warn};
@@ -60,20 +61,28 @@ struct TableState {
     status_reader: TableStatusReader,
 }
 
+/// Id which uniquely identifies a table, including source information (src uri, src table id) and destination information (mooncake table id).
+#[derive(Clone, Eq, PartialEq, Hash)]
+struct UniqueTableId<T: Clone + Eq + Hash + std::fmt::Display> {
+    mooncake_table_id: T,
+    src_table_id: u32,
+}
+
 /// Manages replication for table(s) within a database from various sources (PostgreSQL CDC, REST API, etc.).
-pub struct ReplicationConnection {
+pub struct ReplicationConnection<T: Clone + Eq + Hash + std::fmt::Display> {
     table_base_path: String,
     // Source-specific connections
     source: SourceType,
     // Common fields
     handle: Option<JoinHandle<Result<()>>>,
-    table_states: HashMap<SrcTableId, TableState>,
+    /// Maps from unique table id to its table states.
+    table_states: HashMap<UniqueTableId<T>, TableState>,
     replication_started: bool,
     /// Object storage cache.
     object_storage_cache: ObjectStorageCache,
 }
 
-impl ReplicationConnection {
+impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
     pub async fn new(
         uri: String,
         table_base_path: String,
@@ -110,29 +119,62 @@ impl ReplicationConnection {
         }
     }
 
-    pub fn get_table_reader(&self, src_table_id: SrcTableId) -> &ReadStateManager {
-        &self.table_states.get(&src_table_id).unwrap().reader
+    pub fn get_table_reader(
+        &self,
+        mooncake_table_id: &T,
+        src_table_id: SrcTableId,
+    ) -> &ReadStateManager {
+        let unique_table_id = UniqueTableId {
+            mooncake_table_id: mooncake_table_id.clone(),
+            src_table_id,
+        };
+        &self.table_states.get(&unique_table_id).unwrap().reader
     }
 
-    pub fn get_table_status_reader(&self, src_table_id: SrcTableId) -> &TableStatusReader {
-        &self.table_states.get(&src_table_id).unwrap().status_reader
+    pub fn get_table_status_reader(
+        &self,
+        mooncake_table_id: &T,
+        src_table_id: SrcTableId,
+    ) -> &TableStatusReader {
+        let unique_table_id = UniqueTableId {
+            mooncake_table_id: mooncake_table_id.clone(),
+            src_table_id,
+        };
+        &self
+            .table_states
+            .get(&unique_table_id)
+            .unwrap()
+            .status_reader
     }
 
-    pub fn get_table_status_readers(&self) -> Vec<&TableStatusReader> {
+    pub fn get_table_status_readers(&self) -> HashMap<T, &TableStatusReader> {
         self.table_states
-            .values()
-            .map(|cur_table_state| &cur_table_state.status_reader)
-            .collect::<Vec<_>>()
+            .iter()
+            .map(|(unique_table_id, cur_table_state)| {
+                (
+                    unique_table_id.mooncake_table_id.clone(),
+                    &cur_table_state.status_reader,
+                )
+            })
+            .collect::<HashMap<_, _>>()
     }
 
     pub fn table_count(&self) -> usize {
         self.table_states.len()
     }
 
-    pub fn get_table_event_manager(&mut self, src_table_id: SrcTableId) -> &mut TableEventManager {
+    pub fn get_table_event_manager(
+        &mut self,
+        mooncake_table_id: &T,
+        src_table_id: SrcTableId,
+    ) -> &mut TableEventManager {
+        let unique_table_id = UniqueTableId {
+            mooncake_table_id: mooncake_table_id.clone(),
+            src_table_id,
+        };
         &mut self
             .table_states
-            .get_mut(&src_table_id)
+            .get_mut(&unique_table_id)
             .unwrap()
             .event_manager
     }
@@ -152,7 +194,7 @@ impl ReplicationConnection {
     }
 
     /// Add a table for PostgreSQL CDC replication
-    pub async fn add_table_replication<T: std::fmt::Display>(
+    pub async fn add_table_replication(
         &mut self,
         src_table_name: &str,
         mooncake_table_id: &T,
@@ -183,7 +225,12 @@ impl ReplicationConnection {
                     status_reader: table_resources.table_status_reader,
                 };
 
-                self.table_states.insert(src_table_id, table_state);
+                // TODO(hjiang): Add assertion or error propagation.
+                let unique_table_id = UniqueTableId {
+                    mooncake_table_id: mooncake_table_id.clone(),
+                    src_table_id,
+                };
+                self.table_states.insert(unique_table_id, table_state);
                 debug!(src_table_id, "PostgreSQL table added for replication");
                 Ok(src_table_id)
             }
@@ -195,7 +242,7 @@ impl ReplicationConnection {
 
     /// Add a table for REST API ingestion with Arrow schema
     #[allow(clippy::too_many_arguments)]
-    pub async fn add_table_api<T: std::fmt::Display>(
+    pub async fn add_table_api(
         &mut self,
         src_table_name: &str,
         mooncake_table_id: &T,
@@ -259,7 +306,12 @@ impl ReplicationConnection {
                     status_reader: table_resources.table_status_reader,
                 };
 
-                self.table_states.insert(src_table_id, table_state);
+                let unique_table_id = UniqueTableId {
+                    mooncake_table_id: mooncake_table_id.clone(),
+                    src_table_id,
+                };
+                // TODO(hjiang): Add assertion or error propagation.
+                self.table_states.insert(unique_table_id, table_state);
                 debug!(
                     src_table_id,
                     src_table_name, "REST API table added successfully"
@@ -273,13 +325,17 @@ impl ReplicationConnection {
     }
 
     /// Remove the given table from connection.
-    pub async fn drop_table(&mut self, src_table_id: u32) -> Result<()> {
+    pub async fn drop_table(&mut self, mooncake_table_id: &T, src_table_id: u32) -> Result<()> {
         debug!(src_table_id, "dropping table");
 
         // Get table state and remove it from the map
+        let unique_table_id = UniqueTableId {
+            mooncake_table_id: mooncake_table_id.clone(),
+            src_table_id,
+        };
         let table_state = self
             .table_states
-            .remove(&src_table_id)
+            .remove(&unique_table_id)
             .expect("table not found");
 
         let table_name = &table_state.src_table_name;

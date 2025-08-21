@@ -10,7 +10,7 @@ use tokio::net::TcpStream;
 
 use crate::test_utils::*;
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
-use moonlink_rpc::{load_files, scan_table_begin, scan_table_end};
+use moonlink_rpc::{list_tables, load_files, scan_table_begin, scan_table_end};
 
 /// Moonlink backend directory.
 fn get_moonlink_backend_dir() -> String {
@@ -399,6 +399,63 @@ async fn test_multiple_tables_creation() {
         /*append_only=*/ false,
     )
     .await;
+}
+
+/// Testing scenario: create multiple tables, and check list table result.
+#[tokio::test]
+#[serial]
+async fn test_list_tables() {
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create two test tables.
+    let client: reqwest::Client = reqwest::Client::new();
+    create_table(
+        &client,
+        "database-1",
+        "table-1",
+        /*append_only=*/ false,
+    )
+    .await;
+    create_table(
+        &client,
+        "database-2",
+        "table-2",
+        /*append_only=*/ false,
+    )
+    .await;
+
+    // List test tables.
+    let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();
+    let mut list_results = list_tables(&mut moonlink_stream).await.unwrap();
+    assert_eq!(list_results.len(), 2);
+    list_results.sort_by(|a, b| {
+        (
+            &a.database,
+            &a.table,
+            a.commit_lsn,
+            a.flush_lsn,
+            &a.iceberg_warehouse_location,
+        )
+            .cmp(&(
+                &b.database,
+                &b.table,
+                b.commit_lsn,
+                b.flush_lsn,
+                &b.iceberg_warehouse_location,
+            ))
+    });
+
+    // Validate list results.
+    assert_eq!(list_results[0].database, "database-1");
+    assert_eq!(list_results[0].table, "table-1");
+
+    assert_eq!(list_results[1].database, "database-2");
+    assert_eq!(list_results[1].table, "table-2");
 }
 
 /// Dummy testing for bulk ingest files into mooncake table.

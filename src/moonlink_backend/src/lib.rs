@@ -227,18 +227,16 @@ impl MoonlinkBackend {
         let mut table_statuses = vec![];
         let manager = self.replication_manager.read().await;
         let table_state_readers = manager.get_table_status_readers();
-        for (mooncake_table_id, cur_table_state_readers) in table_state_readers.into_iter() {
-            for cur_reader in cur_table_state_readers.iter() {
-                let table_snapshot_status = cur_reader.get_current_table_state().await?;
-                let table_status = TableStatus {
-                    database: mooncake_table_id.database.clone(),
-                    table: mooncake_table_id.table.clone(),
-                    commit_lsn: table_snapshot_status.commit_lsn,
-                    flush_lsn: table_snapshot_status.flush_lsn,
-                    iceberg_warehouse_location: table_snapshot_status.iceberg_warehouse_location,
-                };
-                table_statuses.push(table_status);
-            }
+        for (mooncake_table_id, cur_reader) in table_state_readers.into_iter() {
+            let table_snapshot_status = cur_reader.get_current_table_state().await?;
+            let table_status = TableStatus {
+                database: mooncake_table_id.database.clone(),
+                table: mooncake_table_id.table.clone(),
+                commit_lsn: table_snapshot_status.commit_lsn,
+                flush_lsn: table_snapshot_status.flush_lsn,
+                iceberg_warehouse_location: table_snapshot_status.iceberg_warehouse_location,
+            };
+            table_statuses.push(table_status);
         }
         Ok(table_statuses)
     }
