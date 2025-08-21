@@ -25,6 +25,14 @@ impl InMemoryBatch {
         }
     }
 
+    /// Get the number of records without filter.
+    pub fn get_raw_record_number(&self) -> u64 {
+        if let Some(record_batch) = &self.data {
+            return record_batch.num_rows() as u64;
+        }
+        0
+    }
+
     pub fn get_filtered_batch(&self) -> Result<Option<RecordBatch>> {
         if self.data.is_none() {
             return Ok(None);

@@ -193,6 +193,7 @@ mod tests {
             table: TABLE.to_string(),
             commit_lsn: lsn,
             flush_lsn: Some(lsn),
+            cardinality: 1,
             iceberg_warehouse_location: guard.tmp().unwrap().path().to_str().unwrap().to_string(),
         };
         assert_eq!(table_statuses, vec![expected_table_status]);

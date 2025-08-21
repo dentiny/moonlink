@@ -35,6 +35,7 @@ impl TableStatusReader {
         Ok(TableSnapshotStatus {
             commit_lsn: table_snapshot_state.commit_lsn,
             flush_lsn: table_snapshot_state.flush_lsn,
+            cardinality: table_snapshot_state.cardinality,
             iceberg_warehouse_location: self.iceberg_warehouse_location.clone(),
         })
     }
@@ -85,6 +86,7 @@ mod tests {
         let expected_table_state = TableSnapshotStatus {
             iceberg_warehouse_location: iceberg_table_config.accessor_config.get_root_path(),
             commit_lsn: 0,
+            cardinality: 0,
             flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
@@ -107,6 +109,7 @@ mod tests {
         let expected_table_state = TableSnapshotStatus {
             iceberg_warehouse_location: iceberg_table_config.accessor_config.get_root_path(),
             commit_lsn: 0,
+            cardinality: 0,
             flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
@@ -133,6 +136,7 @@ mod tests {
         let expected_table_state = TableSnapshotStatus {
             iceberg_warehouse_location: iceberg_table_config.accessor_config.get_root_path(),
             commit_lsn: 10,
+            cardinality: 1,
             flush_lsn: None,
         };
         assert_eq!(actual_table_state, expected_table_state);
@@ -161,6 +165,7 @@ mod tests {
             iceberg_warehouse_location: iceberg_table_config.accessor_config.get_root_path(),
             commit_lsn: 10,
             flush_lsn: Some(10),
+            cardinality: 1,
         };
         assert_eq!(actual_table_state, expected_table_state);
     }

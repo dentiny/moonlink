@@ -184,6 +184,14 @@ impl Snapshot {
         }
     }
 
+    /// Get the number of rows in the current snapshot, including the ones get deleted.
+    pub fn get_cardinality(&self) -> u64 {
+        self.disk_files
+            .values()
+            .map(|entry| entry.num_rows as u64)
+            .sum()
+    }
+
     pub fn get_name_for_inmemory_file(&self) -> PathBuf {
         let mut directory = PathBuf::from(&self.metadata.config.temp_files_directory);
         directory.push(format!(

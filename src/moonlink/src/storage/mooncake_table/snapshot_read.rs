@@ -27,10 +27,35 @@ impl SnapshotTableState {
     /// Read snapshot states
     /// =======================
     ///
+    /// Get the number of rows in record batches before filtering.
+    fn get_in_memory_row_num(&self) -> u64 {
+        // Minic union read functionality to get all committed in-memory row.
+        let mut num_rows = 0;
+        let (batch_id, row_id) = self.last_commit.clone().into();
+        if batch_id > 0 || row_id > 0 {
+            for (id, batch) in self.batches.iter() {
+                if *id < batch_id {
+                    num_rows += batch.get_raw_record_number();
+                } else if *id == batch_id && row_id > 0 {
+                    if batch.data.is_some() {
+                        num_rows += batch.get_raw_record_number();
+                    } else {
+                        let rows = self.rows.as_ref().unwrap().get_buffer(row_id);
+                        num_rows += rows.len() as u64;
+                    }
+                }
+            }
+        }
+        num_rows
+    }
+
     pub(crate) fn get_table_snapshot_states(&self) -> Result<TableSnapshotStatus> {
+        let persisted_row_num = self.current_snapshot.get_cardinality();
+        let in_memory_row_num = self.get_in_memory_row_num();
         Ok(TableSnapshotStatus {
             commit_lsn: self.current_snapshot.snapshot_version,
             flush_lsn: self.current_snapshot.flush_lsn,
+            cardinality: persisted_row_num + in_memory_row_num,
             iceberg_warehouse_location: self.iceberg_warehouse_location.clone(),
         })
     }

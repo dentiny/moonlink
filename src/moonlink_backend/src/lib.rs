@@ -235,6 +235,7 @@ impl MoonlinkBackend {
                 table: mooncake_table_id.table.clone(),
                 commit_lsn: table_snapshot_status.commit_lsn,
                 flush_lsn: table_snapshot_status.flush_lsn,
+                cardinality: table_snapshot_status.cardinality,
                 iceberg_warehouse_location: table_snapshot_status.iceberg_warehouse_location,
             };
             table_statuses.push(table_status);
