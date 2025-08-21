@@ -121,6 +121,54 @@ async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
     reader.into_iter().map(|b| b.unwrap()).collect()
 }
 
+#[tokio::test]
+#[serial]
+async fn test_schema() {
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create test table.
+    let client = reqwest::Client::new();
+    let crafted_src_table_name = format!("{DATABASE}.{TABLE}");
+    let payload = json!({
+        "database": DATABASE,
+        "table": TABLE,
+        "schema": [
+            {"name": "int32", "data_type": "int32", "nullable": false},
+            {"name": "int64", "data_type": "int64", "nullable": false},
+            {"name": "string", "data_type": "string", "nullable": false},
+            {"name": "text", "data_type": "text", "nullable": false},
+            {"name": "bool", "data_type": "bool", "nullable": false},
+            {"name": "boolean", "data_type": "boolean", "nullable": false},
+            {"name": "float32", "data_type": "float32", "nullable": false},
+            {"name": "float64", "data_type": "float64", "nullable": false},
+            {"name": "date32", "data_type": "date32", "nullable": false},
+            // TODO(hjiang): add test cases for negative scale, which is not supported for now.
+            {"name": "decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false}
+        ],
+        "table_config": {
+            "mooncake": {
+                "append_only": true
+            }
+        }
+    });
+    let response = client
+        .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "Response status is {response:?}"
+    );
+}
+
 /// Test basic table creation, insertion and query.
 #[tokio::test]
 #[serial]

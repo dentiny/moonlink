@@ -179,6 +179,23 @@ async fn create_table(
                 "boolean" | "bool" => DataType::Boolean,
                 "float32" => DataType::Float32,
                 "float64" => DataType::Float64,
+                "date32" => DataType::Date32,
+                // Decimal type.
+                dt if dt.starts_with("decimal(") && dt.ends_with(')') => {
+                    let inner = &dt[8..dt.len() - 1];
+                    let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
+                    if parts.len() == 2 {
+                        let precision: u8 = parts[0].parse().map_err(|_| {
+                            format!("Invalid decimal precision in: {}", field.data_type)
+                        })?;
+                        let scale: i8 = parts[1].parse().map_err(|_| {
+                            format!("Invalid decimal scale in: {}", field.data_type)
+                        })?;
+                        DataType::Decimal128(precision, scale)
+                    } else {
+                        return Err(format!("Invalid decimal type: {}", field.data_type));
+                    }
+                }
                 _ => return Err(format!("Unsupported data type: {}", field.data_type)),
             };
 
