@@ -161,11 +161,18 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
 
     /// Initialize event API connection for data ingestion.
     /// Returns the event request sender channel for the API to use.
-    pub async fn initialize_event_api(
+    pub async fn initialize_event_api_for_once(
         &mut self,
         base_path: &str,
     ) -> Result<tokio::sync::mpsc::Sender<crate::rest_ingest::rest_source::EventRequest>> {
-        assert!(!self.connections.contains_key(REST_API_URI));
+        if self.connections.contains_key(REST_API_URI) {
+            return Ok(self
+                .connections
+                .get(REST_API_URI)
+                .as_ref()
+                .unwrap()
+                .get_rest_request_sender());
+        }
 
         // Create the directory that will hold all tables
         tokio::fs::create_dir_all(base_path).await?;

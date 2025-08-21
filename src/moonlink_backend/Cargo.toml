@@ -17,6 +17,7 @@ storage-gcs = ["moonlink/storage-gcs"]
 storage-fs = ["moonlink/storage-fs"]
 
 [dependencies]
+arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-schema = { workspace = true }
 console-subscriber = { version = "0.4", optional = true }

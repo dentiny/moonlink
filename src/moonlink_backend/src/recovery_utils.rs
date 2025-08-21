@@ -8,13 +8,17 @@ use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMeta
 use std::collections::HashSet;
 
 /// Backend related attributes used for recovery.
+#[derive(Clone, Debug)]
 pub(crate) struct BackendAttributes {
     // Temporary files directory.
     pub(crate) temp_files_dir: String,
+    // Base path.
+    pub(crate) base_path: String,
 }
 
 /// Recover REST ingestion table.
 async fn recover_rest_table(
+    backend_attributes: BackendAttributes,
     metadata_entry: TableMetadataEntry,
     replication_manager: &mut ReplicationManager<MooncakeTableId>,
     read_state_filepath_remap: ReadStateFilepathRemap,
@@ -38,6 +42,9 @@ async fn recover_rest_table(
         database: metadata_entry.database,
         table: metadata_entry.table,
     };
+    replication_manager
+        .initialize_event_api_for_once(&backend_attributes.base_path)
+        .await?;
     replication_manager
         .add_rest_table(
             &metadata_entry.src_table_uri,
@@ -78,6 +85,7 @@ async fn recover_non_rest_table(
 
 /// Recovery the given table.
 async fn recover_table(
+    backend_attributes: BackendAttributes,
     metadata_entry: TableMetadataEntry,
     replication_manager: &mut ReplicationManager<MooncakeTableId>,
     read_state_filepath_remap: ReadStateFilepathRemap,
@@ -85,6 +93,7 @@ async fn recover_table(
     // Table created by REST API doesn't support recovery.
     if metadata_entry.src_table_uri == REST_API_URI {
         return recover_rest_table(
+            backend_attributes,
             metadata_entry,
             replication_manager,
             read_state_filepath_remap,
@@ -129,9 +138,12 @@ pub(super) async fn recover_all_tables(
             .moonlink_table_config
             .mooncake_table_config
             .temp_files_directory = backend_attributes.temp_files_dir.clone();
-        // Recover current table.
-        unique_uris.insert(cur_metadata_entry.src_table_uri.clone());
+        // Recover current table; rest table doesn't require replication.
+        if cur_metadata_entry.src_table_uri != REST_API_URI {
+            unique_uris.insert(cur_metadata_entry.src_table_uri.clone());
+        }
         recover_table(
+            backend_attributes.clone(),
             cur_metadata_entry,
             replication_manager,
             read_state_filepath_remap.clone(),

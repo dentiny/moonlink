@@ -411,7 +411,7 @@ fn apply_position_deletes_to_files(
 }
 
 /// Util function to create a table creation config by directory.
-fn get_serialized_table_config(tmp_dir: &TempDir) -> String {
+pub fn get_serialized_table_config(tmp_dir: &TempDir) -> String {
     let root_directory = tmp_dir.path().to_str().unwrap().to_string();
     let table_config = TableConfig {
         mooncake_config: MooncakeConfig {
@@ -432,7 +432,7 @@ fn get_serialized_table_config(tmp_dir: &TempDir) -> String {
 /// Spin up a backend + scratch TempDir + psql client, and guarantee
 /// a **fresh table** named `table_name` exists and is registered with
 /// Moonlink.
-async fn setup_backend(
+pub async fn setup_backend(
     table_name: Option<&'static str>,
     has_primary_key: bool,
 ) -> (TempDir, MoonlinkBackend, Client) {

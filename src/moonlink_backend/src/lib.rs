@@ -86,6 +86,7 @@ impl MoonlinkBackend {
 
         let backend_attributes = BackendAttributes {
             temp_files_dir: temp_files_dir.to_str().unwrap().to_string(),
+            base_path: base_path.to_str().unwrap().to_string(),
         };
         recovery_utils::recover_all_tables(
             backend_attributes,
@@ -331,7 +332,9 @@ impl MoonlinkBackend {
     pub async fn initialize_event_api(&mut self) -> Result<()> {
         let event_api_sender = {
             let mut manager = self.replication_manager.write().await;
-            manager.initialize_event_api(&self.base_path).await?
+            manager
+                .initialize_event_api_for_once(&self.base_path)
+                .await?
         };
 
         self.event_api_sender = Some(event_api_sender);
