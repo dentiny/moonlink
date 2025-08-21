@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     http::{Method, StatusCode},
     response::Json,
-    routing::{get, post},
+    routing::{delete, get, post},
     Router,
 };
 use moonlink::StorageConfig;
@@ -74,6 +74,24 @@ pub struct CreateTableResponse {
 }
 
 /// ====================
+/// Drop table
+/// ====================
+///
+/// Request structure for table drop.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DropTableRequest {
+    pub database: String,
+    pub table: String,
+}
+
+/// Response structure for table drop.
+#[derive(Debug, Serialize)]
+pub struct DropTableResponse {
+    pub status: String,
+    pub message: String,
+}
+
+/// ====================
 /// Data ingestion
 /// ====================
 ///
@@ -130,13 +148,14 @@ pub fn create_router(state: ApiState) -> Router {
     Router::new()
         .route("/health", get(health_check))
         .route("/tables/{table}", post(create_table))
+        .route("/tables/{table}", delete(drop_table))
         .route("/ingest/{table}", post(ingest_data))
         .route("/upload/{table}", post(upload_files))
         .with_state(state)
         .layer(
             CorsLayer::new()
                 .allow_origin(Any)
-                .allow_methods([Method::GET, Method::POST])
+                .allow_methods([Method::GET, Method::POST, Method::DELETE])
                 .allow_headers(Any),
         )
 }
@@ -284,6 +303,25 @@ async fn create_table(
             ))
         }
     }
+}
+
+/// Table drop endpoint
+async fn drop_table(
+    Path(table): Path<String>,
+    State(state): State<ApiState>,
+    Json(payload): Json<DropTableRequest>,
+) -> Result<Json<DropTableResponse>, (StatusCode, Json<ErrorResponse>)> {
+    debug!("Received table drop request for '{}': {:?}", table, payload);
+
+    // Create table in backend
+    state
+        .backend
+        .drop_table(payload.database.clone(), payload.table.clone())
+        .await;
+    Ok(Json(DropTableResponse {
+        status: "success".to_string(),
+        message: "Table dropped successfully".to_string(),
+    }))
 }
 
 /// File upload endpoint.

@@ -10,7 +10,7 @@ use tokio::net::TcpStream;
 
 use crate::test_utils::*;
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
-use moonlink_rpc::{list_tables, load_files, scan_table_begin, scan_table_end};
+use moonlink_rpc::{drop_table, list_tables, load_files, scan_table_begin, scan_table_end};
 
 /// Moonlink backend directory.
 fn get_moonlink_backend_dir() -> String {
@@ -449,6 +449,39 @@ async fn test_multiple_tables_creation() {
         /*append_only=*/ false,
     )
     .await;
+}
+
+#[tokio::test]
+#[serial]
+async fn test_drop_table() {
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create test table.
+    let client = reqwest::Client::new();
+    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+
+    // List table before drop.
+    let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();
+    let list_results = list_tables(&mut moonlink_stream).await.unwrap();
+    assert_eq!(list_results.len(), 1);
+
+    // Drop test table.
+    drop_table(
+        &mut moonlink_stream,
+        DATABASE.to_string(),
+        TABLE.to_string(),
+    )
+    .await
+    .unwrap();
+
+    // List table before drop.
+    let list_results = list_tables(&mut moonlink_stream).await.unwrap();
+    assert_eq!(list_results.len(), 0);
 }
 
 /// Testing scenario: create multiple tables, and check list table result.
