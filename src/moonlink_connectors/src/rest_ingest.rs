@@ -29,6 +29,8 @@ pub enum RestCommand {
         commit_lsn_tx: watch::Sender<u64>,
         flush_lsn_rx: watch::Receiver<u64>,
         wal_flush_lsn_rx: watch::Receiver<u64>,
+        /// Persist LSN, only assigned for tables to recovery; used to indicate and update replication LSN.
+        persist_lsn: Option<u64>,
     },
     DropTable {
         src_table_name: String,
@@ -76,6 +78,10 @@ impl RestApiConnection {
     }
 
     /// Add a table to the REST source and sink (sends command to event loop)
+    ///
+    /// # Arguments
+    ///
+    /// * persist_lsn: only assigned at recovery, used to indicate and update replication LSN.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_table(
         &self,
@@ -86,6 +92,7 @@ impl RestApiConnection {
         commit_lsn_tx: watch::Sender<u64>,
         flush_lsn_rx: watch::Receiver<u64>,
         wal_flush_lsn_rx: watch::Receiver<u64>,
+        persist_lsn: Option<u64>,
     ) -> Result<()> {
         let command = RestCommand::AddTable {
             src_table_name,
@@ -95,6 +102,7 @@ impl RestApiConnection {
             commit_lsn_tx,
             flush_lsn_rx,
             wal_flush_lsn_rx,
+            persist_lsn,
         };
 
         self.cmd_tx
@@ -161,7 +169,7 @@ pub async fn run_rest_event_loop(
     loop {
         tokio::select! {
             Some(cmd) = cmd_rx.recv() => match cmd {
-                RestCommand::AddTable { src_table_name, src_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx, wal_flush_lsn_rx } => {
+                RestCommand::AddTable { src_table_name, src_table_id, schema, event_sender, commit_lsn_tx, flush_lsn_rx, wal_flush_lsn_rx, persist_lsn } => {
                     debug!("Adding REST table '{}' with src_table_id {}", src_table_name, src_table_id);
 
                     // Add to sink (handles table events)
@@ -174,7 +182,7 @@ pub async fn run_rest_event_loop(
                     sink.add_table(src_table_id, table_status)?;
 
                     // Add to source (handles schema and request processing)
-                    rest_source.add_table(src_table_name.clone(), src_table_id, schema)?;
+                    rest_source.add_table(src_table_name.clone(), src_table_id, schema, persist_lsn)?;
                 }
                 RestCommand::DropTable { src_table_name, src_table_id } => {
                     debug!("Dropping REST table '{}' with src_table_id {}", src_table_name, src_table_id);

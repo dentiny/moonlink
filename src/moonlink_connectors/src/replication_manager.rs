@@ -119,6 +119,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     ///
     /// * src_uri: should be a REST API URL
     /// * arrow_schema: Arrow schema for the table
+    /// * flush_lsn: only assigned when recovery, which indicates the iceberg persistence LSN; otherwise it's a fresh table.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_rest_table(
         &mut self,
@@ -128,7 +129,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         arrow_schema: arrow_schema::Schema,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
-        is_recovery: bool,
+        flush_lsn: Option<u64>,
     ) -> Result<()> {
         debug!(%src_uri, src_table_name, "adding REST API table through manager");
 
@@ -148,7 +149,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
                 arrow_schema,
                 moonlink_table_config,
                 read_state_filepath_remap,
-                is_recovery,
+                flush_lsn,
             )
             .await?;
         self.table_info

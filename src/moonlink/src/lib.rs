@@ -12,10 +12,10 @@ pub use event_sync::EventSyncSender;
 pub use storage::storage_utils::create_data_file;
 pub(crate) use storage::NonEvictableHandle;
 pub use storage::{
-    AccessorConfig, BaseFileSystemAccess, BaseIcebergSchemaFetcher, CacheTrait,
+    AccessorConfig, BaseFileSystemAccess, BaseIcebergSnapshotFetcher, CacheTrait,
     DataCompactionConfig, DiskSliceWriterConfig, EventSyncReceiver, FileIndexMergeConfig,
     FileSystemAccessor, FsChaosConfig, FsRetryConfig, FsTimeoutConfig, IcebergPersistenceConfig,
-    IcebergSchemaFetcher, IcebergTableConfig, IcebergTableManager, MooncakeTable,
+    IcebergSnapshotFetcher, IcebergTableConfig, IcebergTableManager, MooncakeTable,
     MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig, MoonlinkTableSecret,
     ObjectStorageCache, ObjectStorageCacheConfig, PersistentWalMetadata, SnapshotReadOutput,
     StorageConfig, TableEventManager, TableManager, TableSnapshotStatus, TableStatusReader,
