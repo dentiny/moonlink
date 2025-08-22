@@ -69,6 +69,7 @@ pub struct FieldSchema {
 pub struct CreateTableResponse {
     pub database: String,
     pub table: String,
+    pub lsn: u64,
 }
 
 /// ====================
@@ -292,6 +293,8 @@ async fn create_table(
             Ok(Json(CreateTableResponse {
                 database: payload.database.clone(),
                 table,
+                // A new table is always with LSN 1.
+                lsn: 1
             }))
         }
         Err(e) => {
