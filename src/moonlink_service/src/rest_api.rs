@@ -67,8 +67,6 @@ pub struct FieldSchema {
 /// Response structure for table creation
 #[derive(Debug, Serialize)]
 pub struct CreateTableResponse {
-    pub status: String,
-    pub message: String,
     pub database: String,
     pub table: String,
 }
@@ -86,10 +84,7 @@ pub struct DropTableRequest {
 
 /// Response structure for table drop.
 #[derive(Debug, Serialize)]
-pub struct DropTableResponse {
-    pub status: String,
-    pub message: String,
-}
+pub struct DropTableResponse {}
 
 /// ====================
 /// List table
@@ -98,8 +93,6 @@ pub struct DropTableResponse {
 /// Response structure for table list.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ListTablesResponse {
-    pub status: String,
-    pub message: String,
     pub tables: Vec<TableStatus>,
 }
 
@@ -117,8 +110,6 @@ pub struct IngestRequest {
 /// Response structure for data ingestion
 #[derive(Debug, Serialize)]
 pub struct IngestResponse {
-    pub status: String,
-    pub message: String,
     pub table: String,
     pub operation: String,
 }
@@ -299,8 +290,6 @@ async fn create_table(
                 table, payload.database, payload.table,
             );
             Ok(Json(CreateTableResponse {
-                status: "success".to_string(),
-                message: "Table created successfully".to_string(),
                 database: payload.database.clone(),
                 table,
             }))
@@ -331,10 +320,7 @@ async fn drop_table(
         .backend
         .drop_table(payload.database.clone(), payload.table.clone())
         .await;
-    Ok(Json(DropTableResponse {
-        status: "success".to_string(),
-        message: "Table dropped successfully".to_string(),
-    }))
+    Ok(Json(DropTableResponse {}))
 }
 
 /// Table list endpoint
@@ -342,16 +328,12 @@ async fn list_tables(
     State(state): State<ApiState>,
 ) -> Result<Json<ListTablesResponse>, (StatusCode, Json<ErrorResponse>)> {
     match state.backend.list_tables().await {
-        Ok(tables) => Ok(Json(ListTablesResponse {
-            status: "success".into(),
-            message: "Tables listed successfully".into(),
-            tables,
-        })),
+        Ok(tables) => Ok(Json(ListTablesResponse { tables })),
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse {
                 error: "table_list_failed".to_string(),
-                message: format!("Failed to list table: {e}"),
+                message: format!("Failed to list tables: {e}"),
             }),
         )),
     }
@@ -467,8 +449,6 @@ async fn ingest_data(
             )
         })?;
     Ok(Json(IngestResponse {
-        status: "success".to_string(),
-        message: "Data queued for ingestion".to_string(),
         table: src_table_name,
         operation: payload.operation,
     }))
