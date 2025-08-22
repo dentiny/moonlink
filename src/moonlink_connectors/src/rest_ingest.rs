@@ -205,7 +205,7 @@ pub async fn run_rest_event_loop(
             // Process REST requests directly (similar to how PostgreSQL processes CDC events)
             Some(request) = rest_request_rx.recv() => {
                 // TODO(hjiang): Handle recursive request like file insertion.
-                let lsn = 0;
+                let mut lsn = 0;
 
                 // Process the request and generate events
                 match rest_source.process_request(&request) {
@@ -214,6 +214,7 @@ pub async fn run_rest_event_loop(
                         for rest_event in rest_events {
                             if let Some(rest_lsn) = rest_event.lsn() {
                                 ma::assert_gt!(rest_lsn, lsn);
+                                lsn = rest_lsn;
                             }
 
                             // Process rest events.

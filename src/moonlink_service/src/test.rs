@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::rest_api::ListTablesResponse;
+use crate::rest_api::{FileUploadResponse, ListTablesResponse};
 use arrow_array::{Int32Array, RecordBatch, StringArray};
 use bytes::Bytes;
 use moonlink::decode_serialized_read_state_for_testing;
@@ -298,7 +298,7 @@ async fn test_moonlink_standalone_data_ingestion() {
 /// Test basic table creation, file upload and query.
 #[tokio::test]
 #[serial]
-async fn test_moonlink_standalone_file_async_upload() {
+async fn test_moonlink_standalone_file_upload() {
     cleanup_directory(&get_moonlink_backend_dir()).await;
     let config = get_service_config();
     tokio::spawn(async move {
@@ -314,7 +314,7 @@ async fn test_moonlink_standalone_file_async_upload() {
     let parquet_file = generate_parquet_file(&get_moonlink_backend_dir()).await;
     let file_upload_payload = json!({
         "operation": "upload",
-        "request_mode": "async",
+        "request_mode": "sync",
         "files": [parquet_file],
         "storage_config": {
             "fs": {
@@ -335,6 +335,8 @@ async fn test_moonlink_standalone_file_async_upload() {
         response.status().is_success(),
         "Response status is {response:?}"
     );
+    let response: FileUploadResponse = response.json().await.unwrap();
+    assert_eq!(response.lsn, Some(1));
 
     // Scan table and get data file and puffin files back.
     let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();

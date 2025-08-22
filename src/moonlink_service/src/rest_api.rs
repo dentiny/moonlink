@@ -73,7 +73,7 @@ pub struct FieldSchema {
 }
 
 /// Response structure for table creation
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreateTableResponse {
     pub database: String,
     pub table: String,
@@ -92,7 +92,7 @@ pub struct DropTableRequest {
 }
 
 /// Response structure for table drop.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DropTableResponse {}
 
 /// ====================
@@ -110,7 +110,7 @@ pub struct ListTablesResponse {
 /// ====================
 ///
 /// Request structure for data ingestion
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IngestRequest {
     pub operation: String,
     pub data: serde_json::Value,
@@ -119,7 +119,7 @@ pub struct IngestRequest {
 }
 
 /// Response structure for data ingestion
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IngestResponse {
     pub table: String,
     pub operation: String,
@@ -131,7 +131,7 @@ pub struct IngestResponse {
 /// File upload
 /// ====================
 ///
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileUploadRequest {
     /// Ingestion operation.
     pub operation: String,
@@ -143,7 +143,7 @@ pub struct FileUploadRequest {
     pub request_mode: RequestMode,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct FileUploadResponse {
     /// Assigned for synchronous mode.
     pub lsn: Option<u64>,
@@ -154,7 +154,7 @@ pub struct FileUploadResponse {
 /// ====================
 ///
 /// Health check response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct HealthResponse {
     pub service: String,
     pub status: String,
@@ -385,7 +385,7 @@ async fn upload_files(
     };
 
     // Create REST request.
-    let (tx, _rx) = mpsc::channel(1);
+    let (tx, mut rx) = mpsc::channel(1);
     let file_event_request = FileEventRequest {
         src_table_name: src_table_name.clone(),
         operation,
@@ -412,7 +412,13 @@ async fn upload_files(
                 }),
             )
         })?;
-    Ok(Json(FileUploadResponse { lsn: None }))
+
+    let lsn: Option<u64> = if payload.request_mode == RequestMode::Sync {
+        rx.recv().await
+    } else {
+        None
+    };
+    Ok(Json(FileUploadResponse { lsn }))
 }
 
 /// Data ingestion endpoint
@@ -446,7 +452,7 @@ async fn ingest_data(
     };
 
     // Create REST request
-    let (tx, _rx) = mpsc::channel(1);
+    let (tx, mut rx) = mpsc::channel(1);
     let row_event_request = RowEventRequest {
         src_table_name: src_table_name.clone(),
         operation,
@@ -474,10 +480,16 @@ async fn ingest_data(
                 }),
             )
         })?;
+
+    let lsn: Option<u64> = if payload.request_mode == RequestMode::Sync {
+        rx.recv().await
+    } else {
+        None
+    };
     Ok(Json(IngestResponse {
         table: src_table_name,
         operation: payload.operation,
-        lsn: None,
+        lsn,
     }))
 }
 
