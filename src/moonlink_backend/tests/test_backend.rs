@@ -9,11 +9,9 @@ mod tests {
         current_wal_lsn, get_serialized_table_config, smoke_create_and_insert, TestGuard,
         TestGuardMode, DATABASE, TABLE,
     };
-    use moonlink_backend::EventRequest;
-    use moonlink_backend::MoonlinkBackend;
-    use moonlink_backend::{
-        table_status::TableStatus, RowEventOperation, RowEventRequest, REST_API_URI,
-    };
+    use moonlink_backend::RowEventOperation;
+    use moonlink_backend::{table_status::TableStatus, REST_API_URI};
+    use moonlink_backend::{EventRequest, MoonlinkBackend, RowEventRequest};
     use moonlink_metadata_store::{base_metadata_store::MetadataStoreTrait, SqliteMetadataStore};
 
     use arrow::datatypes::Schema as ArrowSchema;
@@ -464,6 +462,7 @@ mod tests {
                 "age": 30
             }),
             timestamp: SystemTime::now(),
+            tx: None,
         };
         let rest_event_request = EventRequest::RowRequest(row_event_request);
         backend

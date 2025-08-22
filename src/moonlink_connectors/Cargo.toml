@@ -24,6 +24,7 @@ chrono-tz = "0.10"
 futures = { workspace = true }
 moonlink = { path = "../moonlink" }
 moonlink_error = { path = "../moonlink_error" }
+more-asserts = { workspace = true }
 native-tls = "0.2.14"
 num-traits = { workspace = true }
 parquet = { workspace = true }

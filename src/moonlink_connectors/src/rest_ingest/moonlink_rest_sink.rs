@@ -1,6 +1,7 @@
 use crate::replication_state::ReplicationState;
+use crate::rest_ingest::event_request::RowEventOperation;
+use crate::rest_ingest::rest_event::RestEvent;
 use crate::rest_ingest::rest_source::SrcTableId;
-use crate::rest_ingest::rest_source::{RestEvent, RowEventOperation};
 use crate::{Error, Result};
 use moonlink::TableEvent;
 use std::collections::HashMap;
@@ -252,7 +253,6 @@ impl RestSink {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::rest_ingest::rest_source::{RestEvent, RowEventOperation};
     use moonlink::row::{MoonlinkRow, RowValue};
     use std::time::SystemTime;
     use tokio::sync::mpsc;

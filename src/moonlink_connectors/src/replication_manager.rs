@@ -1,4 +1,5 @@
 use crate::pg_replicate::table::SrcTableId;
+use crate::rest_ingest::event_request::EventRequest;
 use crate::ReplicationConnection;
 use crate::{Error, Result};
 use moonlink::{MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager};
@@ -165,7 +166,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
     pub async fn initialize_event_api_for_once(
         &mut self,
         base_path: &str,
-    ) -> Result<tokio::sync::mpsc::Sender<crate::rest_ingest::rest_source::EventRequest>> {
+    ) -> Result<tokio::sync::mpsc::Sender<EventRequest>> {
         if self.connections.contains_key(REST_API_URI) {
             return Ok(self
                 .connections

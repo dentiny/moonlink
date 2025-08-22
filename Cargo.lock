@@ -4306,6 +4306,7 @@ dependencies = [
  "iceberg",
  "moonlink",
  "moonlink_error",
+ "more-asserts",
  "native-tls",
  "num-traits",
  "parquet",

@@ -11,9 +11,11 @@ pub use error::{Error, Result};
 use mooncake_table_id::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink::{ReadStateFilepathRemap, TableEventManager};
-pub use moonlink_connectors::rest_ingest::rest_source::{
+pub use moonlink_connectors::rest_ingest::event_request::{
     EventRequest, FileEventOperation, FileEventRequest, RowEventOperation, RowEventRequest,
 };
+pub use moonlink_connectors::rest_ingest::rest_event::RestEvent;
+pub use moonlink_connectors::rest_ingest::rest_source::RestSource;
 use moonlink_connectors::ReplicationManager;
 pub use moonlink_connectors::REST_API_URI;
 use moonlink_metadata_store::base_metadata_store::MetadataStoreTrait;

@@ -1,16 +1,20 @@
 pub mod datetime_utils;
 pub mod decimal_utils;
+pub mod event_request;
 pub mod json_converter;
 pub mod moonlink_rest_sink;
+pub mod rest_event;
 pub mod rest_source;
 
 use crate::replication_state::ReplicationState;
+use crate::rest_ingest::event_request::EventRequest;
 use crate::rest_ingest::moonlink_rest_sink::RestSink;
 use crate::rest_ingest::moonlink_rest_sink::TableStatus;
-use crate::rest_ingest::rest_source::{EventRequest, RestSource};
+use crate::rest_ingest::rest_source::RestSource;
 use crate::Result;
 use arrow_schema::Schema;
 use moonlink::TableEvent;
+use more_asserts as ma;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
@@ -200,16 +204,30 @@ pub async fn run_rest_event_loop(
             },
             // Process REST requests directly (similar to how PostgreSQL processes CDC events)
             Some(request) = rest_request_rx.recv() => {
+                // TODO(hjiang): Handle recursive request like file insertion.
+                let lsn = 0;
+
                 // Process the request and generate events
                 match rest_source.process_request(&request) {
                     Ok(rest_events) => {
                         // Send all events to be processed by the sink
                         for rest_event in rest_events {
+                            if let Some(rest_lsn) = rest_event.lsn() {
+                                ma::assert_gt!(rest_lsn, lsn);
+                            }
+
+                            // Process rest events.
                             let rest_event_proc_result = sink.process_rest_event(rest_event).await;
                             if let Err(e) = &rest_event_proc_result {
                                 warn!(error = ?e, "failed to process REST event");
                                 break; // Stop processing further events on error
                             }
+                        }
+
+                        // Send back event response if applicable.
+                        if let Some(rx) = request.get_request_tx() {
+                            // Client connection could be cut down during request handling, so no guarantee send success.
+                            let _ = rx.send(lsn).await;
                         }
                     }
                     Err(e) => {

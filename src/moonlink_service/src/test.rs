@@ -147,8 +147,8 @@ async fn list_tables(client: &reqwest::Client) -> Vec<TableStatus> {
         response.status().is_success(),
         "Response status is {response:?}"
     );
-    let payload: ListTablesResponse = response.json().await.unwrap();
-    payload.tables
+    let response: ListTablesResponse = response.json().await.unwrap();
+    response.tables
 }
 
 /// Util function to load all record batches inside of the given [`path`].
@@ -232,6 +232,7 @@ async fn test_moonlink_standalone_data_ingestion() {
     // Ingest some data.
     let insert_payload = json!({
         "operation": "insert",
+        "request_mode": "async",
         "data": {
             "id": 1,
             "name": "Alice Johnson",
@@ -297,7 +298,7 @@ async fn test_moonlink_standalone_data_ingestion() {
 /// Test basic table creation, file upload and query.
 #[tokio::test]
 #[serial]
-async fn test_moonlink_standalone_file_upload() {
+async fn test_moonlink_standalone_file_async_upload() {
     cleanup_directory(&get_moonlink_backend_dir()).await;
     let config = get_service_config();
     tokio::spawn(async move {
@@ -313,6 +314,7 @@ async fn test_moonlink_standalone_file_upload() {
     let parquet_file = generate_parquet_file(&get_moonlink_backend_dir()).await;
     let file_upload_payload = json!({
         "operation": "upload",
+        "request_mode": "async",
         "files": [parquet_file],
         "storage_config": {
             "fs": {
@@ -401,6 +403,7 @@ async fn test_moonlink_standalone_file_insert() {
     let file_upload_payload = json!({
         "operation": "insert",
         "files": [parquet_file],
+        "request_mode": "async",
         "storage_config": {
             "fs": {
                 "root_directory": get_moonlink_backend_dir(),
@@ -681,6 +684,7 @@ async fn test_non_existent_table() {
     // Test invalid operation to upload a file.
     let file_upload_payload = json!({
         "operation": "upload",
+        "request_mode": "async",
         "files": ["parquet_file"],
         "storage_config": {
             "fs": {

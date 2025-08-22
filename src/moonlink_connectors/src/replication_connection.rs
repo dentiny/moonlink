@@ -1,7 +1,7 @@
 use crate::pg_replicate::table_init::build_table_components;
 use crate::pg_replicate::PostgresConnection;
 use crate::pg_replicate::{table::SrcTableId, table_init::TableComponents};
-use crate::rest_ingest::rest_source::EventRequest;
+use crate::rest_ingest::event_request::EventRequest;
 use crate::rest_ingest::RestApiConnection;
 use crate::{Error, Result};
 use moonlink::{
