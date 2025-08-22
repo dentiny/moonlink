@@ -39,6 +39,10 @@ jobs:
         with:
           tool: cargo-deny
 
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-sort
+
       - uses: swatinem/rust-cache@v2
         with:
           shared-key: ${{ steps.toolchain.outputs.cachekey }}
@@ -51,6 +55,9 @@ jobs:
 
       - name: cargo deny check
         run: cargo deny check
+
+      - name: cargo dependency format
+        run: cargo sort --workspace
 
   # ──────────────────────── 2 · GCS test (feature, chaos) ─────────────────
   gcs_test:
