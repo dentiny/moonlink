@@ -1,3 +1,4 @@
+#[cfg(any(test, debug_assertions))]
 use crate::row::IdentityProp;
 use crate::storage::mooncake_table::SnapshotTableState;
 use crate::storage::mooncake_table::{SnapshotOption, SnapshotTask};
