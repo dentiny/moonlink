@@ -19,7 +19,9 @@ impl MooncakeTable {
         // TODO(hjiang): Parallel IO and error handling.
         // Construct disk file from the given disk files.
         for cur_file in parquet_files.into_iter() {
-            let content = tokio::fs::read(&cur_file).await.unwrap();
+            let content = tokio::fs::read(&cur_file)
+                .await
+                .unwrap_or_else(|_| panic!("Failed to read {cur_file}"));
             let content = Bytes::from(content);
             let file_size = content.len();
             let builder = ParquetRecordBatchReaderBuilder::try_new(content).unwrap();
