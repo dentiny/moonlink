@@ -59,8 +59,8 @@ const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard
 pub struct Table {
     pub database: String,
     pub table: String,
+    pub cardinality: u64,
     pub commit_lsn: u64,
     pub flush_lsn: Option<u64>,
-    pub cardinality: u64,
     pub iceberg_warehouse_location: String,
 }
