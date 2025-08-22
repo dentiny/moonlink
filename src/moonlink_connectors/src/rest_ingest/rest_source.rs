@@ -138,12 +138,25 @@ impl RestSource {
         }
     }
 
+    /// # Arguments
+    ///
+    /// * persist_lsn: only assigned at recovery, used to indicate and update replication LSN.
     pub fn add_table(
         &mut self,
         src_table_name: String,
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
+        persist_lsn: Option<u64>,
     ) -> Result<()> {
+        // Update LSN at recovery.
+        if let Some(persist_lsn) = persist_lsn {
+            let old_lsn = self.lsn_generator.load(Ordering::SeqCst);
+            if persist_lsn > old_lsn {
+                self.lsn_generator.store(persist_lsn, Ordering::SeqCst);
+            }
+        }
+
+        // Update rest source states.
         if self
             .table_schemas
             .insert(src_table_name.clone(), schema)
@@ -400,7 +413,12 @@ mod tests {
         // Test adding table
         let schema = make_test_schema();
         source
-            .add_table("test_table".to_string(), 1, schema.clone())
+            .add_table(
+                "test_table".to_string(),
+                1,
+                schema.clone(),
+                /*persist_lsn=*/ Some(0),
+            )
             .unwrap();
         assert_eq!(source.table_schemas.len(), 1);
         assert_eq!(source.src_table_name_to_src_id.len(), 1);
@@ -418,7 +436,12 @@ mod tests {
         let mut source = RestSource::new();
         let schema = make_test_schema();
         source
-            .add_table("test_table".to_string(), 1, schema)
+            .add_table(
+                "test_table".to_string(),
+                1,
+                schema,
+                /*persist_lsn=*/ Some(0),
+            )
             .unwrap();
 
         let request = RowEventRequest {
@@ -474,6 +497,7 @@ mod tests {
                 /*src_table_name=*/ "test_table".to_string(),
                 /*src_table_id=*/ 1,
                 schema,
+                /*persist_lsn=*/ Some(0),
             )
             .unwrap();
 
@@ -538,6 +562,7 @@ mod tests {
                 /*src_table_name=*/ "test_table".to_string(),
                 /*src_table_id=*/ 1,
                 schema,
+                /*persist_lsn=*/ Some(0),
             )
             .unwrap();
 
@@ -577,6 +602,7 @@ mod tests {
                 /*src_table_name=*/ "test_table".to_string(),
                 /*src_table_id=*/ 1,
                 schema,
+                /*persist_lsn=*/ Some(0),
             )
             .unwrap();
 
@@ -611,10 +637,16 @@ mod tests {
                 "test_table".to_string(),
                 /*src_table_id=*/ 1,
                 schema.clone(),
+                /*persist_lsn=*/ Some(0),
             )
             .unwrap();
 
-        let res = source.add_table("test_table".to_string(), /*src_table_id=*/ 1, schema);
+        let res = source.add_table(
+            "test_table".to_string(),
+            /*src_table_id=*/ 1,
+            schema,
+            /*persist_lsn=*/ Some(0),
+        );
         assert!(res.is_err());
     }
 
@@ -662,7 +694,12 @@ mod tests {
         let mut source = RestSource::new();
         let schema = make_test_schema();
         source
-            .add_table("test_table".to_string(), 1, schema)
+            .add_table(
+                "test_table".to_string(),
+                1,
+                schema,
+                /*persist_lsn=*/ Some(0),
+            )
             .unwrap();
 
         let request1 = RowEventRequest {

@@ -1,7 +1,7 @@
 use crate::error::Result;
 use crate::mooncake_table_id::MooncakeTableId;
 use moonlink::ReadStateFilepathRemap;
-use moonlink::{BaseIcebergSchemaFetcher, IcebergSchemaFetcher};
+use moonlink::{BaseIcebergSnapshotFetcher, IcebergSnapshotFetcher};
 use moonlink_connectors::{ReplicationManager, REST_API_URI};
 use moonlink_metadata_store::base_metadata_store::{MetadataStoreTrait, TableMetadataEntry};
 
@@ -29,11 +29,15 @@ async fn recover_rest_table(
         .moonlink_table_config
         .iceberg_table_config
         .clone();
-    let iceberg_schema_fetcher = IcebergSchemaFetcher::new(iceberg_table_config)?;
-    let arrow_schema = iceberg_schema_fetcher.fetch_table_schema().await?;
+    let iceberg_snapshot_fetcher = IcebergSnapshotFetcher::new(iceberg_table_config)?;
+    let arrow_schema = iceberg_snapshot_fetcher.fetch_table_schema().await?;
+    let flush_lsn = iceberg_snapshot_fetcher.get_flush_lsn().await?;
 
     // Only perform recovery when there's valid iceberg snapshot.
     if arrow_schema.is_none() {
+        return Ok(());
+    }
+    if flush_lsn.is_none() {
         return Ok(());
     }
 
@@ -53,7 +57,7 @@ async fn recover_rest_table(
             arrow_schema.unwrap(),
             metadata_entry.moonlink_table_config,
             read_state_filepath_remap,
-            /*is_recovery=*/ true,
+            flush_lsn,
         )
         .await?;
     Ok(())

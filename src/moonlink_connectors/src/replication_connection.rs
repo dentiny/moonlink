@@ -77,6 +77,7 @@ pub struct ReplicationConnection<T: Clone + Eq + Hash + std::fmt::Display> {
     handle: Option<JoinHandle<Result<()>>>,
     /// Maps from unique table id to its table states.
     table_states: HashMap<UniqueTableId<T>, TableState>,
+    /// Whether replication has started.
     replication_started: bool,
     /// Object storage cache.
     object_storage_cache: ObjectStorageCache,
@@ -241,6 +242,10 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
     }
 
     /// Add a table for REST API ingestion with Arrow schema
+    ///
+    /// # Arguments
+    ///
+    /// * persist_lsn: only assigned at recovery, used to indicate and update replication LSN.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_table_api(
         &mut self,
@@ -249,7 +254,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
         arrow_schema: ArrowSchema,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
-        is_recovery: bool,
+        persist_lsn: Option<u64>,
     ) -> Result<SrcTableId> {
         match &mut self.source {
             SourceType::RestApi(conn) => {
@@ -273,7 +278,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
                     &self.table_base_path,
                     &replication_state,
                     table_components,
-                    is_recovery,
+                    /*is_recovery=*/ persist_lsn.is_some(),
                 )
                 .await?;
 
@@ -295,6 +300,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
                         .wal_flush_lsn_rx
                         .take()
                         .expect("wal_flush_lsn_rx not set"),
+                    persist_lsn,
                 )
                 .await?;
 

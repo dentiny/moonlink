@@ -157,7 +157,7 @@ impl MoonlinkBackend {
                         input_schema.expect("arrow_schema is required for REST API"),
                         moonlink_table_config.clone(),
                         self.read_state_filepath_remap.clone(),
-                        /*is_recovery=*/ false,
+                        /*flush_lsn=*/ None,
                     )
                     .await?;
             } else {
