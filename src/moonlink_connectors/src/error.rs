@@ -3,7 +3,6 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::rest_ingest::rest_source::RestSourceError;
 use crate::rest_ingest::{json_converter, SrcTableId};
-use anyhow;
 use moonlink::Error as MoonlinkError;
 use moonlink_error::{io_error_utils, ErrorStatus, ErrorStruct};
 use serde::{Deserialize, Serialize};
@@ -39,10 +38,6 @@ pub enum Error {
     // Requested database table not found.
     #[error("{0}")]
     TableNotFound(ErrorStruct),
-
-    // Invalid source type for operation.
-    #[error("{0}")]
-    InvalidSourceType(ErrorStruct),
 
     // Table replication error: duplicate table.
     #[error("{0}")]
@@ -90,16 +85,6 @@ impl Error {
     pub fn table_not_found(table_name: String) -> Self {
         Error::TableNotFound(ErrorStruct {
             message: format!("Table {table_name} not found"),
-            status: ErrorStatus::Permanent,
-            source: None,
-            location: Some(Location::caller().to_string()),
-        })
-    }
-
-    #[track_caller]
-    pub fn invalid_source_type(desc: String) -> Self {
-        Error::InvalidSourceType(ErrorStruct {
-            message: format!("Invalid source type: {desc}"),
             status: ErrorStatus::Permanent,
             source: None,
             location: Some(Location::caller().to_string()),

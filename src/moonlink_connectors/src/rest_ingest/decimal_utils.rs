@@ -227,8 +227,8 @@ pub fn convert_decimal_to_row_value(
     })?;
 
     // Based on https://www.postgresql.org/docs/17/datatype-numeric.html, we can handle the decimal value in 3 cases:
-    // 1. scale < 0: negative scale, we need to handle the negative scale
-    // 2. scale > precision: fractional only, we need to handle the fractional only
+    // 1. scale < 0: negative scale
+    // 2. scale > precision: fractional only
     // 3. scale <= precision: standard cases
     // Currently, Ignore Infinity / NaN for now, unless we see a strong use case.
     if scale < 0 {
