@@ -408,13 +408,17 @@ impl CompactionBuilder {
             self.flush_arrow_writer().await?;
         }
 
-        // Perform compaction on file indices.
-        let new_file_indices = self
-            .compact_file_indices(
-                self.compaction_payload.file_indices.clone(),
-                &old_record_loc_to_new_mapping,
-            )
-            .await;
+        // Perform compaction on file indices
+        let mut new_file_indices = vec![];
+        if !old_file_indices.is_empty() {
+            let cur_new_file_indices = self
+                .compact_file_indices(
+                    self.compaction_payload.file_indices.clone(),
+                    &old_record_loc_to_new_mapping,
+                )
+                .await;
+            new_file_indices.push(cur_new_file_indices);
+        }
 
         Ok(DataCompactionResult {
             id: self.compaction_payload.id,
@@ -423,7 +427,7 @@ impl CompactionBuilder {
             old_data_files,
             old_file_indices,
             new_data_files: self.new_data_files,
-            new_file_indices: vec![new_file_indices],
+            new_file_indices,
             evicted_files_to_delete,
         })
     }

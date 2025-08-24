@@ -204,13 +204,18 @@ pub(crate) fn create_test_table_metadata_with_config(
     local_table_directory: String,
     mooncake_table_config: MooncakeTableConfig,
 ) -> Arc<MooncakeTableMetadata> {
+    let identity = if mooncake_table_config.append_only {
+        RowIdentity::None
+    } else {
+        RowIdentity::FullRow
+    };
     Arc::new(MooncakeTableMetadata {
         name: ICEBERG_TEST_TABLE.to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config,
         path: std::path::PathBuf::from(local_table_directory),
-        identity: RowIdentity::FullRow,
+        identity,
     })
 }
 

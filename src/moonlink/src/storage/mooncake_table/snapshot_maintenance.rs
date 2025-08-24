@@ -186,14 +186,18 @@ impl SnapshotTableState {
 
         #[cfg(any(test, debug_assertions))]
         {
-            Self::validate_compaction_payload(&payload);
+            self.validate_compaction_payload(&payload);
         }
         DataCompactionMaintenanceStatus::Payload(payload)
     }
 
-    /// Util function to validate the consistency of data compaction payload.
+    /// Util function to validate the consistency of data files and file indices for data compaction payload.
     #[cfg(any(test, debug_assertions))]
-    fn validate_compaction_payload(payload: &DataCompactionPayload) {
+    fn validate_compaction_payload(&self, payload: &DataCompactionPayload) {
+        if self.mooncake_table_metadata.config.append_only {
+            return;
+        }
+
         // Data files to compact.
         let data_files = payload
             .disk_files
@@ -327,13 +331,16 @@ impl SnapshotTableState {
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
-        let cur_evicted_files = self
-            .update_file_indices_to_mooncake_snapshot_impl(
-                data_compaction_res.old_file_indices,
-                data_compaction_res.new_file_indices,
-            )
-            .await;
-        evicted_files_to_delete.extend(cur_evicted_files);
+        // Append only table doesn't have file indices, directly skip.
+        if !self.mooncake_table_metadata.config.append_only {
+            let cur_evicted_files = self
+                .update_file_indices_to_mooncake_snapshot_impl(
+                    data_compaction_res.old_file_indices,
+                    data_compaction_res.new_file_indices,
+                )
+                .await;
+            evicted_files_to_delete.extend(cur_evicted_files);
+        }
 
         // Apply evicted data files to delete within data compaction process.
         evicted_files_to_delete.extend(

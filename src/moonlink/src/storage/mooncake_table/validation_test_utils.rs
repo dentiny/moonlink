@@ -79,6 +79,11 @@ pub(crate) async fn validate_recovered_snapshot(
         assert!(tokio::fs::try_exists(puffin_filepath).await.unwrap());
     }
 
+    // For append-only table, there's no file indices.
+    if snapshot.indices.file_indices.is_empty() {
+        return;
+    }
+
     // Check file indices.
     let mut index_referenced_data_filepaths: HashSet<String> = HashSet::new();
     for cur_file_index in snapshot.indices.file_indices.iter() {
