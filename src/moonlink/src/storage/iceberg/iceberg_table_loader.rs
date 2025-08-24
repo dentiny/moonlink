@@ -240,18 +240,17 @@ impl IcebergTableManager {
 
         // Load moonlink related metadata.
         let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
-        let snapshot_property = snapshot_utils::get_snapshot_properties(table_metadata)?;
 
         // There's nothing stored in iceberg table.
         if table_metadata.current_snapshot().is_none() {
-            let mut empty_mooncake_snapshot =
+            let empty_mooncake_snapshot =
                 MooncakeSnapshot::new(self.mooncake_table_metadata.clone());
-            empty_mooncake_snapshot.flush_lsn = snapshot_property.flush_lsn;
             return Ok((next_file_id as u32, empty_mooncake_snapshot));
         }
 
         // Load table state into iceberg table manager.
         let snapshot_meta = table_metadata.current_snapshot().unwrap();
+        let snapshot_property = snapshot_utils::get_snapshot_properties(table_metadata)?;
         let manifest_list = snapshot_meta
             .load_manifest_list(
                 self.iceberg_table.as_ref().unwrap().file_io(),
