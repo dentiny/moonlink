@@ -287,8 +287,6 @@ impl IcebergTableManager {
             }
         }
 
-        println!("data file file id = {next_file_id}");
-
         // Attempt to load file indices and deletion vector.
         let mut loaded_deletion_vector = HashMap::new();
         for manifest_file in manifest_list.entries().iter() {
@@ -301,8 +299,6 @@ impl IcebergTableManager {
                 continue;
             }
 
-            println!("before index file id = {next_file_id}");
-
             for entry in manifest_entries.iter() {
                 // Load file indices.
                 let recovered_file_index = self
@@ -313,7 +309,6 @@ impl IcebergTableManager {
                     )
                     .await?;
                 if let Some(recovered_file_index) = recovered_file_index {
-                    println!("we have index???");
                     loaded_file_indices.push(recovered_file_index);
                 }
 
@@ -326,7 +321,6 @@ impl IcebergTableManager {
                     )
                     .await?
                 {
-                    println!("delete???");
                     assert!(loaded_deletion_vector
                         .insert(file_id, puffin_blob_ref)
                         .is_none());

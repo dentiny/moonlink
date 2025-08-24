@@ -331,16 +331,13 @@ impl SnapshotTableState {
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
-        // Append only table doesn't have file indices, directly skip.
-        if !self.mooncake_table_metadata.config.append_only {
-            let cur_evicted_files = self
-                .update_file_indices_to_mooncake_snapshot_impl(
-                    data_compaction_res.old_file_indices,
-                    data_compaction_res.new_file_indices,
-                )
-                .await;
-            evicted_files_to_delete.extend(cur_evicted_files);
-        }
+        let cur_evicted_files = self
+            .update_file_indices_to_mooncake_snapshot_impl(
+                data_compaction_res.old_file_indices,
+                data_compaction_res.new_file_indices,
+            )
+            .await;
+        evicted_files_to_delete.extend(cur_evicted_files);
 
         // Apply evicted data files to delete within data compaction process.
         evicted_files_to_delete.extend(
