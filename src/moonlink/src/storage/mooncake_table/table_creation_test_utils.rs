@@ -221,7 +221,12 @@ pub(crate) fn create_test_table_metadata_with_config(
 
 /// Test util function to get random row identity.
 #[cfg(feature = "chaos-test")]
-pub(crate) fn get_random_identity(random_seed: u64) -> RowIdentity {
+pub(crate) fn get_random_identity(random_seed: u64, append_only: bool) -> RowIdentity {
+    // If append only, no random choice.
+    if append_only {
+        return RowIdentity::None;
+    }
+
     use rand::{seq::IndexedRandom, SeedableRng};
     let mut rng = rand::rngs::StdRng::seed_from_u64(random_seed);
 
@@ -286,6 +291,7 @@ pub(crate) fn create_test_table_metadata_disable_flush(
     let mut config = MooncakeTableConfig::new(local_table_directory.clone());
     config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
     config.disk_slice_writer_config = disk_slice_write_config;
+    config.append_only = identity == RowIdentity::None;
     create_test_table_metadata_with_config_and_identity(local_table_directory, config, identity)
 }
 
@@ -305,6 +311,7 @@ pub(crate) fn create_test_table_metadata_with_index_merge_disable_flush(
     config.disk_slice_writer_config = disk_slice_write_config;
     config.file_index_config = file_index_config;
     config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    config.append_only = identity == RowIdentity::None;
     create_test_table_metadata_with_config_and_identity(local_table_directory, config, identity)
 }
 
@@ -325,6 +332,7 @@ pub(crate) fn create_test_table_metadata_with_data_compaction_disable_flush(
     config.disk_slice_writer_config = disk_slice_write_config;
     config.data_compaction_config = data_compaction_config;
     config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    config.append_only = identity == RowIdentity::None;
     create_test_table_metadata_with_config_and_identity(local_table_directory, config, identity)
 }
 

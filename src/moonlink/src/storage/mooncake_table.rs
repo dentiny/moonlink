@@ -129,6 +129,16 @@ impl TableMetadata {
             identity: previous_metadata.identity.clone(),
         }
     }
+
+    /// Validate metadata invariants.
+    pub fn validate(&self) {
+        // Validate identity property.
+        if self.identity == IdentityProp::None {
+            assert!(self.config.append_only);
+        }
+        // Validate table config.
+        self.config.validate();
+    }
 }
 #[derive(Clone, Debug)]
 pub(crate) struct DiskFileEntry {
@@ -510,7 +520,7 @@ impl MooncakeTable {
         table_filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         wal_manager: WalManager,
     ) -> Result<Self> {
-        table_metadata.config.validate();
+        table_metadata.validate();
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
         let last_iceberg_snapshot_lsn = current_snapshot.flush_lsn;

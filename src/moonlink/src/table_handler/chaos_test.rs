@@ -175,7 +175,7 @@ struct ChaosState {
     /// Used to generate random events, with current timestamp as random seed.
     rng: StdRng,
     /// Whether to enable delete operations.
-    deletion_enabled: bool,
+    append_only: bool,
     /// Non table update operation invocation status.
     non_table_update_cmd_call: NonTableUpdateCmdCall,
     /// Used to generate rows to insert.
@@ -207,12 +207,12 @@ struct ChaosState {
 }
 
 impl ChaosState {
-    fn new(read_state_manager: ReadStateManager, random_seed: u64, deletion_enabled: bool) -> Self {
+    fn new(read_state_manager: ReadStateManager, random_seed: u64, append_only: bool) -> Self {
         let rng = StdRng::seed_from_u64(random_seed);
         Self {
             random_seed,
             rng,
-            deletion_enabled,
+            append_only,
             non_table_update_cmd_call: NonTableUpdateCmdCall::default(),
             txn_state: TxnState::Empty,
             next_id: 0,
@@ -346,7 +346,7 @@ impl ChaosState {
     ///
     /// The logic corresponds to [`get_random_row_to_delete`].
     fn can_delete(&self) -> bool {
-        if !self.deletion_enabled {
+        if self.append_only {
             return false;
         }
 
@@ -385,7 +385,7 @@ impl ChaosState {
     ///
     /// The logic corresponds to [`get_random_row_to_update`].
     fn can_update(&self) -> bool {
-        if !self.deletion_enabled {
+        if self.append_only {
             return false;
         }
 
@@ -712,8 +712,8 @@ struct TestEnvConfig {
     disk_slice_write_chaos_enabled: bool,
     /// Whether to enable local filesystem optimization for object storage cache.
     local_filesystem_optimization_enabled: bool,
-    /// Whether to disable deletion.
-    deletion_enabled: bool,
+    /// Whether to disable deletion, just append operation.
+    append_only: bool,
     /// Table background maintenance option.
     maintenance_option: TableMaintenanceOption,
     /// Event count.
@@ -751,7 +751,7 @@ impl TestEnvironment {
             config.disk_slice_write_chaos_enabled,
             chaos_test_arg.seed,
         );
-        let identity = get_random_identity(chaos_test_arg.seed);
+        let identity = get_random_identity(chaos_test_arg.seed, config.append_only);
         let mooncake_table_metadata = match &config.maintenance_option {
             TableMaintenanceOption::NoTableMaintenance => create_test_table_metadata_disable_flush(
                 table_temp_dir.path().to_str().unwrap().to_string(),
@@ -975,7 +975,7 @@ async fn chaos_test_impl(mut env: TestEnvironment) {
         let mut state = ChaosState::new(
             read_state_manager,
             cloned_args.seed,
-            test_env_config.deletion_enabled,
+            test_env_config.append_only,
         );
         println!(
             "Test {} is with random seed {}",
@@ -1090,7 +1090,7 @@ async fn test_disk_slice_chaos_on_local_fs() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: true,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 2000,
@@ -1117,7 +1117,7 @@ async fn test_chaos_on_local_fs_with_no_background_maintenance() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1140,7 +1140,7 @@ async fn test_chaos_on_local_fs_with_index_merge() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1163,7 +1163,7 @@ async fn test_chaos_on_local_fs_with_data_compaction() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1190,7 +1190,7 @@ async fn test_local_system_optimization_chaos_with_no_background_maintenance() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: true,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1213,7 +1213,7 @@ async fn test_local_system_optimization_chaos_with_index_merge() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: true,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1236,7 +1236,7 @@ async fn test_local_system_optimization_chaos_with_data_compaction() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: true,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1265,7 +1265,7 @@ async fn test_s3_chaos_with_no_background_maintenance() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1287,7 +1287,7 @@ async fn test_s3_chaos_with_index_merge() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1309,7 +1309,7 @@ async fn test_s3_chaos_with_data_compaction() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1335,7 +1335,7 @@ async fn test_gcs_chaos_with_no_background_maintenance() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1357,7 +1357,7 @@ async fn test_gcs_chaos_with_index_merge() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1379,7 +1379,7 @@ async fn test_gcs_chaos_with_data_compaction() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 3500,
@@ -1403,7 +1403,7 @@ async fn test_chaos_injection_with_no_background_maintenance() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: true,
         event_count: 100,
@@ -1426,7 +1426,7 @@ async fn test_chaos_injection_with_index_merge() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: true,
         event_count: 100,
@@ -1449,7 +1449,7 @@ async fn test_chaos_injection_with_data_compaction() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: true,
+        append_only: false,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: true,
         event_count: 100,
@@ -1476,7 +1476,7 @@ async fn test_append_only_chaos_on_local_fs_with_no_background_maintenance() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: false,
+        append_only: true,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
         event_count: 1000,
@@ -1499,7 +1499,7 @@ async fn test_append_only_chaos_on_local_fs_with_index_merge() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: false,
+        append_only: true,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
         event_count: 1000,
@@ -1522,7 +1522,7 @@ async fn test_append_only_chaos_on_local_fs_with_data_compaction() {
         test_name: function_name!(),
         local_filesystem_optimization_enabled: false,
         disk_slice_write_chaos_enabled: false,
-        deletion_enabled: false,
+        append_only: true,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
         event_count: 1000,
