@@ -158,6 +158,17 @@ fn test_row_with_updated_schema() -> MoonlinkRow {
     ])
 }
 
+/// Test util function to get filename without suffix.
+fn get_filename_without_suffix(filepath: &str) -> String {
+    let filename_without_suffix = std::path::Path::new(filepath)
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_string();
+    filename_without_suffix
+}
+
 /// Test util function to write arrow record batch into local file.
 async fn write_arrow_record_batch_to_local<P: AsRef<std::path::Path>>(
     path: P,
@@ -466,14 +477,16 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         ));
 
         // Check second data file and its deletion vector.
-        if file_path.contains(data_filename_2) {
+        let filename_2_without_suffix = get_filename_without_suffix(data_filename_2);
+        if file_path.contains(&filename_2_without_suffix) {
             assert_eq!(loaded_arrow_batch, batch_2,);
             assert_eq!(deleted_rows, vec![1, 2],);
             continue;
         }
 
         // Check first data file and its deletion vector.
-        assert!(file_path.contains(data_filename_1));
+        let filename_1_without_suffix = get_filename_without_suffix(data_filename_1);
+        assert!(file_path.contains(&filename_1_without_suffix));
         assert_eq!(loaded_arrow_batch, batch_1,);
         assert_eq!(deleted_rows, vec![0],);
     }
