@@ -120,7 +120,6 @@ impl IcebergSnapshotDataCompactionPayload {
             return true;
         }
 
-        assert!(!self.old_file_indices_to_remove.is_empty());
         false
     }
 }
