@@ -636,7 +636,7 @@ pub(crate) async fn load_one_arrow_batch(filepath: &str) -> RecordBatch {
 }
 
 /// Test util function to generate a parquet under the given [`tempdir`].
-pub(crate) async fn generate_parquet_file(tempdir: &TempDir) -> String {
+pub(crate) async fn generate_parquet_file(tempdir: &TempDir, filename: &str) -> String {
     let schema = create_test_arrow_schema();
     let ids = Int32Array::from(vec![1, 2, 3]);
     let names = StringArray::from(vec!["Alice", "Bob", "Charlie"]);
@@ -646,7 +646,7 @@ pub(crate) async fn generate_parquet_file(tempdir: &TempDir) -> String {
         vec![Arc::new(ids), Arc::new(names), Arc::new(ages)],
     )
     .unwrap();
-    let file_path = tempdir.path().join("test.parquet");
+    let file_path = tempdir.path().join(filename);
     let file_path_str = file_path.to_str().unwrap().to_string();
     let file = tokio::fs::File::create(file_path).await.unwrap();
     let mut writer: AsyncArrowWriter<tokio::fs::File> =

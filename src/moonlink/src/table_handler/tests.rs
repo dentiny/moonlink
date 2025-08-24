@@ -2363,10 +2363,12 @@ async fn test_batch_ingestion() {
     };
     let env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
 
-    let disk_file = generate_parquet_file(&env.temp_dir).await;
-    env.bulk_upload_files(vec![disk_file], /*lsn=*/ 10).await;
+    let disk_file_1 = generate_parquet_file(&env.temp_dir, "1.parquet").await;
+    let disk_file_2 = generate_parquet_file(&env.temp_dir, "1.parquet").await;
+    env.bulk_upload_files(vec![disk_file_1, disk_file_2], /*lsn=*/ 10)
+        .await;
 
     // Validate bulk ingestion result.
     env.set_readable_lsn(10);
-    env.verify_snapshot(10, &[1, 2, 3]).await;
+    env.verify_snapshot(10, &[1, 1, 2, 2, 3, 3]).await;
 }
