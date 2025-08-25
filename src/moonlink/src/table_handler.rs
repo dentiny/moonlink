@@ -726,9 +726,9 @@ impl TableHandler {
                     } => match flush_result {
                         Some(Ok(disk_slice)) => {
                             if let Some(xact_id) = xact_id {
-                                table.apply_stream_flush_result(xact_id, disk_slice, uuid.clone());
+                                table.apply_stream_flush_result(xact_id, disk_slice, uuid);
                             } else {
-                                table.apply_flush_result(disk_slice, uuid.clone());
+                                table.apply_flush_result(disk_slice, uuid);
                             }
                         }
                         Some(Err(e)) => {

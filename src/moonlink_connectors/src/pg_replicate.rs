@@ -198,6 +198,7 @@ impl PostgresConnection {
             if let Err(e) = commit_lsn_tx.send(start_lsn.into()) {
                 warn!(error = ?e, table_id = src_table_id, "failed to send initial copy commit lsn");
             }
+            self.replication_state.mark(start_lsn.into());
 
             Ok(true)
         } else {
