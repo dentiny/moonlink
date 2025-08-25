@@ -195,6 +195,7 @@ impl PostgresConnection {
             }
 
             // Notify read state manager with the commit LSN for the initial copy boundary.
+            self.replication_state.mark(start_lsn.into());
             if let Err(e) = commit_lsn_tx.send(start_lsn.into()) {
                 warn!(error = ?e, table_id = src_table_id, "failed to send initial copy commit lsn");
             }
