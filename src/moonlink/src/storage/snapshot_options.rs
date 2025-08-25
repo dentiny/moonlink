@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::storage::mooncake_table::replay::replay_events::BackgroundEventId;
-
 /// Option for a maintenance option.
 ///
 /// For all types of maintenance tasks, we have two basic dimensions:
@@ -25,8 +23,6 @@ pub enum MaintenanceOption {
 /// Options to create mooncake snapshot.
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SnapshotOption {
-    /// Table event id, only assigned when a mooncake snapshot creation operation gets created.
-    pub(crate) id: Option<BackgroundEventId>,
     /// UUID for the current mooncake snapshot operation.
     pub(crate) uuid: uuid::Uuid,
     /// Whether to return mooncake snapshot status in the snapshot result.

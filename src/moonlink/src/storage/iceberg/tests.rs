@@ -300,7 +300,6 @@ async fn test_skip_iceberg_snapshot() {
 
     // Create mooncake snapshot.
     assert!(table.create_snapshot(SnapshotOption {
-        id: None,
         uuid: uuid::Uuid::new_v4(),
         force_create: false,
         dump_snapshot: false,
@@ -364,7 +363,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let file_index_1 = create_file_index(vec![data_file_1.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         new_table_schema: None,
@@ -418,7 +416,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     let file_index_2 = create_file_index(vec![data_file_2.clone()]);
 
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         new_table_schema: None,
@@ -498,7 +495,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // Write third snapshot to iceberg table, with file indices to add and remove.
     let merged_file_index = create_file_index(remote_data_files.clone());
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 2,
         new_table_schema: None,
@@ -580,7 +576,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     //
     // Attempt a fourth snapshot persistence, which goes after data file compaction.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 3,
         new_table_schema: None,
@@ -651,7 +646,6 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     //
     // Remove all existing data files and file indices.
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 4,
         new_table_schema: None,
@@ -935,7 +929,6 @@ async fn test_recover_from_failed_snapshot_impl(iceberg_table_config: IcebergTab
     )
     .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         new_table_schema: None,
@@ -1598,7 +1591,6 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
     )
     .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         new_table_schema: None,
@@ -1722,7 +1714,6 @@ async fn test_snapshot_creation_with_duplicate_filename_impl(
     )
     .unwrap();
     let iceberg_snapshot_payload = IcebergSnapshotPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         new_table_schema: None,

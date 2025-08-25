@@ -358,7 +358,6 @@ impl TableHandler {
                         }
                         // Force create the snapshot with LSN `start_lsn`
                         assert!(table.create_snapshot(SnapshotOption {
-                            id: None,
                             uuid: uuid::Uuid::new_v4(),
                             force_create: true,
                             dump_snapshot: false,
@@ -721,15 +720,15 @@ impl TableHandler {
                             .unwrap();
                     }
                     TableEvent::FlushResult {
-                        id,
+                        uuid,
                         xact_id,
                         flush_result,
                     } => match flush_result {
                         Some(Ok(disk_slice)) => {
                             if let Some(xact_id) = xact_id {
-                                table.apply_stream_flush_result(xact_id, disk_slice, id);
+                                table.apply_stream_flush_result(xact_id, disk_slice, uuid.clone());
                             } else {
-                                table.apply_flush_result(disk_slice, id);
+                                table.apply_flush_result(disk_slice, uuid.clone());
                             }
                         }
                         Some(Err(e)) => {

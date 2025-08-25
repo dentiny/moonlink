@@ -400,12 +400,12 @@ impl MooncakeTable {
         &mut self,
         xact_id: u32,
         mut disk_slice: DiskSliceWriter,
-        flush_event_id: BackgroundEventId,
+        flush_event_uuid: uuid::Uuid,
     ) {
         // Record events for flush completion.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_completion(
-                flush_event_id,
+                flush_event_uuid,
                 disk_slice
                     .output_files()
                     .iter()
@@ -515,7 +515,7 @@ impl MooncakeTable {
             .expect("Stream state not found for xact_id, lsn: {xact_id, lsn}");
 
         // Record events for flush initiation.
-        let flush_event_id = self.event_id_assigner.get_next_event_id();
+        let flush_event_id = uuid::Uuid::new_v4();
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_initiation(
                 flush_event_id,

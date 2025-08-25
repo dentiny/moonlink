@@ -213,7 +213,6 @@ impl TableHandlerState {
             force_create = true;
         }
         SnapshotOption {
-            id: None,
             uuid,
             force_create,
             dump_snapshot: false,

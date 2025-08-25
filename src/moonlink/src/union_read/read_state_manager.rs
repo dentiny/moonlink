@@ -141,7 +141,7 @@ impl ReadStateManager {
         commit_lsn: u64,
     ) -> bool {
         // Sanity check on read side: iceberg snapshot LSN <= mooncake snapshot LSN <= commit LSN <= replication LSN
-        if snapshot_lsn != NO_SNAPSHOT_LSN && commit_lsn != NO_COMMIT_LSN {
+        if snapshot_lsn != NO_SNAPSHOT_LSN {
             ma::assert_le!(snapshot_lsn, commit_lsn);
         }
         ma::assert_le!(commit_lsn, replication_lsn);

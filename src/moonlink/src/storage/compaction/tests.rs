@@ -66,7 +66,6 @@ async fn test_data_file_compaction_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: FileSystemAccessor::default_for_test(&temp_dir),
@@ -151,7 +150,6 @@ async fn test_data_file_compaction_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -240,7 +238,6 @@ async fn test_data_file_compaction_3() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -322,7 +319,6 @@ async fn test_data_file_compaction_4() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: FileSystemAccessor::default_for_test(&temp_dir),
@@ -439,7 +435,6 @@ async fn test_data_file_compaction_5() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -563,7 +558,6 @@ async fn test_data_file_compaction_6() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -654,7 +648,6 @@ async fn test_data_file_compaction_7() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -728,7 +721,6 @@ async fn test_data_file_compaction_8() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -823,7 +815,6 @@ async fn test_data_file_compaction_9() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -920,7 +911,6 @@ async fn test_data_file_compaction_10() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -1041,7 +1031,6 @@ async fn test_multiple_compacted_data_files_1() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -1178,7 +1167,6 @@ async fn test_multiple_compacted_data_files_2() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: filesystem_accessor.clone(),
@@ -1242,7 +1230,6 @@ async fn test_large_number_of_data_files() {
 
     // Prepare compaction payload.
     let payload = DataCompactionPayload {
-        id: 0, // Unused.
         uuid: uuid::Uuid::new_v4(),
         object_storage_cache: create_test_object_storage_cache(&temp_dir),
         filesystem_accessor: FileSystemAccessor::default_for_test(&temp_dir),

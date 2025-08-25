@@ -12,8 +12,6 @@ use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedR
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::index::{cache_utils as index_cache_utils, FileIndex};
 use crate::storage::mooncake_table::persistence_buffer::UnpersistedRecords;
-use crate::storage::mooncake_table::replay::event_id_assigner::EventIdAssigner;
-use crate::storage::mooncake_table::replay::replay_events::BackgroundEventId;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::BatchIdCounter;
 use crate::storage::mooncake_table::MoonlinkRow;
@@ -82,9 +80,6 @@ pub(crate) struct SnapshotTableState {
 
     /// Batch ID counter for non-streaming operations
     pub(super) non_streaming_batch_id_counter: Arc<BatchIdCounter>,
-
-    /// Used to generated monotonically increasing id to differentiate each replay events.
-    pub(super) event_id_assigner: EventIdAssigner,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,8 +95,6 @@ pub struct PuffinDeletionBlobAtRead {
 #[derive(Clone)]
 pub struct MooncakeSnapshotOutput {
     /// Table event id.
-    pub(crate) id: BackgroundEventId,
-    /// UUID for the current mooncake snapshot result.
     pub(crate) uuid: uuid::Uuid,
     /// Committed LSN for mooncake snapshot.
     pub(crate) commit_lsn: u64,
@@ -120,7 +113,6 @@ pub struct MooncakeSnapshotOutput {
 impl std::fmt::Debug for MooncakeSnapshotOutput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MooncakeSnapshotOutput")
-            .field("id", &self.id)
             .field("uuid", &self.uuid)
             .field("commit", &self.commit_lsn)
             .field("iceberg_snapshot_payload", &self.iceberg_snapshot_payload)
@@ -163,7 +155,6 @@ impl SnapshotTableState {
         filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
         current_snapshot: Snapshot,
         non_streaming_batch_id_counter: Arc<BatchIdCounter>,
-        event_id_assigner: EventIdAssigner,
     ) -> Result<Self> {
         let mut batches = BTreeMap::new();
         // Properly load a batch ID from the counter to ensure correspondence with MemSlice.
@@ -188,7 +179,6 @@ impl SnapshotTableState {
             uncommitted_deletion_log: Vec::new(),
             unpersisted_records: UnpersistedRecords::new(table_config),
             non_streaming_batch_id_counter,
-            event_id_assigner,
         })
     }
 
@@ -484,8 +474,6 @@ impl SnapshotTableState {
         mut task: SnapshotTask,
         opt: SnapshotOption,
     ) -> MooncakeSnapshotOutput {
-        // Validate event id is assigned.
-        assert!(opt.id.is_some());
         // Validate mooncake table operation invariants.
         self.validate_mooncake_table_invariants(&task, &opt);
         // Validate persistence results.
@@ -632,7 +620,6 @@ impl SnapshotTableState {
         }
 
         MooncakeSnapshotOutput {
-            id: opt.id.unwrap(),
             uuid: opt.uuid,
             commit_lsn: self.current_snapshot.snapshot_version,
             iceberg_snapshot_payload,

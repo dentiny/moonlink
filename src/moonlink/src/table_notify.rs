@@ -1,5 +1,4 @@
 use crate::row::MoonlinkRow;
-use crate::storage::mooncake_table::replay::replay_events::BackgroundEventId;
 use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 use crate::storage::mooncake_table::DataCompactionPayload;
 use crate::storage::mooncake_table::DataCompactionResult;
@@ -97,7 +96,7 @@ pub enum TableEvent {
     },
     FlushResult {
         /// Background event id.
-        id: BackgroundEventId,
+        uuid: uuid::Uuid,
         /// Transaction ID
         xact_id: Option<u32>,
         /// Result for mem slice flush.

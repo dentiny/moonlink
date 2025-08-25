@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 use crate::row::MoonlinkRow;
 use crate::storage::compaction::table_compaction::SingleFileToCompact;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
-use crate::storage::mooncake_table::replay::event_id_assigner::EventIdAssigner;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, FileIndiceMergePayload, IcebergSnapshotImportPayload,
@@ -16,9 +15,6 @@ use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::storage_utils::{FileId, RecordLocation, TableUniqueFileId};
 use crate::NonEvictableHandle;
-
-/// Type alias for background event id.
-pub type BackgroundEventId = u64;
 
 /// =====================
 /// Foreground operations
@@ -60,8 +56,8 @@ pub struct AbortEvent {
 /// =====================
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FlushEventInitiation {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     /// Transaction id, only assigned on streaming ones.
     pub xact_id: Option<u32>,
     /// Flush LSN.
@@ -72,8 +68,8 @@ pub struct FlushEventInitiation {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FlushEventCompletion {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     /// flushed file ids.
     pub file_ids: Vec<FileId>,
 }
@@ -83,16 +79,16 @@ pub struct FlushEventCompletion {
 /// =====================
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MooncakeSnapshotEventInitiation {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     /// Mooncake snapshot options.
     pub option: SnapshotOption,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MooncakeSnapshotEventCompletion {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
 }
 
 /// =====================
@@ -140,8 +136,8 @@ pub struct IcebergDataCompactionEvent {
 /// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IcebergSnapshotEventInitiation {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     /// Flush LSN.
     pub flush_lsn: u64,
     /// Committed deletion logs included in the current iceberg snapshot persistence operation, which is used to prune after persistence completion.
@@ -156,8 +152,8 @@ pub struct IcebergSnapshotEventInitiation {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IcebergSnapshotEventCompletion {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
 }
 
 /// =====================
@@ -167,8 +163,8 @@ pub struct IcebergSnapshotEventCompletion {
 /// For the ease of serde, replay event only stores necessary part of [`FileIndiceMergePayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IndexMergeEventInitiation {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     /// Index merge payload.
     /// [`Vec<FileId>`] indicates the data files referenced by file indices.
     pub index_merge_payload: Vec<Vec<FileId>>,
@@ -176,8 +172,8 @@ pub struct IndexMergeEventInitiation {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IndexMergeEventCompletion {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
 }
 
 /// =====================
@@ -203,8 +199,8 @@ pub struct SingleCompactionPayloadEvent {
 /// For the ease of serde, replay event only stores necessary part of [`DataCompactionPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DataCompactionEventInitiation {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     /// Data files to compact.
     pub data_files: Vec<SingleCompactionPayloadEvent>,
     /// File indices to compact.
@@ -214,8 +210,8 @@ pub struct DataCompactionEventInitiation {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DataCompactionEventCompletion {
-    /// Unique event id, assigned globally.
-    pub id: BackgroundEventId,
+    /// Event id.
+    pub uuid: uuid::Uuid,
     pub data_files: Vec<FileId>,
 }
 
@@ -276,38 +272,35 @@ pub fn create_abort_event(xact_id: u32) -> AbortEvent {
 }
 /// Create flush events.
 pub fn create_flush_event_initiation(
-    event_id: u64,
+    uuid: uuid::Uuid,
     xact_id: Option<u32>,
     lsn: Option<u64>,
     commit_check_point: RecordLocation,
 ) -> FlushEventInitiation {
     FlushEventInitiation {
-        id: event_id,
+        uuid,
         xact_id,
         lsn,
         commit_check_point,
     }
 }
 pub fn create_flush_event_completion(
-    id: BackgroundEventId,
+    uuid: uuid::Uuid,
     file_ids: Vec<FileId>,
 ) -> FlushEventCompletion {
-    FlushEventCompletion { id, file_ids }
+    FlushEventCompletion { uuid, file_ids }
 }
 /// Create mooncake snapshot events.
 pub fn create_mooncake_snapshot_event_initiation(
-    event_id: u64,
+    uuid: uuid::Uuid,
     option: SnapshotOption,
 ) -> MooncakeSnapshotEventInitiation {
-    MooncakeSnapshotEventInitiation {
-        id: event_id,
-        option,
-    }
+    MooncakeSnapshotEventInitiation { uuid, option }
 }
 pub fn create_mooncake_snapshot_event_completion(
-    id: BackgroundEventId,
+    uuid: uuid::Uuid,
 ) -> MooncakeSnapshotEventCompletion {
-    MooncakeSnapshotEventCompletion { id }
+    MooncakeSnapshotEventCompletion { uuid }
 }
 /// Create iceberg snapshot events.
 pub fn get_iceberg_snapshot_import_payload(
@@ -404,11 +397,11 @@ pub fn get_iceberg_data_compaction_payload(
     }
 }
 pub fn create_iceberg_snapshot_event_initiation(
-    event_id: u64,
+    uuid: uuid::Uuid,
     payload: &IcebergSnapshotPayload,
 ) -> IcebergSnapshotEventInitiation {
     IcebergSnapshotEventInitiation {
-        id: event_id,
+        uuid,
         flush_lsn: payload.flush_lsn,
         committed_deletion_logs: payload.committed_deletion_logs.clone(),
         import_payload: get_iceberg_snapshot_import_payload(&payload.import_payload),
@@ -419,17 +412,17 @@ pub fn create_iceberg_snapshot_event_initiation(
     }
 }
 pub fn create_iceberg_snapshot_event_completion(
-    id: BackgroundEventId,
+    uuid: uuid::Uuid,
 ) -> IcebergSnapshotEventCompletion {
-    IcebergSnapshotEventCompletion { id }
+    IcebergSnapshotEventCompletion { uuid }
 }
 /// Create index merge events.
 pub fn create_index_merge_event_initiation(
-    event_id: u64,
+    uuid: uuid::Uuid,
     payload: &FileIndiceMergePayload,
 ) -> IndexMergeEventInitiation {
     IndexMergeEventInitiation {
-        id: event_id,
+        uuid,
         index_merge_payload: payload
             .file_indices
             .iter()
@@ -443,8 +436,8 @@ pub fn create_index_merge_event_initiation(
             .collect::<Vec<_>>(),
     }
 }
-pub fn create_index_merge_event_completion(id: BackgroundEventId) -> IndexMergeEventCompletion {
-    IndexMergeEventCompletion { id }
+pub fn create_index_merge_event_completion(uuid: uuid::Uuid) -> IndexMergeEventCompletion {
+    IndexMergeEventCompletion { uuid }
 }
 /// Create data compaction events.
 pub fn get_cache_handle_event(cache_handle: &Option<PuffinBlobRef>) -> Option<CacheHandleEvent> {
@@ -464,11 +457,11 @@ pub fn get_file_compaction_payload(
     }
 }
 pub fn create_data_compaction_event_initiation(
-    event_id: u64,
+    uuid: uuid::Uuid,
     payload: &DataCompactionPayload,
 ) -> DataCompactionEventInitiation {
     DataCompactionEventInitiation {
-        id: event_id,
+        uuid,
         data_files: payload
             .disk_files
             .iter()
@@ -488,8 +481,8 @@ pub fn create_data_compaction_event_initiation(
     }
 }
 pub fn create_data_compaction_event_completion(
-    id: BackgroundEventId,
+    uuid: uuid::Uuid,
     data_files: Vec<FileId>,
 ) -> DataCompactionEventCompletion {
-    DataCompactionEventCompletion { id, data_files }
+    DataCompactionEventCompletion { uuid, data_files }
 }
