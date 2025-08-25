@@ -243,6 +243,8 @@ pub async fn run_rest_event_loop(
                     }
                 }
             }
+            // All channels are closed.
+            else => break,
         }
     }
 
