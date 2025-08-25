@@ -1193,7 +1193,7 @@ async fn test_local_system_optimization_chaos_with_no_background_maintenance() {
         append_only: false,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 50,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,

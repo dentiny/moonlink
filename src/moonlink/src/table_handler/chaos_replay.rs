@@ -2,9 +2,7 @@ use std::collections::{btree_map, HashMap, HashSet};
 
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
-use crate::storage::mooncake_table::replay::replay_events::{
-    BackgroundEventId, MooncakeTableEvent,
-};
+use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
 use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::DiskSliceWriter;
@@ -139,29 +137,27 @@ pub(crate) async fn replay() {
 
     // Current table states.
     let mut ongoing_flush_event_id = HashSet::new();
-    let completed_flush_events: Arc<Mutex<HashMap<BackgroundEventId, CompletedFlush>>> =
+    let completed_flush_events: Arc<Mutex<HashMap<uuid::Uuid, CompletedFlush>>> =
         Arc::new(Mutex::new(HashMap::new()));
     let completed_flush_events_clone = completed_flush_events.clone();
 
     let mut ongoing_mooncake_snapshot_id = HashSet::new();
-    let completed_mooncake_snapshots: Arc<
-        Mutex<HashMap<BackgroundEventId, CompletedMooncakeSnapshot>>,
-    > = Arc::new(Mutex::new(HashMap::new()));
+    let completed_mooncake_snapshots: Arc<Mutex<HashMap<uuid::Uuid, CompletedMooncakeSnapshot>>> =
+        Arc::new(Mutex::new(HashMap::new()));
     let completed_mooncake_snapshots_clone = completed_mooncake_snapshots.clone();
 
     let mut ongoing_iceberg_snapshot_id = HashSet::new();
-    let completed_iceberg_snapshots: Arc<
-        Mutex<HashMap<BackgroundEventId, CompletedIcebergSnapshot>>,
-    > = Arc::new(Mutex::new(HashMap::new()));
+    let completed_iceberg_snapshots: Arc<Mutex<HashMap<uuid::Uuid, CompletedIcebergSnapshot>>> =
+        Arc::new(Mutex::new(HashMap::new()));
     let completed_iceberg_snapshots_clone = completed_iceberg_snapshots.clone();
 
     let mut ongoing_index_merge_id = HashSet::new();
-    let completed_index_merge: Arc<Mutex<HashMap<BackgroundEventId, CompletedIndexMerge>>> =
+    let completed_index_merge: Arc<Mutex<HashMap<uuid::Uuid, CompletedIndexMerge>>> =
         Arc::new(Mutex::new(HashMap::new()));
     let completed_index_merge_clone = completed_index_merge.clone();
 
     let mut ongoing_data_compaction_id = HashSet::new();
-    let completed_data_compaction: Arc<Mutex<HashMap<BackgroundEventId, CompletedDataCompaction>>> =
+    let completed_data_compaction: Arc<Mutex<HashMap<uuid::Uuid, CompletedDataCompaction>>> =
         Arc::new(Mutex::new(HashMap::new()));
     let completed_data_compaction_clone = completed_data_compaction.clone();
 
@@ -187,7 +183,7 @@ pub(crate) async fn replay() {
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
-                    id,
+                    uuid,
                     xact_id,
                     flush_result,
                 } => {
@@ -196,7 +192,7 @@ pub(crate) async fn replay() {
                         flush_result,
                     };
                     let mut guard = completed_flush_events_clone.lock().await;
-                    assert!(guard.insert(id, completed_flush).is_none());
+                    assert!(guard.insert(uuid, completed_flush).is_none());
                     event_notification.notify_waiters();
                 }
                 TableEvent::MooncakeTableSnapshotResult {
@@ -214,7 +210,7 @@ pub(crate) async fn replay() {
                         let mut guard = pending_iceberg_snapshot_payloads.lock().await;
                         assert!(guard
                             .insert(
-                                iceberg_snapshot_payload.id,
+                                iceberg_snapshot_payload.uuid,
                                 iceberg_snapshot_payload.clone()
                             )
                             .is_none());
@@ -225,7 +221,7 @@ pub(crate) async fn replay() {
                     {
                         TableMaintenanceStatus::Payload(payload) => {
                             let mut guard = pending_index_merge_payloads.lock().await;
-                            assert!(guard.insert(payload.id, payload.clone()).is_none());
+                            assert!(guard.insert(payload.uuid, payload.clone()).is_none());
                         }
                         _ => {}
                     }
@@ -235,7 +231,7 @@ pub(crate) async fn replay() {
                     {
                         TableMaintenanceStatus::Payload(payload) => {
                             let mut guard = pending_data_compaction_payloads.lock().await;
-                            assert!(guard.insert(payload.id, payload.clone()).is_none());
+                            assert!(guard.insert(payload.uuid, payload.clone()).is_none());
                         }
                         _ => {}
                     }
@@ -243,7 +239,7 @@ pub(crate) async fn replay() {
                     let mut guard = completed_mooncake_snapshots_clone.lock().await;
                     assert!(guard
                         .insert(
-                            completed_mooncake_snapshot.mooncake_snapshot_result.id,
+                            completed_mooncake_snapshot.mooncake_snapshot_result.uuid,
                             completed_mooncake_snapshot
                         )
                         .is_none());
@@ -256,7 +252,7 @@ pub(crate) async fn replay() {
                     let mut guard = completed_iceberg_snapshots_clone.lock().await;
                     assert!(guard
                         .insert(
-                            iceberg_snapshot_result.id,
+                            iceberg_snapshot_result.uuid,
                             CompletedIcebergSnapshot {
                                 iceberg_snapshot_result
                             }
@@ -268,7 +264,7 @@ pub(crate) async fn replay() {
                     let mut guard = completed_index_merge_clone.lock().await;
                     assert!(guard
                         .insert(
-                            index_merge_result.id,
+                            index_merge_result.uuid,
                             CompletedIndexMerge { index_merge_result }
                         )
                         .is_none());
@@ -281,7 +277,7 @@ pub(crate) async fn replay() {
                     let mut guard = completed_data_compaction_clone.lock().await;
                     assert!(guard
                         .insert(
-                            data_compaction_result.id,
+                            data_compaction_result.uuid,
                             CompletedDataCompaction {
                                 data_compaction_result
                             }
@@ -342,7 +338,7 @@ pub(crate) async fn replay() {
             // Flush operation
             // =====================
             MooncakeTableEvent::FlushInitiation(flush_initiation_event) => {
-                assert!(ongoing_flush_event_id.insert(flush_initiation_event.id));
+                assert!(ongoing_flush_event_id.insert(flush_initiation_event.uuid));
                 if let Some(xact_id) = flush_initiation_event.xact_id {
                     table
                         .flush_stream(xact_id, flush_initiation_event.lsn)
@@ -352,11 +348,11 @@ pub(crate) async fn replay() {
                 }
             }
             MooncakeTableEvent::FlushCompletion(flush_completion_event) => {
-                assert!(ongoing_flush_event_id.remove(&flush_completion_event.id));
+                assert!(ongoing_flush_event_id.remove(&flush_completion_event.uuid));
                 loop {
                     let completed_flush_event = {
                         let mut guard = completed_flush_events.lock().await;
-                        guard.remove(&flush_completion_event.id)
+                        guard.remove(&flush_completion_event.uuid)
                     };
                     if let Some(completed_flush_event) = completed_flush_event {
                         if let Some(disk_slice) = completed_flush_event.flush_result {
@@ -370,10 +366,10 @@ pub(crate) async fn replay() {
                                 table.apply_stream_flush_result(
                                     xact_id,
                                     disk_slice,
-                                    flush_completion_event.id,
+                                    flush_completion_event.uuid,
                                 );
                             } else {
-                                table.apply_flush_result(disk_slice, flush_completion_event.id);
+                                table.apply_flush_result(disk_slice, flush_completion_event.uuid);
                             }
                             // Check newly persisted disk files.
                             let expected_disk_files_count =
@@ -391,18 +387,18 @@ pub(crate) async fn replay() {
             // Mooncake snapshot
             // =====================
             MooncakeTableEvent::MooncakeSnapshotInitiation(snapshot_initiation_event) => {
-                assert!(ongoing_mooncake_snapshot_id.insert(snapshot_initiation_event.id));
+                assert!(ongoing_mooncake_snapshot_id.insert(snapshot_initiation_event.uuid));
                 let mut snapshot_option = snapshot_initiation_event.option.clone();
                 snapshot_option.dump_snapshot = true;
                 // Event only recorded when snapshot gets created in source run.
                 assert!(table.create_snapshot(snapshot_option));
             }
             MooncakeTableEvent::MooncakeSnapshotCompletion(snapshot_completion_event) => {
-                assert!(ongoing_mooncake_snapshot_id.remove(&snapshot_completion_event.id));
+                assert!(ongoing_mooncake_snapshot_id.remove(&snapshot_completion_event.uuid));
                 loop {
                     let completed_mooncake_snapshot = {
                         let mut guard = completed_mooncake_snapshots.lock().await;
-                        guard.remove(&snapshot_completion_event.id)
+                        guard.remove(&snapshot_completion_event.uuid)
                     };
                     if let Some(completed_mooncake_snapshot) = completed_mooncake_snapshot {
                         let actual_disk_files = completed_mooncake_snapshot
@@ -431,22 +427,22 @@ pub(crate) async fn replay() {
             // Iceberg snapshot
             // =====================
             MooncakeTableEvent::IcebergSnapshotInitiation(snapshot_initiation_event) => {
-                assert!(ongoing_iceberg_snapshot_id.insert(snapshot_initiation_event.id));
+                assert!(ongoing_iceberg_snapshot_id.insert(snapshot_initiation_event.uuid));
                 let payload = {
                     let mut guard = pending_iceberg_snapshot_payloads_clone.lock().await;
-                    let payload = guard.remove(&snapshot_initiation_event.id).unwrap();
-                    let rest = guard.split_off(&snapshot_initiation_event.id);
+                    let payload = guard.remove(&snapshot_initiation_event.uuid).unwrap();
+                    let rest = guard.split_off(&snapshot_initiation_event.uuid);
                     *guard = rest;
                     payload
                 };
                 table.persist_iceberg_snapshot(payload);
             }
             MooncakeTableEvent::IcebergSnapshotCompletion(snapshot_completion_event) => {
-                assert!(ongoing_iceberg_snapshot_id.remove(&snapshot_completion_event.id));
+                assert!(ongoing_iceberg_snapshot_id.remove(&snapshot_completion_event.uuid));
                 loop {
                     let completed_iceberg_snapshot_event = {
                         let mut guard = completed_iceberg_snapshots.lock().await;
-                        guard.remove(&snapshot_completion_event.id)
+                        guard.remove(&snapshot_completion_event.uuid)
                     };
                     if let Some(completed_iceberg_snapshot) = completed_iceberg_snapshot_event {
                         table.set_iceberg_snapshot_res(
@@ -462,22 +458,22 @@ pub(crate) async fn replay() {
             // Index merge events
             // =====================
             MooncakeTableEvent::IndexMergeInitiation(index_merge_initiation_event) => {
-                assert!(ongoing_index_merge_id.insert(index_merge_initiation_event.id));
+                assert!(ongoing_index_merge_id.insert(index_merge_initiation_event.uuid));
                 let payload = {
                     let mut guard = pending_index_merge_payloads_clone.lock().await;
-                    let payload = guard.remove(&index_merge_initiation_event.id).unwrap();
-                    let rest = guard.split_off(&index_merge_initiation_event.id);
+                    let payload = guard.remove(&index_merge_initiation_event.uuid).unwrap();
+                    let rest = guard.split_off(&index_merge_initiation_event.uuid);
                     *guard = rest;
                     payload
                 };
                 table.perform_index_merge(payload);
             }
             MooncakeTableEvent::IndexMergeCompletion(index_merge_completion_event) => {
-                assert!(ongoing_index_merge_id.remove(&index_merge_completion_event.id));
+                assert!(ongoing_index_merge_id.remove(&index_merge_completion_event.uuid));
                 loop {
                     let completed_index_merge_event = {
                         let mut guard = completed_index_merge.lock().await;
-                        guard.remove(&index_merge_completion_event.id)
+                        guard.remove(&index_merge_completion_event.uuid)
                     };
                     if let Some(completed_index_merge) = completed_index_merge_event {
                         table.set_file_indices_merge_res(completed_index_merge.index_merge_result);
@@ -491,22 +487,24 @@ pub(crate) async fn replay() {
             // Data compaction events
             // =====================
             MooncakeTableEvent::DataCompactionInitiation(data_compaction_initiation_event) => {
-                assert!(ongoing_data_compaction_id.insert(data_compaction_initiation_event.id));
+                assert!(ongoing_data_compaction_id.insert(data_compaction_initiation_event.uuid));
                 let payload = {
                     let mut guard = pending_data_compaction_payloads_clone.lock().await;
-                    let payload = guard.remove(&data_compaction_initiation_event.id).unwrap();
-                    let rest = guard.split_off(&data_compaction_initiation_event.id);
+                    let payload = guard
+                        .remove(&data_compaction_initiation_event.uuid)
+                        .unwrap();
+                    let rest = guard.split_off(&data_compaction_initiation_event.uuid);
                     *guard = rest;
                     payload
                 };
                 table.perform_data_compaction(payload);
             }
             MooncakeTableEvent::DataCompactionCompletion(data_compaction_completion_event) => {
-                assert!(ongoing_data_compaction_id.remove(&data_compaction_completion_event.id));
+                assert!(ongoing_data_compaction_id.remove(&data_compaction_completion_event.uuid));
                 loop {
                     let completed_data_compaction_event = {
                         let mut guard = completed_data_compaction.lock().await;
-                        guard.remove(&data_compaction_completion_event.id)
+                        guard.remove(&data_compaction_completion_event.uuid)
                     };
                     if let Some(completed_data_compaction) = completed_data_compaction_event {
                         let data_compaction_result =

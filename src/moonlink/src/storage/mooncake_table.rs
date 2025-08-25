@@ -754,7 +754,7 @@ impl MooncakeTable {
     ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_mooncake_snapshot_event_completion(
-                mooncake_snapshot_res.uuid.clone(),
+                mooncake_snapshot_res.uuid,
             );
             event_replay_tx
                 .send(MooncakeTableEvent::MooncakeSnapshotCompletion(table_event))
@@ -767,9 +767,8 @@ impl MooncakeTable {
         iceberg_snapshot_res: &IcebergSnapshotResult,
     ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
-            let table_event = replay_events::create_iceberg_snapshot_event_completion(
-                iceberg_snapshot_res.uuid.clone(),
-            );
+            let table_event =
+                replay_events::create_iceberg_snapshot_event_completion(iceberg_snapshot_res.uuid);
             event_replay_tx
                 .send(MooncakeTableEvent::IcebergSnapshotCompletion(table_event))
                 .unwrap();
@@ -950,10 +949,8 @@ impl MooncakeTable {
     fn create_snapshot_impl(&mut self, opt: SnapshotOption) {
         // Record mooncake snapshot event initiation.
         if let Some(event_replay_tx) = &self.event_replay_tx {
-            let table_event = replay_events::create_mooncake_snapshot_event_initiation(
-                opt.uuid.clone(),
-                opt.clone(),
-            );
+            let table_event =
+                replay_events::create_mooncake_snapshot_event_initiation(opt.uuid, opt.clone());
             event_replay_tx
                 .send(MooncakeTableEvent::MooncakeSnapshotInitiation(table_event))
                 .unwrap();
@@ -1520,7 +1517,7 @@ impl MooncakeTable {
         let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
         let table_auto_incr_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
         self.next_file_id += new_file_ids_to_create;
-        let table_event_id = snapshot_payload.uuid.clone();
+        let table_event_id = snapshot_payload.uuid;
         tokio::task::spawn(
             Self::persist_iceberg_snapshot_impl(
                 iceberg_table_manager,
