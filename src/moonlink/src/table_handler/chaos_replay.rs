@@ -13,6 +13,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_notify::{TableEvent, TableMaintenanceStatus};
+use crate::MooncakeTableConfig;
 use crate::{Result, StorageConfig};
 
 use std::sync::Arc;
@@ -68,16 +69,23 @@ async fn create_mooncake_table_for_replay(
 ) -> MooncakeTable {
     let line = lines.next_line().await.unwrap().unwrap();
     let replay_table_metadata: ReplayTableMetadata = serde_json::from_str(&line).unwrap();
-    let table_metadata = create_test_table_metadata_disable_flush_with_full_config(
-        replay_env
-            .table_temp_dir
-            .path()
-            .to_str()
-            .unwrap()
-            .to_string(),
-        create_disk_writer_config(),
-        replay_table_metadata.config.file_index_config,
-        replay_table_metadata.config.data_compaction_config,
+    let local_table_directory = replay_env
+        .table_temp_dir
+        .path()
+        .to_str()
+        .unwrap()
+        .to_string();
+    let mut mooncake_table_config = MooncakeTableConfig::new(local_table_directory.clone());
+    mooncake_table_config.mem_slice_size = usize::MAX; // Disable flush at commit if not force flush.
+    mooncake_table_config.append_only = replay_table_metadata.config.append_only;
+    mooncake_table_config.disk_slice_writer_config = create_disk_writer_config();
+    mooncake_table_config.file_index_config = replay_table_metadata.config.file_index_config;
+    mooncake_table_config.data_compaction_config =
+        replay_table_metadata.config.data_compaction_config;
+
+    let table_metadata = create_test_table_metadata_with_config_and_identity(
+        local_table_directory,
+        mooncake_table_config,
         replay_table_metadata.identity.clone(),
     );
     let object_storage_cache = if replay_table_metadata.local_filesystem_optimization_enabled {
@@ -116,7 +124,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_5fl4gg617x7v";
+    let replay_filepath = "/tmp/chaos_test_5x1yp1jigz5d";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
