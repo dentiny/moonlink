@@ -35,11 +35,16 @@ impl RestSink {
     }
 
     /// Add a table to the REST sink
-    /// 
+    ///
     /// # Arguments
     ///
     /// * persist_lsn: only assigned at recovery, used to indicate and update commit LSN and replication LSN.
-    pub fn add_table(&mut self, src_table_id: SrcTableId, table_status: TableStatus, persist_lsn: Option<u64>) -> Result<()> {
+    pub fn add_table(
+        &mut self,
+        src_table_id: SrcTableId,
+        table_status: TableStatus,
+        persist_lsn: Option<u64>,
+    ) -> Result<()> {
         // Update per-table commit LSN.
         if let Some(persist_lsn) = persist_lsn {
             table_status.commit_lsn_tx.send(persist_lsn).unwrap();
@@ -297,7 +302,8 @@ mod tests {
 
         // Add table to sink
         let src_table_id = 1;
-        sink.add_table(src_table_id, table_status).unwrap();
+        sink.add_table(src_table_id, table_status, /*persist_lsn=*/ None)
+            .unwrap();
 
         // Create a test event
         let test_row = MoonlinkRow::new(vec![
@@ -396,7 +402,8 @@ mod tests {
         };
 
         let src_table_id = 1;
-        sink.add_table(src_table_id, table_status).unwrap();
+        sink.add_table(src_table_id, table_status, /*persist_lsn=*/ None)
+            .unwrap();
 
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(42)]);
 
@@ -483,8 +490,10 @@ mod tests {
         };
 
         // Add two tables
-        sink.add_table(1, table_status_1).unwrap();
-        sink.add_table(2, table_status_2).unwrap();
+        sink.add_table(1, table_status_1, /*persist_lsn=*/ None)
+            .unwrap();
+        sink.add_table(2, table_status_2, /*persist_lsn=*/ None)
+            .unwrap();
 
         // Test different operation types
         let test_row = MoonlinkRow::new(vec![RowValue::Int32(1)]);
