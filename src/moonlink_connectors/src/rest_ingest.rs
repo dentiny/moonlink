@@ -190,7 +190,7 @@ pub async fn run_rest_event_loop(
                         event_sender,
                         commit_lsn_tx,
                     };
-                    sink.add_table(src_table_id, table_status)?;
+                    sink.add_table(src_table_id, table_status, persist_lsn)?;
 
                     // Add to source (handles schema and request processing)
                     rest_source.add_table(src_table_name.clone(), src_table_id, schema, persist_lsn)?;
