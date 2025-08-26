@@ -1,5 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
+use crate::row::MoonlinkRow;
+use crate::row::RowValue;
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
 use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
@@ -12,13 +14,16 @@ use crate::storage::mooncake_table::{
 };
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
+use crate::table_handler::test_utils::check_read_snapshot;
 use crate::table_notify::{TableEvent, TableMaintenanceStatus};
 use crate::MooncakeTableConfig;
+use crate::ReadStateManager;
 use crate::{Result, StorageConfig};
 
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
 use tokio::io::AsyncBufReadExt;
+use tokio::sync::watch;
 use tokio::sync::Notify;
 use tokio::sync::{mpsc, Mutex};
 
@@ -61,6 +66,15 @@ struct ReplayEnvironment {
 
 fn create_disk_writer_config() -> DiskSliceWriterConfig {
     DiskSliceWriterConfig::default()
+}
+
+/// Util function to get id from the given moonlink row.
+fn get_id_from_row(row: &MoonlinkRow) -> i32 {
+    let val = &row.values[0];
+    match val {
+        RowValue::Int32(id) => *id,
+        _ => panic!("First element should be int32"),
+    }
 }
 
 async fn create_mooncake_table_for_replay(
@@ -124,7 +138,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_tyxmnalugbgf";
+    let replay_filepath = "/tmp/chaos_test_g8bey026i61i";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -169,8 +183,6 @@ pub(crate) async fn replay() {
         Arc::new(Mutex::new(HashMap::new()));
     let completed_data_compaction_clone = completed_data_compaction.clone();
 
-    // Expected table snapshot.
-    let mut snapshot_disk_files = HashSet::new();
     // Pending background tasks to issue.
     // Maps from event id to payload.
     let pending_iceberg_snapshot_payloads = Arc::new(Mutex::new(HashMap::new()));
@@ -185,6 +197,17 @@ pub(crate) async fn replay() {
     let (event_replay_sender, _event_replay_receiver) = mpsc::unbounded_channel();
     table.register_table_notify(table_event_sender).await;
     table.register_event_replay_tx(Some(event_replay_sender));
+    let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
+    let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
+    let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| local_filepath);
+    let read_state_manager = ReadStateManager::new(
+        &table,
+        replication_lsn_rx,
+        commit_lsn_rx,
+        read_state_filepath_remap,
+    );
+    let mut latest_commit_lsn = 0;
+
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
         while let Some(table_event) = table_event_receiver.recv().await {
@@ -298,6 +321,13 @@ pub(crate) async fn replay() {
         }
     });
 
+    // Used to indicate valid rows.
+    let mut committed_ids = HashSet::new();
+    // Ids for the current ongoing transaction to append, which could be aborted.
+    let mut uncommitted_appended_ids = HashSet::new();
+    // Ids for the current ongoing transaction to delete, which could be aborted.
+    let mut uncommitted_deleted_ids = HashSet::new();
+
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
@@ -306,6 +336,11 @@ pub(crate) async fn replay() {
             // Foreground operations
             // =====================
             MooncakeTableEvent::Append(append_event) => {
+                // Update in-memory state.
+                let id = get_id_from_row(&append_event.row);
+                assert!(uncommitted_appended_ids.insert(id));
+
+                // Apply update to mooncake table.
                 if let Some(xact_id) = append_event.xact_id {
                     table
                         .append_in_stream_batch(append_event.row, xact_id)
@@ -315,6 +350,15 @@ pub(crate) async fn replay() {
                 }
             }
             MooncakeTableEvent::Delete(delete_event) => {
+                // Update in-memory state.
+                let id = get_id_from_row(&delete_event.row);
+                if uncommitted_appended_ids.contains(&id) {
+                    uncommitted_appended_ids.remove(&id);
+                } else {
+                    assert!(uncommitted_deleted_ids.insert(id));
+                }
+
+                // Apply update to mooncake table.
                 if let Some(xact_id) = delete_event.xact_id {
                     table
                         .delete_in_stream_batch(delete_event.row, xact_id)
@@ -326,6 +370,24 @@ pub(crate) async fn replay() {
                 }
             }
             MooncakeTableEvent::Commit(commit_event) => {
+                // Update in-memory state.
+                let appended = std::mem::take(&mut uncommitted_appended_ids);
+                let deleted = std::mem::take(&mut uncommitted_deleted_ids);
+                {
+                    for cur_append in appended.into_iter() {
+                        assert!(committed_ids.insert(cur_append));
+                    }
+                    for cur_delete in deleted.into_iter() {
+                        assert!(committed_ids.remove(&cur_delete));
+                    }
+                }
+
+                // Update LSN.
+                commit_lsn_tx.send(commit_event.lsn).unwrap();
+                replication_lsn_tx.send(commit_event.lsn).unwrap();
+                latest_commit_lsn = commit_event.lsn;
+
+                // Apply update to mooncake table.
                 if let Some(xact_id) = commit_event.xact_id {
                     table
                         .commit_transaction_stream_impl(xact_id, commit_event.lsn)
@@ -335,11 +397,11 @@ pub(crate) async fn replay() {
                 }
             }
             MooncakeTableEvent::Abort(abort_event) => {
-                let flushed_disk_files =
-                    table.get_stream_transaction_disk_files(abort_event.xact_id);
-                for cur_disk_file in flushed_disk_files.into_iter() {
-                    assert!(snapshot_disk_files.remove(&cur_disk_file));
-                }
+                // Update in-memory state.
+                uncommitted_appended_ids.clear();
+                uncommitted_deleted_ids.clear();
+
+                // Apply update to mooncake table.
                 table.abort_in_stream_batch(abort_event.xact_id);
             }
             // =====================
@@ -368,11 +430,6 @@ pub(crate) async fn replay() {
                     if let Some(completed_flush_event) = completed_flush_event {
                         if let Some(disk_slice) = completed_flush_event.flush_result {
                             let disk_slice = disk_slice.unwrap();
-                            let new_disk_file_ids = disk_slice
-                                .output_files()
-                                .iter()
-                                .map(|f| f.0.file_id())
-                                .collect::<Vec<_>>();
                             if let Some(xact_id) = completed_flush_event.xact_id {
                                 table.apply_stream_flush_result(
                                     xact_id,
@@ -382,11 +439,6 @@ pub(crate) async fn replay() {
                             } else {
                                 table.apply_flush_result(disk_slice, flush_completion_event.uuid);
                             }
-                            // Check newly persisted disk files.
-                            let expected_disk_files_count =
-                                snapshot_disk_files.len() + new_disk_file_ids.len();
-                            snapshot_disk_files.extend(new_disk_file_ids);
-                            assert_eq!(expected_disk_files_count, snapshot_disk_files.len());
                         }
                         break;
                     }
@@ -412,27 +464,30 @@ pub(crate) async fn replay() {
                         guard.remove(&snapshot_completion_event.uuid)
                     };
                     if let Some(completed_mooncake_snapshot) = completed_mooncake_snapshot {
-                        let actual_disk_files = completed_mooncake_snapshot
-                            .mooncake_snapshot_result
-                            .current_snapshot
-                            .as_ref()
-                            .unwrap()
-                            .disk_files
-                            .iter()
-                            .map(|cur_disk_file| cur_disk_file.0.file_id())
-                            .collect::<HashSet<_>>();
-                        assert_eq!(snapshot_disk_files, actual_disk_files);
-
-                        // Update mooncake table related states.
                         table.mark_mooncake_snapshot_completed();
                         table.record_mooncake_snapshot_completion(
                             &completed_mooncake_snapshot.mooncake_snapshot_result,
+                        );
+                        table.notify_snapshot_reader(
+                            completed_mooncake_snapshot
+                                .mooncake_snapshot_result
+                                .commit_lsn,
                         );
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.
                     event_notification_clone.notified().await;
                 }
+
+                // Validate mooncake snapshot.
+                let mut expected_ids = committed_ids.iter().copied().collect::<Vec<_>>();
+                expected_ids.sort();
+                check_read_snapshot(
+                    &read_state_manager,
+                    /*target_lsn=*/ Some(latest_commit_lsn),
+                    &expected_ids,
+                )
+                .await;
             }
             // =====================
             // Iceberg snapshot
@@ -514,12 +569,6 @@ pub(crate) async fn replay() {
                     if let Some(completed_data_compaction) = completed_data_compaction_event {
                         let data_compaction_result =
                             completed_data_compaction.data_compaction_result;
-                        for cur_old_file in data_compaction_result.old_data_files.iter() {
-                            assert!(snapshot_disk_files.remove(&cur_old_file.file_id()));
-                        }
-                        for (cur_new_file, _) in data_compaction_result.new_data_files.iter() {
-                            assert!(snapshot_disk_files.insert(cur_new_file.file_id()));
-                        }
                         table.set_data_compaction_res(data_compaction_result);
                         break;
                     }

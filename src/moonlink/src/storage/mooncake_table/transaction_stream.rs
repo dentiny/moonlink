@@ -33,7 +33,7 @@ pub(crate) struct TransactionStreamState {
 
 /// Determines the state of a transaction stream.
 /// Transaction can be safely removed when it is no longer `Pending` and has no pending flushes.
-#[derive(PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TransactionStreamStatus {
     Pending,
     Committed,
