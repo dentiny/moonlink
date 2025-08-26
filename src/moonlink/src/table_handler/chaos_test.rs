@@ -63,10 +63,11 @@ fn parse_chaos_test_args() -> ChaosTestArgs {
 
     // Default seed if not provided
     let seed = seed.unwrap_or_else(|| {
-        SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos() as u64
+        // SystemTime::now()
+        //     .duration_since(UNIX_EPOCH)
+        //     .unwrap()
+        //     .as_nanos() as u64
+        1756240686726817373
     });
 
     ChaosTestArgs {
