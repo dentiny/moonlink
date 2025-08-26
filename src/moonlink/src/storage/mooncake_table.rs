@@ -755,6 +755,7 @@ impl MooncakeTable {
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_mooncake_snapshot_event_completion(
                 mooncake_snapshot_res.uuid,
+                mooncake_snapshot_res.commit_lsn,
             );
             event_replay_tx
                 .send(MooncakeTableEvent::MooncakeSnapshotCompletion(table_event))

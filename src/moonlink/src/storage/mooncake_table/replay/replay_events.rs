@@ -89,6 +89,8 @@ pub struct MooncakeSnapshotEventInitiation {
 pub struct MooncakeSnapshotEventCompletion {
     /// Event id.
     pub uuid: uuid::Uuid,
+    /// Commit LSN.
+    pub lsn: u64,
 }
 
 /// =====================
@@ -299,8 +301,9 @@ pub fn create_mooncake_snapshot_event_initiation(
 }
 pub fn create_mooncake_snapshot_event_completion(
     uuid: uuid::Uuid,
+    lsn: u64,
 ) -> MooncakeSnapshotEventCompletion {
-    MooncakeSnapshotEventCompletion { uuid }
+    MooncakeSnapshotEventCompletion { uuid, lsn }
 }
 /// Create iceberg snapshot events.
 pub fn get_iceberg_snapshot_import_payload(

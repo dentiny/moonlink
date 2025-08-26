@@ -138,7 +138,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_g8bey026i61i";
+    let replay_filepath = "/tmp/chaos_test_a5sl2gkuqem5";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -206,7 +206,6 @@ pub(crate) async fn replay() {
         commit_lsn_rx,
         read_state_filepath_remap,
     );
-    let mut latest_commit_lsn = 0;
 
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
@@ -322,6 +321,9 @@ pub(crate) async fn replay() {
         }
     });
 
+    // Used to indicate valid rows for all versions.
+    // Maps from commit LSN to valid ids.
+    let mut versioned_committed_ids = HashMap::new();
     // Used to indicate valid rows.
     let mut committed_ids = HashSet::new();
     // Ids for the current ongoing transaction to append, which could be aborted.
@@ -382,11 +384,13 @@ pub(crate) async fn replay() {
                         assert!(committed_ids.remove(&cur_delete));
                     }
                 }
+                assert!(versioned_committed_ids
+                    .insert(commit_event.lsn, committed_ids.clone())
+                    .is_none());
 
                 // Update LSN.
                 commit_lsn_tx.send(commit_event.lsn).unwrap();
                 replication_lsn_tx.send(commit_event.lsn).unwrap();
-                latest_commit_lsn = commit_event.lsn;
 
                 // Apply update to mooncake table.
                 if let Some(xact_id) = commit_event.xact_id {
@@ -481,11 +485,18 @@ pub(crate) async fn replay() {
                 }
 
                 // Validate mooncake snapshot.
-                let mut expected_ids = committed_ids.iter().copied().collect::<Vec<_>>();
+                let commit_lsn = snapshot_completion_event.lsn;
+                let mut expected_ids = versioned_committed_ids
+                    .get(&commit_lsn)
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>();
                 expected_ids.sort();
                 check_read_snapshot(
                     &read_state_manager,
-                    /*target_lsn=*/ Some(latest_commit_lsn),
+                    /*target_lsn=*/ Some(commit_lsn),
                     &expected_ids,
                 )
                 .await;
