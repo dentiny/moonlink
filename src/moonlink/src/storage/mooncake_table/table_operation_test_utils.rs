@@ -36,12 +36,12 @@ pub(crate) async fn flush_table_and_sync(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            uuid,
+            event_id,
             xact_id: _,
             flush_result,
         } => match flush_result {
             Some(Ok(disk_slice)) => {
-                table.apply_flush_result(disk_slice, uuid);
+                table.apply_flush_result(disk_slice, event_id);
             }
             Some(Err(e)) => {
                 error!(error = ?e, "failed to flush disk slice");
@@ -70,7 +70,7 @@ pub(crate) async fn flush_table_and_sync_no_apply(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            uuid: _,
+            event_id: _,
             xact_id: _,
             flush_result,
         } => match flush_result {
@@ -103,7 +103,7 @@ pub(crate) async fn flush_stream_and_sync_no_apply(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            uuid: _,
+            event_id: _,
             xact_id: _,
             flush_result,
         } => match flush_result {
@@ -138,12 +138,12 @@ pub(crate) async fn commit_transaction_stream_and_sync(
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            uuid,
+            event_id,
             xact_id: Some(xact_id),
             flush_result,
         } => match flush_result {
             Some(Ok(disk_slice)) => {
-                table.apply_stream_flush_result(xact_id, disk_slice, uuid);
+                table.apply_stream_flush_result(xact_id, disk_slice, event_id);
             }
             Some(Err(e)) => {
                 error!(error = ?e, "failed to flush disk slice");

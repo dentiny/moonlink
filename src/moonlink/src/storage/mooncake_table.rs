@@ -862,7 +862,7 @@ impl MooncakeTable {
                 Ok(()) => {
                     table_notify_tx
                         .send(TableEvent::FlushResult {
-                            uuid: event_id,
+                            event_id,
                             xact_id,
                             flush_result: Some(Ok(disk_slice_clone)),
                         })
@@ -872,7 +872,7 @@ impl MooncakeTable {
                 Err(e) => {
                     table_notify_tx
                         .send(TableEvent::FlushResult {
-                            uuid: event_id,
+                            event_id,
                             xact_id,
                             flush_result: Some(Err(e)),
                         })
@@ -1209,7 +1209,7 @@ impl MooncakeTable {
             tokio::task::spawn(async move {
                 table_notify_tx
                     .send(TableEvent::FlushResult {
-                        uuid: event_id,
+                        event_id,
                         xact_id: None,
                         flush_result: None,
                     })

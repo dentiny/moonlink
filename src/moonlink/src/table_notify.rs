@@ -96,7 +96,7 @@ pub enum TableEvent {
     },
     FlushResult {
         /// Background event id.
-        uuid: uuid::Uuid,
+        event_id: uuid::Uuid,
         /// Transaction ID
         xact_id: Option<u32>,
         /// Result for mem slice flush.

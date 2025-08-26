@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 /// Option for a maintenance option.
 ///
-/// Event id, which is a UUID, will be used for background events to ensure reproducibility.
+/// Event id, which is a UUID, will be used for background events to ensure deterministic reproduction.
 ///
 /// For all types of maintenance tasks, we have two basic dimensions:
 /// - Selection criteria: for full-mode maintenance task, all files will take part in, however big it is; for non-full-mode, only those meet certain threshold will be selected.

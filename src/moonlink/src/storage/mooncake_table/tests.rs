@@ -2656,7 +2656,7 @@ async fn test_disk_slice_write_failure() -> Result<()> {
     let flush_result = event_completion_rx.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
-            uuid: _,
+            event_id: _,
             xact_id: _,
             flush_result,
         } => {

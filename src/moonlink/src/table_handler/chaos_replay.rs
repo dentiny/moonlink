@@ -191,7 +191,7 @@ pub(crate) async fn replay() {
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
-                    uuid,
+                    event_id,
                     xact_id,
                     flush_result,
                 } => {
@@ -200,7 +200,7 @@ pub(crate) async fn replay() {
                         flush_result,
                     };
                     let mut guard = completed_flush_events_clone.lock().await;
-                    assert!(guard.insert(uuid, completed_flush).is_none());
+                    assert!(guard.insert(event_id, completed_flush).is_none());
                     event_notification.notify_waiters();
                 }
                 TableEvent::MooncakeTableSnapshotResult {
