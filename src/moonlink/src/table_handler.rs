@@ -422,11 +422,6 @@ impl TableHandler {
                     TableEvent::RegularIcebergSnapshot {
                         mut iceberg_snapshot_payload,
                     } => {
-                        println!(
-                            "in table handler iceberg uuid = {:?}",
-                            iceberg_snapshot_payload.uuid
-                        );
-
                         // Update table maintenance status.
                         if iceberg_snapshot_payload.contains_table_maintenance_payload()
                             && table_handler_state.table_maintenance_process_status
@@ -494,11 +489,6 @@ impl TableHandler {
                             if let Some(iceberg_snapshot_payload) =
                                 mooncake_snapshot_result.iceberg_snapshot_payload
                             {
-                                println!(
-                                    "after mooncake snapshot, uuid = {:?}",
-                                    iceberg_snapshot_payload.uuid
-                                );
-
                                 table_handler_event_sender
                                     .send(TableEvent::RegularIcebergSnapshot {
                                         iceberg_snapshot_payload,
