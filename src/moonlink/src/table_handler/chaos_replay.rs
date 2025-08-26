@@ -138,7 +138,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_a5sl2gkuqem5";
+    let replay_filepath = "/tmp/chaos_debug_clone_4848383";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -192,6 +192,10 @@ pub(crate) async fn replay() {
     let pending_index_merge_payloads_clone = pending_index_merge_payloads.clone();
     let pending_data_compaction_payloads_clone = pending_data_compaction_payloads.clone();
 
+    // Maps from file id to data filepath.
+    let data_files = Arc::new(Mutex::new(HashMap::new()));
+    let data_files_clone = data_files.clone();
+
     let mut table = create_mooncake_table_for_replay(&replay_env, &mut lines).await;
     let (table_event_sender, mut table_event_receiver) = mpsc::channel(100);
     let (event_replay_sender, _event_replay_receiver) = mpsc::unbounded_channel();
@@ -217,13 +221,29 @@ pub(crate) async fn replay() {
                     xact_id,
                     flush_result,
                 } => {
+                    {
+                        let data_files = flush_result
+                            .as_ref()
+                            .unwrap()
+                            .as_ref()
+                            .unwrap()
+                            .output_files();
+                        let mut guard = data_files_clone.lock().await;
+                        for (data_file_id, _) in data_files.iter() {
+                            assert!(guard
+                                .insert(data_file_id.file_id(), data_file_id.file_path().clone())
+                                .is_none());
+                        }
+                    }
                     let completed_flush = CompletedFlush {
                         xact_id,
                         flush_result,
                     };
-                    let mut guard = completed_flush_events_clone.lock().await;
-                    assert!(guard.insert(event_id, completed_flush).is_none());
-                    event_notification.notify_waiters();
+                    {
+                        let mut guard = completed_flush_events_clone.lock().await;
+                        assert!(guard.insert(event_id, completed_flush).is_none());
+                        event_notification.notify_waiters();
+                    }
                 }
                 TableEvent::MooncakeTableSnapshotResult {
                     mooncake_snapshot_result,
@@ -304,17 +324,28 @@ pub(crate) async fn replay() {
                 TableEvent::DataCompactionResult {
                     data_compaction_result,
                 } => {
-                    let data_compaction_result = data_compaction_result.unwrap();
-                    let mut guard = completed_data_compaction_clone.lock().await;
-                    assert!(guard
-                        .insert(
-                            data_compaction_result.uuid,
-                            CompletedDataCompaction {
-                                data_compaction_result
-                            }
-                        )
-                        .is_none());
-                    event_notification.notify_waiters();
+                    {
+                        let data_files = &data_compaction_result.as_ref().unwrap().new_data_files;
+                        let mut guard = data_files_clone.lock().await;
+                        for (data_file_id, _) in data_files.iter() {
+                            assert!(guard
+                                .insert(data_file_id.file_id(), data_file_id.file_path().clone())
+                                .is_none());
+                        }
+                    }
+                    {
+                        let data_compaction_result = data_compaction_result.unwrap();
+                        let mut guard = completed_data_compaction_clone.lock().await;
+                        assert!(guard
+                            .insert(
+                                data_compaction_result.uuid,
+                                CompletedDataCompaction {
+                                    data_compaction_result
+                                }
+                            )
+                            .is_none());
+                        event_notification.notify_waiters();
+                    }
                 }
                 _ => {}
             }

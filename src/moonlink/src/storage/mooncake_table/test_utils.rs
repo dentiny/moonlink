@@ -11,10 +11,11 @@ use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
 use crate::storage::wal::WalManager;
 use crate::{StorageConfig, WalConfig};
 use arrow::array::Int32Array;
+use arrow_array::Array;
 use futures::future::join_all;
 use iceberg::io::FileIOBuilder;
 use moonlink_table_metadata::{DeletionVector, PositionDelete};
-use parquet::arrow::arrow_reader::{ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use std::collections::HashSet;
 use std::fs::{create_dir_all, File};
 use tempfile::{tempdir, TempDir};
@@ -92,29 +93,32 @@ pub async fn test_table(
     .unwrap()
 }
 
-pub fn read_batch(reader: ParquetRecordBatchReader) -> Option<RecordBatch> {
-    match reader.into_iter().next() {
-        Some(Ok(batch)) => Some(batch),
-        _ => None,
-    }
-}
-
 pub fn read_ids_from_parquet(file_path: &String) -> Vec<Option<i32>> {
     let file = File::open(file_path).unwrap();
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)
         .unwrap()
         .build()
         .unwrap();
-    let batch = match read_batch(reader) {
-        Some(batch) => batch,
-        None => return vec![],
-    };
-    let col = batch
-        .column(0)
-        .as_any()
-        .downcast_ref::<Int32Array>()
-        .unwrap();
-    (0..col.len()).map(|i| Some(col.value(i))).collect()
+
+    let mut ids = Vec::new();
+    for batch in reader {
+        let batch = batch.unwrap();
+        let col = batch
+            .column(0)
+            .as_any()
+            .downcast_ref::<Int32Array>()
+            .unwrap();
+
+        ids.extend((0..col.len()).map(|i| {
+            if col.is_null(i) {
+                None
+            } else {
+                Some(col.value(i))
+            }
+        }));
+    }
+
+    ids
 }
 
 pub fn verify_file_contents(
