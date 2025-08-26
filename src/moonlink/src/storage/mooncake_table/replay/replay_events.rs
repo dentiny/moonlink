@@ -156,6 +156,8 @@ pub struct IcebergSnapshotEventInitiation {
 pub struct IcebergSnapshotEventCompletion {
     /// Event id.
     pub uuid: uuid::Uuid,
+    /// Flush LSN.
+    pub lsn: u64,
 }
 
 /// =====================
@@ -416,8 +418,9 @@ pub fn create_iceberg_snapshot_event_initiation(
 }
 pub fn create_iceberg_snapshot_event_completion(
     uuid: uuid::Uuid,
+    lsn: u64,
 ) -> IcebergSnapshotEventCompletion {
-    IcebergSnapshotEventCompletion { uuid }
+    IcebergSnapshotEventCompletion { uuid, lsn }
 }
 /// Create index merge events.
 pub fn create_index_merge_event_initiation(

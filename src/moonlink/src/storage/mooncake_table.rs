@@ -768,8 +768,10 @@ impl MooncakeTable {
         iceberg_snapshot_res: &IcebergSnapshotResult,
     ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
-            let table_event =
-                replay_events::create_iceberg_snapshot_event_completion(iceberg_snapshot_res.uuid);
+            let table_event = replay_events::create_iceberg_snapshot_event_completion(
+                iceberg_snapshot_res.uuid,
+                iceberg_snapshot_res.flush_lsn,
+            );
             event_replay_tx
                 .send(MooncakeTableEvent::IcebergSnapshotCompletion(table_event))
                 .unwrap();
