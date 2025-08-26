@@ -228,7 +228,7 @@ impl FileCatalog {
                     builder = builder.remove_properties(removals)?;
                 }
                 TableUpdate::AddSchema { schema } => {
-                    builder = builder.add_schema(schema.clone());
+                    builder = builder.add_schema(schema.clone())?;
                 }
                 TableUpdate::SetCurrentSchema { schema_id } => {
                     builder = builder.set_current_schema(*schema_id)?;
