@@ -844,7 +844,7 @@ impl MooncakeTable {
         disk_slice: &mut DiskSliceWriter,
         table_notify_tx: Sender<TableEvent>,
         xact_id: Option<u32>,
-        flush_event_id: uuid::Uuid,
+        event_uuid: uuid::Uuid,
     ) {
         if let Some(lsn) = disk_slice.lsn() {
             self.insert_ongoing_flush_lsn(lsn);
@@ -862,7 +862,7 @@ impl MooncakeTable {
                 Ok(()) => {
                     table_notify_tx
                         .send(TableEvent::FlushResult {
-                            uuid: flush_event_id,
+                            uuid: event_uuid,
                             xact_id,
                             flush_result: Some(Ok(disk_slice_clone)),
                         })
@@ -872,7 +872,7 @@ impl MooncakeTable {
                 Err(e) => {
                     table_notify_tx
                         .send(TableEvent::FlushResult {
-                            uuid: flush_event_id,
+                            uuid: event_uuid,
                             xact_id,
                             flush_result: Some(Err(e)),
                         })
@@ -1193,7 +1193,7 @@ impl MooncakeTable {
     /// Drains the current mem slice and create a disk slice.
     /// Flushes the disk slice.
     /// Adds the disk slice to `next_snapshot_task`.
-    pub fn flush(&mut self, lsn: u64) -> Result<()> {
+    pub fn flush(&mut self, event_uuid: uuid::Uuid, lsn: u64) -> Result<()> {
         // Sanity check flush LSN doesn't regress.
         assert!(
             self.next_snapshot_task.new_flush_lsn.is_none()
@@ -1204,14 +1204,12 @@ impl MooncakeTable {
         );
 
         let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
-        let flush_event_id = uuid::Uuid::new_v4();
-
         if self.mem_slice.is_empty() || self.ongoing_flush_lsns.contains(&lsn) {
             self.try_set_next_flush_lsn(lsn);
             tokio::task::spawn(async move {
                 table_notify_tx
                     .send(TableEvent::FlushResult {
-                        uuid: flush_event_id,
+                        uuid: event_uuid,
                         xact_id: None,
                         flush_result: None,
                     })
@@ -1224,7 +1222,7 @@ impl MooncakeTable {
         // Record events for flush initialization.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_initiation(
-                flush_event_id,
+                event_uuid.clone(),
                 /*xact_id=*/ None,
                 Some(lsn),
                 self.mem_slice.get_commit_check_point(),
@@ -1239,7 +1237,7 @@ impl MooncakeTable {
             &mut disk_slice,
             table_notify_tx,
             /*xact_id=*/ None,
-            flush_event_id,
+            event_uuid,
         );
 
         Ok(())

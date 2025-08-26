@@ -34,6 +34,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::storage::mooncake_table_config::IcebergPersistenceConfig;
 use crate::storage::mooncake_table_config::MooncakeTableConfig;
+use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::storage_utils;
@@ -303,9 +304,9 @@ async fn test_skip_iceberg_snapshot() {
         uuid: uuid::Uuid::new_v4(),
         force_create: false,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true,
-        index_merge_option: MaintenanceOption::BestEffort,
-        data_compaction_option: MaintenanceOption::BestEffort,
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip,
+        index_merge_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
+        data_compaction_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
     }));
     let (_, iceberg_snapshot_payload, _, _, _) =
         sync_mooncake_snapshot(&mut table, &mut notify_rx).await;

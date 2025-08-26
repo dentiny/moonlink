@@ -1,4 +1,4 @@
-use std::collections::{btree_map, HashMap, HashSet};
+use std::collections::{HashMap, HashSet};
 
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
 use crate::storage::cache::object_storage::object_storage_cache::ObjectStorageCache;
@@ -124,7 +124,7 @@ async fn create_mooncake_table_for_replay(
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_5x1yp1jigz5d";
+    let replay_filepath = "/tmp/chaos_test_tyxmnalugbgf";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -173,9 +173,9 @@ pub(crate) async fn replay() {
     let mut snapshot_disk_files = HashSet::new();
     // Pending background tasks to issue.
     // Maps from event id to payload.
-    let pending_iceberg_snapshot_payloads = Arc::new(Mutex::new(btree_map::BTreeMap::new()));
-    let pending_index_merge_payloads = Arc::new(Mutex::new(btree_map::BTreeMap::new()));
-    let pending_data_compaction_payloads = Arc::new(Mutex::new(btree_map::BTreeMap::new()));
+    let pending_iceberg_snapshot_payloads = Arc::new(Mutex::new(HashMap::new()));
+    let pending_index_merge_payloads = Arc::new(Mutex::new(HashMap::new()));
+    let pending_data_compaction_payloads = Arc::new(Mutex::new(HashMap::new()));
     let pending_iceberg_snapshot_payloads_clone = pending_iceberg_snapshot_payloads.clone();
     let pending_index_merge_payloads_clone = pending_index_merge_payloads.clone();
     let pending_data_compaction_payloads_clone = pending_data_compaction_payloads.clone();
@@ -188,6 +188,8 @@ pub(crate) async fn replay() {
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
         while let Some(table_event) = table_event_receiver.recv().await {
+            println!("--- table event = {:?}", table_event);
+
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
@@ -301,6 +303,9 @@ pub(crate) async fn replay() {
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
+
+        println!("process replay event : {:?}", replay_table_event);
+
         match replay_table_event {
             // =====================
             // Foreground operations
@@ -347,12 +352,15 @@ pub(crate) async fn replay() {
             // =====================
             MooncakeTableEvent::FlushInitiation(flush_initiation_event) => {
                 assert!(ongoing_flush_event_id.insert(flush_initiation_event.uuid));
+                let event_uuid = flush_initiation_event.uuid;
                 if let Some(xact_id) = flush_initiation_event.xact_id {
                     table
-                        .flush_stream(xact_id, flush_initiation_event.lsn)
+                        .flush_stream(event_uuid, xact_id, flush_initiation_event.lsn)
                         .unwrap();
                 } else {
-                    table.flush(flush_initiation_event.lsn.unwrap()).unwrap();
+                    table
+                        .flush(event_uuid, flush_initiation_event.lsn.unwrap())
+                        .unwrap();
                 }
             }
             MooncakeTableEvent::FlushCompletion(flush_completion_event) => {
@@ -439,8 +447,6 @@ pub(crate) async fn replay() {
                 let payload = {
                     let mut guard = pending_iceberg_snapshot_payloads_clone.lock().await;
                     let payload = guard.remove(&snapshot_initiation_event.uuid).unwrap();
-                    let rest = guard.split_off(&snapshot_initiation_event.uuid);
-                    *guard = rest;
                     payload
                 };
                 table.persist_iceberg_snapshot(payload);
@@ -470,8 +476,6 @@ pub(crate) async fn replay() {
                 let payload = {
                     let mut guard = pending_index_merge_payloads_clone.lock().await;
                     let payload = guard.remove(&index_merge_initiation_event.uuid).unwrap();
-                    let rest = guard.split_off(&index_merge_initiation_event.uuid);
-                    *guard = rest;
                     payload
                 };
                 table.perform_index_merge(payload);
@@ -501,8 +505,6 @@ pub(crate) async fn replay() {
                     let payload = guard
                         .remove(&data_compaction_initiation_event.uuid)
                         .unwrap();
-                    let rest = guard.split_off(&data_compaction_initiation_event.uuid);
-                    *guard = rest;
                     payload
                 };
                 table.perform_data_compaction(payload);

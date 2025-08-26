@@ -5,6 +5,7 @@ use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::test_utils::{append_rows, test_row, test_table, TestContext};
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
+use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
@@ -1995,7 +1996,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: false,
+        iceberg_snapshot_option: IcebergSnapshotOption::BestEffort(uuid::Uuid::new_v4()),
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
     });
@@ -2033,7 +2034,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: false,
+        iceberg_snapshot_option: IcebergSnapshotOption::BestEffort(uuid::Uuid::new_v4()),
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
     });
@@ -2098,7 +2099,7 @@ async fn test_out_of_order_flush_completion_with_iceberg_snapshots() -> Result<(
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: false,
+        iceberg_snapshot_option: IcebergSnapshotOption::BestEffort(uuid::Uuid::new_v4()),
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
     });
@@ -2252,9 +2253,9 @@ async fn test_streaming_batch_id_mismatch_with_data_compaction() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true, // Skip iceberg to focus on the mooncake issue
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip, // Skip iceberg to focus on the mooncake issue
         index_merge_option: MaintenanceOption::Skip,
-        data_compaction_option: MaintenanceOption::ForceRegular, // Trigger data compaction
+        data_compaction_option: MaintenanceOption::ForceRegular(uuid::Uuid::new_v4()), // Trigger data compaction
     });
 
     assert!(created, "Mooncake snapshot should be created");
@@ -2327,9 +2328,9 @@ async fn test_streaming_empty_batch_filtering() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true,
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip,
         index_merge_option: MaintenanceOption::Skip,
-        data_compaction_option: MaintenanceOption::ForceRegular,
+        data_compaction_option: MaintenanceOption::ForceRegular(uuid::Uuid::new_v4()),
     });
 
     assert!(created);
@@ -2386,7 +2387,7 @@ async fn test_batch_id_removal_assertion_direct() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true,
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip, // No compaction to avoid other issues
     });
@@ -2464,9 +2465,9 @@ async fn test_puffin_deletion_blob_inconsistency_assertion() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true,
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip,
         index_merge_option: MaintenanceOption::Skip,
-        data_compaction_option: MaintenanceOption::ForceRegular, // Force data compaction
+        data_compaction_option: MaintenanceOption::ForceRegular(uuid::Uuid::new_v4()), // Force data compaction
     });
 
     assert!(created, "Mooncake snapshot should be created");
@@ -2530,7 +2531,7 @@ async fn test_stream_commit_with_ongoing_flush_deletion_remapping() -> Result<()
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true,
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
     });
@@ -2579,7 +2580,7 @@ async fn test_deletion_align_with_batch() -> Result<()> {
         uuid: uuid::Uuid::new_v4(),
         force_create: true,
         dump_snapshot: false,
-        skip_iceberg_snapshot: true,
+        iceberg_snapshot_option: IcebergSnapshotOption::Skip,
         index_merge_option: MaintenanceOption::Skip,
         data_compaction_option: MaintenanceOption::Skip,
     });
@@ -2647,7 +2648,9 @@ async fn test_disk_slice_write_failure() -> Result<()> {
     table.commit(100);
 
     // Attempt to flush - this should fail due to invalid directory
-    table.flush(100).unwrap();
+    table
+        .flush(/*event_uuid=*/ uuid::Uuid::new_v4(), /*lsn=*/ 100)
+        .unwrap();
 
     // Wait for the flush result and verify it contains the expected error
     let flush_result = event_completion_rx.recv().await.unwrap();

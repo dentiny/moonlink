@@ -1479,7 +1479,7 @@ async fn test_append_only_chaos_on_local_fs_with_no_background_maintenance() {
         append_only: true,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 200,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,

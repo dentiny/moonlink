@@ -16,6 +16,7 @@ use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::BatchIdCounter;
 use crate::storage::mooncake_table::MoonlinkRow;
 use crate::storage::mooncake_table::SnapshotOption;
+use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::storage_utils::{FileId, TableId, TableUniqueFileId};
 use crate::storage::storage_utils::{
     MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
@@ -587,7 +588,7 @@ impl SnapshotTableState {
 
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         let flush_lsn = self.current_snapshot.flush_lsn.unwrap_or(0);
-        if !opt.skip_iceberg_snapshot
+        if opt.iceberg_snapshot_option != IcebergSnapshotOption::Skip
             && (force_empty_iceberg_payload || flush_by_table_write)
             && flush_lsn < task.min_ongoing_flush_lsn
         {
@@ -601,8 +602,11 @@ impl SnapshotTableState {
                 || flush_by_new_files_or_maintenance
                 || force_empty_iceberg_payload
             {
-                iceberg_snapshot_payload =
-                    Some(self.get_iceberg_snapshot_payload(flush_lsn, committed_deletion_logs));
+                iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
+                    &opt.iceberg_snapshot_option,
+                    flush_lsn,
+                    committed_deletion_logs,
+                ));
             }
         }
 

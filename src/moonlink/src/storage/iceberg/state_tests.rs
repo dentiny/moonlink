@@ -45,6 +45,7 @@ use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::Snapshot;
+use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::MooncakeTable;
@@ -421,9 +422,9 @@ async fn test_state_1_1() {
         uuid: uuid::Uuid::new_v4(),
         dump_snapshot: false,
         force_create: false,
-        skip_iceberg_snapshot: false,
-        index_merge_option: MaintenanceOption::BestEffort,
-        data_compaction_option: MaintenanceOption::BestEffort,
+        iceberg_snapshot_option: IcebergSnapshotOption::BestEffort(uuid::Uuid::new_v4()),
+        index_merge_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
+        data_compaction_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
     }));
 
     // Validate end state.
@@ -449,9 +450,9 @@ async fn test_state_1_2() {
         uuid: uuid::Uuid::new_v4(),
         dump_snapshot: false,
         force_create: false,
-        skip_iceberg_snapshot: false,
-        index_merge_option: MaintenanceOption::BestEffort,
-        data_compaction_option: MaintenanceOption::BestEffort,
+        iceberg_snapshot_option: IcebergSnapshotOption::BestEffort(uuid::Uuid::new_v4()),
+        index_merge_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
+        data_compaction_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
     }));
 
     // Validate end state.

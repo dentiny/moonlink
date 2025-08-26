@@ -197,7 +197,13 @@ fn bench_write(c: &mut Criterion) {
                             1,
                         );
                     }
-                    table.flush_stream(1, None).unwrap();
+                    table
+                        .flush_stream(
+                            /*event_uuid=*/ uuid::Uuid::new_v4(),
+                            /*xact_id=*/ 1,
+                            /*lsn=*/ None,
+                        )
+                        .unwrap();
                 });
                 table
             },
@@ -213,7 +219,13 @@ fn bench_write(c: &mut Criterion) {
                             )
                             .await;
                     }
-                    table.flush_stream(1, None).unwrap();
+                    table
+                        .flush_stream(
+                            /*event_uuid=*/ uuid::Uuid::new_v4(),
+                            /*xact_id=*/ 1,
+                            /*lsn=*/ None,
+                        )
+                        .unwrap();
                 });
             },
             BatchSize::PerIteration,

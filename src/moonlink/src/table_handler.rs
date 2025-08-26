@@ -12,6 +12,7 @@ use crate::event_sync::EventSyncSender;
 use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
 use crate::storage::mooncake_table::AlterTableRequest;
 use crate::storage::mooncake_table::INITIAL_COPY_XACT_ID;
+use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::{io_utils, MooncakeTable};
@@ -351,9 +352,12 @@ impl TableHandler {
                     }
                     TableEvent::FinishInitialCopy { start_lsn } => {
                         debug!("finishing initial copy");
-                        if let Err(e) =
-                            table.commit_transaction_stream(INITIAL_COPY_XACT_ID, start_lsn)
-                        {
+                        let event_uuid = uuid::Uuid::new_v4();
+                        if let Err(e) = table.commit_transaction_stream(
+                            event_uuid,
+                            INITIAL_COPY_XACT_ID,
+                            start_lsn,
+                        ) {
                             error!(error = %e, "failed to finish initial copy");
                         }
                         // Force create the snapshot with LSN `start_lsn`
@@ -361,7 +365,7 @@ impl TableHandler {
                             uuid: uuid::Uuid::new_v4(),
                             force_create: true,
                             dump_snapshot: false,
-                            skip_iceberg_snapshot: true,
+                            iceberg_snapshot_option: IcebergSnapshotOption::Skip,
                             index_merge_option: MaintenanceOption::Skip,
                             data_compaction_option: MaintenanceOption::Skip,
                         }));
@@ -389,7 +393,8 @@ impl TableHandler {
                         {
                             if let Some(commit_lsn) = table_handler_state.table_consistent_view_lsn
                             {
-                                table.flush(commit_lsn).unwrap();
+                                let event_uuid = uuid::Uuid::new_v4();
+                                table.flush(event_uuid, commit_lsn).unwrap();
                                 table_handler_state.last_unflushed_commit_lsn = None;
                                 table_handler_state.reset_iceberg_state_at_mooncake_snapshot();
                                 if let SpecialTableState::AlterTable { .. } =
@@ -417,6 +422,11 @@ impl TableHandler {
                     TableEvent::RegularIcebergSnapshot {
                         mut iceberg_snapshot_payload,
                     } => {
+                        println!(
+                            "in table handler iceberg uuid = {:?}",
+                            iceberg_snapshot_payload.uuid
+                        );
+
                         // Update table maintenance status.
                         if iceberg_snapshot_payload.contains_table_maintenance_payload()
                             && table_handler_state.table_maintenance_process_status
@@ -484,6 +494,11 @@ impl TableHandler {
                             if let Some(iceberg_snapshot_payload) =
                                 mooncake_snapshot_result.iceberg_snapshot_payload
                             {
+                                println!(
+                                    "after mooncake snapshot, uuid = {:?}",
+                                    iceberg_snapshot_payload.uuid
+                                );
+
                                 table_handler_event_sender
                                     .send(TableEvent::RegularIcebergSnapshot {
                                         iceberg_snapshot_payload,
@@ -812,7 +827,8 @@ impl TableHandler {
                     Some(xact_id) => {
                         let res = table.append_in_stream_batch(row, xact_id);
                         if table.should_transaction_flush(xact_id) {
-                            if let Err(e) = table.flush_stream(xact_id, None) {
+                            let event_uuid = uuid::Uuid::new_v4();
+                            if let Err(e) = table.flush_stream(event_uuid, xact_id, None) {
                                 error!(error = %e, "failed to flush stream");
                             }
                         }
@@ -864,7 +880,8 @@ impl TableHandler {
                 .await;
             }
             TableEvent::StreamFlush { xact_id, .. } => {
-                if let Err(e) = table.flush_stream(xact_id, None) {
+                let event_uuid = uuid::Uuid::new_v4();
+                if let Err(e) = table.flush_stream(event_uuid, xact_id, None) {
                     error!(error = %e, "failed to flush stream");
                 }
             }
@@ -915,7 +932,8 @@ impl TableHandler {
                 if let Some(last_unflushed_commit_lsn) =
                     table_handler_state.last_unflushed_commit_lsn
                 {
-                    if let Err(e) = table.flush(last_unflushed_commit_lsn) {
+                    let event_uuid = uuid::Uuid::new_v4();
+                    if let Err(e) = table.flush(event_uuid, last_unflushed_commit_lsn) {
                         error!(error = %e, "flush non-streaming writes failed in LSN {lsn}");
                     }
                     table_handler_state.last_unflushed_commit_lsn = None;
@@ -929,7 +947,8 @@ impl TableHandler {
                         return;
                     }
                 }
-                if let Err(e) = table.commit_transaction_stream(xact_id, lsn) {
+                let event_uuid = uuid::Uuid::new_v4();
+                if let Err(e) = table.commit_transaction_stream(event_uuid, xact_id, lsn) {
                     error!(error = %e, "stream commit flush failed");
                 }
             }
@@ -937,7 +956,8 @@ impl TableHandler {
                 table.commit(lsn);
                 if table.should_flush() || should_force_snapshot || force_flush_requested {
                     table_handler_state.last_unflushed_commit_lsn = None;
-                    if let Err(e) = table.flush(lsn) {
+                    let event_uuid = uuid::Uuid::new_v4();
+                    if let Err(e) = table.flush(event_uuid, lsn) {
                         error!(error = %e, "flush failed in commit");
                     }
                 }

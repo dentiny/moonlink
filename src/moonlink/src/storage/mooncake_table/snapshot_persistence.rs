@@ -8,6 +8,7 @@ use crate::storage::mooncake_table::SnapshotTask;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload,
 };
+use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 /// This file stores snapshot persistence related features.
@@ -29,11 +30,12 @@ impl SnapshotTableState {
 
     pub(super) fn get_iceberg_snapshot_payload(
         &self,
+        opt: &IcebergSnapshotOption,
         flush_lsn: u64,
         committed_deletion_to_persist: CommittedDeletionToPersist,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
-            uuid: uuid::Uuid::new_v4(),
+            uuid: opt.get_event_id().unwrap().clone(),
             flush_lsn,
             new_table_schema: None,
             committed_deletion_logs: committed_deletion_to_persist.committed_deletion_logs,
