@@ -522,7 +522,7 @@ impl MooncakeTable {
         // Record events for flush initiation.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_initiation(
-                event_id.clone(),
+                event_id,
                 /*xact_id=*/ Some(xact_id),
                 lsn,
                 stream_state.mem_slice.get_commit_check_point(),

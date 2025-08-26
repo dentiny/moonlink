@@ -1209,7 +1209,7 @@ impl MooncakeTable {
             tokio::task::spawn(async move {
                 table_notify_tx
                     .send(TableEvent::FlushResult {
-                        uuid: event_id.clone(),
+                        uuid: event_id,
                         xact_id: None,
                         flush_result: None,
                     })
@@ -1222,7 +1222,7 @@ impl MooncakeTable {
         // Record events for flush initialization.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_initiation(
-                event_id.clone(),
+                event_id,
                 /*xact_id=*/ None,
                 Some(lsn),
                 self.mem_slice.get_commit_check_point(),

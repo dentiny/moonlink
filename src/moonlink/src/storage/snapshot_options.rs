@@ -35,7 +35,7 @@ impl IcebergSnapshotOption {
     pub fn get_event_id(&self) -> Option<uuid::Uuid> {
         match &self {
             IcebergSnapshotOption::Skip => None,
-            IcebergSnapshotOption::BestEffort(event_id) => Some(event_id.clone()),
+            IcebergSnapshotOption::BestEffort(event_id) => Some(*event_id),
         }
     }
 }

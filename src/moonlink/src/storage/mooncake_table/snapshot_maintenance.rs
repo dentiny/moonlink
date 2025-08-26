@@ -179,7 +179,7 @@ impl SnapshotTableState {
         }
 
         let payload = DataCompactionPayload {
-            uuid: event_id.unwrap().clone(),
+            uuid: *event_id.unwrap(),
             object_storage_cache: self.object_storage_cache.clone(),
             filesystem_accessor: self.filesystem_accessor.clone(),
             disk_files: tentative_data_files_to_compact
@@ -284,7 +284,7 @@ impl SnapshotTableState {
         // To avoid too many small IO operations, only attempt an index merge when accumulated small indices exceeds the threshold.
         if file_indices_to_merge.len() >= min_index_merge_file_num_threshold {
             let payload = FileIndiceMergePayload {
-                uuid: event_id.unwrap().clone(),
+                uuid: *event_id.unwrap(),
                 file_indices: file_indices_to_merge
                     .into_iter()
                     .take(max_index_merge_file_num_threshold)

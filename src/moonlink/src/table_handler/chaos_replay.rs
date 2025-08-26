@@ -441,8 +441,8 @@ pub(crate) async fn replay() {
                 assert!(ongoing_iceberg_snapshot_id.insert(snapshot_initiation_event.uuid));
                 let payload = {
                     let mut guard = pending_iceberg_snapshot_payloads_clone.lock().await;
-                    let payload = guard.remove(&snapshot_initiation_event.uuid).unwrap();
-                    payload
+
+                    guard.remove(&snapshot_initiation_event.uuid).unwrap()
                 };
                 table.persist_iceberg_snapshot(payload);
             }
@@ -470,8 +470,8 @@ pub(crate) async fn replay() {
                 assert!(ongoing_index_merge_id.insert(index_merge_initiation_event.uuid));
                 let payload = {
                     let mut guard = pending_index_merge_payloads_clone.lock().await;
-                    let payload = guard.remove(&index_merge_initiation_event.uuid).unwrap();
-                    payload
+
+                    guard.remove(&index_merge_initiation_event.uuid).unwrap()
                 };
                 table.perform_index_merge(payload);
             }
@@ -497,10 +497,10 @@ pub(crate) async fn replay() {
                 assert!(ongoing_data_compaction_id.insert(data_compaction_initiation_event.uuid));
                 let payload = {
                     let mut guard = pending_data_compaction_payloads_clone.lock().await;
-                    let payload = guard
+
+                    guard
                         .remove(&data_compaction_initiation_event.uuid)
-                        .unwrap();
-                    payload
+                        .unwrap()
                 };
                 table.perform_data_compaction(payload);
             }

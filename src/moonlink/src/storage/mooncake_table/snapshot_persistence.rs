@@ -35,7 +35,7 @@ impl SnapshotTableState {
         committed_deletion_to_persist: CommittedDeletionToPersist,
     ) -> IcebergSnapshotPayload {
         IcebergSnapshotPayload {
-            uuid: opt.get_event_id().unwrap().clone(),
+            uuid: opt.get_event_id().unwrap(),
             flush_lsn,
             new_table_schema: None,
             committed_deletion_logs: committed_deletion_to_persist.committed_deletion_logs,
