@@ -199,7 +199,7 @@ fn bench_write(c: &mut Criterion) {
                     }
                     table
                         .flush_stream(
-                            /*event_uuid=*/ uuid::Uuid::new_v4(),
+                            /*event_id=*/ uuid::Uuid::new_v4(),
                             /*xact_id=*/ 1,
                             /*lsn=*/ None,
                         )
@@ -221,7 +221,7 @@ fn bench_write(c: &mut Criterion) {
                     }
                     table
                         .flush_stream(
-                            /*event_uuid=*/ uuid::Uuid::new_v4(),
+                            /*event_id=*/ uuid::Uuid::new_v4(),
                             /*xact_id=*/ 1,
                             /*lsn=*/ None,
                         )

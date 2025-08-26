@@ -31,8 +31,8 @@ pub(crate) async fn flush_table_and_sync(
     receiver: &mut Receiver<TableEvent>,
     lsn: u64,
 ) -> Result<()> {
-    let event_uuid = uuid::Uuid::new_v4();
-    table.flush(event_uuid, lsn).unwrap();
+    let event_id = uuid::Uuid::new_v4();
+    table.flush(lsn, event_id).unwrap();
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
@@ -65,8 +65,8 @@ pub(crate) async fn flush_table_and_sync_no_apply(
     receiver: &mut Receiver<TableEvent>,
     lsn: u64,
 ) -> Option<DiskSliceWriter> {
-    let event_uuid = uuid::Uuid::new_v4();
-    table.flush(event_uuid, lsn).unwrap();
+    let event_id = uuid::Uuid::new_v4();
+    table.flush(lsn, event_id).unwrap();
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
@@ -98,8 +98,8 @@ pub(crate) async fn flush_stream_and_sync_no_apply(
     xact_id: u32,
     lsn: Option<u64>,
 ) -> Option<DiskSliceWriter> {
-    let event_uuid = uuid::Uuid::new_v4();
-    table.flush_stream(event_uuid, xact_id, lsn).unwrap();
+    let event_id = uuid::Uuid::new_v4();
+    table.flush_stream(xact_id, lsn, event_id).unwrap();
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {
         TableEvent::FlushResult {
@@ -131,9 +131,9 @@ pub(crate) async fn commit_transaction_stream_and_sync(
     xact_id: u32,
     lsn: u64,
 ) {
-    let event_uuid = uuid::Uuid::new_v4();
+    let event_id = uuid::Uuid::new_v4();
     table
-        .commit_transaction_stream(event_uuid, xact_id, lsn)
+        .commit_transaction_stream(xact_id, lsn, event_id)
         .unwrap();
     let flush_result = receiver.recv().await.unwrap();
     match flush_result {

@@ -2649,7 +2649,7 @@ async fn test_disk_slice_write_failure() -> Result<()> {
 
     // Attempt to flush - this should fail due to invalid directory
     table
-        .flush(/*event_uuid=*/ uuid::Uuid::new_v4(), /*lsn=*/ 100)
+        .flush(/*lsn=*/ 100, /*event_id=*/ uuid::Uuid::new_v4())
         .unwrap();
 
     // Wait for the flush result and verify it contains the expected error

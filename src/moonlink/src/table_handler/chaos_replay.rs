@@ -188,8 +188,6 @@ pub(crate) async fn replay() {
     // Start a background thread which continuously read from event receiver.
     tokio::spawn(async move {
         while let Some(table_event) = table_event_receiver.recv().await {
-            println!("--- table event = {:?}", table_event);
-
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::FlushResult {
@@ -303,9 +301,6 @@ pub(crate) async fn replay() {
     while let Some(serialized_event) = lines.next_line().await.unwrap() {
         let replay_table_event: MooncakeTableEvent =
             serde_json::from_str(&serialized_event).unwrap();
-
-        println!("process replay event : {:?}", replay_table_event);
-
         match replay_table_event {
             // =====================
             // Foreground operations
@@ -352,14 +347,14 @@ pub(crate) async fn replay() {
             // =====================
             MooncakeTableEvent::FlushInitiation(flush_initiation_event) => {
                 assert!(ongoing_flush_event_id.insert(flush_initiation_event.uuid));
-                let event_uuid = flush_initiation_event.uuid;
+                let event_id = flush_initiation_event.uuid;
                 if let Some(xact_id) = flush_initiation_event.xact_id {
                     table
-                        .flush_stream(event_uuid, xact_id, flush_initiation_event.lsn)
+                        .flush_stream(xact_id, flush_initiation_event.lsn, event_id)
                         .unwrap();
                 } else {
                     table
-                        .flush(event_uuid, flush_initiation_event.lsn.unwrap())
+                        .flush(flush_initiation_event.lsn.unwrap(), event_id)
                         .unwrap();
                 }
             }

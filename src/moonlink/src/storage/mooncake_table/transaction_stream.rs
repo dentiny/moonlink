@@ -400,12 +400,12 @@ impl MooncakeTable {
         &mut self,
         xact_id: u32,
         mut disk_slice: DiskSliceWriter,
-        flush_event_uuid: uuid::Uuid,
+        flush_event_id: uuid::Uuid,
     ) {
         // Record events for flush completion.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_completion(
-                flush_event_uuid,
+                flush_event_id,
                 disk_slice
                     .output_files()
                     .iter()
@@ -509,9 +509,9 @@ impl MooncakeTable {
 
     pub fn flush_stream(
         &mut self,
-        event_uuid: uuid::Uuid,
         xact_id: u32,
         lsn: Option<u64>,
+        event_id: uuid::Uuid,
     ) -> Result<()> {
         // Temporarily remove to drop reference to self
         let mut stream_state = self
@@ -522,7 +522,7 @@ impl MooncakeTable {
         // Record events for flush initiation.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_initiation(
-                event_uuid.clone(),
+                event_id.clone(),
                 /*xact_id=*/ Some(xact_id),
                 lsn,
                 stream_state.mem_slice.get_commit_check_point(),
@@ -538,7 +538,7 @@ impl MooncakeTable {
 
         stream_state.ongoing_flush_count += 1;
 
-        self.flush_disk_slice(&mut disk_slice, table_notify_tx, Some(xact_id), event_uuid);
+        self.flush_disk_slice(&mut disk_slice, table_notify_tx, Some(xact_id), event_id);
 
         // Add back stream state
         self.transaction_stream_states.insert(xact_id, stream_state);
@@ -649,11 +649,11 @@ impl MooncakeTable {
     /// - Enqueues `TransactionStreamOutput::Commit` for snapshot task
     pub fn commit_transaction_stream(
         &mut self,
-        event_uuid: uuid::Uuid,
         xact_id: u32,
         lsn: u64,
+        event_id: uuid::Uuid,
     ) -> Result<()> {
-        self.flush_stream(event_uuid, xact_id, Some(lsn))?;
+        self.flush_stream(xact_id, Some(lsn), event_id)?;
         self.commit_transaction_stream_impl(xact_id, lsn)
     }
 }
