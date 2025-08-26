@@ -82,6 +82,7 @@ jobs:
 
       # ─────────────────────── Start Fake GCS Server ──────────────────────────
       - name: Start Fake GCS Server
+        timeout-minutes: 2
         run: |
           docker run -d \
             --name fake-gcs \
@@ -97,7 +98,7 @@ jobs:
 
       # ───────────────────── Wait for Fake GCS to be ready ───────────────────
       - name: Wait for Fake GCS ready
-        timeout-minutes: 5
+        timeout-minutes: 2
         run: |
           for i in {1..10}; do
             if curl -sf http://gcs.local:4443/storage/v1/b; then
@@ -157,6 +158,7 @@ jobs:
 
       # ─────────────────────── Start Fake S3 Server ──────────────────────────
       - name: Start Fake S3 Server
+        timeout-minutes: 2
         run: |
           docker run -d \
             --name minio \
@@ -172,7 +174,7 @@ jobs:
 
       # ───────────────────── Wait for Fake S3 to be ready ───────────────────
       - name: Wait for Fake S3
-        timeout-minutes: 5
+        timeout-minutes: 2
         run: |
           for i in {1..10}; do
             if curl -sf http://minio:9000/minio/health/ready; then
@@ -513,6 +515,7 @@ jobs:
 
       # ─────────────────────── Start nginx manually ──────────────────────────
       - name: Start nginx
+        timeout-minutes: 2
         run: |
           docker run -d \
             --name nginx \
@@ -527,6 +530,7 @@ jobs:
 
       # ───────────────────── Wait for nginx to be ready ───────────────────
       - name: Wait for nginx
+        timeout-minutes: 2
         run: |
           for i in {1..10}; do
             if curl -sf http://localhost:80; then
