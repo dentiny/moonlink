@@ -130,6 +130,10 @@ where
                 backend.drop_table(database, table).await;
                 write(&mut stream, &()).await?;
             }
+            Request::GetParquetMetadata { data_file } => {
+                let metadata = backend.get_parquet_metadata(data_file).await?;
+                write(&mut stream, &metadata).await?;
+            }
             Request::GetTableSchema { database, table } => {
                 let database = backend.get_table_schema(database, table).await?;
                 let writer = StreamWriter::try_new(vec![], &database)?;
