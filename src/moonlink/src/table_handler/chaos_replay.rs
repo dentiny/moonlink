@@ -98,12 +98,10 @@ async fn create_mooncake_table_for_replay(
     mooncake_table_config.file_index_config = replay_table_metadata.config.file_index_config;
     mooncake_table_config.data_compaction_config =
         replay_table_metadata.config.data_compaction_config;
+    mooncake_table_config.row_identity = replay_table_metadata.config.row_identity;
 
-    let table_metadata = create_test_table_metadata_with_config_and_identity(
-        local_table_directory,
-        mooncake_table_config,
-        replay_table_metadata.config.row_identity.clone(),
-    );
+    let table_metadata =
+        create_test_table_metadata_with_config(local_table_directory, mooncake_table_config);
     let object_storage_cache = if replay_table_metadata.local_filesystem_optimization_enabled {
         let config = ObjectStorageCacheConfig::new(
             /*max_bytes=*/ 1 << 30, // 1GiB

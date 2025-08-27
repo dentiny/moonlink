@@ -6,7 +6,7 @@
 /// - Rows to delete comes from committed appended ones
 /// - LSN always increases
 use crate::event_sync::create_table_event_syncer;
-use crate::row::{IdentityProp, MoonlinkRow, RowValue};
+use crate::row::{MoonlinkRow, RowValue};
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils::*;
 #[cfg(feature = "storage-gcs")]
@@ -833,7 +833,6 @@ impl TestEnvironment {
         // TODO(hjiang): Synchronize the background task and gracefully shutdown.
         let table_metadata_replay = ReplayTableMetadata {
             config: mooncake_table_metadata.config.clone(),
-            identity,
             local_filesystem_optimization_enabled: config.local_filesystem_optimization_enabled,
             storage_config: config.storage_config.clone(),
         };
