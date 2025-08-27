@@ -1633,10 +1633,17 @@ async fn test_mixed_regular_and_streaming_lsn_ordering() -> Result<()> {
 
     // Start streaming flush with LSN 50 (lower than regular, but allowed for streaming)
     table.append_in_stream_batch(test_row(2, "B", 21), xact_id)?;
-    let streaming_disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(50))
-            .await
-            .expect("Streaming disk slice should be present");
+    let streaming_disk_slice = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        /*lsn=*/ Some(50),
+    )
+    .await
+    .expect("Streaming disk slice should be present");
+    table
+        .commit_transaction_stream_impl(xact_id, /*lsn=*/ 50)
+        .unwrap();
 
     // Verify both are tracked and min is 50
     assert!(table.ongoing_flush_lsns.contains_key(&100));
