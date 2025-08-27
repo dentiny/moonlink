@@ -8,6 +8,8 @@ pub mod table_status;
 
 use arrow_schema::Schema;
 pub use error::{Error, Result};
+use futures::TryStreamExt;
+use futures::{stream, StreamExt};
 use moonlink::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink::{ReadStateFilepathRemap, TableEventManager};
@@ -28,6 +30,9 @@ use crate::table_status::TableStatus;
 
 /// Type alias for filepath remap function, which remaps http URI to local filepath if possible.
 type HttpFilepathRemap = std::sync::Arc<dyn Fn(String) -> String + Send + Sync>;
+
+/// Max concurrency to fetch parquet metadata in parallel.
+const DEFAULT_PARQUET_METADATA_FETCH_PARALLELISM: usize = 128;
 
 pub struct MoonlinkBackend {
     // Base directory for all tables.
@@ -237,11 +242,24 @@ impl MoonlinkBackend {
         self.base_path.clone()
     }
 
-    /// Get the serialized parquet metadata for the requested parquet file.
+    /// Get the serialized parquet metadata for the requested parquet files.
+    /// Serialized results are returned in the same order of given data files.
+    ///
     /// TODO(hjiang): Currently it only supports local parquet files.
-    pub async fn get_parquet_metadata(&self, data_file: String) -> Result<Vec<u8>> {
-        let local_data_filepath = (self.http_filepath_remap)(data_file);
-        parquet_utils::get_parquet_serialized_metadata(&local_data_filepath).await
+    pub async fn get_parquet_metadatas(&self, data_files: Vec<String>) -> Result<Vec<Vec<u8>>> {
+        let http_filepath_remap = self.http_filepath_remap.clone();
+        let serialized_metadatas: Vec<Vec<u8>> = stream::iter(data_files.into_iter())
+            .map(move |cur_data_file| {
+                let http_filepath_remap_clone = http_filepath_remap.clone();
+                async move {
+                    let local_data_filepath = (http_filepath_remap_clone)(cur_data_file);
+                    parquet_utils::get_parquet_serialized_metadata(&local_data_filepath).await
+                }
+            })
+            .buffered(DEFAULT_PARQUET_METADATA_FETCH_PARALLELISM)
+            .try_collect()
+            .await?;
+        Ok(serialized_metadatas)
     }
 
     /// Get the current mooncake table schema.

@@ -130,8 +130,8 @@ where
                 backend.drop_table(database, table).await?;
                 write(&mut stream, &()).await?;
             }
-            Request::GetParquetMetadata { data_file } => {
-                let metadata = backend.get_parquet_metadata(data_file).await?;
+            Request::GetParquetMetadatas { data_files } => {
+                let metadata = backend.get_parquet_metadatas(data_files).await?;
                 write(&mut stream, &metadata).await?;
             }
             Request::GetTableSchema { database, table } => {
