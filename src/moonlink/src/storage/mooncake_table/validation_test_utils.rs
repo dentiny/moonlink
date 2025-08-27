@@ -129,12 +129,16 @@ pub(crate) async fn check_file_pinned(object_storage_cache: &ObjectStorageCache,
 
 /// Test util function to check the given row doesn't exist in the snapshot indices.
 pub(crate) async fn check_row_index_nonexistent(snapshot: &Snapshot, row: &MoonlinkRow) {
-    let key = snapshot.metadata.identity.get_lookup_key(row);
+    let key = snapshot.metadata.config.row_identity.get_lookup_key(row);
     let locs = snapshot
         .indices
         .find_record(&RawDeletionRecord {
             lookup_key: key,
-            row_identity: snapshot.metadata.identity.extract_identity_for_key(row),
+            row_identity: snapshot
+                .metadata
+                .config
+                .row_identity
+                .extract_identity_for_key(row),
             pos: None,
             lsn: 0, // LSN has nothing to do with deletion record search
         })
@@ -151,12 +155,16 @@ pub(crate) async fn check_row_index_on_disk(
     row: &MoonlinkRow,
     filesystem_accessor: &dyn BaseFileSystemAccess,
 ) {
-    let key = snapshot.metadata.identity.get_lookup_key(row);
+    let key = snapshot.metadata.config.row_identity.get_lookup_key(row);
     let locs = snapshot
         .indices
         .find_record(&RawDeletionRecord {
             lookup_key: key,
-            row_identity: snapshot.metadata.identity.extract_identity_for_key(row),
+            row_identity: snapshot
+                .metadata
+                .config
+                .row_identity
+                .extract_identity_for_key(row),
             pos: None,
             lsn: 0, // LSN has nothing to do with deletion record search
         })

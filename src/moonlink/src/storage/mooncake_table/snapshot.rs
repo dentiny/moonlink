@@ -886,7 +886,7 @@ impl SnapshotTableState {
                 identity.equals_record_batch_at_offset(
                     batch.data.as_ref().expect("batch missing data"),
                     *row_id,
-                    &self.current_snapshot.metadata.identity,
+                    &self.current_snapshot.metadata.config.row_identity,
                 )
             }
             RecordLocation::DiskFile(file_id, row_id) => {
@@ -899,7 +899,7 @@ impl SnapshotTableState {
                     .equals_parquet_at_offset(
                         file.file_path(),
                         *row_id,
-                        &self.current_snapshot.metadata.identity,
+                        &self.current_snapshot.metadata.config.row_identity,
                     )
                     .await
             }

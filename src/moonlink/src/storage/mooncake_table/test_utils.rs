@@ -78,6 +78,7 @@ pub async fn test_table(
     let iceberg_table_config = test_iceberg_table_config(context, table_name);
     let mut table_config = test_mooncake_table_config(context);
     table_config.batch_size = 2;
+    table_config.row_identity = identity;
     let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, &context.path());
     let wal_manager = WalManager::new(&wal_config);
     MooncakeTable::new(
@@ -85,7 +86,6 @@ pub async fn test_table(
         table_name.to_string(),
         1,
         context.path(),
-        identity,
         iceberg_table_config.clone(),
         table_config,
         wal_manager,

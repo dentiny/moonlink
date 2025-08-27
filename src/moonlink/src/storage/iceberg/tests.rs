@@ -1,3 +1,4 @@
+use crate::row::IdentityProp;
 /// This module contain tests which are not covered by state-machine based test, including complex operations, object storage based tests, etc.
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
@@ -266,9 +267,6 @@ async fn test_skip_iceberg_snapshot() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
 
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
     let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, &path);
@@ -279,7 +277,6 @@ async fn test_skip_iceberg_snapshot() {
         "test_table".to_string(),
         /*table_id=*/ 1,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         wal_manager,
@@ -1350,6 +1347,7 @@ async fn test_data_compaction_append_only_and_create_snapshot_impl(
     let mut config = MooncakeTableConfig::new(table_temp_dir.path().to_str().unwrap().to_string());
     config.data_compaction_config = data_compaction_config;
     config.append_only = true;
+    config.row_identity = IdentityProp::None;
     let mooncake_table_metadata = create_test_table_metadata_with_config(
         table_temp_dir.path().to_str().unwrap().to_string(),
         config,
@@ -1823,7 +1821,6 @@ async fn test_small_batch_size_and_large_parquet_size() {
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
     let mooncake_table_metadata =
         create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
 
     let iceberg_table_config = create_iceberg_table_config(warehouse_uri.clone());
     let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, &path);
@@ -1848,7 +1845,6 @@ async fn test_small_batch_size_and_large_parquet_size() {
         "test_table".to_string(),
         /*table_id=*/ 1,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
         wal_manager,
@@ -1911,22 +1907,6 @@ async fn test_small_batch_size_and_large_parquet_size() {
 async fn test_multiple_table_ids_for_deletion_vector() {
     let temp_dir = tempfile::tempdir().unwrap();
     let path = temp_dir.path().to_path_buf();
-    let mooncake_table_config = MooncakeTableConfig {
-        append_only: false,
-        // Flush as long as there's new rows appended at commit.
-        mem_slice_size: 1,
-        // At flush, place each row in a separate parquet file.
-        disk_slice_writer_config: DiskSliceWriterConfig {
-            parquet_file_size: 1,
-            chaos_config: None,
-        },
-        ..Default::default()
-    };
-    let mooncake_table_metadata = create_test_table_metadata_with_config(
-        temp_dir.path().to_str().unwrap().to_string(),
-        mooncake_table_config,
-    );
-    let identity_property = mooncake_table_metadata.identity.clone();
 
     let iceberg_table_config = get_iceberg_table_config(&temp_dir);
     let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, &path);
@@ -1937,7 +1917,6 @@ async fn test_multiple_table_ids_for_deletion_vector() {
         "test_table".to_string(),
         /*table_id=*/ 1,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         MooncakeTableConfig::default(),
         wal_manager,

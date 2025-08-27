@@ -184,9 +184,6 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
 ) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
     let warehouse_uri = path.clone().to_str().unwrap().to_string();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
 
     let storage_config = StorageConfig::FileSystem {
         root_directory: warehouse_uri.clone(),
@@ -223,7 +220,6 @@ pub(super) async fn create_mooncake_table_and_notify_for_index_merge(
         "test_table".to_string(),
         TEST_TABLE_ID.0,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
         wal_manager,

@@ -6,7 +6,7 @@
 /// - Rows to delete comes from committed appended ones
 /// - LSN always increases
 use crate::event_sync::create_table_event_syncer;
-use crate::row::{MoonlinkRow, RowValue};
+use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils::*;
 #[cfg(feature = "storage-gcs")]

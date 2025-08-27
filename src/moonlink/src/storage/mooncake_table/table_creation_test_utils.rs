@@ -1,5 +1,4 @@
 /// This module contains table creation tests utils.
-use crate::row::IdentityProp as RowIdentity;
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
@@ -199,7 +198,6 @@ pub(crate) fn create_test_table_metadata_with_config_and_identity(
         schema: create_test_arrow_schema(),
         config: mooncake_table_config,
         path: std::path::PathBuf::from(local_table_directory),
-        identity,
     })
 }
 
@@ -208,18 +206,12 @@ pub(crate) fn create_test_table_metadata_with_config(
     local_table_directory: String,
     mooncake_table_config: MooncakeTableConfig,
 ) -> Arc<MooncakeTableMetadata> {
-    let identity = if mooncake_table_config.append_only {
-        RowIdentity::None
-    } else {
-        RowIdentity::FullRow
-    };
     Arc::new(MooncakeTableMetadata {
         name: ICEBERG_TEST_TABLE.to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config,
         path: std::path::PathBuf::from(local_table_directory),
-        identity,
     })
 }
 
@@ -346,7 +338,6 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
     let object_storage_cache = create_test_object_storage_cache(temp_dir);
     let mooncake_table_metadata =
         create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
     let iceberg_table_config = get_iceberg_table_config(temp_dir);
     let schema = create_test_arrow_schema();
 
@@ -368,7 +359,6 @@ pub(crate) async fn create_table_and_iceberg_manager_with_data_compaction_config
         ICEBERG_TEST_TABLE.to_string(),
         /*table_id=*/ 1,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
         wal_manager,
@@ -398,9 +388,6 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
     object_storage_cache: ObjectStorageCache,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
     let iceberg_table_config = get_iceberg_table_config(temp_dir);
     let schema = create_test_arrow_schema();
 
@@ -428,7 +415,6 @@ pub(crate) async fn create_mooncake_table_and_notify_for_compaction(
         ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
         wal_manager,
@@ -458,7 +444,6 @@ pub(crate) async fn create_mooncake_table(
         ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
         mooncake_table_metadata.path.clone(),
-        mooncake_table_metadata.identity.clone(),
         iceberg_table_config.clone(),
         mooncake_table_metadata.config.clone(),
         wal_manager,
@@ -495,10 +480,6 @@ pub(crate) async fn create_mooncake_table_and_notify_for_read(
     object_storage_cache: Arc<dyn CacheTrait>,
 ) -> (MooncakeTable, Receiver<TableEvent>) {
     let path = temp_dir.path().to_path_buf();
-    let mooncake_table_metadata =
-        create_test_table_metadata(temp_dir.path().to_str().unwrap().to_string());
-    let identity_property = mooncake_table_metadata.identity.clone();
-
     let iceberg_table_config = get_iceberg_table_config(temp_dir);
     let schema = create_test_arrow_schema();
 
@@ -519,7 +500,6 @@ pub(crate) async fn create_mooncake_table_and_notify_for_read(
         ICEBERG_TEST_TABLE.to_string(),
         /*version=*/ TEST_TABLE_ID.0,
         path,
-        identity_property,
         iceberg_table_config.clone(),
         mooncake_table_config,
         wal_manager,

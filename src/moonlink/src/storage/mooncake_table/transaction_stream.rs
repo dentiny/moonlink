@@ -149,7 +149,7 @@ impl MooncakeTable {
                 TransactionStreamState::new(
                     metadata.schema.clone(),
                     metadata.config.batch_size,
-                    metadata.identity.clone(),
+                    metadata.config.row_identity.clone(),
                     Arc::clone(&self.streaming_batch_id_counter),
                 )
             })
@@ -174,8 +174,12 @@ impl MooncakeTable {
         }
 
         // Perform append operation.
-        let lookup_key = self.metadata.identity.get_lookup_key(&row);
-        let identity_for_key = self.metadata.identity.extract_identity_for_key(&row);
+        let lookup_key = self.metadata.config.row_identity.get_lookup_key(&row);
+        let identity_for_key = self
+            .metadata
+            .config
+            .row_identity
+            .extract_identity_for_key(&row);
 
         let stream_state = self.get_or_create_stream_state(xact_id);
         stream_state
@@ -187,7 +191,7 @@ impl MooncakeTable {
 
     pub async fn delete_in_stream_batch(&mut self, row: MoonlinkRow, xact_id: u32) {
         // Check if this is an append-only table
-        if matches!(self.metadata.identity, IdentityProp::None) {
+        if matches!(self.metadata.config.row_identity, IdentityProp::None) {
             tracing::error!("Delete operation not supported for append-only tables");
             return;
         }
@@ -202,13 +206,13 @@ impl MooncakeTable {
         }
 
         // Perform delete operation.
-        let lookup_key = self.metadata.identity.get_lookup_key(&row);
-        let metadata_identity = self.metadata.identity.clone();
+        let lookup_key = self.metadata.config.row_identity.get_lookup_key(&row);
+        let row_identity = self.metadata.config.row_identity.clone();
         let mut record = RawDeletionRecord {
             lookup_key,
             lsn: get_lsn_for_pending_xact(xact_id), // at commit time we will update this with the actual lsn
             pos: None,
-            row_identity: metadata_identity.extract_identity_columns(row),
+            row_identity: row_identity.extract_identity_columns(row),
         };
 
         let stream_state = self.get_or_create_stream_state(xact_id);
@@ -222,7 +226,7 @@ impl MooncakeTable {
             // Delete from stream mem slice
             if stream_state
                 .mem_slice
-                .delete(&record, &metadata_identity)
+                .delete(&record, &row_identity)
                 .await
                 .is_some()
             {
@@ -243,7 +247,7 @@ impl MooncakeTable {
                                 continue;
                             }
                             if record.row_identity.is_some()
-                                && metadata_identity.requires_identity_check_in_mem_slice()
+                                && row_identity.requires_identity_check_in_mem_slice()
                                 && !record
                                     .row_identity
                                     .as_ref()
@@ -251,7 +255,7 @@ impl MooncakeTable {
                                     .equals_record_batch_at_offset(
                                         batch.data.as_ref().unwrap(),
                                         row_id,
-                                        &metadata_identity,
+                                        &row_identity,
                                     )
                             {
                                 continue;
@@ -286,7 +290,7 @@ impl MooncakeTable {
                                     .equals_parquet_at_offset(
                                         file.file_path(),
                                         row_id,
-                                        &metadata_identity,
+                                        &row_identity,
                                     )
                                     .await
                             {
@@ -306,7 +310,7 @@ impl MooncakeTable {
         // Scope the main table deletion lookup
         record.pos = {
             self.mem_slice
-                .find_non_deleted_position(&record, &metadata_identity)
+                .find_non_deleted_position(&record, &row_identity)
                 .await
         };
 

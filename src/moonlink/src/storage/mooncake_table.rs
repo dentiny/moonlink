@@ -96,8 +96,6 @@ pub struct TableMetadata {
     pub(crate) config: MooncakeTableConfig,
     /// storage path
     pub(crate) path: PathBuf,
-    /// function to get lookup key from row
-    pub(crate) identity: IdentityProp,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -126,18 +124,17 @@ impl TableMetadata {
             schema: Arc::new(new_schema),
             config: previous_metadata.config.clone(),
             path: previous_metadata.path.clone(),
-            identity: previous_metadata.identity.clone(),
         }
     }
 
     /// Validate metadata invariants.
     pub fn validate(&self) {
         // Validate identity property.
-        if self.identity == IdentityProp::None {
+        if self.config.row_identity == IdentityProp::None {
             assert!(self.config.append_only);
         }
         if self.config.append_only {
-            assert_eq!(self.identity, IdentityProp::None);
+            assert_eq!(self.config.row_identity, IdentityProp::None);
         }
         // Validate table config.
         self.config.validate();
@@ -482,7 +479,6 @@ impl MooncakeTable {
         name: String,
         table_id: u32,
         base_path: PathBuf,
-        identity: IdentityProp,
         iceberg_table_config: IcebergTableConfig,
         table_config: MooncakeTableConfig,
         wal_manager: WalManager,
@@ -495,7 +491,6 @@ impl MooncakeTable {
             schema: Arc::new(schema.clone()),
             config: table_config.clone(),
             path: base_path,
-            identity,
         });
         let iceberg_table_manager = Box::new(IcebergTableManager::new(
             metadata.clone(),
@@ -540,7 +535,7 @@ impl MooncakeTable {
             mem_slice: MemSlice::new(
                 table_metadata.schema.clone(),
                 table_metadata.config.batch_size,
-                table_metadata.identity.clone(),
+                table_metadata.config.row_identity.clone(),
                 Arc::clone(&non_streaming_batch_id_counter),
             ),
             metadata: table_metadata.clone(),
@@ -595,7 +590,7 @@ impl MooncakeTable {
         self.mem_slice = MemSlice::new(
             new_metadata.schema.clone(),
             new_metadata.config.batch_size,
-            new_metadata.identity.clone(),
+            new_metadata.config.row_identity.clone(),
             Arc::clone(&self.non_streaming_batch_id_counter),
         );
         let mut guard = self.snapshot.try_write().unwrap();
@@ -1130,8 +1125,12 @@ impl MooncakeTable {
         }
 
         // Perform append operation.
-        let lookup_key = self.metadata.identity.get_lookup_key(&row);
-        let identity_for_key = self.metadata.identity.extract_identity_for_key(&row);
+        let lookup_key = self.metadata.config.row_identity.get_lookup_key(&row);
+        let identity_for_key = self
+            .metadata
+            .config
+            .row_identity
+            .extract_identity_for_key(&row);
         if let Some(batch) = self.mem_slice.append(lookup_key, row, identity_for_key)? {
             self.next_snapshot_task
                 .new_record_batches
@@ -1146,7 +1145,7 @@ impl MooncakeTable {
 
     pub async fn delete(&mut self, row: MoonlinkRow, lsn: u64) {
         // Check if this is an append-only table
-        if matches!(self.metadata.identity, IdentityProp::None) {
+        if matches!(self.metadata.config.row_identity, IdentityProp::None) {
             tracing::error!("Delete operation not supported for append-only tables");
             return;
         }
@@ -1164,16 +1163,20 @@ impl MooncakeTable {
         }
 
         // Perform delete operation.
-        let lookup_key = self.metadata.identity.get_lookup_key(&row);
+        let lookup_key = self.metadata.config.row_identity.get_lookup_key(&row);
         let mut record = RawDeletionRecord {
             lookup_key,
             lsn,
             pos: None,
-            row_identity: self.metadata.identity.extract_identity_columns(row),
+            row_identity: self
+                .metadata
+                .config
+                .row_identity
+                .extract_identity_columns(row),
         };
         let pos = self
             .mem_slice
-            .delete(&record, &self.metadata.identity)
+            .delete(&record, &self.metadata.config.row_identity)
             .await;
         record.pos = pos;
         self.next_snapshot_task.new_deletions.push(record);

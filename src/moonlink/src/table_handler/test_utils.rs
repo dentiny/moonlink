@@ -1,5 +1,6 @@
 use crate::event_sync::create_table_event_syncer;
-use crate::row::{IdentityProp, MoonlinkRow, RowValue};
+use crate::row::IdentityProp;
+use crate::row::{MoonlinkRow, RowValue};
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
 use crate::storage::mooncake_table::table_creation_test_utils::create_test_arrow_schema;
@@ -89,8 +90,9 @@ impl TestEnvironment {
     /// Creates a default test environment with default settings.
     pub async fn default() -> Self {
         let temp_dir = tempdir().unwrap();
-        let mooncake_table_config =
+        let mut mooncake_table_config =
             MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
+        mooncake_table_config.row_identity = IdentityProp::Keys(vec![0]);
         Self::new(temp_dir, mooncake_table_config).await
     }
 
@@ -156,19 +158,11 @@ impl TestEnvironment {
         let wal_config = WalConfig::default_wal_config_local(WAL_TEST_TABLE_ID, temp_dir.path());
         let wal_manager = WalManager::new(&wal_config);
 
-        // Use appropriate identity based on append_only configuration
-        let identity = if mooncake_table_config.append_only {
-            IdentityProp::None
-        } else {
-            IdentityProp::Keys(vec![0])
-        };
-
         let mooncake_table = MooncakeTable::new(
             (*create_test_arrow_schema()).clone(),
             table_name.to_string(),
             1,
             path,
-            identity,
             iceberg_table_config.clone(),
             mooncake_table_config,
             wal_manager,
@@ -188,20 +182,12 @@ impl TestEnvironment {
     ) -> IcebergTableManager {
         let table_name = "table_name";
 
-        // Use appropriate identity based on append_only configuration
-        let identity = if mooncake_table_config.append_only {
-            IdentityProp::None
-        } else {
-            IdentityProp::Keys(vec![0])
-        };
-
         let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
             name: table_name.to_string(),
             table_id: 0,
             schema: create_test_arrow_schema(),
             config: mooncake_table_config.clone(),
             path: self.temp_dir.path().to_path_buf(),
-            identity,
         });
         let iceberg_table_config = get_iceberg_manager_config(
             table_name.to_string(),

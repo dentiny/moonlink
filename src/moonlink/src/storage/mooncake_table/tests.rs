@@ -260,14 +260,12 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
 #[tokio::test]
 async fn test_snapshot_initialization() -> Result<()> {
     let schema = create_test_arrow_schema();
-    let identity = IdentityProp::Keys(vec![0]);
     let metadata = Arc::new(TableMetadata {
         name: "test_table".to_string(),
         table_id: 1,
         schema,
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::new(),
-        identity,
     });
     let snapshot = Snapshot::new(metadata);
     assert_eq!(snapshot.snapshot_version, 0);
@@ -491,10 +489,9 @@ async fn test_duplicate_deletion() -> Result<()> {
 #[tokio::test]
 async fn test_table_recovery() {
     let table_name = "table_recovery";
-    let row_identity = IdentityProp::Keys(vec![0]);
 
     let context = TestContext::new(table_name);
-    let mut table = test_table(&context, table_name, row_identity.clone()).await;
+    let mut table = test_table(&context, table_name, IdentityProp::FullRow).await;
     let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
     table.register_table_notify(event_completion_tx).await;
 
@@ -516,7 +513,6 @@ async fn test_table_recovery() {
         table_name.to_string(),
         /*table_id=*/ 1,
         context.path(),
-        row_identity.clone(),
         iceberg_table_config.clone(),
         test_mooncake_table_config(&context),
         wal_manager,
@@ -538,7 +534,6 @@ async fn test_snapshot_load_failure() {
         schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),
-        identity: IdentityProp::Keys(vec![0]),
     });
     let mut mock_table_manager = MockTableManager::new();
     mock_table_manager
@@ -576,7 +571,6 @@ async fn test_snapshot_store_failure() {
         schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(), // No temp files generated.
         path: PathBuf::from(temp_dir.path()),
-        identity: IdentityProp::Keys(vec![0]),
     });
     let table_metadata_copy = table_metadata.clone();
 
@@ -2636,7 +2630,6 @@ async fn test_disk_slice_write_failure() -> Result<()> {
         schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(),
         path: invalid_path, // This directory doesn't exist, causing write failures
-        identity: IdentityProp::Keys(vec![0]),
     });
 
     let table_metadata_copy = table_metadata.clone();

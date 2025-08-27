@@ -102,7 +102,7 @@ async fn create_mooncake_table_for_replay(
     let table_metadata = create_test_table_metadata_with_config_and_identity(
         local_table_directory,
         mooncake_table_config,
-        replay_table_metadata.identity.clone(),
+        replay_table_metadata.config.row_identity.clone(),
     );
     let object_storage_cache = if replay_table_metadata.local_filesystem_optimization_enabled {
         let config = ObjectStorageCacheConfig::new(
