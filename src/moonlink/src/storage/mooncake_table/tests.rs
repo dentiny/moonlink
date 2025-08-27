@@ -1026,14 +1026,13 @@ async fn test_streaming_begin_flush_delete_commit_end_flush() {
     table.delete_in_stream_batch(row2, xact_id2).await;
 
     // Commit the new transaction
+    let disk_slice2 =
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id2, Some(lsn2 + 1))
+            .await
+            .unwrap();
     table
         .commit_transaction_stream_impl(xact_id2, lsn2 + 1)
         .unwrap();
-
-    let disk_slice2 =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id2, Some(lsn2))
-            .await
-            .unwrap();
 
     table.apply_stream_flush_result(
         xact_id,
@@ -1353,14 +1352,16 @@ async fn test_streaming_flush_lsns_tracking() -> Result<()> {
 
     // Flush streaming transactions with different LSNs (can be out of order)
     let disk_slice_1 =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_1, Some(100))
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_1, Some(50))
             .await
             .expect("Disk slice 1 should be present");
+    table.commit_transaction_stream_impl(xact_id_1, /*lsn=*/ 50).unwrap();
 
     let disk_slice_2 =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_2, Some(50))
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_2, Some(100))
             .await
             .expect("Disk slice 2 should be present");
+    table.commit_transaction_stream_impl(xact_id_2, /*lsn=*/ 100).unwrap();
 
     // Verify both streaming LSNs are tracked
     assert!(table.ongoing_flush_lsns.contains_key(&100));
@@ -2235,7 +2236,7 @@ async fn test_streaming_batch_id_mismatch_with_data_compaction() -> Result<()> {
         &mut table,
         &mut event_completion_rx,
         xact_id,
-        /*lsn=*/ None,
+        /*lsn=*/ Some(21),
     )
     .await
     .expect("Disk slice should be present");
