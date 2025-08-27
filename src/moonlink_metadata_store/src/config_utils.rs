@@ -63,12 +63,25 @@ struct MooncakeTableConfigForPersistence {
     persistence_config: IcebergPersistenceConfig,
 
     /// Whether this is an append-only table (no indexes, no deletes).
-    #[serde(default)]
+    #[serde(default = "MoonlinkTableConfigForPersistence::default_append_only")]
     append_only: bool,
 
     /// Identity of a single row.
-    #[serde(default)]
+    #[serde(default = "MoonlinkTableConfigForPersistence::default_row_identity")]
     row_identity: IdentityProp,
+}
+
+impl MooncakeTableConfigForPersistence {
+    /// Validate the config.
+    /// Notice, persisted config should keep backward compatibility and forward compatibility, and ALWAYS be valid.
+    fn validate(&self) {
+        if self.append_only {
+            assert_eq!(self.row_identity, IdentityProp::None);
+        }
+        if self.row_identity == IdentityProp::None {
+            assert!(self.append_only);
+        }
+    }
 }
 
 /// Struct for moonlink table config.
@@ -84,8 +97,28 @@ struct MoonlinkTableConfigForPersistence {
 }
 
 impl MoonlinkTableConfigForPersistence {
+    // Notice, default value for the table config should be a valid combination.
+    const DEFAULT_APPEND_ONLY: bool = true;
+    const DEFAULT_ROW_IDENTITY: IdentityProp = IdentityProp::None;
+
+    pub fn default_append_only() -> bool {
+        Self::DEFAULT_APPEND_ONLY
+    }
+    pub fn default_row_identity() -> IdentityProp {
+        Self::DEFAULT_ROW_IDENTITY
+    }
+
+    /// Validate the config.
+    /// Notice, persisted config should keep backward compatibility and forward compatibility, and ALWAYS be valid.
+    fn validate(&self) {
+        self.mooncake_table_config.validate();
+    }
+
     /// Get mooncake table config from persisted moonlink config.
     fn get_mooncake_table_config(&self) -> MooncakeTableConfig {
+        // Validate before exporting into mooncake table config.
+        self.validate();
+
         MooncakeTableConfig {
             append_only: self.mooncake_table_config.append_only,
             row_identity: self.mooncake_table_config.row_identity.clone(),
@@ -350,9 +383,9 @@ mod tests {
             // Iceberg persistence config.
             persistence_config: IcebergPersistenceConfig::default(),
             // Append-only config.
-            append_only: false,
+            append_only: true,
             // Row identity.
-            row_identity: IdentityProp::default(),
+            row_identity: IdentityProp::None,
         };
         assert_eq!(actual_persisted_config, expected_persisted_config);
     }
