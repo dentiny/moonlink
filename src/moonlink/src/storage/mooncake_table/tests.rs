@@ -737,10 +737,14 @@ async fn test_streaming_begin_flush_commit_end_flush() {
 
     // Begin the flush
     // This will drain the mem slice and add its relevant state to the stream state
-    let disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(lsn))
-            .await
-            .expect("Disk slice should be present");
+    let disk_slice = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        Some(lsn + 1),
+    )
+    .await
+    .expect("Disk slice should be present");
 
     // Wait to apply the flush to simulate an async flush that hasn't returned
     // Commit the transaction while the flush is pending
@@ -808,24 +812,24 @@ async fn test_streaming_begin_flush_commit_end_flush_multiple() {
 
     // Begin the flush
     // This will drain the mem slice and add its relevant state to the stream state
-    let disk_slice1 =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(lsn))
-            .await
-            .unwrap();
+    let disk_slice1 = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        /*lsn=*/ None,
+    )
+    .await
+    .unwrap();
 
     let row2 = test_row(2, "B", 21);
     table.append_in_stream_batch(row2, xact_id).unwrap();
 
     // Begin the flush
     // This will drain the mem slice and add its relevant state to the stream state
-    let disk_slice2 = flush_stream_and_sync_no_apply(
-        &mut table,
-        &mut event_completion_rx,
-        xact_id,
-        Some(lsn + 1),
-    )
-    .await
-    .unwrap();
+    let disk_slice2 =
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(lsn))
+            .await
+            .unwrap();
 
     // Wait to apply the flush to simulate an async flush that hasn't returned
     // Commit the transaction while the flush is pending
@@ -987,10 +991,14 @@ async fn test_streaming_begin_flush_delete_commit_end_flush() {
 
     // Begin the flush
     // This will drain the mem slice and add its relevant state to the stream state
-    let disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(lsn))
-            .await
-            .unwrap();
+    let disk_slice = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        Some(lsn + 1),
+    )
+    .await
+    .unwrap();
 
     // Wait to apply the flush to simulate an async flush that hasn't returned
     // Commit the transaction while the flush is pending
@@ -2216,10 +2224,14 @@ async fn test_streaming_batch_id_mismatch_with_data_compaction() -> Result<()> {
 
     // Step 3: Flush the streaming transaction
     // This creates a disk slice with the original batch IDs
-    let disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(20))
-            .await
-            .expect("Disk slice should be present");
+    let disk_slice = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        /*lsn=*/ None,
+    )
+    .await
+    .expect("Disk slice should be present");
 
     // Step 4: Delete one of the rows in the streaming transaction
     // This can cause some batches to become empty after filtering
@@ -2292,12 +2304,6 @@ async fn test_streaming_empty_batch_filtering() -> Result<()> {
     table.append_in_stream_batch(test_row(2, "ToDelete", 21), xact_id1)?;
     table.append_in_stream_batch(test_row(3, "AlsoDelete", 22), xact_id1)?;
 
-    // Flush stream 1
-    let disk_slice1 =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id1, Some(10))
-            .await
-            .expect("Stream 1 disk slice should be present");
-
     // Delete all rows in stream 1 (making batches empty after filtering)
     table
         .delete_in_stream_batch(test_row(2, "ToDelete", 21), xact_id1)
@@ -2306,8 +2312,18 @@ async fn test_streaming_empty_batch_filtering() -> Result<()> {
         .delete_in_stream_batch(test_row(3, "AlsoDelete", 22), xact_id1)
         .await;
 
+    // Flush stream 1
+    let disk_slice1 = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id1,
+        /*lsn=*/ Some(11),
+    )
+    .await
+    .expect("Stream 1 disk slice should be present");
+
     // Commit stream 1
-    table.commit_transaction_stream_impl(xact_id1, 11)?;
+    table.commit_transaction_stream_impl(xact_id1, /*lsn=*/ 11)?;
     table.apply_stream_flush_result(
         xact_id1,
         disk_slice1,
@@ -2368,7 +2384,7 @@ async fn test_batch_id_removal_assertion_direct() -> Result<()> {
     // This creates a disk slice that contains the original batch ID
     // but the batch will be filtered out during processing (empty after deletion)
     let disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(10))
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(11))
             .await
             .expect("Disk slice should be present");
 
@@ -2506,14 +2522,10 @@ async fn test_stream_commit_with_ongoing_flush_deletion_remapping() -> Result<()
 
     // Step 4: Flush the streaming transaction (creates disk slice)
     // The disk slice now contains the deletion remapping info
-    let disk_slice = flush_stream_and_sync_no_apply(
-        &mut table,
-        &mut event_completion_rx,
-        xact_id,
-        /*lsn=*/ Some(3),
-    )
-    .await
-    .expect("Disk slice should be present");
+    let disk_slice =
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(3))
+            .await
+            .expect("Disk slice should be present");
 
     // Step 5: Commit the streaming transaction
     // This processes deletions and adds them to committed_deletion_log
@@ -2800,10 +2812,14 @@ async fn test_streaming_commit_before_flush_finishes_sets_flush_lsn() -> Result<
     table.append_in_stream_batch(row, xact_id)?;
 
     // Begin a streaming flush WITHOUT a writer LSN to simulate a periodic flush before commit
-    let disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, None)
-            .await
-            .expect("Disk slice should be present");
+    let disk_slice = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        Some(commit_lsn),
+    )
+    .await
+    .expect("Disk slice should be present");
 
     // Commit the transaction while the flush is still pending
     table

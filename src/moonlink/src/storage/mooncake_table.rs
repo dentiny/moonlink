@@ -840,6 +840,10 @@ impl MooncakeTable {
     }
 
     /// Flushes the disk slice for the transaction.
+    ///
+    /// # Arguments
+    ///
+    /// * ongoing_flush_count: used to increment ongoing flush count for the given LSN.
     fn flush_disk_slice(
         &mut self,
         disk_slice: &mut DiskSliceWriter,
