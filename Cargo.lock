@@ -4268,6 +4268,7 @@ dependencies = [
  "arrow-array",
  "arrow-schema",
  "console-subscriber",
+ "futures",
  "iceberg",
  "moonlink",
  "moonlink_connectors",

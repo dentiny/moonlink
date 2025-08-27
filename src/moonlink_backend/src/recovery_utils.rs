@@ -20,7 +20,7 @@ pub(crate) struct BackendAttributes {
 async fn recover_rest_table(
     backend_attributes: BackendAttributes,
     metadata_entry: TableMetadataEntry,
-    replication_manager: &mut ReplicationManager<MooncakeTableId>,
+    replication_manager: &mut ReplicationManager,
     read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()> {
     assert_eq!(metadata_entry.src_table_uri, REST_API_URI);
@@ -66,7 +66,7 @@ async fn recover_rest_table(
 /// Recovery non-REST ingestion table.
 async fn recover_non_rest_table(
     mut metadata_entry: TableMetadataEntry,
-    replication_manager: &mut ReplicationManager<MooncakeTableId>,
+    replication_manager: &mut ReplicationManager,
     read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()> {
     assert_ne!(metadata_entry.src_table_uri, REST_API_URI);
@@ -91,7 +91,7 @@ async fn recover_non_rest_table(
 async fn recover_table(
     backend_attributes: BackendAttributes,
     metadata_entry: TableMetadataEntry,
-    replication_manager: &mut ReplicationManager<MooncakeTableId>,
+    replication_manager: &mut ReplicationManager,
     read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()> {
     // Table created by REST API doesn't support recovery.
@@ -119,7 +119,7 @@ pub(super) async fn recover_all_tables(
     backend_attributes: BackendAttributes,
     metadata_store_accessor: &dyn MetadataStoreTrait,
     read_state_filepath_remap: ReadStateFilepathRemap,
-    replication_manager: &mut ReplicationManager<MooncakeTableId>,
+    replication_manager: &mut ReplicationManager,
 ) -> Result<()> {
     let mut unique_uris = HashSet::<String>::new();
 
