@@ -537,8 +537,15 @@ impl MooncakeTable {
         let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
 
         stream_state.ongoing_flush_count += 1;
+        let ongoing_flush_count = stream_state.ongoing_flush_count;
 
-        self.flush_disk_slice(&mut disk_slice, table_notify_tx, Some(xact_id), event_id);
+        self.flush_disk_slice(
+            &mut disk_slice,
+            table_notify_tx,
+            Some(xact_id),
+            ongoing_flush_count,
+            event_id,
+        );
 
         // Add back stream state
         self.transaction_stream_states.insert(xact_id, stream_state);

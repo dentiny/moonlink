@@ -350,8 +350,8 @@ async fn test_stream_delete_unflushed_non_streamed_row() {
 }
 
 #[tokio::test]
-async fn test_streaming_transaction_periodic_flush() {
-    let mut env = TestEnvironment::default().await;
+async fn test_hjiang_streaming_transaction_periodic_flush() {
+    let env = TestEnvironment::default().await;
     let xact_id = 201;
     let commit_lsn = 20; // LSN at which the transaction will eventually commit
     let initial_read_lsn_target = commit_lsn; // For verifying no data pre-commit
@@ -386,8 +386,6 @@ async fn test_streaming_transaction_periodic_flush() {
 
     env.verify_snapshot(final_read_lsn_target, &[10, 11, 12])
         .await;
-
-    env.shutdown().await;
 }
 
 #[tokio::test]

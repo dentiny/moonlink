@@ -65,7 +65,7 @@ use delete_vector::BatchDeletionVector;
 pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
 pub(crate) use snapshot::SnapshotTableState;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
@@ -462,7 +462,8 @@ pub struct MooncakeTable {
     wal_manager: WalManager,
 
     /// LSN of ongoing flushes.
-    pub ongoing_flush_lsns: BTreeSet<u64>,
+    /// Maps from LSN to its count.
+    pub ongoing_flush_lsns: BTreeMap<u64, u32>,
 
     /// Table replay sender.
     event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
@@ -565,7 +566,7 @@ impl MooncakeTable {
             last_iceberg_snapshot_lsn,
             table_notify: None,
             wal_manager,
-            ongoing_flush_lsns: BTreeSet::new(),
+            ongoing_flush_lsns: BTreeMap::new(),
             event_replay_tx: None,
         })
     }
@@ -843,10 +844,11 @@ impl MooncakeTable {
         disk_slice: &mut DiskSliceWriter,
         table_notify_tx: Sender<TableEvent>,
         xact_id: Option<u32>,
+        ongoing_flush_count: u32,
         event_id: uuid::Uuid,
     ) {
         if let Some(lsn) = disk_slice.lsn() {
-            self.insert_ongoing_flush_lsn(lsn);
+            self.insert_ongoing_flush_lsn(lsn, ongoing_flush_count);
         } else {
             assert!(
                 xact_id.is_some(),
@@ -913,31 +915,39 @@ impl MooncakeTable {
     fn try_set_next_flush_lsn(&mut self, lsn: u64) {
         let min_pending_lsn = self.get_min_ongoing_flush_lsn();
         if lsn < min_pending_lsn {
+            // TODO(hjiang): Add assertion that flush LSN never regresses, currently it's still buggy, I will fix in the followup PR.
             self.next_snapshot_task.new_flush_lsn = Some(lsn);
         }
     }
 
     // We fallback to u64::MAX if there are no pending flush LSNs so that the LSN is always greater than the flush LSN and the iceberg snapshot can proceed.
     pub fn get_min_ongoing_flush_lsn(&self) -> u64 {
-        self.ongoing_flush_lsns
-            .iter()
-            .next()
-            .copied()
-            .unwrap_or(u64::MAX)
+        if let Some((lsn, _)) = self.ongoing_flush_lsns.first_key_value() {
+            return *lsn;
+        }
+        u64::MAX
     }
 
-    pub fn insert_ongoing_flush_lsn(&mut self, lsn: u64) {
-        assert!(
-            self.ongoing_flush_lsns.insert(lsn),
-            "LSN {lsn} already in pending flush LSNs"
-        );
+    pub fn insert_ongoing_flush_lsn(&mut self, lsn: u64, count: u32) {
+        *self.ongoing_flush_lsns.entry(lsn).or_insert(0) += count;
     }
 
     pub fn remove_ongoing_flush_lsn(&mut self, lsn: u64) {
-        assert!(
-            self.ongoing_flush_lsns.remove(&lsn),
-            "LSN {lsn} not found in pending flush LSNs"
-        );
+        use std::collections::btree_map::Entry;
+
+        match self.ongoing_flush_lsns.entry(lsn) {
+            Entry::Occupied(mut entry) => {
+                let counter = entry.get_mut();
+                if *counter > 1 {
+                    *counter -= 1;
+                } else {
+                    entry.remove();
+                }
+            }
+            Entry::Vacant(_) => {
+                panic!("Tried to remove LSN {lsn}, but it is not tracked");
+            }
+        }
     }
 
     pub fn has_ongoing_flush(&self) -> bool {
@@ -1203,7 +1213,7 @@ impl MooncakeTable {
         );
 
         let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
-        if self.mem_slice.is_empty() || self.ongoing_flush_lsns.contains(&lsn) {
+        if self.mem_slice.is_empty() || self.ongoing_flush_lsns.contains_key(&lsn) {
             self.try_set_next_flush_lsn(lsn);
             tokio::task::spawn(async move {
                 table_notify_tx
@@ -1236,6 +1246,7 @@ impl MooncakeTable {
             &mut disk_slice,
             table_notify_tx,
             /*xact_id=*/ None,
+            /*ongoing_flush_count=*/ 1,
             event_id,
         );
 
