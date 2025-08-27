@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use crate::Result;
+use moonlink::row::IdentityProp;
 use moonlink::MooncakeTableId;
 use moonlink::{
     AccessorConfig, DataCompactionConfig, FileIndexMergeConfig, IcebergTableConfig,
@@ -44,6 +45,9 @@ impl MooncakeConfig {
         mooncake_table_config.file_index_config = index_merge_config;
         mooncake_table_config.data_compaction_config = data_compaction_config;
         mooncake_table_config.append_only = self.append_only;
+        if self.append_only {
+            mooncake_table_config.row_identity = IdentityProp::None;
+        }
         mooncake_table_config
     }
 }

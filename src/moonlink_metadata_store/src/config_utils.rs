@@ -1,4 +1,5 @@
 use crate::error::Result;
+use moonlink::row::IdentityProp;
 use moonlink::{
     AccessorConfig, DataCompactionConfig, DiskSliceWriterConfig, FileIndexMergeConfig,
     IcebergPersistenceConfig, IcebergTableConfig, MooncakeTableConfig, MooncakeTableId,
@@ -64,6 +65,10 @@ struct MooncakeTableConfigForPersistence {
     /// Whether this is an append-only table (no indexes, no deletes).
     #[serde(default)]
     append_only: bool,
+
+    /// Identity of a single row.
+    #[serde(default)]
+    row_identity: IdentityProp,
 }
 
 /// Struct for moonlink table config.
@@ -83,6 +88,7 @@ impl MoonlinkTableConfigForPersistence {
     fn get_mooncake_table_config(&self) -> MooncakeTableConfig {
         MooncakeTableConfig {
             append_only: self.mooncake_table_config.append_only,
+            row_identity: self.mooncake_table_config.row_identity.clone(),
             mem_slice_size: self.mooncake_table_config.mem_slice_size,
             snapshot_deletion_record_count: self
                 .mooncake_table_config
@@ -134,6 +140,7 @@ pub(crate) fn parse_moonlink_table_config(
             file_index_config: mooncake_config.file_index_config.clone(),
             persistence_config: mooncake_config.persistence_config.clone(),
             append_only: mooncake_config.append_only,
+            row_identity: mooncake_config.row_identity,
         },
         wal_root_uri: wal_config.get_accessor_config().get_root_path(),
     };
@@ -344,6 +351,8 @@ mod tests {
             persistence_config: IcebergPersistenceConfig::default(),
             // Append-only config.
             append_only: false,
+            // Row identity.
+            row_identity: IdentityProp::default(),
         };
         assert_eq!(actual_persisted_config, expected_persisted_config);
     }

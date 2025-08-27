@@ -359,7 +359,7 @@ impl PostgresConnection {
         &self,
         table_name: &str,
         mooncake_table_id: &T,
-        moonlink_table_config: MoonlinkTableConfig,
+        mut moonlink_table_config: MoonlinkTableConfig,
         is_recovery: bool,
         table_base_path: &str,
         read_state_filepath_remap: ReadStateFilepathRemap,
@@ -375,6 +375,7 @@ impl PostgresConnection {
 
         let (arrow_schema, identity) =
             crate::pg_replicate::util::postgres_schema_to_moonlink_schema(&table_schema);
+        moonlink_table_config.mooncake_table_config.row_identity = identity;
         let table_components = TableComponents {
             read_state_filepath_remap,
             object_storage_cache,
@@ -384,7 +385,6 @@ impl PostgresConnection {
         let mut table_resources = build_table_components(
             mooncake_table_id.to_string(),
             arrow_schema,
-            identity,
             table_name.to_string(),
             table_schema.src_table_id,
             &table_base_path.to_string(),

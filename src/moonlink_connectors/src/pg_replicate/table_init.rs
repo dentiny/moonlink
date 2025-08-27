@@ -72,7 +72,6 @@ async fn recreate_directory(dir: &PathBuf) -> Result<()> {
 pub async fn build_table_components(
     mooncake_table_id: String,
     arrow_schema: ArrowSchema,
-    mut identity: IdentityProp,
     src_table_name: String,
     src_table_id: SrcTableId,
     base_path: &str,
@@ -80,14 +79,6 @@ pub async fn build_table_components(
     table_components: TableComponents,
     is_recovery: bool,
 ) -> Result<TableResources> {
-    // Override identity to None if append_only is enabled
-    if table_components
-        .moonlink_table_config
-        .mooncake_table_config
-        .append_only
-    {
-        identity = IdentityProp::None;
-    }
     // Recreate write-through cache directory.
     let write_cache_path = PathBuf::from(base_path).join(&mooncake_table_id);
     recreate_directory(&write_cache_path).await?;
@@ -136,7 +127,6 @@ pub async fn build_table_components(
         mooncake_table_id,
         get_next_table_id(),
         write_cache_path,
-        identity,
         table_components
             .moonlink_table_config
             .iceberg_table_config
