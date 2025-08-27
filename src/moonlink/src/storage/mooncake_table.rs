@@ -64,6 +64,7 @@ use arrow_schema::Schema;
 use delete_vector::BatchDeletionVector;
 pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
+use more_asserts as ma;
 pub(crate) use snapshot::SnapshotTableState;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
@@ -915,7 +916,9 @@ impl MooncakeTable {
     fn try_set_next_flush_lsn(&mut self, lsn: u64) {
         let min_pending_lsn = self.get_min_ongoing_flush_lsn();
         if lsn < min_pending_lsn {
-            // TODO(hjiang): Add assertion that flush LSN never regresses, currently it's still buggy, I will fix in the followup PR.
+            if let Some(old_flush_lsn) = self.next_snapshot_task.new_flush_lsn {
+                ma::assert_le!(old_flush_lsn, lsn);
+            }
             self.next_snapshot_task.new_flush_lsn = Some(lsn);
         }
     }

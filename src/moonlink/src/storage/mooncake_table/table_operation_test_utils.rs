@@ -90,7 +90,7 @@ pub(crate) async fn flush_table_and_sync_no_apply(
     }
 }
 
-/// Flush mooncake, block wait its completion.
+/// Flush the given streaming transaction, block wait its completion.
 #[cfg(test)]
 pub(crate) async fn flush_stream_and_sync_no_apply(
     table: &mut MooncakeTable,

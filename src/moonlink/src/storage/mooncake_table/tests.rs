@@ -2506,10 +2506,14 @@ async fn test_stream_commit_with_ongoing_flush_deletion_remapping() -> Result<()
 
     // Step 4: Flush the streaming transaction (creates disk slice)
     // The disk slice now contains the deletion remapping info
-    let disk_slice =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id, Some(4))
-            .await
-            .expect("Disk slice should be present");
+    let disk_slice = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id,
+        /*lsn=*/ Some(3),
+    )
+    .await
+    .expect("Disk slice should be present");
 
     // Step 5: Commit the streaming transaction
     // This processes deletions and adds them to committed_deletion_log
