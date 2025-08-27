@@ -6,6 +6,8 @@ use tokio::io::AsyncSeekExt;
 
 /// Parquet file footer size.
 const FOOTER_SIZE: u64 = 8;
+/// Parquet file magic bytes ("PAR1").
+const PARQUET_MAGIC: &[u8; 4] = b"PAR1";
 
 /// Get serialized uncompressed parquet metadata from the given local filepath.
 /// TODO(hjiang): Currently it only supports local filepath.
@@ -22,11 +24,11 @@ pub(crate) async fn get_parquet_serialized_metadata(filepath: &str) -> Result<Ve
 
     // Read last 8 bytes (metadata length + magic bytes).
     file.seek(SeekFrom::End(-(FOOTER_SIZE as i64))).await?;
-    let mut footer = [0u8; 8];
+    let mut footer = [0u8; FOOTER_SIZE as usize];
     file.read_exact(&mut footer).await?;
 
     // Validate magic bytes.
-    if &footer[4..] != b"PAR1" {
+    if &footer[4..] != PARQUET_MAGIC {
         return Err(Error::data_corruption(format!(
             "File {filepath} magic bytes are corrupted"
         )));
@@ -43,7 +45,7 @@ pub(crate) async fn get_parquet_serialized_metadata(filepath: &str) -> Result<Ve
     }
 
     // Seek to metadata start and read.
-    let metadata_start = file_len - 8 - metadata_len;
+    let metadata_start = file_len - FOOTER_SIZE - metadata_len;
     file.seek(SeekFrom::Start(metadata_start)).await?;
 
     let mut buf = vec![0u8; metadata_len as usize];
