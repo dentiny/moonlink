@@ -5,8 +5,8 @@ use crate::rest_ingest::event_request::EventRequest;
 use crate::rest_ingest::RestApiConnection;
 use crate::{Error, Result};
 use moonlink::{
-    MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, ReadStateManager,
-    TableEventManager, TableStatusReader,
+    MooncakeTableId, MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap,
+    ReadStateManager, TableEventManager, TableStatusReader,
 };
 
 use arrow_schema::Schema as ArrowSchema;
@@ -63,27 +63,27 @@ struct TableState {
 
 /// Id which uniquely identifies a table, including source information (src uri, src table id) and destination information (mooncake table id).
 #[derive(Clone, Eq, PartialEq, Hash)]
-struct UniqueTableId<T: Clone + Eq + Hash + std::fmt::Display> {
-    mooncake_table_id: T,
+struct UniqueTableId {
+    mooncake_table_id: MooncakeTableId,
     src_table_id: u32,
 }
 
 /// Manages replication for table(s) within a database from various sources (PostgreSQL CDC, REST API, etc.).
-pub struct ReplicationConnection<T: Clone + Eq + Hash + std::fmt::Display> {
+pub struct ReplicationConnection {
     table_base_path: String,
     // Source-specific connections
     source: SourceType,
     // Common fields
     handle: Option<JoinHandle<Result<()>>>,
     /// Maps from unique table id to its table states.
-    table_states: HashMap<UniqueTableId<T>, TableState>,
+    table_states: HashMap<UniqueTableId, TableState>,
     /// Whether replication has started.
     replication_started: bool,
     /// Object storage cache.
     object_storage_cache: ObjectStorageCache,
 }
 
-impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
+impl ReplicationConnection {
     pub async fn new(
         uri: String,
         table_base_path: String,
@@ -122,7 +122,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
 
     pub fn get_table_reader(
         &self,
-        mooncake_table_id: &T,
+        mooncake_table_id: &MooncakeTableId,
         src_table_id: SrcTableId,
     ) -> &ReadStateManager {
         let unique_table_id = UniqueTableId {
@@ -134,7 +134,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
 
     pub fn get_table_status_reader(
         &self,
-        mooncake_table_id: &T,
+        mooncake_table_id: &MooncakeTableId,
         src_table_id: SrcTableId,
     ) -> &TableStatusReader {
         let unique_table_id = UniqueTableId {
@@ -148,7 +148,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
             .status_reader
     }
 
-    pub fn get_table_status_readers(&self) -> HashMap<T, &TableStatusReader> {
+    pub fn get_table_status_readers(&self) -> HashMap<MooncakeTableId, &TableStatusReader> {
         self.table_states
             .iter()
             .map(|(unique_table_id, cur_table_state)| {
@@ -166,7 +166,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
 
     pub fn get_table_event_manager(
         &mut self,
-        mooncake_table_id: &T,
+        mooncake_table_id: &MooncakeTableId,
         src_table_id: SrcTableId,
     ) -> &mut TableEventManager {
         let unique_table_id = UniqueTableId {
@@ -198,7 +198,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
     pub async fn add_table_replication(
         &mut self,
         src_table_name: &str,
-        mooncake_table_id: &T,
+        mooncake_table_id: &MooncakeTableId,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
         is_recovery: bool,
@@ -250,7 +250,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
     pub async fn add_table_api(
         &mut self,
         src_table_name: &str,
-        mooncake_table_id: &T,
+        mooncake_table_id: &MooncakeTableId,
         arrow_schema: ArrowSchema,
         moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
@@ -338,7 +338,11 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationConnection<T> {
     }
 
     /// Remove the given table from connection.
-    pub async fn drop_table(&mut self, mooncake_table_id: &T, src_table_id: u32) -> Result<()> {
+    pub async fn drop_table(
+        &mut self,
+        mooncake_table_id: &MooncakeTableId,
+        src_table_id: u32,
+    ) -> Result<()> {
         debug!(src_table_id, "dropping table");
 
         // Get table state and remove it from the map
@@ -407,7 +411,7 @@ mod tests {
         );
         let object_storage_cache = ObjectStorageCache::new(cache_config);
 
-        let mut connection = ReplicationConnection::<u32>::new(
+        let mut connection = ReplicationConnection::new(
             crate::replication_manager::REST_API_URI.to_string(),
             temp_dir.path().join("tables").to_string_lossy().to_string(),
             object_storage_cache,

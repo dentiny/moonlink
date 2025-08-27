@@ -41,7 +41,7 @@ pub struct MoonlinkBackend {
     // Metadata storage accessor.
     metadata_store_accessor: Box<dyn MetadataStoreTrait>,
 
-    replication_manager: RwLock<ReplicationManager<MooncakeTableId>>,
+    replication_manager: RwLock<ReplicationManager>,
 
     event_api_sender: Option<tokio::sync::mpsc::Sender<EventRequest>>,
 }
