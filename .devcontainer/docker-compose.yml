@@ -42,6 +42,11 @@ services:
       - "9000:9000"  # S3 API
       - "9001:9001"  # Web UI
 
+  iceberg-rest:
+    image: apache/iceberg-rest-fixture:latest
+    ports:
+      - "8181:8181"
+
   fake-gcs:
     image: fsouza/fake-gcs-server:latest
     hostname: gcs

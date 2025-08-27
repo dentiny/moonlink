@@ -591,18 +591,20 @@ impl MooncakeTable {
             alter_table_request,
         ));
 
-        let mut guard = self.snapshot.try_write().unwrap();
-        guard.reset_for_alter(new_metadata.clone());
-        assert!(
-            self.metadata.schema.fields.len() != new_metadata.schema.fields.len(),
-            "Only support alter table with add/drop fields"
-        );
+        // Follow the same initialization order as mooncake table, which is used to decide batch id assignment.
         self.mem_slice = MemSlice::new(
             new_metadata.schema.clone(),
             new_metadata.config.batch_size,
             new_metadata.identity.clone(),
             Arc::clone(&self.non_streaming_batch_id_counter),
         );
+        let mut guard = self.snapshot.try_write().unwrap();
+        guard.reset_for_alter(new_metadata.clone());
+        assert!(
+            self.metadata.schema.fields.len() != new_metadata.schema.fields.len(),
+            "Only support alter table with add/drop fields"
+        );
+
         self.metadata = new_metadata.clone();
         new_metadata
     }

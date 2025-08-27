@@ -2905,3 +2905,58 @@ async fn test_two_deletes_same_key_after_flush() -> Result<()> {
     .await;
     Ok(())
 }
+
+#[tokio::test]
+async fn test_streaming_batch_id_assignment() -> Result<()> {
+    let context = TestContext::new("streaming_batch_id_assignment");
+    let mut table = test_table(&context, "lsn_table", IdentityProp::FullRow).await;
+    let (event_completion_tx, mut event_completion_rx) = mpsc::channel(100);
+    table.register_table_notify(event_completion_tx).await;
+
+    let xact_id_1 = 1;
+    let xact_id_2 = 2;
+
+    // Start streaming transactions
+    table.append_in_stream_batch(test_row(1, "A", 20), xact_id_1)?;
+    table.append_in_stream_batch(test_row(2, "B", 21), xact_id_2)?;
+
+    // Flush streaming transactions with different LSNs (can be out of order)
+    let disk_slice_1 =
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_1, Some(50))
+            .await
+            .expect("Disk slice 1 should be present");
+    table
+        .commit_transaction_stream_impl(xact_id_1, /*lsn=*/ 50)
+        .unwrap();
+
+    let disk_slice_2 =
+        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_2, Some(100))
+            .await
+            .expect("Disk slice 2 should be present");
+    table
+        .commit_transaction_stream_impl(xact_id_2, /*lsn=*/ 100)
+        .unwrap();
+
+    // Verify both streaming LSNs are tracked
+    assert!(table.ongoing_flush_lsns.contains(&100));
+    assert!(table.ongoing_flush_lsns.contains(&50));
+    assert_eq!(table.get_min_ongoing_flush_lsn(), 50);
+
+    // Complete streaming flushes
+    table.apply_stream_flush_result(
+        xact_id_1,
+        disk_slice_1,
+        uuid::Uuid::new_v4(), /*placeholder*/
+    );
+    table.apply_stream_flush_result(
+        xact_id_2,
+        disk_slice_2,
+        uuid::Uuid::new_v4(), /*placeholder*/
+    );
+
+    // Verify all pending flushes are cleared
+    assert!(table.ongoing_flush_lsns.is_empty());
+    assert_eq!(table.get_min_ongoing_flush_lsn(), u64::MAX);
+
+    Ok(())
+}
