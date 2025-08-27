@@ -585,8 +585,6 @@ impl MooncakeTable {
             );
         }
         for (id, _) in stream_state.new_record_batches.iter() {
-            println!("when ingesting lsn {} has id = {}", lsn, *id);
-
             assert!(
                 self.next_snapshot_task
                     .flushing_batch_lsn_map

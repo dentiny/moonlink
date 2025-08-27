@@ -1026,10 +1026,14 @@ async fn test_streaming_begin_flush_delete_commit_end_flush() {
     table.delete_in_stream_batch(row2, xact_id2).await;
 
     // Commit the new transaction
-    let disk_slice2 =
-        flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id2, Some(lsn2 + 1))
-            .await
-            .unwrap();
+    let disk_slice2 = flush_stream_and_sync_no_apply(
+        &mut table,
+        &mut event_completion_rx,
+        xact_id2,
+        Some(lsn2 + 1),
+    )
+    .await
+    .unwrap();
     table
         .commit_transaction_stream_impl(xact_id2, lsn2 + 1)
         .unwrap();
@@ -1355,13 +1359,17 @@ async fn test_streaming_flush_lsns_tracking() -> Result<()> {
         flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_1, Some(50))
             .await
             .expect("Disk slice 1 should be present");
-    table.commit_transaction_stream_impl(xact_id_1, /*lsn=*/ 50).unwrap();
+    table
+        .commit_transaction_stream_impl(xact_id_1, /*lsn=*/ 50)
+        .unwrap();
 
     let disk_slice_2 =
         flush_stream_and_sync_no_apply(&mut table, &mut event_completion_rx, xact_id_2, Some(100))
             .await
             .expect("Disk slice 2 should be present");
-    table.commit_transaction_stream_impl(xact_id_2, /*lsn=*/ 100).unwrap();
+    table
+        .commit_transaction_stream_impl(xact_id_2, /*lsn=*/ 100)
+        .unwrap();
 
     // Verify both streaming LSNs are tracked
     assert!(table.ongoing_flush_lsns.contains_key(&100));
@@ -1370,7 +1378,7 @@ async fn test_streaming_flush_lsns_tracking() -> Result<()> {
 
     // Mix with regular flush (must be higher than previous regular flush)
     append_rows(&mut table, vec![test_row(3, "C", 22)])?;
-    table.commit(3);
+    table.commit(103);
     let disk_slice_3 = flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, 75)
         .await
         .expect("Disk slice 3 should be present");
@@ -2938,8 +2946,8 @@ async fn test_streaming_batch_id_assignment() -> Result<()> {
         .unwrap();
 
     // Verify both streaming LSNs are tracked
-    assert!(table.ongoing_flush_lsns.contains(&100));
-    assert!(table.ongoing_flush_lsns.contains(&50));
+    assert!(table.ongoing_flush_lsns.contains_key(&100));
+    assert!(table.ongoing_flush_lsns.contains_key(&50));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 50);
 
     // Complete streaming flushes
