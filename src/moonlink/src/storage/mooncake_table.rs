@@ -66,7 +66,7 @@ pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
 use more_asserts as ma;
 pub(crate) use snapshot::SnapshotTableState;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
@@ -463,6 +463,12 @@ pub struct MooncakeTable {
     /// Maps from LSN to its count.
     pub ongoing_flush_lsns: BTreeMap<u64, u32>,
 
+    /// Unrecorded completed flush LSNs.
+    ///
+    /// All flush operations are async, which means it's possible that flushes with larger LSN finish before those with smaller LSNs, so they cannot be reflected to snapshot flush LSN immediately.
+    /// To avoid losing LSNs, we need to keep track of early completed unrecorded LSNs as well.
+    pub completed_unrecorded_flush_lsns: BTreeSet<u64>,
+
     /// Table replay sender.
     event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
 }
@@ -563,6 +569,7 @@ impl MooncakeTable {
             table_notify: None,
             wal_manager,
             ongoing_flush_lsns: BTreeMap::new(),
+            completed_unrecorded_flush_lsns: BTreeSet::new(),
             event_replay_tx: None,
         })
     }
@@ -916,11 +923,28 @@ impl MooncakeTable {
     // Attempts to set the flush LSN for the next iceberg snapshot. Note that we can only set the flush LSN if it's less than the current min pending flush LSN. Otherwise, LSNs will be persisted to iceberg in the wrong order.
     fn try_set_next_flush_lsn(&mut self, lsn: u64) {
         let min_pending_lsn = self.get_min_ongoing_flush_lsn();
+
         if lsn < min_pending_lsn {
             if let Some(old_flush_lsn) = self.next_snapshot_task.new_flush_lsn {
                 ma::assert_le!(old_flush_lsn, lsn);
             }
             self.next_snapshot_task.new_flush_lsn = Some(lsn);
+        } else {
+            // It's possible to have multiple flushes with the same LSN.
+            self.completed_unrecorded_flush_lsns.insert(lsn);
+        }
+
+        // Check whether we need to add completed unrecorded flush LSNs into next snapshot.
+        if self.ongoing_flush_lsns.is_empty() {
+            if let Some(smallest_lsn) = self.completed_unrecorded_flush_lsns.first() {
+                if let Some(cur_flush_lsn) = self.next_snapshot_task.new_flush_lsn {
+                    ma::assert_le!(cur_flush_lsn, smallest_lsn);
+                }
+            }
+            if let Some(largest_lsn) = self.completed_unrecorded_flush_lsns.last() {
+                self.next_snapshot_task.new_flush_lsn = Some(*largest_lsn);
+            }
+            self.completed_unrecorded_flush_lsns.clear();
         }
     }
 

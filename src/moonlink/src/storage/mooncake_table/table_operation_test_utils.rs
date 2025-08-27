@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Receiver;
@@ -24,6 +26,39 @@ use tracing::{debug, error};
 /// Flush
 /// ===============================
 ///
+/// Synchronize on ongoing flushes and return a map of <event id, disk slice>.
+#[cfg(test)]
+pub(crate) async fn get_flush_results(
+    receiver: &mut Receiver<TableEvent>,
+    expected_flushes: usize,
+) -> HashMap<uuid::Uuid, DiskSliceWriter> {
+    let mut flush_results = HashMap::new();
+    for _ in 0..expected_flushes {
+        let cur_flush_result = receiver.recv().await.unwrap();
+        match cur_flush_result {
+            TableEvent::FlushResult {
+                event_id,
+                xact_id: _,
+                flush_result,
+            } => match flush_result {
+                Some(Ok(disk_slice)) => {
+                    flush_results.insert(event_id, disk_slice);
+                }
+                Some(Err(e)) => {
+                    error!(error = ?e, "failed to flush disk slice");
+                }
+                None => {
+                    debug!("Flush result is none, disk slice was empty");
+                }
+            },
+            _ => {
+                panic!("Expected FlushResult as first event, but got others.");
+            }
+        }
+    }
+    flush_results
+}
+
 /// Flush mooncake, block wait its completion and reflect result to mooncake table.
 #[cfg(test)]
 pub(crate) async fn flush_table_and_sync(
@@ -350,6 +385,11 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
         .unwrap();
+
+    println!(
+        "after creating mooncake snapshot, iceberg snapdhot ? {}",
+        iceberg_snapshot_payload.is_some()
+    );
 
     // Create iceberg snapshot if possible.
     if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
