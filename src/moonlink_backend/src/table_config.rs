@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::Result;
+use crate::{Error, Result};
 use moonlink::row::IdentityProp;
 use moonlink::MooncakeTableId;
 use moonlink::{
@@ -50,6 +50,17 @@ impl MooncakeConfig {
         Self::DEFAULT_ROW_IDENTITY
     }
 
+    /// Return whether config is valid.
+    pub fn is_valid(&self) -> bool {
+        if self.append_only && self.row_identity != IdentityProp::None {
+            return false;
+        }
+        if self.row_identity == IdentityProp::None && !self.append_only {
+            return false;
+        }
+        true
+    }
+
     /// Convert to mooncake table config.
     pub(crate) fn take_as_mooncake_table_config(
         self,
@@ -95,6 +106,14 @@ pub struct TableConfig {
 }
 
 impl TableConfig {
+    /// Return whether the config is valid.
+    pub fn is_valid(&self) -> bool {
+        if !self.mooncake_config.is_valid() {
+            return false;
+        }
+        true
+    }
+
     /// Convert table config from serialized plain json string.
     pub fn from_json_or_default(json: &str, default_table_directory: &str) -> Result<Self> {
         let mut config: TableConfig = serde_json::from_str(json)?;
@@ -111,6 +130,15 @@ impl TableConfig {
                 WalConfig::default_storage_config_local(Path::new(default_table_directory));
             config.wal_config = Some(AccessorConfig::new_with_storage_config(storage_config));
         }
+
+        // Check whehther config is valid.
+        if !config.is_valid() {
+            // WARNING: table config could contain sensitive information like secrets, we should use customized stringify function, which hides certain information, instead of directly using the raw json string.
+            return Err(Error::invalid_config(format!(
+                "Table config {config:?} is invalid"
+            )));
+        }
+
         Ok(config)
     }
 

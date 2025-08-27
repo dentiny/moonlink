@@ -46,6 +46,9 @@ pub enum Error {
 
     #[error("{0}")]
     MpscChannelSendError(ErrorStruct),
+
+    #[error("{0}")]
+    InvalidConfig(ErrorStruct),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -59,6 +62,11 @@ impl Error {
     pub fn data_corruption(message: String) -> Self {
         Self::DataCorruptionError(ErrorStruct::new(message, ErrorStatus::Permanent))
     }
+    #[track_caller]
+    pub fn invalid_config(message: String) -> Self {
+        Self::InvalidConfig(ErrorStruct::new(message, ErrorStatus::Permanent))
+    }
+
     pub fn get_status(&self) -> ErrorStatus {
         match self {
             Error::ParseIntError(es) => es.status,
@@ -72,6 +80,7 @@ impl Error {
             Error::Json(es) => es.status,
             Error::MpscChannelSendError(es) => es.status,
             Error::DataCorruptionError(es) => es.status,
+            Error::InvalidConfig(es) => es.status,
         }
     }
 }

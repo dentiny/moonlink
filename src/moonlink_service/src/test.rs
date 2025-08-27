@@ -835,3 +835,72 @@ async fn test_non_existent_table() {
         .unwrap();
     // Make sure service doesn't crash.
 }
+
+/// Error case: create a mooncake table with an invalid table config.
+#[tokio::test]
+#[serial]
+async fn test_create_table_with_invalid_config() {
+    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    let client: reqwest::Client = reqwest::Client::new();
+    let crafted_src_table_name = format!("{DATABASE}.{TABLE}");
+
+    // ==================
+    // Invalid config 1
+    // ==================
+    //
+    // Create an invalid config payload.
+    let payload = json!({
+        "database": DATABASE,
+        "table": TABLE,
+        "schema": [
+            {"name": "id", "data_type": "int32", "nullable": false}
+        ],
+        "table_config": {
+            "mooncake": {
+                "append_only": false,
+                "row_identity": "None"
+            }
+        }
+    });
+    let response = client
+        .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+
+    // ==================
+    // Invalid config 2
+    // ==================
+    //
+    // Create an invalid config payload.
+    let payload = json!({
+        "database": DATABASE,
+        "table": TABLE,
+        "schema": [
+            {"name": "id", "data_type": "int32", "nullable": false}
+        ],
+        "table_config": {
+            "mooncake": {
+                "append_only": true,
+                "row_identity": "FullRow"
+            }
+        }
+    });
+    let response = client
+        .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(!response.status().is_success());
+}
