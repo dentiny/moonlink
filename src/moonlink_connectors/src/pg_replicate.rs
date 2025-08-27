@@ -359,7 +359,7 @@ impl PostgresConnection {
         &self,
         table_name: &str,
         mooncake_table_id: &T,
-        mut moonlink_table_config: MoonlinkTableConfig,
+        moonlink_table_config: &mut MoonlinkTableConfig,
         is_recovery: bool,
         table_base_path: &str,
         read_state_filepath_remap: ReadStateFilepathRemap,
@@ -379,7 +379,7 @@ impl PostgresConnection {
         let table_components = TableComponents {
             read_state_filepath_remap,
             object_storage_cache,
-            moonlink_table_config,
+            moonlink_table_config: moonlink_table_config.clone(),
         };
 
         let mut table_resources = build_table_components(

@@ -56,7 +56,7 @@ impl<T: Clone + Eq + Hash + std::fmt::Display> ReplicationManager<T> {
         src_uri: &str,
         mooncake_table_id: T,
         table_name: &str,
-        moonlink_table_config: MoonlinkTableConfig,
+        moonlink_table_config: &mut MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
         is_recovery: bool,
     ) -> Result<()> {

@@ -65,7 +65,7 @@ async fn recover_rest_table(
 
 /// Recovery non-REST ingestion table.
 async fn recover_non_rest_table(
-    metadata_entry: TableMetadataEntry,
+    mut metadata_entry: TableMetadataEntry,
     replication_manager: &mut ReplicationManager<MooncakeTableId>,
     read_state_filepath_remap: ReadStateFilepathRemap,
 ) -> Result<()> {
@@ -79,7 +79,7 @@ async fn recover_non_rest_table(
             &metadata_entry.src_table_uri,
             mooncake_table_id,
             &metadata_entry.src_table_name,
-            metadata_entry.moonlink_table_config,
+            &mut metadata_entry.moonlink_table_config,
             read_state_filepath_remap,
             /*is_recovery=*/ true,
         )

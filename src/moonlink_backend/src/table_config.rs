@@ -45,9 +45,8 @@ impl MooncakeConfig {
         mooncake_table_config.file_index_config = index_merge_config;
         mooncake_table_config.data_compaction_config = data_compaction_config;
         mooncake_table_config.append_only = self.append_only;
-        if self.append_only {
-            mooncake_table_config.row_identity = IdentityProp::None;
-        }
+        // TODO(hjiang): Identity shall be part of the mooncake config.
+        mooncake_table_config.row_identity = IdentityProp::None;
         mooncake_table_config
     }
 }
@@ -59,6 +58,7 @@ pub struct TableConfig {
     #[serde(rename = "mooncake")]
     #[serde(default)]
     pub mooncake_config: MooncakeConfig,
+
     /// Iceberg storage config.
     #[serde(rename = "iceberg")]
     #[serde(default)]
