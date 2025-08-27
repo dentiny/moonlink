@@ -8,8 +8,7 @@ pub mod table_status;
 
 use arrow_schema::Schema;
 pub use error::{Error, Result};
-use futures::TryStreamExt;
-use futures::{stream, StreamExt};
+use futures::{stream, StreamExt, TryStreamExt};
 use moonlink::MooncakeTableId;
 pub use moonlink::ReadState;
 use moonlink::{ReadStateFilepathRemap, TableEventManager};
