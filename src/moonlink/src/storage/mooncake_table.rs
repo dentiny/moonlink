@@ -61,11 +61,12 @@ use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;
 use arrow::record_batch::RecordBatch;
 use arrow_schema::Schema;
+use more_asserts as ma;
 use delete_vector::BatchDeletionVector;
 pub(crate) use disk_slice::DiskSliceWriter;
 use mem_slice::MemSlice;
 pub(crate) use snapshot::SnapshotTableState;
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
@@ -462,7 +463,11 @@ pub struct MooncakeTable {
     wal_manager: WalManager,
 
     /// LSN of ongoing flushes.
-    pub ongoing_flush_lsns: BTreeSet<u64>,
+    /// Maps from LSN to its count.
+    pub ongoing_flush_lsns: BTreeMap<u64, u32>,
+
+    /// LSN of flush operations, which have finished, but not recorded in mooncake snapshot.
+    unrecorded_flush_lsns: BTreeSet<u64>,
 
     /// Table replay sender.
     event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
@@ -565,7 +570,8 @@ impl MooncakeTable {
             last_iceberg_snapshot_lsn,
             table_notify: None,
             wal_manager,
-            ongoing_flush_lsns: BTreeSet::new(),
+            ongoing_flush_lsns: BTreeMap::new(),
+            unrecorded_flush_lsns: BTreeSet::new(),
             event_replay_tx: None,
         })
     }
@@ -764,8 +770,10 @@ impl MooncakeTable {
         iceberg_snapshot_res: &IcebergSnapshotResult,
     ) {
         if let Some(event_replay_tx) = &self.event_replay_tx {
-            let table_event =
-                replay_events::create_iceberg_snapshot_event_completion(iceberg_snapshot_res.uuid);
+            let table_event = replay_events::create_iceberg_snapshot_event_completion(
+                iceberg_snapshot_res.uuid,
+                iceberg_snapshot_res.flush_lsn,
+            );
             event_replay_tx
                 .send(MooncakeTableEvent::IcebergSnapshotCompletion(table_event))
                 .unwrap();
@@ -843,15 +851,6 @@ impl MooncakeTable {
         xact_id: Option<u32>,
         event_id: uuid::Uuid,
     ) {
-        if let Some(lsn) = disk_slice.lsn() {
-            self.insert_ongoing_flush_lsn(lsn);
-        } else {
-            assert!(
-                xact_id.is_some(),
-                "LSN should be none for non streaming flush"
-            );
-        }
-
         let mut disk_slice_clone = disk_slice.clone();
         tokio::task::spawn(async move {
             let flush_result = disk_slice_clone.write().await;
@@ -903,39 +902,64 @@ impl MooncakeTable {
             .lsn()
             .expect("LSN should never be none for non streaming flush");
         self.remove_ongoing_flush_lsn(lsn);
+        println!("set flush lsn {} at {:?}:{:?}", lsn, file!(), line!());
         self.try_set_next_flush_lsn(lsn);
         self.next_snapshot_task.new_disk_slices.push(disk_slice);
     }
 
     // Attempts to set the flush LSN for the next iceberg snapshot. Note that we can only set the flush LSN if it's less than the current min pending flush LSN. Otherwise, LSNs will be persisted to iceberg in the wrong order.
     fn try_set_next_flush_lsn(&mut self, lsn: u64) {
+        println!("completed lsn = {}, min pending lsn = {}, ongoing = {:?}", lsn, self.get_min_ongoing_flush_lsn(), self.ongoing_flush_lsns);
+
         let min_pending_lsn = self.get_min_ongoing_flush_lsn();
         if lsn < min_pending_lsn {
+            if let Some(old_flush_lsn) = self.next_snapshot_task.new_flush_lsn {
+                ma::assert_le!(old_flush_lsn, lsn);
+            }
             self.next_snapshot_task.new_flush_lsn = Some(lsn);
+        }
+
+        // If there're no ongoing flushes, we're free to set flush LSN to the largest of completed ones.
+        if !self.has_ongoing_flush() && !self.unrecorded_flush_lsns.is_empty() {
+            let smallest_flush_lsn = self.unrecorded_flush_lsns.first().unwrap();
+            ma::assert_le!(self.next_snapshot_task.new_flush_lsn.unwrap(), *smallest_flush_lsn);
+            let largest_flush_lsn = self.unrecorded_flush_lsns.last().unwrap();
+            self.next_snapshot_task.new_flush_lsn = Some(*largest_flush_lsn);
+            self.unrecorded_flush_lsns.clear();
         }
     }
 
     // We fallback to u64::MAX if there are no pending flush LSNs so that the LSN is always greater than the flush LSN and the iceberg snapshot can proceed.
     pub fn get_min_ongoing_flush_lsn(&self) -> u64 {
-        self.ongoing_flush_lsns
-            .iter()
-            .next()
-            .copied()
-            .unwrap_or(u64::MAX)
+        if let Some((lsn, _)) = self.ongoing_flush_lsns.first_key_value() {
+            return *lsn;
+        }
+        u64::MAX
     }
 
-    pub fn insert_ongoing_flush_lsn(&mut self, lsn: u64) {
-        assert!(
-            self.ongoing_flush_lsns.insert(lsn),
-            "LSN {lsn} already in pending flush LSNs"
-        );
+    pub fn insert_ongoing_flush_lsn(&mut self, lsn: u64, count: u32) {
+        *self.ongoing_flush_lsns.entry(lsn).or_insert(0) += count;
     }
 
     pub fn remove_ongoing_flush_lsn(&mut self, lsn: u64) {
-        assert!(
-            self.ongoing_flush_lsns.remove(&lsn),
-            "LSN {lsn} not found in pending flush LSNs"
-        );
+        use std::collections::btree_map::Entry;
+
+        match self.ongoing_flush_lsns.entry(lsn) {
+            Entry::Occupied(mut entry) => {
+                let counter = entry.get_mut();
+                if *counter > 1 {
+                    *counter -= 1;
+                } else {
+                    entry.remove();
+                }
+            }
+            Entry::Vacant(_) => {
+                panic!("Tried to remove LSN {lsn}, but it is not tracked");
+            }
+        }
+
+        // It's possible to have multiple completed flush operations for the same LSN.
+        self.unrecorded_flush_lsns.insert(lsn);
     }
 
     pub fn has_ongoing_flush(&self) -> bool {
@@ -1201,7 +1225,8 @@ impl MooncakeTable {
         );
 
         let table_notify_tx = self.table_notify.as_ref().unwrap().clone();
-        if self.mem_slice.is_empty() || self.ongoing_flush_lsns.contains(&lsn) {
+        if self.mem_slice.is_empty() || self.ongoing_flush_lsns.contains_key(&lsn) {
+            println!("set flush lsn {} at {:?}:{:?}", lsn, file!(), line!());
             self.try_set_next_flush_lsn(lsn);
             tokio::task::spawn(async move {
                 table_notify_tx
@@ -1230,6 +1255,7 @@ impl MooncakeTable {
         }
 
         let mut disk_slice = self.prepare_disk_slice(lsn)?;
+        self.insert_ongoing_flush_lsn(lsn, /*count=*/1);
         self.flush_disk_slice(
             &mut disk_slice,
             table_notify_tx,

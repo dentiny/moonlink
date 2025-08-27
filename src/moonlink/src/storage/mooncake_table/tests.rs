@@ -1300,9 +1300,9 @@ async fn test_ongoing_flush_lsns_tracking() -> Result<()> {
         .expect("Disk slice 3 should be present");
 
     // Verify all LSNs are tracked
-    assert!(table.ongoing_flush_lsns.contains(&5));
-    assert!(table.ongoing_flush_lsns.contains(&10));
-    assert!(table.ongoing_flush_lsns.contains(&15));
+    assert!(table.ongoing_flush_lsns.contains_key(&5));
+    assert!(table.ongoing_flush_lsns.contains_key(&10));
+    assert!(table.ongoing_flush_lsns.contains_key(&15));
     assert_eq!(table.ongoing_flush_lsns.len(), 3);
 
     // Verify min is correctly calculated (should be 5)
@@ -1310,15 +1310,15 @@ async fn test_ongoing_flush_lsns_tracking() -> Result<()> {
 
     // Complete flush with LSN 10 (out of order completion)
     table.apply_flush_result(disk_slice_2, uuid::Uuid::new_v4() /*placeholder*/);
-    assert!(table.ongoing_flush_lsns.contains(&5));
-    assert!(!table.ongoing_flush_lsns.contains(&10));
-    assert!(table.ongoing_flush_lsns.contains(&15));
+    assert!(table.ongoing_flush_lsns.contains_key(&5));
+    assert!(!table.ongoing_flush_lsns.contains_key(&10));
+    assert!(table.ongoing_flush_lsns.contains_key(&15));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 5); // Still 5
 
     // Complete flush with LSN 5
     table.apply_flush_result(disk_slice_1, uuid::Uuid::new_v4() /*placeholder*/);
-    assert!(!table.ongoing_flush_lsns.contains(&5));
-    assert!(table.ongoing_flush_lsns.contains(&15));
+    assert!(!table.ongoing_flush_lsns.contains_key(&5));
+    assert!(table.ongoing_flush_lsns.contains_key(&15));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 15); // Now 15
 
     // Complete last flush
@@ -1355,8 +1355,8 @@ async fn test_streaming_flush_lsns_tracking() -> Result<()> {
             .expect("Disk slice 2 should be present");
 
     // Verify both streaming LSNs are tracked
-    assert!(table.ongoing_flush_lsns.contains(&100));
-    assert!(table.ongoing_flush_lsns.contains(&50));
+    assert!(table.ongoing_flush_lsns.contains_key(&100));
+    assert!(table.ongoing_flush_lsns.contains_key(&50));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 50);
 
     // Mix with regular flush (must be higher than previous regular flush)
@@ -1367,9 +1367,9 @@ async fn test_streaming_flush_lsns_tracking() -> Result<()> {
         .expect("Disk slice 3 should be present");
 
     // Verify all three LSNs are tracked
-    assert!(table.ongoing_flush_lsns.contains(&100));
-    assert!(table.ongoing_flush_lsns.contains(&50));
-    assert!(table.ongoing_flush_lsns.contains(&75));
+    assert!(table.ongoing_flush_lsns.contains_key(&100));
+    assert!(table.ongoing_flush_lsns.contains_key(&50));
+    assert!(table.ongoing_flush_lsns.contains_key(&75));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 50);
 
     // Complete streaming flushes
@@ -1580,22 +1580,22 @@ async fn test_out_of_order_flush_completion() -> Result<()> {
         .expect("Disk slice should be present");
 
     // Verify all are pending and min is 10
-    assert!(table.ongoing_flush_lsns.contains(&10));
-    assert!(table.ongoing_flush_lsns.contains(&20));
-    assert!(table.ongoing_flush_lsns.contains(&30));
+    assert!(table.ongoing_flush_lsns.contains_key(&10));
+    assert!(table.ongoing_flush_lsns.contains_key(&20));
+    assert!(table.ongoing_flush_lsns.contains_key(&30));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 10);
 
     // Complete flush 30 first (out of order)
     table.apply_flush_result(disk_slice_30, uuid::Uuid::new_v4() /*placeholder*/);
-    assert!(!table.ongoing_flush_lsns.contains(&30));
-    assert!(table.ongoing_flush_lsns.contains(&10));
-    assert!(table.ongoing_flush_lsns.contains(&20));
+    assert!(!table.ongoing_flush_lsns.contains_key(&30));
+    assert!(table.ongoing_flush_lsns.contains_key(&10));
+    assert!(table.ongoing_flush_lsns.contains_key(&20));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 10); // Still 10
 
     // Complete flush 10 (should update min to 20)
     table.apply_flush_result(disk_slice_10, uuid::Uuid::new_v4() /*placeholder*/);
-    assert!(!table.ongoing_flush_lsns.contains(&10));
-    assert!(table.ongoing_flush_lsns.contains(&20));
+    assert!(!table.ongoing_flush_lsns.contains_key(&10));
+    assert!(table.ongoing_flush_lsns.contains_key(&20));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 20);
 
     // Complete flush 20 (should clear all)
@@ -1631,8 +1631,8 @@ async fn test_mixed_regular_and_streaming_lsn_ordering() -> Result<()> {
             .expect("Streaming disk slice should be present");
 
     // Verify both are tracked and min is 50
-    assert!(table.ongoing_flush_lsns.contains(&100));
-    assert!(table.ongoing_flush_lsns.contains(&50));
+    assert!(table.ongoing_flush_lsns.contains_key(&100));
+    assert!(table.ongoing_flush_lsns.contains_key(&50));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 50);
 
     // According to table handler logic, iceberg snapshots with flush_lsn >= 50 should be blocked
@@ -1662,8 +1662,8 @@ async fn test_mixed_regular_and_streaming_lsn_ordering() -> Result<()> {
         streaming_disk_slice,
         uuid::Uuid::new_v4(), /*placeholder*/
     );
-    assert!(!table.ongoing_flush_lsns.contains(&50));
-    assert!(table.ongoing_flush_lsns.contains(&100));
+    assert!(!table.ongoing_flush_lsns.contains_key(&50));
+    assert!(table.ongoing_flush_lsns.contains_key(&100));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 100);
 
     // Now iceberg snapshots with flush_lsn < 100 should be allowed
@@ -1988,7 +1988,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
     table.commit(2);
 
     // Verify we have pending flushes
-    assert!(table.ongoing_flush_lsns.contains(&30));
+    assert!(table.ongoing_flush_lsns.contains_key(&30));
     assert_eq!(table.get_min_ongoing_flush_lsn(), 30);
 
     // Create a mooncake snapshot - this will create an iceberg payload
@@ -2090,9 +2090,9 @@ async fn test_out_of_order_flush_completion_with_iceberg_snapshots() -> Result<(
 
     // Verify all pending flushes and min pending LSN
     assert_eq!(table.get_min_ongoing_flush_lsn(), 10);
-    assert!(table.ongoing_flush_lsns.contains(&10));
-    assert!(table.ongoing_flush_lsns.contains(&20));
-    assert!(table.ongoing_flush_lsns.contains(&30));
+    assert!(table.ongoing_flush_lsns.contains_key(&10));
+    assert!(table.ongoing_flush_lsns.contains_key(&20));
+    assert!(table.ongoing_flush_lsns.contains_key(&30));
 
     // Create snapshot and test constraint with min_ongoing_flush_lsn = 10
     let created = table.create_snapshot(SnapshotOption {
@@ -2136,16 +2136,16 @@ async fn test_out_of_order_flush_completion_with_iceberg_snapshots() -> Result<(
     // Complete flushes OUT OF ORDER - complete middle one first (LSN 20)
     table.apply_flush_result(disk_slice_2, uuid::Uuid::new_v4() /*placeholder*/);
     assert_eq!(table.get_min_ongoing_flush_lsn(), 10); // Should still be 10
-    assert!(table.ongoing_flush_lsns.contains(&10));
-    assert!(!table.ongoing_flush_lsns.contains(&20));
-    assert!(table.ongoing_flush_lsns.contains(&30));
+    assert!(table.ongoing_flush_lsns.contains_key(&10));
+    assert!(!table.ongoing_flush_lsns.contains_key(&20));
+    assert!(table.ongoing_flush_lsns.contains_key(&30));
 
     // Complete the first flush (LSN 10) - now min should be 30
     table.apply_flush_result(disk_slice_1, uuid::Uuid::new_v4() /*placeholder*/);
     assert_eq!(table.get_min_ongoing_flush_lsn(), 30); // Now should be 30
-    assert!(!table.ongoing_flush_lsns.contains(&10));
-    assert!(!table.ongoing_flush_lsns.contains(&20));
-    assert!(table.ongoing_flush_lsns.contains(&30));
+    assert!(!table.ongoing_flush_lsns.contains_key(&10));
+    assert!(!table.ongoing_flush_lsns.contains_key(&20));
+    assert!(table.ongoing_flush_lsns.contains_key(&30));
 
     // Test constraint logic with new min pending flush LSN = 30
     let can_initiate_low = TableHandlerState::can_initiate_iceberg_snapshot(

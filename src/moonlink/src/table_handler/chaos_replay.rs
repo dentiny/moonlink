@@ -9,6 +9,7 @@ use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::MooncakeTable;
+use crate::storage::mooncake_table::TableMetadata;
 use crate::storage::mooncake_table::{
     table_creation_test_utils::*, FileIndiceMergeResult, IcebergSnapshotResult,
 };
@@ -16,6 +17,7 @@ use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_handler::test_utils::check_read_snapshot;
 use crate::table_notify::{TableEvent, TableMaintenanceStatus};
+use crate::IcebergTableConfig;
 use crate::MooncakeTableConfig;
 use crate::ReadStateManager;
 use crate::{Result, StorageConfig};
@@ -80,7 +82,7 @@ fn get_id_from_row(row: &MoonlinkRow) -> i32 {
 async fn create_mooncake_table_for_replay(
     replay_env: &ReplayEnvironment,
     lines: &mut tokio::io::Lines<tokio::io::BufReader<tokio::fs::File>>,
-) -> MooncakeTable {
+) -> (Arc<TableMetadata>, IcebergTableConfig, MooncakeTable) {
     let line = lines.next_line().await.unwrap().unwrap();
     let replay_table_metadata: ReplayTableMetadata = serde_json::from_str(&line).unwrap();
     let local_table_directory = replay_env
@@ -128,17 +130,60 @@ async fn create_mooncake_table_for_replay(
         atomic_write_dir: None,
     };
     let iceberg_table_config = get_iceberg_table_config_with_storage_config(storage_config);
-    create_mooncake_table(
-        table_metadata,
-        iceberg_table_config,
+    let mooncake_table = create_mooncake_table(
+        table_metadata.clone(),
+        iceberg_table_config.clone(),
         Arc::new(object_storage_cache),
     )
-    .await
+    .await;
+    (table_metadata, iceberg_table_config, mooncake_table)
+}
+
+/// Test util function to check whether iceberg snapshot contains expected content.
+async fn validate_persisted_iceberg_table(
+    mooncake_table_metadata: Arc<TableMetadata>,
+    iceberg_table_config: IcebergTableConfig,
+    snapshot_lsn: u64,
+    expected_ids: Vec<i32>,
+) {
+    println!("validate iceberg lsn = {}", snapshot_lsn);
+
+    let (event_sender, _event_receiver) = mpsc::channel(100);
+    let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
+    let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
+    replication_lsn_tx.send(snapshot_lsn).unwrap();
+    last_commit_lsn_tx.send(snapshot_lsn).unwrap();
+
+    // Use a fresh new cache for new iceberg table manager.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = create_test_object_storage_cache(&cache_temp_dir);
+
+    let mut table = create_mooncake_table(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+        object_storage_cache,
+    )
+    .await;
+    table.register_table_notify(event_sender).await;
+
+    let read_state_filepath_remap = std::sync::Arc::new(|local_filepath: String| local_filepath);
+    let read_state_manager = ReadStateManager::new(
+        &table,
+        replication_lsn_rx.clone(),
+        last_commit_lsn_rx,
+        read_state_filepath_remap,
+    );
+    check_read_snapshot(
+        &read_state_manager,
+        Some(snapshot_lsn),
+        /*expected_ids=*/ &expected_ids,
+    )
+    .await;
 }
 
 pub(crate) async fn replay() {
     // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_debug_clone_4848383";
+    let replay_filepath = "/tmp/chaos_test_ar6k8n3c7cq6";
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -196,7 +241,8 @@ pub(crate) async fn replay() {
     let data_files = Arc::new(Mutex::new(HashMap::new()));
     let data_files_clone = data_files.clone();
 
-    let mut table = create_mooncake_table_for_replay(&replay_env, &mut lines).await;
+    let (table_metadata, iceberg_table_config, mut table) =
+        create_mooncake_table_for_replay(&replay_env, &mut lines).await;
     let (table_event_sender, mut table_event_receiver) = mpsc::channel(100);
     let (event_replay_sender, _event_replay_receiver) = mpsc::unbounded_channel();
     table.register_table_notify(table_event_sender).await;
@@ -408,11 +454,14 @@ pub(crate) async fn replay() {
                 let appended = std::mem::take(&mut uncommitted_appended_ids);
                 let deleted = std::mem::take(&mut uncommitted_deleted_ids);
                 {
-                    for cur_append in appended.into_iter() {
-                        assert!(committed_ids.insert(cur_append));
-                    }
+                    // Consider update case,
+                    // - It's possible to add an existing id.
+                    // - We should apply deletion before addition.
                     for cur_delete in deleted.into_iter() {
-                        assert!(committed_ids.remove(&cur_delete));
+                        committed_ids.remove(&cur_delete);
+                    }
+                    for cur_append in appended.into_iter() {
+                        committed_ids.insert(cur_append);
                     }
                 }
                 assert!(versioned_committed_ids
@@ -560,6 +609,24 @@ pub(crate) async fn replay() {
                     // Otherwise block until the corresponding flush event completes.
                     event_notification_clone.notified().await;
                 }
+
+                // Validate iceberg snapshot.
+                let commit_lsn = snapshot_completion_event.lsn;
+                let mut expected_ids = versioned_committed_ids
+                    .get(&commit_lsn)
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>();
+                expected_ids.sort();
+                validate_persisted_iceberg_table(
+                    table_metadata.clone(),
+                    iceberg_table_config.clone(),
+                    commit_lsn,
+                    expected_ids,
+                )
+                .await;
             }
             // =====================
             // Index merge events
