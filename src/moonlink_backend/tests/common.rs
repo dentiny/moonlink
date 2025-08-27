@@ -1,4 +1,5 @@
 use arrow_array::Int64Array;
+use moonlink::row::IdentityProp;
 use moonlink_backend::table_config::{MooncakeConfig, TableConfig};
 use moonlink_metadata_store::SqliteMetadataStore;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -72,6 +73,7 @@ impl TestGuard {
                 skip_index_merge: true,
                 skip_data_compaction: true,
                 append_only: false,
+                row_identity: IdentityProp::FullRow,
             },
             iceberg_config: Some(AccessorConfig::new_with_storage_config(
                 StorageConfig::FileSystem {
@@ -438,6 +440,7 @@ pub fn get_serialized_table_config(tmp_dir: &TempDir) -> String {
             skip_index_merge: true,
             skip_data_compaction: true,
             append_only: false,
+            row_identity: IdentityProp::FullRow,
         },
         iceberg_config: Some(AccessorConfig::new_with_storage_config(
             StorageConfig::FileSystem {
