@@ -268,7 +268,8 @@ mod tests {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: true,
                 skip_data_compaction: false,
-                append_only: false,
+                append_only: true,
+                row_identity: IdentityProp::None,
             },
             iceberg_config: Some(AccessorConfig::new_with_storage_config(
                 moonlink::StorageConfig::Gcs {
@@ -339,7 +340,8 @@ mod tests {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: true,
                 skip_data_compaction: false,
-                append_only: false,
+                append_only: true,
+                row_identity: IdentityProp::None,
             },
             iceberg_config: Some(AccessorConfig::new_with_storage_config(
                 moonlink::StorageConfig::S3 {
