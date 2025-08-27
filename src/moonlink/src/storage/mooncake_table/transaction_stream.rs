@@ -417,12 +417,6 @@ impl MooncakeTable {
                 .unwrap();
         }
 
-        // Perform table flush completion notification.
-        if let Some(lsn) = disk_slice.lsn() {
-            self.remove_ongoing_flush_lsn(lsn);
-            self.try_set_next_flush_lsn(lsn);
-        }
-
         let stream_state = self
             .transaction_stream_states
             .get_mut(&xact_id)
@@ -446,6 +440,7 @@ impl MooncakeTable {
             let should_remove = stream_state.ongoing_flush_count == 0;
             let _ = stream_state;
 
+            self.remove_ongoing_flush_lsn(commit_lsn);
             self.try_set_next_flush_lsn(commit_lsn);
             self.next_snapshot_task.new_disk_slices.push(disk_slice);
             if should_remove {
@@ -507,6 +502,9 @@ impl MooncakeTable {
         }
     }
 
+    /// # Arguments
+    ///
+    /// * lsn: commit LSN for the current streaming transaction if assigned.
     pub fn flush_stream(
         &mut self,
         xact_id: u32,
@@ -538,7 +536,21 @@ impl MooncakeTable {
 
         stream_state.ongoing_flush_count += 1;
 
-        self.flush_disk_slice(&mut disk_slice, table_notify_tx, Some(xact_id), event_id);
+        // For streaming transactions, only record ongoing flush operations when commit;
+        // otherwise it's completely invisible to the outside world.
+        let ongoing_flush_count = if lsn.is_some() {
+            stream_state.ongoing_flush_count
+        } else {
+            0
+        };
+
+        self.flush_disk_slice(
+            &mut disk_slice,
+            table_notify_tx,
+            Some(xact_id),
+            ongoing_flush_count,
+            event_id,
+        );
 
         // Add back stream state
         self.transaction_stream_states.insert(xact_id, stream_state);
