@@ -80,16 +80,15 @@ impl MoonlinkBackend {
             let data_server_uri_arc = Arc::clone(&data_server_uri_arc);
             Arc::new(move |http_filepath: String| {
                 if let Some(ref data_server_uri) = *data_server_uri_arc {
-                    // Normalize to avoid double/missing slashes
+                    // Normalize to avoid double/missing slashes.
                     let uri_prefix = data_server_uri.trim_end_matches('/');
                     if http_filepath.starts_with(uri_prefix) {
-                        // Strip the URI prefix and any leading slash in the remainder
+                        // Strip the URI prefix and any leading slash in the remainder.
                         let stripped = http_filepath[uri_prefix.len()..].trim_start_matches('/');
                         let base = base_path_arc.trim_end_matches('/');
                         return format!("{base}/{stripped}");
                     }
                 }
-                // Not a match → leave untouched (e.g., s3://..., gs://..., other hosts)
                 http_filepath
             })
         };
