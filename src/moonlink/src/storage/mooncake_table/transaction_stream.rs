@@ -420,6 +420,7 @@ impl MooncakeTable {
         // Perform table flush completion notification.
         if let Some(lsn) = disk_slice.lsn() {
             self.remove_ongoing_flush_lsn(lsn);
+            println!("set flush lsn {} at {:?}:{:?}", lsn, file!(), line!());
             self.try_set_next_flush_lsn(lsn);
         }
 
@@ -446,6 +447,7 @@ impl MooncakeTable {
             let should_remove = stream_state.ongoing_flush_count == 0;
             let _ = stream_state;
 
+            println!("set flush lsn {} at {:?}:{:?}", commit_lsn, file!(), line!());
             self.try_set_next_flush_lsn(commit_lsn);
             self.next_snapshot_task.new_disk_slices.push(disk_slice);
             if should_remove {
@@ -554,6 +556,16 @@ impl MooncakeTable {
                 .send(MooncakeTableEvent::Commit(table_event))
                 .unwrap();
         }
+
+        // Record ongoing flushes.
+        let ongoing_flush_count = {
+            let stream_state = self
+                .transaction_stream_states
+                .get_mut(&xact_id)
+                .expect("Stream state not found for xact_id: {xact_id}");
+            stream_state.ongoing_flush_count
+        };
+        self.insert_ongoing_flush_lsn(lsn, ongoing_flush_count);
 
         // Perform commit operation.
         let stream_state = self

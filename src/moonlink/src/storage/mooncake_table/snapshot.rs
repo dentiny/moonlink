@@ -597,6 +597,11 @@ impl SnapshotTableState {
                     flush_lsn,
                     committed_deletion_logs,
                 ));
+
+                println!("decide to perform an iceberg snapshot, flush lsn = {}, mooncake snapshot lsn = {}",
+                    flush_lsn,
+                    self.current_snapshot.snapshot_version,
+                );
             }
         }
 

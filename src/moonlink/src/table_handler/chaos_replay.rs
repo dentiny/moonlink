@@ -146,6 +146,8 @@ async fn validate_persisted_iceberg_table(
     snapshot_lsn: u64,
     expected_ids: Vec<i32>,
 ) {
+    println!("validate iceberg lsn = {}", snapshot_lsn);
+
     let (event_sender, _event_receiver) = mpsc::channel(100);
     let (replication_lsn_tx, replication_lsn_rx) = watch::channel(0u64);
     let (last_commit_lsn_tx, last_commit_lsn_rx) = watch::channel(0u64);
