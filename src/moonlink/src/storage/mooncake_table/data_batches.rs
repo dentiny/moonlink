@@ -92,7 +92,9 @@ impl ColumnStoreBuffer {
             .collect();
 
         // Get the initial batch ID from the counter
-        let initial_id = batch_id_counter.load();
+        // To avoid initial id conflict we need to acquire a unique id.
+        // Notice, `next` returns the value before change
+        let initial_id = batch_id_counter.next() + 1;
 
         Self {
             schema,
@@ -362,7 +364,7 @@ mod tests {
         ]);
 
         let counter = BatchIdCounter::new(false);
-        let start = counter.load();
+        let start = counter.load() + 1;
         let mut buffer = ColumnStoreBuffer::new(Arc::new(schema.clone()), 2, Arc::new(counter));
 
         let row1 = MoonlinkRow::new(vec![

@@ -34,6 +34,8 @@ impl BatchIdCounter {
         self.counter.load(Ordering::Relaxed)
     }
 
+    // Increment the id by 1, and return the id before change.
+    //
     // Relaxed ordering is used here because the counter is only used for internal state tracking, not for synchronization.
     pub fn next(&self) -> u64 {
         let current = self.counter.load(Ordering::Relaxed);
