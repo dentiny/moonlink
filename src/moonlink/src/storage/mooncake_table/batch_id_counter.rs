@@ -34,7 +34,7 @@ impl BatchIdCounter {
         self.counter.load(Ordering::Relaxed)
     }
 
-    // Increment the id by 1, and return the id before change.
+    // Increment the id by 1, and return the id after change.
     //
     // Relaxed ordering is used here because the counter is only used for internal state tracking, not for synchronization.
     pub fn next(&self) -> u64 {
@@ -51,7 +51,8 @@ impl BatchIdCounter {
             ma::assert_lt!(current, u64::MAX, "Non-streaming batch ID counter overflow");
         }
 
-        self.counter.fetch_add(1, Ordering::Relaxed)
+        let old_value = self.counter.fetch_add(1, Ordering::Relaxed);
+        old_value + 1
     }
 }
 
@@ -79,11 +80,12 @@ mod tests {
         let counter = BatchIdCounter::new(true);
 
         // First call should return 0, then increment to 1
-        assert_eq!(counter.next(), 0);
+        assert_eq!(counter.load(), 0);
+        assert_eq!(counter.next(), 1);
         assert_eq!(counter.load(), 1);
 
-        // Second call should return 1, then increment to 2
-        assert_eq!(counter.next(), 1);
+        // Second call should return 2.
+        assert_eq!(counter.next(), 2);
         assert_eq!(counter.load(), 2);
     }
 
@@ -93,11 +95,12 @@ mod tests {
         let expected_start = STREAMING_BATCH_ID_MAX;
 
         // First call should return 2^63, then increment to 2^63 + 1
-        assert_eq!(counter.next(), expected_start);
+        assert_eq!(counter.load(), expected_start);
+        assert_eq!(counter.next(), expected_start + 1);
         assert_eq!(counter.load(), expected_start + 1);
 
         // Second call should return 2^63 + 1, then increment to 2^63 + 2
-        assert_eq!(counter.next(), expected_start + 1);
+        assert_eq!(counter.next(), expected_start + 2);
         assert_eq!(counter.load(), expected_start + 2);
     }
 
@@ -135,7 +138,6 @@ mod tests {
         counter.counter.store(near_limit, Ordering::Relaxed);
 
         // These should work
-        assert_eq!(counter.next(), near_limit);
         assert_eq!(counter.next(), near_limit + 1);
 
         // The next call should panic - test this separately to ensure it panics
@@ -153,7 +155,8 @@ mod tests {
                 thread::spawn(move || {
                     let mut ids = Vec::new();
                     for _ in 0..increments_per_thread {
-                        ids.push(counter_clone.next());
+                        ids.push(counter_clone.load());
+                        counter_clone.next();
                     }
                     ids
                 })

@@ -93,8 +93,8 @@ impl ColumnStoreBuffer {
 
         // Get the initial batch ID from the counter
         // To avoid initial id conflict we need to acquire a unique id.
-        // Notice, `next` returns the value before change
-        let initial_id = batch_id_counter.next() + 1;
+        // Notice, `next` returns the value after change
+        let initial_id = batch_id_counter.next();
 
         Self {
             schema,
@@ -162,7 +162,7 @@ impl ColumnStoreBuffer {
         let batch = Arc::new(RecordBatch::try_new(Arc::clone(&self.schema), columns)?);
         let last_batch = self.in_memory_batches.last_mut();
         last_batch.unwrap().batch.data = Some(batch.clone());
-        let next_batch_id = self.batch_id_counter.next() + 1;
+        let next_batch_id = self.batch_id_counter.next();
         self.in_memory_batches.push(BatchEntry {
             id: next_batch_id,
             batch: InMemoryBatch::new(self.max_rows_per_buffer),
