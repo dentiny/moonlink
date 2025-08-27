@@ -72,7 +72,7 @@ async fn test_readiness_probe() {
 }
 
 /// Util function to get table creation payload.
-fn get_create_table_payload(database: &str, table: &str, append_only: bool) -> serde_json::Value {
+fn get_create_table_payload(database: &str, table: &str) -> serde_json::Value {
     let create_table_payload = json!({
         "database": database,
         "table": table,
@@ -84,7 +84,8 @@ fn get_create_table_payload(database: &str, table: &str, append_only: bool) -> s
         ],
         "table_config": {
             "mooncake": {
-                "append_only": append_only
+                "append_only": true,
+                "row_identity": "None"
             }
         }
     });
@@ -111,11 +112,11 @@ fn get_optimize_table_payload(database: &str, table: &str, mode: &str) -> serde_
 }
 
 /// Util function to create table via REST API.
-async fn create_table(client: &reqwest::Client, database: &str, table: &str, append_only: bool) {
+async fn create_table(client: &reqwest::Client, database: &str, table: &str) {
     // REST API doesn't allow duplicate source table name.
     let crafted_src_table_name = format!("{database}.{table}");
 
-    let payload = get_create_table_payload(database, table, append_only);
+    let payload = get_create_table_payload(database, table);
     let response = client
         .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}"))
         .header("content-type", "application/json")
@@ -254,7 +255,7 @@ async fn run_optimize_table_test(mode: &str) {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Ingest some data.
     let insert_payload = json!({
@@ -356,7 +357,7 @@ async fn test_moonlink_standalone_data_ingestion() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Ingest some data.
     let insert_payload = json!({
@@ -437,7 +438,7 @@ async fn test_moonlink_standalone_file_upload() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ true).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Upload a file.
     let parquet_file = generate_parquet_file(&get_moonlink_backend_dir()).await;
@@ -527,7 +528,7 @@ async fn test_moonlink_standalone_file_insert() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Upload a file.
     let parquet_file = generate_parquet_file(&get_moonlink_backend_dir()).await;
@@ -616,16 +617,10 @@ async fn test_multiple_tables_creation() {
 
     // Create the first test table.
     let client: reqwest::Client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Create the second test table.
-    create_table(
-        &client,
-        "second-database",
-        TABLE,
-        /*append_only=*/ false,
-    )
-    .await;
+    create_table(&client, "second-database", TABLE).await;
 }
 
 #[tokio::test]
@@ -640,7 +635,7 @@ async fn test_drop_table() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // List table before drop.
     let list_results = list_tables(&client).await;
@@ -667,20 +662,8 @@ async fn test_list_tables() {
 
     // Create two test tables.
     let client: reqwest::Client = reqwest::Client::new();
-    create_table(
-        &client,
-        "database-1",
-        "table-1",
-        /*append_only=*/ false,
-    )
-    .await;
-    create_table(
-        &client,
-        "database-2",
-        "table-2",
-        /*append_only=*/ false,
-    )
-    .await;
+    create_table(&client, "database-1", "table-1").await;
+    create_table(&client, "database-2", "table-2").await;
 
     // List test tables.
     let mut list_results = list_tables(&client).await;
@@ -722,7 +705,7 @@ async fn test_bulk_ingest_files() {
     test_readiness_probe().await;
 
     let client: reqwest::Client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // A dummy stub-level interface testing.
     let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();
@@ -753,7 +736,7 @@ async fn test_invalid_operation() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Test invalid operation to upload a file.
     let file_upload_payload = json!({
@@ -810,7 +793,7 @@ async fn test_non_existent_table() {
 
     // Create the test table.
     let client: reqwest::Client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE, /*append_only=*/ false).await;
+    create_table(&client, DATABASE, TABLE).await;
 
     // Test invalid operation to upload a file.
     let file_upload_payload = json!({
