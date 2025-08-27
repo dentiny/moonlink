@@ -36,6 +36,9 @@ pub enum Error {
     InvalidArgumentError(ErrorStruct),
 
     #[error("{0}")]
+    DataCorruptionError(ErrorStruct),
+
+    #[error("{0}")]
     TokioWatchRecvError(ErrorStruct),
 
     #[error("{0}")]
@@ -52,6 +55,10 @@ impl Error {
     pub fn invalid_argument(message: String) -> Self {
         Self::InvalidArgumentError(ErrorStruct::new(message, ErrorStatus::Permanent))
     }
+    #[track_caller]
+    pub fn data_corruption(message: String) -> Self {
+        Self::DataCorruptionError(ErrorStruct::new(message, ErrorStatus::Permanent))
+    }
     pub fn get_status(&self) -> ErrorStatus {
         match self {
             Error::ParseIntError(es) => es.status,
@@ -64,6 +71,7 @@ impl Error {
             Error::TokioWatchRecvError(es) => es.status,
             Error::Json(es) => es.status,
             Error::MpscChannelSendError(es) => es.status,
+            Error::DataCorruptionError(es) => es.status,
         }
     }
 }

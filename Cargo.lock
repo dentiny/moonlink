@@ -4286,6 +4286,7 @@ dependencies = [
  "serial_test",
  "tempfile",
  "thiserror 2.0.16",
+ "thrift",
  "tokio",
  "tokio-postgres",
  "tracing-subscriber",

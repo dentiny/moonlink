@@ -1,6 +1,7 @@
 mod error;
 pub mod file_utils;
 mod logging;
+mod parquet_utils;
 mod recovery_utils;
 pub mod table_config;
 pub mod table_status;
@@ -25,11 +26,16 @@ use crate::recovery_utils::BackendAttributes;
 use crate::table_config::TableConfig;
 use crate::table_status::TableStatus;
 
+/// Type alias for filepath remap function, which remaps http URI to local filepath if possible.
+type HttpFilepathRemap = std::sync::Arc<dyn Fn(String) -> String + Send + Sync>;
+
 pub struct MoonlinkBackend {
     // Base directory for all tables.
     base_path: String,
     // Functor used to remap local filepath within [`ReadState`] to data server URI if specified and if possible, so table access is routed to data server.
     read_state_filepath_remap: ReadStateFilepathRemap,
+    // Functor used to remap URI for data files back to local filepath if specified and if applicable.
+    http_filepath_remap: HttpFilepathRemap,
     // Directory used to store union read temporary files.
     temp_files_dir: String,
     // Metadata storage accessor.
@@ -69,6 +75,25 @@ impl MoonlinkBackend {
             })
         };
 
+        let http_filepath_remap: Arc<dyn Fn(String) -> String + Send + Sync> = {
+            let base_path_arc = Arc::clone(&base_path_arc);
+            let data_server_uri_arc = Arc::clone(&data_server_uri_arc);
+            Arc::new(move |http_filepath: String| {
+                if let Some(ref data_server_uri) = *data_server_uri_arc {
+                    // Normalize to avoid double/missing slashes
+                    let uri_prefix = data_server_uri.trim_end_matches('/');
+                    if http_filepath.starts_with(uri_prefix) {
+                        // Strip the URI prefix and any leading slash in the remainder
+                        let stripped = http_filepath[uri_prefix.len()..].trim_start_matches('/');
+                        let base = base_path_arc.trim_end_matches('/');
+                        return format!("{base}/{stripped}");
+                    }
+                }
+                // Not a match → leave untouched (e.g., s3://..., gs://..., other hosts)
+                http_filepath
+            })
+        };
+
         // Canonicalize moonlink backend directory, so all paths stored are of absolute path.
         tokio::fs::create_dir_all(&base_path).await?;
         let base_path = tokio::fs::canonicalize(base_path).await?;
@@ -100,6 +125,7 @@ impl MoonlinkBackend {
         Ok(Self {
             base_path: base_path_str.to_string(),
             read_state_filepath_remap,
+            http_filepath_remap,
             temp_files_dir: temp_files_dir.to_str().unwrap().to_string(),
             replication_manager: RwLock::new(replication_manager),
             metadata_store_accessor,
@@ -210,6 +236,13 @@ impl MoonlinkBackend {
     /// Get the base directory for all mooncake tables.
     pub fn get_base_path(&self) -> String {
         self.base_path.clone()
+    }
+
+    /// Get the serialized parquet metadata for the requested parquet file.
+    /// TODO(hjiang): Currently it only supports local parquet files.
+    pub async fn get_parquet_metadata(&self, data_file: String) -> Result<Vec<u8>> {
+        let local_data_filepath = (self.http_filepath_remap)(data_file);
+        parquet_utils::get_parquet_serialized_metadata(&local_data_filepath).await
     }
 
     /// Get the current mooncake table schema.
