@@ -402,3 +402,72 @@ impl MoonlinkBackend {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::parquet_utils::deserialize_parquet_metadata;
+    use arrow_array::{Int32Array, RecordBatch};
+    use arrow_schema::{DataType, Field, Schema};
+    use moonlink_metadata_store::SqliteMetadataStore;
+    use parquet::arrow::arrow_writer::ArrowWriter;
+    use std::fs::File as StdFile;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    /// Test util function to dump local parquet file.
+    fn write_parquet_file(schema: Arc<Schema>, batch: RecordBatch, parquet_filepath: &str) {
+        let file = StdFile::create(parquet_filepath).unwrap();
+        let mut writer = ArrowWriter::try_new(file, schema, /*prop=*/ None).unwrap();
+        writer.write(&batch).unwrap();
+        let _ = writer.close().unwrap();
+    }
+
+    #[tokio::test]
+    async fn test_parquet_metadata_fetch() {
+        // Create backend.
+        let tmp_dir = tempdir().unwrap();
+        let base_path = tmp_dir.path().to_str().unwrap().to_string();
+        let sqlite_metadata_store = SqliteMetadataStore::new_with_directory(&base_path)
+            .await
+            .unwrap();
+        let backend = MoonlinkBackend::new(
+            /*base_path=*/ base_path,
+            /*data_server_uri=*/ None,
+            Box::new(sqlite_metadata_store),
+        )
+        .await
+        .unwrap();
+
+        // Write two parquet files.
+        let schema = Arc::new(Schema::new(vec![Field::new("x", DataType::Int32, true)]));
+        let data_1 = Arc::new(Int32Array::from(vec![
+            Some(1),
+            Some(2),
+            Some(2),
+            Some(5),
+            None,
+        ]));
+        let batch_1 = RecordBatch::try_new(schema.clone(), vec![data_1]).unwrap();
+        let data_2 = Arc::new(Int32Array::from(vec![Some(0), None]));
+        let batch_2 = RecordBatch::try_new(schema.clone(), vec![data_2]).unwrap();
+
+        let parquet_filepath_1 = format!("{}/test_1.parquet", tmp_dir.path().to_str().unwrap());
+        let parquet_filepath_2 = format!("{}/test_2.parquet", tmp_dir.path().to_str().unwrap());
+        write_parquet_file(schema.clone(), batch_1, &parquet_filepath_1);
+        write_parquet_file(schema.clone(), batch_2, &parquet_filepath_2);
+
+        // Get parquet metadata.
+        let parquet_metadatas = backend
+            .get_parquet_metadatas(vec![parquet_filepath_1.clone(), parquet_filepath_2.clone()])
+            .await
+            .unwrap();
+        // Validate metadatas are returned in the correct order.
+        assert_eq!(parquet_metadatas.len(), 2);
+        let metadata_1 = deserialize_parquet_metadata(&parquet_metadatas[0][..]);
+        assert_eq!(metadata_1.num_rows, 5);
+        let metadata_2 = deserialize_parquet_metadata(&parquet_metadatas[1][..]);
+        assert_eq!(metadata_2.num_rows, 2);
+    }
+}
