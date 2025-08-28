@@ -424,7 +424,7 @@ impl MooncakeTable {
         let stream_state = self
             .transaction_stream_states
             .get_mut(&xact_id)
-            .expect("Stream state not found for xact_id: {xact_id}");
+            .unwrap_or_else(|| panic!("Stream state not found for xact_id: {xact_id}"));
 
         stream_state.ongoing_flush_count -= 1;
 
@@ -519,7 +519,9 @@ impl MooncakeTable {
         let mut stream_state = self
             .transaction_stream_states
             .remove(&xact_id)
-            .expect("Stream state not found for xact_id, lsn: {xact_id, lsn}");
+            .unwrap_or_else(|| {
+                panic!("Stream state not found for xact_id {xact_id}, lsn: {lsn:?}")
+            });
 
         // Record events for flush initiation.
         if let Some(event_replay_tx) = &self.event_replay_tx {
@@ -575,7 +577,7 @@ impl MooncakeTable {
         let stream_state = self
             .transaction_stream_states
             .get_mut(&xact_id)
-            .expect("Stream state not found for xact_id: {xact_id}");
+            .unwrap_or_else(|| panic!("Stream state not found for xact_id: {xact_id}"));
 
         // Add state from current mem slice to stream first
         let (_, mut batches, index) = stream_state.mem_slice.drain()?;

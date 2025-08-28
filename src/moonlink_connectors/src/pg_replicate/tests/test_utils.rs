@@ -62,7 +62,7 @@ pub async fn fetch_table_schema(publication: &str, table_name_str: &str) -> Tabl
         .get_src_table_id(&table_name)
         .await
         .unwrap()
-        .expect("missing table id for table {table_name}");
+        .expect(&format!("missing table id for table {table_name}"));
     schema_client
         .get_table_schema(src_table_id, table_name, Some(publication))
         .await
