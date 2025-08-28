@@ -501,6 +501,7 @@ impl ChaosState {
             self.next_id += 1;
             return row;
         }
+
         let mut candidates: Vec<(i32, MoonlinkRow)> = self
             .committed_inserted_rows
             .iter()
@@ -600,6 +601,7 @@ impl ChaosState {
         self.try_push_read_snapshot_cmd(&mut choices);
         self.try_push_table_maintenance_cmd(&mut choices);
         if self.txn_state == TxnState::Empty {
+            // Upsert table doesn't support streaming transaction.
             if !self.is_upsert_table {
                 choices.push(EventKind::BeginStreamingTxn);
             }
