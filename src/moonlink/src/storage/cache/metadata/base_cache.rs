@@ -1,20 +1,18 @@
 use async_trait::async_trait;
 
+// TODO(hjiang): Need to remove `'static` lifecycle annotation.
 #[async_trait]
 #[allow(dead_code)]
 pub trait MetadataCacheTrait<K, V>: Send + Sync
-// TODO: Do we really need 'static here? Revisit later.
 where
-    K: Send + Sync + 'static,
-    V: Send + Sync + 'static,
+    K: std::hash::Hash + Eq + Clone + Send + Sync + 'static,
+    V: Send + Sync + Clone,
 {
     /// Retrieves a value for the given key.
     ///
     /// **Note:** This returns a cloned copy of the value stored in the cache.
     /// Modifying the returned value does not affect the cached value.
-    async fn get(&self, key: &K) -> Option<V>
-    where
-        V: Clone;
+    async fn get(&self, key: &K) -> Option<V>;
 
     /// Inserts a key-value pair into the cache.
     ///
@@ -23,6 +21,8 @@ where
     /// - If the key already exists, the old value is overwritten with the new value.
     ///
     /// **Note:** This does not return the old value.
+    ///
+    /// TODO(hjiang): Add documentation on expiration on the same key.
     async fn put(&self, key: K, value: V);
 
     /// Removes all entries from the cache.
@@ -40,10 +40,5 @@ where
     /// - This operation does not panic or log errors for missing keys.
     ///
     /// **Note:** The returned value is a cloned copy of the cached value.
-    async fn evict(&self, key: &K) -> Option<V>
-    where
-        V: Clone;
-
-    /// Returns the number of entries currently stored in the cache.
-    async fn len(&self) -> u64;
+    async fn remove(&self, key: &K) -> Option<V>;
 }
