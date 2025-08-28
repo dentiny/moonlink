@@ -1,10 +1,8 @@
-#[cfg(test)]
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::mpsc::Receiver;
 
-#[cfg(test)]
 use crate::row::MoonlinkRow;
 use crate::storage::io_utils;
 use crate::storage::mooncake_table::disk_slice::DiskSliceWriter;
@@ -27,7 +25,6 @@ use tracing::{debug, error};
 /// ===============================
 ///
 /// Synchronize on ongoing flushes and return a map of <event id, disk slice>.
-#[cfg(test)]
 pub(crate) async fn get_flush_results(
     receiver: &mut Receiver<TableEvent>,
     expected_flushes: usize,
@@ -159,7 +156,6 @@ pub(crate) async fn flush_stream_and_sync_no_apply(
 }
 
 /// Commit transaction stream, block wait its completion and reflect result to mooncake table.
-#[cfg(test)]
 pub(crate) async fn commit_transaction_stream_and_sync(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
@@ -198,7 +194,6 @@ pub(crate) async fn commit_transaction_stream_and_sync(
 /// ===============================
 ///
 /// Test util function to block wait delete request, and check whether matches expected data files.
-#[cfg(test)]
 pub(crate) async fn sync_delete_evicted_files(
     receiver: &mut Receiver<TableEvent>,
     mut expected_files_to_delete: Vec<String>,
@@ -385,11 +380,6 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
         .unwrap();
-
-    println!(
-        "after creating mooncake snapshot, iceberg snapdhot ? {}",
-        iceberg_snapshot_payload.is_some()
-    );
 
     // Create iceberg snapshot if possible.
     if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
