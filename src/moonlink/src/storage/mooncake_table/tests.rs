@@ -2988,7 +2988,7 @@ async fn test_late_arriving_high_flush_lsn() {
     let lsn_1 = 13;
     let lsn_2 = 16;
 
-    let flush_event_ids = vec![
+    let flush_event_ids = [
         uuid::Uuid::new_v4(),
         uuid::Uuid::new_v4(),
         uuid::Uuid::new_v4(),
@@ -2999,12 +2999,12 @@ async fn test_late_arriving_high_flush_lsn() {
         .append_in_stream_batch(test_row(1, "A", 10), xact_id_1)
         .unwrap();
     table
-        .flush_stream(xact_id_1, /*lsn=*/ None, flush_event_ids[0].clone())
+        .flush_stream(xact_id_1, /*lsn=*/ None, flush_event_ids[0])
         .unwrap();
 
     // Second flush operation.
     table
-        .commit_transaction_stream(xact_id_1, lsn_1, flush_event_ids[1].clone())
+        .commit_transaction_stream(xact_id_1, lsn_1, flush_event_ids[1])
         .unwrap();
 
     // Third flush operation.
@@ -3012,7 +3012,7 @@ async fn test_late_arriving_high_flush_lsn() {
         .append_in_stream_batch(test_row(2, "B", 20), xact_id_2)
         .unwrap();
     table
-        .commit_transaction_stream(xact_id_2, lsn_2, flush_event_ids[2].clone())
+        .commit_transaction_stream(xact_id_2, lsn_2, flush_event_ids[2])
         .unwrap();
 
     // Validate all streaming LSN are tracked.
