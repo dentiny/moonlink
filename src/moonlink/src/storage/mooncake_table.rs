@@ -936,13 +936,11 @@ impl MooncakeTable {
 
         // Check whether we need to add completed unrecorded flush LSNs into next snapshot.
         if self.ongoing_flush_lsns.is_empty() {
-            if let Some(smallest_lsn) = self.completed_unrecorded_flush_lsns.first() {
-                if let Some(cur_flush_lsn) = self.next_snapshot_task.new_flush_lsn {
-                    ma::assert_le!(cur_flush_lsn, smallest_lsn);
-                }
-            }
             if let Some(largest_lsn) = self.completed_unrecorded_flush_lsns.last() {
-                self.next_snapshot_task.new_flush_lsn = Some(*largest_lsn);
+                // Till this point, flush LSN is already set.
+                if *largest_lsn > self.next_snapshot_task.new_flush_lsn.unwrap() {
+                    self.next_snapshot_task.new_flush_lsn = Some(*largest_lsn);
+                }
             }
             self.completed_unrecorded_flush_lsns.clear();
         }

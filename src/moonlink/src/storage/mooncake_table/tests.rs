@@ -1290,43 +1290,46 @@ async fn test_ongoing_flush_lsns_tracking() -> Result<()> {
     // Add data and start multiple flushes with monotonically increasing LSNs
     append_rows(&mut table, vec![test_row(1, "A", 20)])?;
     table.commit(1);
-    let disk_slice_1 = flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, 5)
-        .await
-        .expect("Disk slice 1 should be present");
+    let disk_slice_1 =
+        flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, /*lsn=*/ 1)
+            .await
+            .expect("Disk slice 1 should be present");
 
     append_rows(&mut table, vec![test_row(2, "B", 21)])?;
     table.commit(2);
-    let disk_slice_2 = flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, 10)
-        .await
-        .expect("Disk slice 2 should be present");
+    let disk_slice_2 =
+        flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, /*lsn=*/ 2)
+            .await
+            .expect("Disk slice 2 should be present");
 
     append_rows(&mut table, vec![test_row(3, "C", 22)])?;
     table.commit(3);
-    let disk_slice_3 = flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, 15)
-        .await
-        .expect("Disk slice 3 should be present");
+    let disk_slice_3 =
+        flush_table_and_sync_no_apply(&mut table, &mut event_completion_rx, /*lsn=*/ 3)
+            .await
+            .expect("Disk slice 3 should be present");
 
     // Verify all LSNs are tracked
-    assert!(table.ongoing_flush_lsns.contains_key(&5));
-    assert!(table.ongoing_flush_lsns.contains_key(&10));
-    assert!(table.ongoing_flush_lsns.contains_key(&15));
+    assert!(table.ongoing_flush_lsns.contains_key(&1));
+    assert!(table.ongoing_flush_lsns.contains_key(&2));
+    assert!(table.ongoing_flush_lsns.contains_key(&3));
     assert_eq!(table.ongoing_flush_lsns.len(), 3);
 
-    // Verify min is correctly calculated (should be 5)
-    assert_eq!(table.get_min_ongoing_flush_lsn(), 5);
+    // Verify min is correctly calculated (should be 1)
+    assert_eq!(table.get_min_ongoing_flush_lsn(), 1);
 
-    // Complete flush with LSN 10 (out of order completion)
+    // Complete flush with LSN 2 (out of order completion)
     table.apply_flush_result(disk_slice_2, uuid::Uuid::new_v4() /*placeholder*/);
-    assert!(table.ongoing_flush_lsns.contains_key(&5));
-    assert!(!table.ongoing_flush_lsns.contains_key(&10));
-    assert!(table.ongoing_flush_lsns.contains_key(&15));
-    assert_eq!(table.get_min_ongoing_flush_lsn(), 5); // Still 5
+    assert!(table.ongoing_flush_lsns.contains_key(&1));
+    assert!(!table.ongoing_flush_lsns.contains_key(&2));
+    assert!(table.ongoing_flush_lsns.contains_key(&3));
+    assert_eq!(table.get_min_ongoing_flush_lsn(), 1); // Still 1
 
-    // Complete flush with LSN 5
+    // Complete flush with LSN 1
     table.apply_flush_result(disk_slice_1, uuid::Uuid::new_v4() /*placeholder*/);
-    assert!(!table.ongoing_flush_lsns.contains_key(&5));
-    assert!(table.ongoing_flush_lsns.contains_key(&15));
-    assert_eq!(table.get_min_ongoing_flush_lsn(), 15); // Now 15
+    assert!(!table.ongoing_flush_lsns.contains_key(&1));
+    assert!(table.ongoing_flush_lsns.contains_key(&3));
+    assert_eq!(table.get_min_ongoing_flush_lsn(), 3); // Now 3
 
     // Complete last flush
     table.apply_flush_result(disk_slice_3, uuid::Uuid::new_v4() /*placeholder*/);
