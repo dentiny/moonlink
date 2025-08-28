@@ -120,6 +120,8 @@ impl IcebergTableManager {
 
         IcebergValidation::validate_puffin_manifest_entry(entry)?;
         let deletion_vector = DeletionVector::load_from_dv_blob(file_io.clone(), data_file).await?;
+        let num_rows = data_file.record_count();
+
         let batch_deletion_vector = deletion_vector.take_as_batch_delete_vector();
         data_file_entry.deletion_vector = batch_deletion_vector;
 
@@ -162,6 +164,7 @@ impl IcebergTableManager {
             puffin_file_cache_handle: cache_handle.unwrap(),
             start_offset: data_file.content_offset().unwrap() as u32,
             blob_size: data_file.content_size_in_bytes().unwrap() as u32,
+            num_rows: num_rows as usize,
         };
 
         Ok(Some((*data_file_id, persisted_deletion_vector)))

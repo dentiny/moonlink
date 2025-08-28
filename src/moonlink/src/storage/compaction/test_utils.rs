@@ -220,6 +220,7 @@ pub(crate) async fn dump_deletion_vector_puffin(
         puffin_file_cache_handle: cache_handle.unwrap(),
         start_offset: 4_u32, // Puffin file starts with 4 magic bytes.
         blob_size: blob_size as u32,
+        num_rows: deleted_rows_num,
     }
 }
 

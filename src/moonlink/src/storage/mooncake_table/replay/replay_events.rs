@@ -196,8 +196,8 @@ pub struct CacheHandleEvent {
 pub struct SingleCompactionPayloadEvent {
     /// File id.
     pub file_id: TableUniqueFileId,
-    /// Deletion vector.
-    pub puffin_blob_ref: Option<CacheHandleEvent>,
+    /// Number of rows deleted.
+    pub num_rows_deleted: usize,
 }
 
 /// For the ease of serde, replay event only stores necessary part of [`DataCompactionPayload`].
@@ -446,20 +446,15 @@ pub fn create_index_merge_event_completion(uuid: uuid::Uuid) -> IndexMergeEventC
     IndexMergeEventCompletion { uuid }
 }
 /// Create data compaction events.
-pub fn get_cache_handle_event(cache_handle: &Option<PuffinBlobRef>) -> Option<CacheHandleEvent> {
-    if let Some(cache_handle) = cache_handle {
-        return Some(CacheHandleEvent {
-            file_id: cache_handle.puffin_file_cache_handle.file_id,
-        });
-    }
-    None
-}
 pub fn get_file_compaction_payload(
     single_file_compaction: &SingleFileToCompact,
 ) -> SingleCompactionPayloadEvent {
     SingleCompactionPayloadEvent {
         file_id: single_file_compaction.file_id,
-        puffin_blob_ref: get_cache_handle_event(&single_file_compaction.deletion_vector),
+        num_rows_deleted: single_file_compaction
+            .deletion_vector
+            .as_ref()
+            .map_or(0, |puffin_blob_ref| puffin_blob_ref.num_rows),
     }
 }
 pub fn create_data_compaction_event_initiation(
