@@ -50,6 +50,8 @@ impl SnapshotTableState {
     pub(super) async fn assert_current_snapshot_consistent(&self) {
         // Check data files and file indices match each other.
         self.assert_data_files_and_file_indices_match();
+        // Check deletion record for disk files.
+        self.assert_deletion_records_for_disk_files();
         // Check one data file is only pointed by one file index.
         self.assert_file_indices_no_duplicate();
         // Check file ids don't have duplicate.
@@ -67,6 +69,23 @@ impl SnapshotTableState {
     fn assert_uncommitted_deletion_logs_valid(&self) {
         for cur_log in self.uncommitted_deletion_log.iter() {
             assert!(cur_log.is_some());
+        }
+    }
+
+    /// Util function to validate deleted rows for batch deletion vector and puffin deletion vector blob.
+    #[cfg(any(test, debug_assertions))]
+    fn assert_deletion_records_for_disk_files(&self) {
+        for (_, cur_disk_file_entry) in self.current_snapshot.disk_files.iter() {
+            // Puffin blob is a subset of batch deletion vector.
+            ma::assert_le!(
+                cur_disk_file_entry
+                    .puffin_deletion_blob
+                    .as_ref()
+                    .map_or(0, |cur_puffin_blob| cur_puffin_blob.num_rows),
+                cur_disk_file_entry
+                    .batch_deletion_vector
+                    .get_num_rows_deleted()
+            );
         }
     }
 
