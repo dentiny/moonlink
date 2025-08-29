@@ -71,7 +71,7 @@ use tokio::sync::mpsc;
 fn test_committed_deletion_log_1(
     data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
-    let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
+    let mut deletion_vector = BatchDeletionVector::new(/*max_size=*/ 3);
     assert!(deletion_vector.delete_row(0));
 
     HashMap::<MooncakeDataFileRef, BatchDeletionVector>::from([(data_file, deletion_vector)])
@@ -87,7 +87,7 @@ fn test_committed_deletion_logs_to_persist_1(
 fn test_committed_deletion_log_2(
     data_file: MooncakeDataFileRef,
 ) -> HashMap<MooncakeDataFileRef, BatchDeletionVector> {
-    let mut deletion_vector = BatchDeletionVector::new(MooncakeTableConfig::DEFAULT_BATCH_SIZE);
+    let mut deletion_vector = BatchDeletionVector::new(/*max_size=*/ 3);
     assert!(deletion_vector.delete_row(1));
     assert!(deletion_vector.delete_row(2));
 

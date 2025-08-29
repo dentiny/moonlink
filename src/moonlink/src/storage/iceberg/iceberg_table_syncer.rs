@@ -174,7 +174,6 @@ impl IcebergTableManager {
         &mut self,
         new_data_files: Vec<MooncakeDataFileRef>,
         old_data_files: Vec<MooncakeDataFileRef>,
-        new_deletion_vector: &HashMap<MooncakeDataFileRef, BatchDeletionVector>,
     ) -> IcebergResult<DataFileImportResult> {
         let mut local_data_files_to_remote = HashMap::with_capacity(new_data_files.len());
         let mut new_remote_data_files = Vec::with_capacity(new_data_files.len());
@@ -206,11 +205,7 @@ impl IcebergTableManager {
         // Handle imported new data files.
         for (idx, local_data_file) in new_data_files.into_iter().enumerate() {
             let cur_iceberg_data_file = iceberg_data_files[idx].clone();
-
-            // Try get deletion vector batch size.
-            let max_rows = new_deletion_vector
-                .get(&local_data_file)
-                .map(|dv| dv.get_max_rows());
+            let num_rows = cur_iceberg_data_file.record_count();
 
             // Insert new entry into iceberg table manager persisted data files.
             let old_entry = self.persisted_data_files.insert(
@@ -218,9 +213,7 @@ impl IcebergTableManager {
                 DataFileEntry {
                     data_file: cur_iceberg_data_file.clone(),
                     // Max number of rows will be initialized when deletion take place.
-                    deletion_vector: BatchDeletionVector::new(
-                        max_rows.unwrap_or(UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW),
-                    ),
+                    deletion_vector: BatchDeletionVector::new(num_rows as usize),
                 },
             );
             assert!(old_entry.is_none());
@@ -289,11 +282,10 @@ impl IcebergTableManager {
                 .get(&data_file.file_id())
                 .unwrap()
                 .clone();
-
-            if entry.deletion_vector.get_max_rows() == UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW {
-                entry.deletion_vector =
-                    BatchDeletionVector::new(new_deletion_vector.get_max_rows());
-            }
+            assert_eq!(
+                entry.deletion_vector.get_max_rows(),
+                new_deletion_vector.get_max_rows()
+            );
             entry.deletion_vector.merge_with(&new_deletion_vector);
 
             // Data filepath in iceberg table.
@@ -563,13 +555,7 @@ impl IcebergTableManager {
         let old_file_indices = take_file_indices_to_remove(&mut snapshot_payload);
 
         // Persist data files.
-        let data_file_import_result = self
-            .sync_data_files(
-                new_data_files,
-                old_data_files,
-                &snapshot_payload.import_payload.new_deletion_vector,
-            )
-            .await?;
+        let data_file_import_result = self.sync_data_files(new_data_files, old_data_files).await?;
 
         // Persist committed deletion logs.
         let new_deletion_vector =

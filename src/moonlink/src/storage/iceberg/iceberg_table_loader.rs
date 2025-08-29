@@ -82,10 +82,11 @@ impl IcebergTableManager {
         }
 
         let data_file = entry.data_file();
+        let num_rows = data_file.record_count();
         assert_eq!(data_file.file_format(), DataFileFormat::Parquet);
         let new_data_file_entry = DataFileEntry {
             data_file: data_file.clone(),
-            deletion_vector: BatchDeletionVector::new(UNINITIALIZED_BATCH_DELETION_VECTOR_MAX_ROW),
+            deletion_vector: BatchDeletionVector::new(num_rows as usize),
         };
 
         self.persisted_data_files
