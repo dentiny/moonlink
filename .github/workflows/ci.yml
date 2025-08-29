@@ -446,7 +446,29 @@ jobs:
           retention-days: 3
           if-no-files-found: warn
 
-  # ───────────── 11 · PostgreSQL Integration Tests ─────────────
+  # ───────────── 11 · Regression test  ─────────────
+  regression_test:
+    name: Regression test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
+
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
+
+      - name: Start regression test
+        timeout-minutes: 10
+        run: |
+          RUST_BACKTRACE=1 cargo test table_handler::regression --features=chaos-test -p moonlink -- --nocapture
+
+  # ───────────── 12 · PostgreSQL Integration Tests ─────────────
   postgres_tests:
     name: PostgreSQL Integration Tests
     runs-on: ubuntu-latest
@@ -519,7 +541,7 @@ jobs:
           # want to test storing and retrieving different types of storage configs
           cargo test --package moonlink_metadata_store --tests --features "metadata-all test-utils storage-s3 storage-gcs"
 
-  # ───────────── 12 · Moonlink Service Integration Tests ─────────────
+  # ───────────── 13 · Moonlink Service Integration Tests ─────────────
   moonlink_service_tests:
     name: Moonlink Service Integration Tests
     runs-on: ubuntu-latest

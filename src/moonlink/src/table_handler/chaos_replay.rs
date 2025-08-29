@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::cache::object_storage::cache_config::ObjectStorageCacheConfig;
@@ -22,6 +20,7 @@ use crate::MooncakeTableConfig;
 use crate::ReadStateManager;
 use crate::{Result, StorageConfig};
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tempfile::{tempdir, TempDir};
 use tokio::io::AsyncBufReadExt;
@@ -36,7 +35,6 @@ struct CompletedFlush {
     /// Result for mem slice flush.
     flush_result: Option<Result<DiskSliceWriter>>,
 }
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct CompletedMooncakeSnapshot {
     /// Mooncake snapshot result.
@@ -177,9 +175,7 @@ async fn validate_persisted_iceberg_table(
     .await;
 }
 
-pub(crate) async fn replay() {
-    // TODO(hjiang): Take an command line argument.
-    let replay_filepath = "/tmp/chaos_test_ar6k8n3c7cq6";
+pub(crate) async fn replay(replay_filepath: &str) {
     let cache_temp_dir = tempdir().unwrap();
     let table_temp_dir = tempdir().unwrap();
     let iceberg_temp_dir = tempdir().unwrap();
@@ -684,9 +680,4 @@ pub(crate) async fn replay() {
             }
         }
     }
-}
-
-#[tokio::test]
-async fn test_table_event_replay() {
-    replay().await;
 }

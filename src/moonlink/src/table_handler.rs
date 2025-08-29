@@ -978,3 +978,7 @@ mod chaos_test;
 #[cfg(test)]
 #[cfg(feature = "chaos-test")]
 mod chaos_replay;
+
+#[cfg(test)]
+#[cfg(feature = "chaos-test")]
+mod regression;
