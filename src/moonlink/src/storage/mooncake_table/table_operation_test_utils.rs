@@ -344,6 +344,21 @@ async fn sync_data_compaction(receiver: &mut Receiver<TableEvent>) -> DataCompac
 /// Composite util functions
 /// ===================================
 ///
+/// Test util function, but not block wait its completion.
+pub(crate) async fn create_mooncake_snapshot_no_sync(
+    table: &mut MooncakeTable,
+) {
+    let mooncake_snapshot_created = table.create_snapshot(SnapshotOption {
+        uuid: uuid::Uuid::new_v4(),
+        force_create: true,
+        dump_snapshot: false,
+        iceberg_snapshot_option: IcebergSnapshotOption::BestEffort(uuid::Uuid::new_v4()),
+        data_compaction_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
+        index_merge_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
+    });
+    assert!(mooncake_snapshot_created);
+}
+
 // Test util function, which creates mooncake snapshot for testing.
 pub(crate) async fn create_mooncake_snapshot_for_test(
     table: &mut MooncakeTable,
@@ -390,7 +405,7 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
 }
 
 // Test util to block wait current mooncake snapshot completion, get the iceberg persistence payload, and perform a new mooncake snapshot and wait completion.
-async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
+pub(crate) async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
 ) {
