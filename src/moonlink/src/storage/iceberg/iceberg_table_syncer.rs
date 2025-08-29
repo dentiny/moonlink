@@ -9,7 +9,6 @@ use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 #[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
 use crate::storage::iceberg::manifest_utils;
-use crate::storage::iceberg::manifest_utils::ManifestEntryCount;
 use crate::storage::iceberg::moonlink_catalog::PuffinBlobType;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
@@ -260,7 +259,7 @@ impl IcebergTableManager {
 
             for old_row_idx in old_deleted_rows.into_iter() {
                 let old_record_location =
-                    RecordLocation::DiskFile(old_file_id.clone(), old_row_idx as usize);
+                    RecordLocation::DiskFile(*old_file_id, old_row_idx as usize);
                 if let Some(new_remapped_record_location) =
                     data_file_records_remap.get(&old_record_location)
                 {

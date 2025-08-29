@@ -3144,8 +3144,7 @@ async fn test_persisted_deletion_record_remap() {
             stored_iceberg_snapshot_result = Some(iceberg_snapshot_result.unwrap());
         } else {
             panic!(
-                "Expect either iceberg snapshot result and data compaction result but get {:?}",
-                notification
+                "Expect either iceberg snapshot result and data compaction result but get {notification:?}"
             );
         }
     }
