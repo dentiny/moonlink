@@ -120,6 +120,7 @@ pub async fn test_append_only_table(context: &TestContext, table_name: &str) -> 
     .unwrap()
 }
 
+// TODO(hjiang): Support object storage.
 pub fn read_ids_from_parquet(file_path: &String) -> Vec<Option<i32>> {
     let file = File::open(file_path).unwrap();
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)

@@ -1426,30 +1426,6 @@ async fn test_data_compaction_with_update() {
     test_data_compaction_with_update_impl(iceberg_table_config).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[cfg(feature = "storage-s3")]
-async fn test_data_compaction_with_update_with_s3() {
-    // Remote object storage for iceberg.
-    let (bucket, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
-    let _test_guard = S3TestGuard::new(bucket.clone()).await;
-    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
-
-    // Common testing logic.
-    test_data_compaction_with_update_impl(iceberg_table_config.clone()).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[cfg(feature = "storage-gcs")]
-async fn test_data_compaction_with_update_with_gcs() {
-    // Remote object storage for iceberg.
-    let (bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
-    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
-
-    // Common testing logic.
-    test_data_compaction_with_update_impl(iceberg_table_config.clone()).await;
-}
-
 /// ================================
 /// Test data compaction with append-only table
 /// ================================
