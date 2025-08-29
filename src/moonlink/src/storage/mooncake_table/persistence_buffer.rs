@@ -1,9 +1,10 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
+use crate::storage::compaction::table_compaction::RemappedRecordLocation;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 use crate::storage::mooncake_table::SnapshotTask;
 use crate::storage::mooncake_table_config::MooncakeTableConfig;
-use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
 
 use more_asserts as ma;
 
@@ -45,6 +46,10 @@ pub(crate) struct UnpersistedRecords {
     compacted_file_indices_to_remove: Vec<GlobalIndex>,
     /// Unpersisted new compacted file indices, which should be added in the later iceberg snapshots.
     compacted_file_indices_to_add: Vec<GlobalIndex>,
+    /// Un-applied remapped record.
+    ///
+    /// For an uncommitted deletion record, it could appear in two places: committed deletion log, or iceberg deletion vector puffin blob.
+    compacted_data_file_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 
 impl UnpersistedRecords {
@@ -84,6 +89,11 @@ impl UnpersistedRecords {
     }
     pub(crate) fn get_compacted_file_indices_to_remove(&self) -> Vec<GlobalIndex> {
         self.compacted_file_indices_to_remove.clone()
+    }
+    pub(crate) fn get_compacted_data_file_remap(
+        &self,
+    ) -> HashMap<RecordLocation, RemappedRecordLocation> {
+        self.compacted_data_file_remap.clone()
     }
 
     /// Get unpersisted data files as hash set for lookup.
@@ -151,6 +161,9 @@ impl UnpersistedRecords {
             .extend(data_compaction_res.new_file_indices);
         self.compacted_file_indices_to_remove
             .extend(data_compaction_res.old_file_indices);
+
+        assert!(self.compacted_data_file_remap.is_empty());
+        self.compacted_data_file_remap = data_compaction_res.remapped_data_files;
     }
 
     /// Buffer unpersisted records.
@@ -240,6 +253,14 @@ impl UnpersistedRecords {
         );
         self.compacted_file_indices_to_remove
             .drain(0..persisted_compaction_res.old_file_indices_removed.len());
+
+        if !persisted_compaction_res.data_file_records_remap.is_empty() {
+            assert_eq!(
+                persisted_compaction_res.data_file_records_remap.len(),
+                self.compacted_data_file_remap.len()
+            );
+            self.compacted_data_file_remap.clear();
+        }
     }
 
     /// Prune persisted records.

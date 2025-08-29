@@ -1493,6 +1493,10 @@ impl MooncakeTable {
             .data_compaction_payload
             .old_file_indices_to_remove
             .clone();
+        let data_file_record_remap_by_compaction = snapshot_payload
+            .data_compaction_payload
+            .data_file_records_remap
+            .clone();
 
         let persistence_file_params = PersistenceFileParams {
             table_auto_incr_ids,
@@ -1566,6 +1570,7 @@ impl MooncakeTable {
                     [new_file_indices_cutoff_index_2..new_file_indices_cutoff_index_3]
                     .to_vec(),
                 old_file_indices_removed: old_file_indices_to_remove_by_compaction,
+                data_file_records_remap: data_file_record_remap_by_compaction,
             },
         };
 

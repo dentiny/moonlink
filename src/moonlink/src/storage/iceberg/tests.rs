@@ -379,6 +379,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
+            data_file_records_remap: HashMap::new(),
         },
     };
 
@@ -432,6 +433,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
+            data_file_records_remap: HashMap::new(),
         },
     };
 
@@ -511,6 +513,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
+            data_file_records_remap: HashMap::new(),
         },
     };
     let persistence_file_params = PersistenceFileParams {
@@ -594,6 +597,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_data_files_to_remove: vec![data_file_1.clone(), data_file_2.clone()],
             new_file_indices_to_import: vec![compacted_file_index.clone()],
             old_file_indices_to_remove: vec![merged_file_index.clone()],
+            data_file_records_remap: HashMap::new(),
         },
     };
     let persistence_file_params = PersistenceFileParams {
@@ -666,6 +670,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             old_data_files_to_remove: vec![compacted_data_file.clone()],
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![compacted_file_index.clone()],
+            data_file_records_remap: HashMap::new(),
         },
     };
     let persistence_file_params = PersistenceFileParams {

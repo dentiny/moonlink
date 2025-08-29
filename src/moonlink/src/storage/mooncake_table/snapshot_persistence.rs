@@ -65,6 +65,7 @@ impl SnapshotTableState {
                 old_file_indices_to_remove: self
                     .unpersisted_records
                     .get_compacted_file_indices_to_remove(),
+                data_file_records_remap: self.unpersisted_records.get_compacted_data_file_remap(),
             },
         }
     }

@@ -1,3 +1,4 @@
+use crate::storage::compaction::table_compaction::RemappedRecordLocation;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
@@ -22,8 +23,8 @@ use crate::storage::mooncake_table::{
     take_data_files_to_import, take_file_indices_to_import, take_file_indices_to_remove,
 };
 use crate::storage::storage_utils::{
-    create_data_file, get_unique_file_id_for_flush, FileId, MooncakeDataFileRef, TableId,
-    TableUniqueFileId,
+    create_data_file, get_unique_file_id_for_flush, FileId, MooncakeDataFileRef, RecordLocation,
+    TableId, TableUniqueFileId,
 };
 use crate::storage::{io_utils, storage_utils};
 use crate::Result;
@@ -48,6 +49,11 @@ pub struct DataFileImportResult {
     local_data_files_to_remote: HashMap<String, String>,
     /// New mooncake data files, represented in remote file paths.
     new_remote_data_files: Vec<MooncakeDataFileRef>,
+    /// Deletion records after compaction.
+    ///
+    /// A committed deletion record could appear in two places: committed deletion log in mooncake snapshot, or iceberg puffin blob.
+    /// For later, we need to do a proper remapping after compaction.
+    remapped_deletion_records: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
 }
 
 impl IcebergTableManager {
@@ -174,6 +180,7 @@ impl IcebergTableManager {
         &mut self,
         new_data_files: Vec<MooncakeDataFileRef>,
         old_data_files: Vec<MooncakeDataFileRef>,
+        data_file_records_remap: &HashMap<RecordLocation, RemappedRecordLocation>,
     ) -> IcebergResult<DataFileImportResult> {
         let mut local_data_files_to_remote = HashMap::with_capacity(new_data_files.len());
         let mut new_remote_data_files = Vec::with_capacity(new_data_files.len());
@@ -244,6 +251,30 @@ impl IcebergTableManager {
             new_iceberg_data_files.push(cur_iceberg_data_file);
         }
 
+        // Remap already persisted data files; all data file's attributes are accessible.
+        let mut remapped_deletion_records =
+            HashMap::<MooncakeDataFileRef, BatchDeletionVector>::new();
+        for (old_file_id, old_data_file_entry) in self.persisted_data_files.iter() {
+            let old_batch_deletion_vector = &old_data_file_entry.deletion_vector;
+            let old_deleted_rows = old_batch_deletion_vector.collect_deleted_rows();
+
+            for old_row_idx in old_deleted_rows.into_iter() {
+                let old_record_location =
+                    RecordLocation::DiskFile(old_file_id.clone(), old_row_idx as usize);
+                if let Some(new_remapped_record_location) =
+                    data_file_records_remap.get(&old_record_location)
+                {
+                    if let Some(new_batch_deletion_record) = remapped_deletion_records
+                        .get_mut(&new_remapped_record_location.new_data_file)
+                    {
+                        assert!(new_batch_deletion_record.delete_row(
+                            new_remapped_record_location.record_location.get_row_idx()
+                        ));
+                    }
+                }
+            }
+        }
+
         // Handle removed data files.
         let mut data_files_to_remove_set = HashSet::with_capacity(old_data_files.len());
         for cur_data_file in old_data_files.into_iter() {
@@ -264,6 +295,7 @@ impl IcebergTableManager {
             new_iceberg_data_files,
             local_data_files_to_remote,
             new_remote_data_files,
+            remapped_deletion_records,
         })
     }
 
@@ -555,11 +587,35 @@ impl IcebergTableManager {
         let old_file_indices = take_file_indices_to_remove(&mut snapshot_payload);
 
         // Persist data files.
-        let data_file_import_result = self.sync_data_files(new_data_files, old_data_files).await?;
+        let data_file_import_result = self
+            .sync_data_files(
+                new_data_files,
+                old_data_files,
+                &snapshot_payload
+                    .data_compaction_payload
+                    .data_file_records_remap,
+            )
+            .await?;
 
         // Persist committed deletion logs.
-        let new_deletion_vector =
+        let mut new_deletion_vector =
             std::mem::take(&mut snapshot_payload.import_payload.new_deletion_vector);
+        let remapped_deletion_records = data_file_import_result.remapped_deletion_records;
+        for (remapped_data_file, remapped_batch_deletion_vector) in
+            remapped_deletion_records.into_iter()
+        {
+            if let Some(new_batch_deletion_vector) =
+                new_deletion_vector.get_mut(&remapped_data_file)
+            {
+                // TODO(hjiang): Should validate conflict.
+                new_batch_deletion_vector.merge_with(&remapped_batch_deletion_vector);
+            } else {
+                assert!(new_deletion_vector
+                    .insert(remapped_data_file, remapped_batch_deletion_vector)
+                    .is_none());
+            }
+        }
+
         let deletion_puffin_blobs = self
             .sync_deletion_vector(new_deletion_vector, &file_params)
             .await?;

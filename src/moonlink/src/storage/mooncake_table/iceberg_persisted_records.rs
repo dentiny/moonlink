@@ -1,12 +1,13 @@
+use crate::storage::compaction::table_compaction::RemappedRecordLocation;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionResult;
 use crate::storage::mooncake_table::table_snapshot::{
     IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult,
 };
-use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::storage_utils::{FileId, RecordLocation};
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 /// Record iceberg persisted records, used to sync to mooncake snapshot.
 #[derive(Debug, Default)]
@@ -28,6 +29,7 @@ impl IcebergPersistedRecords {
         if self.flush_lsn.is_none() {
             assert!(self.import_result.is_empty());
             assert!(self.index_merge_result.is_empty());
+            assert!(self.data_compaction_result.is_empty());
             assert!(self.data_compaction_result.is_empty());
             return true;
         }

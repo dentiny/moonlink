@@ -1,3 +1,4 @@
+use crate::storage::compaction::table_compaction::RemappedRecordLocation;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
@@ -6,6 +7,7 @@ use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::storage_utils::RecordLocation;
 use crate::storage::TableManager;
 
 use std::collections::{HashMap, HashSet};
@@ -84,6 +86,8 @@ pub struct IcebergSnapshotDataCompactionPayload {
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
     /// Old file indices to remove from the iceberg table.
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
+    /// Data file records remapping.
+    pub(crate) data_file_records_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 
 impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
@@ -105,6 +109,10 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
                 "old file indices to remove count",
                 &self.old_file_indices_to_remove.len(),
             )
+            .field(
+                "data file records remap count",
+                &self.data_file_records_remap.len(),
+            )
             .finish()
     }
 }
@@ -116,6 +124,7 @@ impl IcebergSnapshotDataCompactionPayload {
             assert!(self.new_data_files_to_import.is_empty());
             assert!(self.new_file_indices_to_import.is_empty());
             assert!(self.old_file_indices_to_remove.is_empty());
+            assert!(self.data_file_records_remap.is_empty());
             return true;
         }
 
@@ -310,6 +319,8 @@ pub struct IcebergSnapshotDataCompactionResult {
     pub(crate) new_file_indices_imported: Vec<MooncakeFileIndex>,
     /// Old data files to remove from the iceberg table.
     pub(crate) old_file_indices_removed: Vec<MooncakeFileIndex>,
+    /// Data file record mapping (due to compaction).
+    pub(crate) data_file_records_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 
 impl IcebergSnapshotDataCompactionResult {
@@ -319,6 +330,7 @@ impl IcebergSnapshotDataCompactionResult {
             assert!(self.new_data_files_imported.is_empty());
             assert!(self.new_file_indices_imported.is_empty());
             assert!(self.old_file_indices_removed.is_empty());
+            assert!(self.data_file_records_remap.is_empty());
             return true;
         }
 
@@ -345,6 +357,10 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
             .field(
                 "old file indices removed count",
                 &self.old_file_indices_removed.len(),
+            )
+            .field(
+                "data file records remap count",
+                &self.data_file_records_remap.len(),
             )
             .finish()
     }
