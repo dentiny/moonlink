@@ -3,7 +3,7 @@ use crate::rest_ingest::event_request::EventRequest;
 use crate::ReplicationConnection;
 use crate::{Error, Result};
 use moonlink::{
-    MooncakeTableId, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
+    MooncakeTableConfig, MooncakeTableId, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager
 };
 use moonlink::{ReadStateFilepathRemap, TableStatusReader};
 use std::collections::hash_map::Entry;
@@ -121,6 +121,7 @@ impl ReplicationManager {
     ///
     /// * src_uri: should be a REST API URL
     /// * arrow_schema: Arrow schema for the table
+    /// * moonlink_table_config: serialized mooncake table config.
     /// * flush_lsn: only assigned when recovery, which indicates the iceberg persistence LSN; otherwise it's a fresh table.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_rest_table(
@@ -129,10 +130,10 @@ impl ReplicationManager {
         mooncake_table_id: MooncakeTableId,
         src_table_name: &str,
         arrow_schema: arrow_schema::Schema,
-        moonlink_table_config: MoonlinkTableConfig,
+        moonlink_table_config: String,
         read_state_filepath_remap: ReadStateFilepathRemap,
         flush_lsn: Option<u64>,
-    ) -> Result<()> {
+    ) -> Result<MooncakeTableConfig> {
         debug!(%src_uri, src_table_name, "adding REST API table through manager");
 
         // Fail if REST API connection doesn't exist

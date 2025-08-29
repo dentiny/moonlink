@@ -245,6 +245,7 @@ impl ReplicationConnection {
     ///
     /// # Arguments
     ///
+    /// * moonlink_table_config: serialized mooncake table config.
     /// * persist_lsn: only assigned at recovery, used to indicate and update replication LSN.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_table_api(
@@ -252,10 +253,10 @@ impl ReplicationConnection {
         src_table_name: &str,
         mooncake_table_id: &MooncakeTableId,
         arrow_schema: ArrowSchema,
-        moonlink_table_config: MoonlinkTableConfig,
+        moonlink_table_config: String,
         read_state_filepath_remap: ReadStateFilepathRemap,
         persist_lsn: Option<u64>,
-    ) -> Result<SrcTableId> {
+    ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
         match &mut self.source {
             SourceType::RestApi(conn) => {
                 debug!(src_table_name, "adding REST API table");

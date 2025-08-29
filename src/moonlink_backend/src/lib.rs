@@ -185,7 +185,7 @@ impl MoonlinkBackend {
                         mooncake_table_id,
                         &src_table_name,
                         input_schema.expect("arrow_schema is required for REST API"),
-                        moonlink_table_config.clone(),
+                        table_config,
                         self.read_state_filepath_remap.clone(),
                         /*flush_lsn=*/ None,
                     )
@@ -196,7 +196,7 @@ impl MoonlinkBackend {
                         &src_uri,
                         mooncake_table_id,
                         &src_table_name,
-                        &mut moonlink_table_config,
+                        table_config,
                         self.read_state_filepath_remap.clone(),
                         /*is_recovery=*/ false,
                     )

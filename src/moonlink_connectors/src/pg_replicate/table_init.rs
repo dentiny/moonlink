@@ -34,8 +34,8 @@ pub struct TableComponents {
     pub read_state_filepath_remap: ReadStateFilepathRemap,
     /// Shared object storage cache for all mooncake tables.
     pub object_storage_cache: ObjectStorageCache,
-    /// Mooncake table configuration.
-    pub moonlink_table_config: MoonlinkTableConfig,
+    /// Serialized mooncake table configuration.
+    pub moonlink_table_config: String,
 }
 
 /// Resources that should be returned to the caller when a table is initialised.
