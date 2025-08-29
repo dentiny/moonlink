@@ -48,7 +48,7 @@ pub(crate) struct UnpersistedRecords {
     compacted_file_indices_to_add: Vec<GlobalIndex>,
     /// Un-applied remapped record.
     ///
-    /// For an uncommitted deletion record, it could appear in two places: committed deletion log, or iceberg deletion vector puffin blob.
+    /// For a committed deletion record, it could appear in two places: committed deletion log, or iceberg deletion vector puffin blob.
     compacted_data_file_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 

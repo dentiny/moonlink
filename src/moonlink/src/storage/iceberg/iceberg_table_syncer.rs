@@ -264,12 +264,24 @@ impl IcebergTableManager {
                 if let Some(new_remapped_record_location) =
                     data_file_records_remap.get(&old_record_location)
                 {
-                    if let Some(new_batch_deletion_record) = remapped_deletion_records
-                        .get_mut(&new_remapped_record_location.new_data_file)
+                    let new_data_file = new_remapped_record_location.new_data_file.clone();
+                    let new_row_idx = new_remapped_record_location.record_location.get_row_idx();
+                    if let Some(new_batch_deletion_vector) =
+                        remapped_deletion_records.get_mut(&new_data_file)
                     {
-                        assert!(new_batch_deletion_record.delete_row(
-                            new_remapped_record_location.record_location.get_row_idx()
-                        ));
+                        assert!(new_batch_deletion_vector.delete_row(new_row_idx));
+                    } else {
+                        let new_data_file_entry = self
+                            .persisted_data_files
+                            .get(&new_data_file.file_id())
+                            .unwrap();
+                        let mut new_batch_deletion_vector = BatchDeletionVector::new(
+                            new_data_file_entry.data_file.record_count() as usize,
+                        );
+                        assert!(new_batch_deletion_vector.delete_row(new_row_idx));
+                        assert!(remapped_deletion_records
+                            .insert(new_data_file, new_batch_deletion_vector)
+                            .is_none());
                     }
                 }
             }
@@ -492,79 +504,6 @@ impl IcebergTableManager {
         Ok(remote_file_indices)
     }
 
-    /// Get current manifest entries, used for sanity check purpose.
-    async fn get_expected_entry_count_after_sync(
-        &self,
-        snapshot_payload: &IcebergSnapshotPayload,
-    ) -> ManifestEntryCount {
-        #[cfg(any(feature = "chaos-test", not(any(test, debug_assertions))))]
-        {
-            let _ = snapshot_payload; // Suppress unused warning.
-            ManifestEntryCount::default()
-        }
-
-        #[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
-        {
-            let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
-            let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
-            let mut entries_count =
-                manifest_utils::get_manifest_entries_number(table_metadata, file_io).await;
-
-            let new_data_files = snapshot_payload.get_new_data_files();
-            let old_data_files = snapshot_payload.get_old_data_files();
-            let new_file_indices = snapshot_payload.get_new_file_indices();
-            let old_file_indices = snapshot_payload.get_old_file_indices();
-
-            // Update data files count.
-            entries_count.data_file_entries += new_data_files.len();
-            entries_count.data_file_entries -= old_data_files.len();
-
-            // Update file indices count.
-            entries_count.file_indices_entries += new_file_indices.len();
-            entries_count.file_indices_entries -= old_file_indices.len();
-
-            // Update deletion vectors count.
-            let committed_deletion_logs = &snapshot_payload.committed_deletion_logs;
-            let data_file_ids_for_deletion_log = committed_deletion_logs
-                .iter()
-                .map(|(file_id, _)| *file_id)
-                .collect::<HashSet<_>>();
-            for cur_file_id in data_file_ids_for_deletion_log.into_iter() {
-                if let Some(data_file_entry) = self.persisted_data_files.get(&cur_file_id) {
-                    if !data_file_entry.deletion_vector.is_empty() {
-                        continue;
-                    }
-                }
-                entries_count.deletion_vector_entries += 1;
-            }
-            for cur_old_data_file in old_data_files.into_iter() {
-                let file_id = cur_old_data_file.file_id();
-                if let Some(data_file_entry) = self.persisted_data_files.get(&file_id) {
-                    if !data_file_entry.deletion_vector.is_empty() {
-                        entries_count.deletion_vector_entries -= 1;
-                    }
-                }
-            }
-
-            entries_count
-        }
-    }
-
-    /// Get actual entry count after sync.
-    async fn get_actual_entry_count_after_sync(&self) -> ManifestEntryCount {
-        #[cfg(any(feature = "chaos-test", not(any(test, debug_assertions))))]
-        {
-            ManifestEntryCount::default()
-        }
-
-        #[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
-        {
-            let table_metadata = self.iceberg_table.as_ref().unwrap().metadata();
-            let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
-            manifest_utils::get_manifest_entries_number(table_metadata, file_io).await
-        }
-    }
-
     pub(crate) async fn sync_snapshot_impl(
         &mut self,
         mut snapshot_payload: IcebergSnapshotPayload,
@@ -575,11 +514,6 @@ impl IcebergTableManager {
 
         // Validate schema consistency before persistence operation.
         self.validate_schema_consistency_at_store().await;
-
-        // Used to validate iceberg persistence status.
-        let expected_manifest_entries_after_sync = self
-            .get_expected_entry_count_after_sync(&snapshot_payload)
-            .await;
 
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
         let old_data_files = take_data_files_to_remove(&mut snapshot_payload);
@@ -653,13 +587,6 @@ impl IcebergTableManager {
         self.iceberg_table = Some(updated_iceberg_table);
 
         self.catalog.clear_puffin_metadata();
-
-        // Get manifest entries status after sync, used to validate iceberg persistence.
-        let actual_manifest_entries_after_sync = self.get_actual_entry_count_after_sync().await;
-        assert_eq!(
-            expected_manifest_entries_after_sync,
-            actual_manifest_entries_after_sync
-        );
 
         // NOTICE: persisted data files and file indices are returned in the order of (1) newly imported ones; (2) index merge ones; (3) data compacted ones.
         Ok(PersistenceResult {

@@ -171,6 +171,7 @@ impl IcebergSnapshotPayload {
     pub fn get_new_file_ids_num(&self) -> u32 {
         // Only deletion vector puffin blobs create files with new file ids.
         self.import_payload.new_deletion_vector.len() as u32
+            + self.data_compaction_payload.data_file_records_remap.len() as u32
     }
 
     /// Return whether the payload contains table maintenance content.
