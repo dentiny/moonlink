@@ -1201,11 +1201,12 @@ impl MooncakeTable {
     }
 
     pub async fn delete(&mut self, row: MoonlinkRow, lsn: u64) {
-        self.delete_impl(row, lsn, false).await;
+        self.delete_impl(row, lsn, /*delete_if_exists=*/ false)
+            .await;
     }
 
     pub async fn delete_if_exists(&mut self, row: MoonlinkRow, lsn: u64) {
-        self.delete_impl(row, lsn, true).await;
+        self.delete_impl(row, lsn, /*delete_if_exists=*/ true).await;
     }
 
     pub fn commit(&mut self, lsn: u64) {

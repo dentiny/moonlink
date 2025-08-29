@@ -1329,6 +1329,128 @@ async fn test_data_compaction_and_create_snapshot_with_gcs() {
 }
 
 /// ================================
+/// Test data compaction with update
+/// ================================
+///
+/// Testing scenario: create iceberg snapshot for data compaction.
+async fn test_data_compaction_with_update_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
+    let data_compaction_config = DataCompactionConfig {
+        min_data_file_to_compact: 2,
+        max_data_file_to_compact: 3,
+        data_file_final_size: u64::MAX,
+        data_file_deletion_percentage: 0,
+    };
+    let mut config = MooncakeTableConfig::new(table_temp_dir.path().to_str().unwrap().to_string());
+    config.data_compaction_config = data_compaction_config;
+    let mooncake_table_metadata = create_test_table_metadata_with_config(
+        table_temp_dir.path().to_str().unwrap().to_string(),
+        config,
+    );
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+
+    // Create mooncake table and table event notification receiver.
+    let (mut table, mut notify_rx) = create_mooncake_table_and_notify(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
+    )
+    .await;
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
+
+    // Append one row.
+    let row = test_row_1();
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 1);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 1)
+        .await
+        .unwrap();
+
+    // Delete and append the row again.
+    table.delete(row.clone(), /*lsn=*/ 2).await;
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 3);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 3)
+        .await
+        .unwrap();
+
+    // Delete and append the row again.
+    table.delete(row.clone(), /*lsn=*/ 4).await;
+    table.append(row.clone()).unwrap();
+    table.commit(/*lsn=*/ 5);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 5)
+        .await
+        .unwrap();
+
+    // Attempt data compaction and flush to iceberg table.
+    create_mooncake_and_persist_for_data_compaction_for_test(
+        &mut table,
+        &mut notify_rx,
+        /*injected_committed_deletion_rows=*/ vec![],
+        /*injected_uncommitted_deletion_rows=*/ vec![],
+    )
+    .await;
+
+    // Create a new iceberg table manager and check states.
+    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
+        mooncake_table_metadata.clone(),
+        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
+        filesystem_accessor.clone(),
+        iceberg_table_config.clone(),
+    )
+    .unwrap();
+    let (next_file_id, snapshot) = iceberg_table_manager_for_recovery
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(next_file_id, 2); // one data file, one file index
+    assert_eq!(snapshot.disk_files.len(), 1);
+    assert_eq!(snapshot.indices.file_indices.len(), 1);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 5);
+    check_deletion_vector_consistency_for_snapshot(&snapshot).await;
+
+    // Validate iceberg snapshot.
+    verify_recovered_mooncake_snapshot(&snapshot, /*expected_ids=*/ &[1]).await;
+}
+
+#[tokio::test]
+async fn test_data_compaction_with_update() {
+    // Local filesystem for iceberg.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+
+    // Common testing logic.
+    test_data_compaction_with_update_impl(iceberg_table_config).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "storage-s3")]
+async fn test_data_compaction_with_update_with_s3() {
+    // Remote object storage for iceberg.
+    let (bucket, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
+    let _test_guard = S3TestGuard::new(bucket.clone()).await;
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_data_compaction_with_update_impl(iceberg_table_config.clone()).await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[cfg(feature = "storage-gcs")]
+async fn test_data_compaction_with_update_with_gcs() {
+    // Remote object storage for iceberg.
+    let (bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
+    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
+    let iceberg_table_config = create_iceberg_table_config(warehouse_uri);
+
+    // Common testing logic.
+    test_data_compaction_with_update_impl(iceberg_table_config.clone()).await;
+}
+
+/// ================================
 /// Test data compaction with append-only table
 /// ================================
 ///

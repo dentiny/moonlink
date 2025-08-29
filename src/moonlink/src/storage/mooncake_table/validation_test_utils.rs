@@ -3,6 +3,7 @@ use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSyst
 /// This module contains testing utils for validation.
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::puffin_utils;
+use crate::storage::mooncake_table::test_utils::*;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::DiskFileEntry;
 use crate::storage::mooncake_table::Snapshot;
@@ -10,8 +11,8 @@ use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::RawDeletionRecord;
 use crate::storage::storage_utils::RecordLocation;
 use crate::ObjectStorageCache;
-
 use iceberg::io::FileIOBuilder;
+use moonlink_table_metadata::PositionDelete;
 use std::collections::HashSet;
 
 /// Test util function to check consistency for snapshot batch deletion vector and deletion puffin blob.
@@ -188,4 +189,28 @@ pub(crate) async fn check_row_index_on_disk(
             panic!("Unexpected location {:?}", locs[0]);
         }
     }
+}
+
+/// Test util function to validate mooncake snapshot result.
+pub(crate) async fn verify_recovered_mooncake_snapshot(snapshot: &Snapshot, expected_ids: &[i32]) {
+    let mut position_deletes = vec![];
+    let mut data_files = vec![];
+    for (file_idx, (cur_data_file, cur_disk_entry)) in snapshot.disk_files.iter().enumerate() {
+        data_files.push(cur_data_file.file_path().clone());
+        let rows_deleted = cur_disk_entry.batch_deletion_vector.collect_deleted_rows();
+        for row_idx in rows_deleted.into_iter() {
+            position_deletes.push(PositionDelete {
+                data_file_number: file_idx as u32,
+                data_file_row_number: row_idx as u32,
+            });
+        }
+    }
+    verify_files_and_deletions(
+        &data_files,
+        /*puffin_file_paths=*/ &[],
+        position_deletes,
+        /*deletion_vectors=*/ vec![],
+        expected_ids,
+    )
+    .await;
 }
