@@ -7,8 +7,6 @@ use crate::storage::iceberg::deletion_vector::{
 use crate::storage::iceberg::iceberg_table_manager::*;
 use crate::storage::iceberg::index::FileIndexBlob;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
-#[cfg(all(not(feature = "chaos-test"), any(test, debug_assertions)))]
-use crate::storage::iceberg::manifest_utils;
 use crate::storage::iceberg::moonlink_catalog::PuffinBlobType;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
