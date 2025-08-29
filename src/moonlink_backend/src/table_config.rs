@@ -40,8 +40,8 @@ impl Default for MooncakeConfig {
 
 impl MooncakeConfig {
     // Notice, default value for the table config should be a valid combination.
-    const DEFAULT_APPEND_ONLY: bool = true;
-    const DEFAULT_ROW_IDENTITY: IdentityProp = IdentityProp::None;
+    const DEFAULT_APPEND_ONLY: bool = false;
+    const DEFAULT_ROW_IDENTITY: IdentityProp = IdentityProp::FullRow;
 
     pub fn default_append_only() -> bool {
         Self::DEFAULT_APPEND_ONLY
@@ -181,8 +181,8 @@ mod tests {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: false,
                 skip_data_compaction: false,
-                append_only: true,
-                row_identity: IdentityProp::None,
+                append_only: false,
+                row_identity: IdentityProp::FullRow,
             },
             iceberg_config: Some(AccessorConfig::new_with_storage_config(
                 moonlink::StorageConfig::FileSystem {
@@ -234,8 +234,8 @@ mod tests {
             mooncake_config: MooncakeConfig {
                 skip_index_merge: true,
                 skip_data_compaction: false,
-                append_only: true,
-                row_identity: IdentityProp::None,
+                append_only: false,
+                row_identity: IdentityProp::FullRow,
             },
             iceberg_config: Some(AccessorConfig::new_with_storage_config(
                 moonlink::StorageConfig::FileSystem {
@@ -399,6 +399,7 @@ mod tests {
             {
                 "mooncake": {
                     "append_only": true,
+                    "row_identity": "None",
                     "skip_index_merge": true,
                     "skip_data_compaction": true
                 }
