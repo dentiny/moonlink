@@ -218,13 +218,33 @@ impl CompactionBuilder {
                 .unwrap()
         };
 
+        if data_file_to_compact.file_id.file_id.0 == 10000000000014100 {
+            println!("10000000000014100 row num = {}, puffin deleted row number = {}", total_num_rows, deleted_rows_num);
+        }
+        if data_file_to_compact.file_id.file_id.0 == 10000000000014300 {
+            println!("10000000000014300 row num = {}, puffin deleted row number = {}", total_num_rows, deleted_rows_num);
+        }
+
         let mut old_start_row_idx = 0;
         let mut old_to_new_remap = HashMap::new();
         while let Some(cur_record_batch) = reader.try_next().await? {
+            
             // If all rows have been deleted for the old data file, do nothing.
             let cur_num_rows = cur_record_batch.num_rows();
             let filtered_record_batch =
                 get_filtered_record_batch(cur_record_batch, old_start_row_idx);
+
+                if data_file_to_compact.file_id.file_id.0 == 10000000000014100 {
+                    println!("10000000000014100 filtered record batch = {:?}", filtered_record_batch);
+                }
+                if data_file_to_compact.file_id.file_id.0 == 10000000000014300 {
+                    println!("10000000000014300 filtered record batch = {:?}", filtered_record_batch);
+                }
+                if data_file_to_compact.file_id.file_id.0 == 10000000000059500 {
+                    println!("10000000000059500 filtered record batch = {:?}", filtered_record_batch);
+                }
+    
+
             if filtered_record_batch.num_rows() == 0 {
                 old_start_row_idx += cur_num_rows;
                 continue;

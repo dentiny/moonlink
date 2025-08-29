@@ -578,6 +578,14 @@ impl SnapshotTableState {
 
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         let flush_lsn = self.current_snapshot.flush_lsn.unwrap_or(0);
+
+        println!("option = {:?}, flush by table write {}, flush lsn = {}, min ongoing {}", 
+            opt.iceberg_snapshot_option,
+            flush_by_table_write,
+            flush_lsn,
+            task.min_ongoing_flush_lsn,
+        );
+
         if opt.iceberg_snapshot_option != IcebergSnapshotOption::Skip
             && (force_empty_iceberg_payload || flush_by_table_write)
             && flush_lsn < task.min_ongoing_flush_lsn
@@ -592,6 +600,9 @@ impl SnapshotTableState {
                 || flush_by_new_files_or_maintenance
                 || force_empty_iceberg_payload
             {
+
+                println!("should have iceberg payload?");
+
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     &opt.iceberg_snapshot_option,
                     flush_lsn,
