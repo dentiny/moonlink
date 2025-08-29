@@ -51,7 +51,7 @@ pub struct DataFileImportResult {
     /// Deletion records after compaction.
     ///
     /// A committed deletion record could appear in two places: committed deletion log in mooncake snapshot, or iceberg puffin blob.
-    /// For later, we need to do a proper remapping after compaction.
+    /// For later, we need to do remapping for already persisted disk files.
     remapped_deletion_records: HashMap<MooncakeDataFileRef, BatchDeletionVector>,
 }
 
@@ -250,7 +250,7 @@ impl IcebergTableManager {
             new_iceberg_data_files.push(cur_iceberg_data_file);
         }
 
-        // Remap already persisted data files; all data file's attributes are accessible.
+        // Remap already persisted data files; till now all data file's attributes are accessible.
         let mut remapped_deletion_records =
             HashMap::<MooncakeDataFileRef, BatchDeletionVector>::new();
         for (old_file_id, old_data_file_entry) in self.persisted_data_files.iter() {
@@ -273,6 +273,7 @@ impl IcebergTableManager {
                         let new_data_file_entry = self
                             .persisted_data_files
                             .get(&new_data_file.file_id())
+                            // Invariant sanity check: all data files have been imported into in-memory state.
                             .unwrap();
                         let mut new_batch_deletion_vector = BatchDeletionVector::new(
                             new_data_file_entry.data_file.record_count() as usize,

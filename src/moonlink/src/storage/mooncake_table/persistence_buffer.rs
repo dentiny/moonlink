@@ -49,6 +49,7 @@ pub(crate) struct UnpersistedRecords {
     /// Un-applied remapped record.
     ///
     /// For a committed deletion record, it could appear in two places: committed deletion log, or iceberg deletion vector puffin blob.
+    /// For later, iceberg table manager should handle it, with the knowledge of remapping information.
     compacted_data_file_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 

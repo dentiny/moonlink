@@ -3169,7 +3169,7 @@ async fn test_persisted_deletion_record_remap() {
     let iceberg_snapshot_result =
         create_iceberg_snapshot(&mut table, iceberg_payload, &mut notify_rx)
             .await
-            .unwrap(); // <----
+            .unwrap();
     table.set_iceberg_snapshot_res(iceberg_snapshot_result);
 
     // Validate iceberg snapshot content.
