@@ -345,7 +345,16 @@ impl TestEnvironment {
     }
 
     pub async fn bulk_upload_files(&self, files: Vec<String>, lsn: u64) {
-        self.send_event(TableEvent::LoadFiles { files, lsn }).await;
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: self.temp_dir.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
+        self.send_event(TableEvent::LoadFiles {
+            files,
+            storage_config,
+            lsn,
+        })
+        .await;
     }
 
     // --- LSN and Verification Helpers ---

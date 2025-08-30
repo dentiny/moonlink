@@ -9,7 +9,7 @@ use crate::pg_replicate::table::{ColumnSchema, LookupKey, SrcTableId, TableName,
 use crate::pg_replicate::util::postgres_schema_to_moonlink_schema;
 use crate::Result;
 use futures::{pin_mut, Stream, StreamExt};
-use moonlink::TableEvent;
+use moonlink::{StorageConfig, TableEvent};
 use moonlink_error::ErrorStatus;
 use moonlink_error::ErrorStruct;
 use std::path::Path;
@@ -117,6 +117,10 @@ where
     if let Err(e) = event_sender
         .send(TableEvent::LoadFiles {
             files: files_written,
+            storage_config: StorageConfig::FileSystem {
+                root_directory: output_dir.to_str().unwrap().to_string(),
+                atomic_write_dir: None,
+            },
             lsn: start_lsn,
         })
         .await

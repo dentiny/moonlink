@@ -2432,6 +2432,10 @@ async fn test_initial_copy_iceberg_ack_without_wal() {
     sender
         .send(TableEvent::LoadFiles {
             files: vec![file_path],
+            storage_config: crate::StorageConfig::FileSystem {
+                root_directory: env.temp_dir.path().to_str().unwrap().to_string(),
+                atomic_write_dir: None,
+            },
             lsn: start_lsn,
         })
         .await
@@ -2479,6 +2483,10 @@ async fn test_finish_initial_copy_overlaps_with_ongoing_snapshot() {
     sender
         .send(TableEvent::LoadFiles {
             files: vec![file_path],
+            storage_config: crate::StorageConfig::FileSystem {
+                root_directory: env.temp_dir.path().to_str().unwrap().to_string(),
+                atomic_write_dir: None,
+            },
             lsn: start_lsn,
         })
         .await

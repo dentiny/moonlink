@@ -9,6 +9,7 @@ use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::wal::WalPersistenceUpdateResult;
 use crate::Result;
+use crate::StorageConfig;
 
 /// Table maintenance status.
 #[derive(Clone, Debug)]
@@ -110,6 +111,8 @@ pub enum TableEvent {
     LoadFiles {
         /// Parquet files to directly load into mooncake table, without schema validation, index construction, etc.
         files: Vec<String>,
+        /// Storage config to access files, assume all files share the same access.
+        storage_config: StorageConfig,
         /// LSN for the bulk upload operation.
         lsn: u64,
     },

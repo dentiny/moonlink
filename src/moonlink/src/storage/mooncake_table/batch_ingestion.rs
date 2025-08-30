@@ -1,6 +1,8 @@
+use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::{
     create_data_file, storage::mooncake_table::transaction_stream::TransactionStreamCommit,
 };
+use crate::{AccessorConfig, FileSystemAccessor, StorageConfig};
 
 use super::*;
 
@@ -8,40 +10,93 @@ use futures::{stream, StreamExt};
 use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::ProjectionMask;
 use std::path::PathBuf;
+use std::sync::Arc;
 use tokio::fs::File;
 
-use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
+const MAX_IN_FLIGHT: usize = 64;
+
+/// Ensure parquet files to ingest lives on local filesystem.
+/// Return local parquet files to ingest.
+async fn ensure_parquet_files_local_filesystem(
+    filesystem_accessor: Arc<FileSystemAccessor>,
+    parquet_file: String,
+    write_through_directory: String,
+    storage_config: StorageConfig,
+) -> Result<String> {
+    match storage_config {
+        // Already at local filesystem, skip.
+        StorageConfig::FileSystem { .. } => Ok(parquet_file),
+        _ => {
+            let filename = std::path::Path::new(&parquet_file)
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            let local_parquet_file = std::path::Path::new(&write_through_directory).join(filename);
+            let local_parquet_filepath = local_parquet_file.to_str().unwrap().to_string();
+            filesystem_accessor
+                .copy_from_remote_to_local(&parquet_file, &local_parquet_filepath)
+                .await?;
+            Ok(local_parquet_filepath)
+        }
+    }
+}
 
 impl MooncakeTable {
     /// Batch ingestion the given [`parquet_files`] into mooncake table.
     ///
     /// TODO(hjiang):
     /// 1. Record table events.
-    /// 2. It involves IO operations, should be placed at background thread.s
-    pub(crate) async fn batch_ingest(&mut self, parquet_files: Vec<String>, lsn: u64) {
-        const MAX_IN_FLIGHT: usize = 64;
+    /// 2. It involves IO operations, should be placed at background thread.
+    pub(crate) async fn batch_ingest(
+        &mut self,
+        parquet_files: Vec<String>,
+        storage_config: StorageConfig,
+        lsn: u64,
+    ) {
         let start_id = self.next_file_id;
         self.next_file_id += parquet_files.len() as u32;
+
+        // Create filesystem accessor to download remote parquet files to local filesystem.
+        let accessor_config = AccessorConfig::new_with_storage_config(storage_config.clone());
+        let filesystem_accessor = Arc::new(FileSystemAccessor::new(accessor_config));
+        let write_through_directory = self.metadata.path.to_str().unwrap().to_string();
 
         let disk_files = stream::iter(parquet_files.into_iter().enumerate().map(
             |(idx, cur_file)| {
                 let cur_file_id = (start_id as u64) + idx as u64;
+                let filesystem_accessor_clone = filesystem_accessor.clone();
+                let write_through_directory_clone = write_through_directory.clone();
+                let storage_config_clone = storage_config.clone();
+
                 async move {
-                    // TODO(hjiang): Handle remote data file ingestion as well.
-                    let file = File::open(&cur_file)
+                    // If parquet files to ingest doesn't live on local filesystem, copy it to table write-through directory.
+                    let local_parquet = ensure_parquet_files_local_filesystem(
+                        filesystem_accessor_clone,
+                        cur_file,
+                        write_through_directory_clone,
+                        storage_config_clone,
+                    )
+                    .await
+                    .unwrap();
+
+                    let file = File::open(&local_parquet)
                         .await
-                        .unwrap_or_else(|_| panic!("Failed to open {cur_file}"));
+                        .unwrap_or_else(|_| panic!("Failed to open {local_parquet}"));
                     let file_size = file
                         .metadata()
                         .await
-                        .unwrap_or_else(|_| panic!("Failed to stat {cur_file}"))
+                        .unwrap_or_else(|_| panic!("Failed to stat {local_parquet}"))
                         .len() as usize;
                     let stream_builder = ParquetRecordBatchStreamBuilder::new(file)
                         .await
-                        .unwrap_or_else(|_| panic!("Failed to read parquet footer for {cur_file}"));
+                        .unwrap_or_else(|_| {
+                            panic!("Failed to read parquet footer for {local_parquet}")
+                        });
                     let num_rows = stream_builder.metadata().file_metadata().num_rows() as usize;
 
-                    let mooncake_data_file = create_data_file(cur_file_id, cur_file.clone());
+                    let mooncake_data_file = create_data_file(cur_file_id, local_parquet.clone());
                     let disk_file_entry = DiskFileEntry {
                         cache_handle: None,
                         num_rows,
@@ -184,8 +239,16 @@ mod tests {
         write_parquet_file(&file1, &[batch1]).await;
 
         let lsn = 100u64;
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
         table
-            .batch_ingest(vec![file1.to_string_lossy().to_string()], lsn)
+            .batch_ingest(
+                vec![file1.to_string_lossy().to_string()],
+                storage_config,
+                lsn,
+            )
             .await;
 
         // Verify next_snapshot_task updated
@@ -224,12 +287,17 @@ mod tests {
         write_parquet_file(&file2, &[b2.clone()]).await;
 
         let lsn = 200u64;
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
         table
             .batch_ingest(
                 vec![
                     file1.to_string_lossy().to_string(),
                     file2.to_string_lossy().to_string(),
                 ],
+                storage_config,
                 lsn,
             )
             .await;
@@ -280,12 +348,17 @@ mod tests {
         write_parquet_file(&file1, &[b1.clone()]).await;
         write_parquet_file(&file2, &[b2.clone()]).await;
 
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
         table
             .batch_ingest(
                 vec![
                     file1.to_string_lossy().to_string(),
                     file2.to_string_lossy().to_string(),
                 ],
+                storage_config,
                 500,
             )
             .await;
@@ -330,8 +403,16 @@ mod tests {
         let b1 = batch_with_rows(&[301, 302, 303]);
         write_parquet_file(&file1, &[b1.clone()]).await;
 
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
         table
-            .batch_ingest(vec![file1.to_string_lossy().to_string()], 600)
+            .batch_ingest(
+                vec![file1.to_string_lossy().to_string()],
+                storage_config,
+                600,
+            )
             .await;
 
         let (files, mut indices) = match &table.next_snapshot_task.new_streaming_xact[0] {
@@ -374,8 +455,16 @@ mod tests {
         let table_dir = context.path();
         tokio::fs::remove_dir_all(&table_dir).await.unwrap();
 
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
         table
-            .batch_ingest(vec![file1.to_string_lossy().to_string()], 300)
+            .batch_ingest(
+                vec![file1.to_string_lossy().to_string()],
+                storage_config,
+                300,
+            )
             .await;
 
         match &table.next_snapshot_task.new_streaming_xact[0] {
@@ -398,7 +487,11 @@ mod tests {
         )
         .await;
 
-        table.batch_ingest(vec![], 400).await;
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
+        table.batch_ingest(vec![], storage_config, 400).await;
 
         match &table.next_snapshot_task.new_streaming_xact[0] {
             TransactionStreamOutput::Abort(_) => panic!("unexpected abort"),
@@ -427,7 +520,11 @@ mod tests {
         )
         .await;
 
-        table.batch_ingest(vec![], 700).await;
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
+        table.batch_ingest(vec![], storage_config, 700).await;
 
         match &table.next_snapshot_task.new_streaming_xact[0] {
             TransactionStreamOutput::Commit(commit) => {
@@ -448,7 +545,11 @@ mod tests {
         )
         .await;
 
-        table.batch_ingest(vec![], 800).await;
+        let storage_config = crate::StorageConfig::FileSystem {
+            root_directory: context.path().to_str().unwrap().to_string(),
+            atomic_write_dir: None,
+        };
+        table.batch_ingest(vec![], storage_config, 800).await;
 
         match &table.next_snapshot_task.new_streaming_xact[0] {
             TransactionStreamOutput::Commit(commit) => {

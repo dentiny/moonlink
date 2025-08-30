@@ -224,8 +224,12 @@ impl TableHandler {
                     // ==============================
                     // Bulk ingestion events
                     // ==============================
-                    TableEvent::LoadFiles { files, lsn } => {
-                        table.batch_ingest(files, lsn).await;
+                    TableEvent::LoadFiles {
+                        files,
+                        storage_config,
+                        lsn,
+                    } => {
+                        table.batch_ingest(files, storage_config, lsn).await;
                     }
 
                     // ==============================
