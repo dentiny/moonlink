@@ -1,17 +1,18 @@
 use std::sync::Arc;
 
-use crate::rest_api::{FileUploadResponse, ListTablesResponse};
 use arrow_array::{Int32Array, RecordBatch, StringArray};
+use async_recursion::async_recursion;
 use bytes::Bytes;
-use moonlink::decode_serialized_read_state_for_testing;
-use moonlink_backend::table_status::TableStatus;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde_json::json;
 use serial_test::serial;
 use tokio::net::TcpStream;
 
+use crate::rest_api::{FileUploadResponse, ListTablesResponse};
 use crate::test_utils::*;
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
+use moonlink::decode_serialized_read_state_for_testing;
+use moonlink_backend::table_status::TableStatus;
 use moonlink_rpc::{load_files, scan_table_begin, scan_table_end};
 
 /// Moonlink backend directory.
@@ -45,12 +46,14 @@ fn get_service_config() -> ServiceConfig {
 }
 
 /// Util function to delete and all subdirectories and files in the given directory.
+#[async_recursion]
 async fn cleanup_directory(dir: &str) {
     let dir = std::path::Path::new(dir);
     let mut entries = tokio::fs::read_dir(dir).await.unwrap();
     while let Some(entry) = entries.next_entry().await.unwrap() {
         let entry_path = entry.path();
         if entry_path.is_dir() {
+            cleanup_directory(entry_path.to_str().unwrap()).await;
             tokio::fs::remove_dir_all(&entry_path).await.unwrap();
         } else {
             tokio::fs::remove_file(&entry_path).await.unwrap();
@@ -201,10 +204,11 @@ async fn test_schema() {
             {"name": "float32", "data_type": "float32", "nullable": false},
             {"name": "float64", "data_type": "float64", "nullable": false},
             {"name": "date32", "data_type": "date32", "nullable": false},
-            // TODO(hjiang): add test cases for negative scale, which is not supported for now.
             {"name": "decimal(10)", "data_type": "decimal(10,2)", "nullable": false}, // only precision value
             {"name": "decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false}, // lowercase
-            {"name": "Decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false} // uppercase
+            {"name": "Decimal(10,2)", "data_type": "decimal(10,2)", "nullable": false}, // uppercase
+            {"name": "Decimal(10,0)", "data_type": "decimal(10,0)", "nullable": false}, // scale = 0
+            {"name": "Decimal(2,-3)", "data_type": "decimal(2,-3)", "nullable": false} // negative scale value
         ],
         "table_config": {
             "mooncake": {
