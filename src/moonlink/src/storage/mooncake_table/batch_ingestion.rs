@@ -25,20 +25,35 @@ async fn ensure_parquet_files_local_filesystem(
 ) -> Result<String> {
     match storage_config {
         // Already at local filesystem, skip.
+        #[cfg(feature = "storage-fs")]
         StorageConfig::FileSystem { .. } => Ok(parquet_file),
+        #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
         _ => {
-            let filename = std::path::Path::new(&parquet_file)
-                .file_name()
+            let filename_without_suffix = std::path::Path::new(&parquet_file)
+                .file_stem()
                 .unwrap()
                 .to_str()
                 .unwrap()
                 .to_string();
-            let local_parquet_file = std::path::Path::new(&write_through_directory).join(filename);
+
+            // Suffix with UUID to avoid filename conflict.
+            let unique_filename = format!(
+                "{}-{:?}.parquet",
+                filename_without_suffix,
+                uuid::Uuid::new_v4()
+            );
+            let local_parquet_file =
+                std::path::Path::new(&write_through_directory).join(unique_filename);
             let local_parquet_filepath = local_parquet_file.to_str().unwrap().to_string();
+
             filesystem_accessor
                 .copy_from_remote_to_local(&parquet_file, &local_parquet_filepath)
                 .await?;
             Ok(local_parquet_filepath)
+        }
+        #[cfg(all(not(feature = "storage-gcs"), not(feature = "storage-s3")))]
+        _ => {
+            panic!("Unknown storage config {:?}", storage_config);
         }
     }
 }

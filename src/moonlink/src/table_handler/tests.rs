@@ -2372,14 +2372,96 @@ async fn test_batch_ingestion() {
     };
     let env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
 
+    let storage_config = crate::StorageConfig::FileSystem {
+        root_directory: env.temp_dir.path().to_str().unwrap().to_string(),
+        atomic_write_dir: None,
+    };
     let disk_file_1 = generate_parquet_file(&env.temp_dir, "1.parquet").await;
     let disk_file_2 = generate_parquet_file(&env.temp_dir, "1.parquet").await;
-    env.bulk_upload_files(vec![disk_file_1, disk_file_2], /*lsn=*/ 10)
-        .await;
+    env.bulk_upload_files(
+        vec![disk_file_1, disk_file_2],
+        storage_config,
+        /*lsn=*/ 10,
+    )
+    .await;
 
     // Validate bulk ingestion result.
     env.set_readable_lsn(10);
     env.verify_snapshot(10, &[1, 1, 2, 2, 3, 3]).await;
+}
+
+/// Testing scenario: batch upload parquet files from GCS into mooncake table.
+#[cfg(feature = "storage-gcs")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_batch_ingestion_with_gcs() {
+    use crate::storage::filesystem::gcs::gcs_test_utils::*;
+    use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
+
+    let (bucket, warehouse_uri) = get_test_gcs_bucket_and_warehouse();
+    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
+    let accessor_config = create_gcs_storage_config(&warehouse_uri);
+    let storage_config = accessor_config.storage_config;
+    let gcs_filepath = format!("gs://{}/object", bucket);
+
+    let temp_dir = tempdir().unwrap();
+    let mooncake_table_config = MooncakeTableConfig {
+        append_only: true, // Enable append-only mode
+        row_identity: IdentityProp::None,
+        batch_size: 2,
+        mem_slice_size: 1000,
+        snapshot_deletion_record_count: 1000,
+        temp_files_directory: temp_dir.path().to_str().unwrap().to_string(),
+        disk_slice_writer_config: DiskSliceWriterConfig::default(),
+        data_compaction_config: DataCompactionConfig::default(),
+        file_index_config: FileIndexMergeConfig::default(),
+        persistence_config: IcebergPersistenceConfig::default(),
+    };
+    let env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
+
+    generate_parquet_file_in_gcs(storage_config.clone(), &gcs_filepath).await;
+    env.bulk_upload_files(vec![gcs_filepath], storage_config.clone(), /*lsn=*/ 10)
+        .await;
+
+    // Validate bulk ingestion result.
+    env.set_readable_lsn(10);
+    env.verify_snapshot(10, &[1, 2, 3]).await;
+}
+
+/// Testing scenario: batch upload parquet files from S3 into mooncake table.
+#[cfg(feature = "storage-s3")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_batch_ingestion_with_s3() {
+    use crate::storage::filesystem::s3::s3_test_utils::*;
+    use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
+
+    let (bucket, warehouse_uri) = get_test_s3_bucket_and_warehouse();
+    let _test_guard = S3TestGuard::new(bucket.clone()).await;
+    let accessor_config = create_s3_storage_config(&warehouse_uri);
+    let storage_config = accessor_config.storage_config;
+    let s3_filepath = format!("s3://{}/object", bucket);
+
+    let temp_dir = tempdir().unwrap();
+    let mooncake_table_config = MooncakeTableConfig {
+        append_only: true, // Enable append-only mode
+        row_identity: IdentityProp::None,
+        batch_size: 2,
+        mem_slice_size: 1000,
+        snapshot_deletion_record_count: 1000,
+        temp_files_directory: temp_dir.path().to_str().unwrap().to_string(),
+        disk_slice_writer_config: DiskSliceWriterConfig::default(),
+        data_compaction_config: DataCompactionConfig::default(),
+        file_index_config: FileIndexMergeConfig::default(),
+        persistence_config: IcebergPersistenceConfig::default(),
+    };
+    let env = TestEnvironment::new(temp_dir, mooncake_table_config).await;
+
+    generate_parquet_file_in_s3(storage_config.clone(), &s3_filepath).await;
+    env.bulk_upload_files(vec![s3_filepath], storage_config.clone(), /*lsn=*/ 10)
+        .await;
+
+    // Validate bulk ingestion result.
+    env.set_readable_lsn(10);
+    env.verify_snapshot(10, &[1, 2, 3]).await;
 }
 
 #[tokio::test]
