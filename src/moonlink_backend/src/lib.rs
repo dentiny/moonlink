@@ -180,6 +180,7 @@ impl MoonlinkBackend {
                     &table_config,
                     &mooncake_table_id,
                     &self.base_path,
+                    &self.temp_files_dir,
                 )?;
                 manager
                     .add_rest_table(
@@ -197,6 +198,7 @@ impl MoonlinkBackend {
                 let mut cur_moonlink_table_config = config_utils::parse_replication_table_config(
                     &table_config,
                     &mooncake_table_id,
+                    &self.base_path,
                     &self.temp_files_dir,
                 )?;
                 // Moonlink table config will get updated later at replication manager.
