@@ -121,7 +121,6 @@ impl ReplicationManager {
     ///
     /// * src_uri: should be a REST API URL
     /// * arrow_schema: Arrow schema for the table
-    /// * moonlink_table_config: serialized mooncake table config.
     /// * flush_lsn: only assigned when recovery, which indicates the iceberg persistence LSN; otherwise it's a fresh table.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_rest_table(

@@ -245,7 +245,6 @@ impl ReplicationConnection {
     ///
     /// # Arguments
     ///
-    /// * moonlink_table_config: serialized mooncake table config.
     /// * persist_lsn: only assigned at recovery, used to indicate and update replication LSN.
     #[allow(clippy::too_many_arguments)]
     pub async fn add_table_api(
