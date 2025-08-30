@@ -16,9 +16,10 @@ const PARQUET_MAGIC: &[u8; 4] = b"PAR1";
 /// TODO(hjiang): Currently it only supports local filepath.
 pub(crate) async fn get_parquet_serialized_metadata(filepath: &str) -> Result<Vec<u8>> {
     let mut file = tokio::fs::File::open(&filepath).await.map_err(|e| {
-        Error::Io(ErrorStruct {
-            message: format!("Failed to open file {} with error {:?}", filepath, e),
-        })
+        Error::io(format!(
+            "Failed to open file {} with error {:?}",
+            filepath, e
+        ))
     })?;
 
     // Validate file size.

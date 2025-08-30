@@ -66,6 +66,10 @@ impl Error {
     pub fn invalid_config(message: String) -> Self {
         Self::InvalidConfig(ErrorStruct::new(message, ErrorStatus::Permanent))
     }
+    #[track_caller]
+    pub fn io(message: String) -> Self {
+        Self::Io(ErrorStruct::new(message, ErrorStatus::Permanent))
+    }
 
     pub fn get_status(&self) -> ErrorStatus {
         match self {
