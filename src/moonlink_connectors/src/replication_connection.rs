@@ -253,10 +253,10 @@ impl ReplicationConnection {
         src_table_name: &str,
         mooncake_table_id: &MooncakeTableId,
         arrow_schema: ArrowSchema,
-        moonlink_table_config: String,
+        moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
         persist_lsn: Option<u64>,
-    ) -> Result<(SrcTableId, MoonlinkTableConfig)> {
+    ) -> Result<SrcTableId> {
         match &mut self.source {
             SourceType::RestApi(conn) => {
                 debug!(src_table_name, "adding REST API table");

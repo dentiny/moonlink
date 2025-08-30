@@ -3,7 +3,7 @@ use crate::rest_ingest::event_request::EventRequest;
 use crate::ReplicationConnection;
 use crate::{Error, Result};
 use moonlink::{
-    MooncakeTableConfig, MooncakeTableId, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager
+    MooncakeTableId, MoonlinkTableConfig, ObjectStorageCache, ReadStateManager, TableEventManager,
 };
 use moonlink::{ReadStateFilepathRemap, TableStatusReader};
 use std::collections::hash_map::Entry;
@@ -130,10 +130,10 @@ impl ReplicationManager {
         mooncake_table_id: MooncakeTableId,
         src_table_name: &str,
         arrow_schema: arrow_schema::Schema,
-        moonlink_table_config: String,
+        moonlink_table_config: MoonlinkTableConfig,
         read_state_filepath_remap: ReadStateFilepathRemap,
         flush_lsn: Option<u64>,
-    ) -> Result<MooncakeTableConfig> {
+    ) -> Result<()> {
         debug!(%src_uri, src_table_name, "adding REST API table through manager");
 
         // Fail if REST API connection doesn't exist

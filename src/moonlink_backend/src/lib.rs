@@ -1,3 +1,4 @@
+mod config_utils;
 mod error;
 pub mod file_utils;
 mod logging;
@@ -9,8 +10,8 @@ pub mod table_status;
 use arrow_schema::Schema;
 pub use error::{Error, Result};
 use futures::{stream, StreamExt, TryStreamExt};
-use moonlink::MooncakeTableId;
 pub use moonlink::ReadState;
+use moonlink::{MooncakeTableId, MoonlinkTableConfig};
 use moonlink::{ReadStateFilepathRemap, TableEventManager};
 pub use moonlink_connectors::rest_ingest::event_request::{
     EventRequest, FileEventOperation, FileEventRequest, RowEventOperation, RowEventRequest,
@@ -24,7 +25,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use crate::recovery_utils::BackendAttributes;
-use crate::table_config::TableConfig;
 use crate::table_status::TableStatus;
 
 /// Type alias for filepath remap function, which remaps http URI to local filepath if possible.
@@ -173,35 +173,45 @@ impl MoonlinkBackend {
         };
 
         // Add mooncake table to replication, and create corresponding mooncake table.
-        let table_config = TableConfig::from_json_or_default(&table_config, &self.base_path)?;
-        let mut moonlink_table_config =
-            table_config.take_as_moonlink_config(self.temp_files_dir.clone(), &mooncake_table_id);
-        {
+        let moonlink_table_config: Result<MoonlinkTableConfig> = {
             let mut manager = self.replication_manager.write().await;
             if src_uri == REST_API_URI {
+                let cur_moonlink_table_config = config_utils::parse_event_table_config(
+                    &table_config,
+                    &mooncake_table_id,
+                    &self.base_path,
+                )?;
                 manager
                     .add_rest_table(
                         &src_uri,
                         mooncake_table_id,
                         &src_table_name,
                         input_schema.expect("arrow_schema is required for REST API"),
-                        table_config,
+                        cur_moonlink_table_config.clone(),
                         self.read_state_filepath_remap.clone(),
                         /*flush_lsn=*/ None,
                     )
                     .await?;
+                Ok(cur_moonlink_table_config)
             } else {
+                let mut cur_moonlink_table_config = config_utils::parse_replication_table_config(
+                    &table_config,
+                    &mooncake_table_id,
+                    &self.temp_files_dir,
+                )?;
+                // Moonlink table config will get updated later at replication manager.
                 manager
                     .add_table(
                         &src_uri,
                         mooncake_table_id,
                         &src_table_name,
-                        table_config,
+                        &mut cur_moonlink_table_config,
                         self.read_state_filepath_remap.clone(),
                         /*is_recovery=*/ false,
                     )
                     .await?;
                 manager.start_replication(&src_uri).await?;
+                Ok(cur_moonlink_table_config)
             }
         };
 
@@ -212,7 +222,7 @@ impl MoonlinkBackend {
                 &table,
                 &src_table_name,
                 &src_uri,
-                moonlink_table_config,
+                moonlink_table_config?,
             )
             .await?;
 
