@@ -1,6 +1,7 @@
 use crate::rest_ingest::SrcTableId;
 use crate::{rest_ingest::event_request::RowEventOperation, Result};
 use moonlink::row::MoonlinkRow;
+use moonlink::StorageConfig;
 
 use std::sync::Arc;
 use std::time::SystemTime;
@@ -32,6 +33,9 @@ pub enum RestEvent {
     FileUploadEvent {
         /// Source table id.
         src_table_id: SrcTableId,
+        /// Storage config to access files to upload.
+        /// Assume all files share the same config.
+        storage_config: StorageConfig,
         /// Used to directly ingest into mooncake table.
         files: Vec<String>,
         /// LSN for the ingestion event.

@@ -18,9 +18,9 @@ const MAX_IN_FLIGHT: usize = 64;
 /// Ensure parquet files to ingest lives on local filesystem.
 /// Return local parquet files to ingest.
 async fn ensure_parquet_files_local_filesystem(
-    filesystem_accessor: Arc<FileSystemAccessor>,
+    _filesystem_accessor: Arc<FileSystemAccessor>,
     parquet_file: String,
-    write_through_directory: String,
+    _write_through_directory: String,
     storage_config: StorageConfig,
 ) -> Result<String> {
     match storage_config {
@@ -43,15 +43,19 @@ async fn ensure_parquet_files_local_filesystem(
                 uuid::Uuid::new_v4()
             );
             let local_parquet_file =
-                std::path::Path::new(&write_through_directory).join(unique_filename);
+                std::path::Path::new(&_write_through_directory).join(unique_filename);
             let local_parquet_filepath = local_parquet_file.to_str().unwrap().to_string();
 
-            filesystem_accessor
+            _filesystem_accessor
                 .copy_from_remote_to_local(&parquet_file, &local_parquet_filepath)
                 .await?;
             Ok(local_parquet_filepath)
         }
-        #[cfg(all(not(feature = "storage-gcs"), not(feature = "storage-s3")))]
+        #[cfg(all(
+            not(feature = "storage-fs"),
+            not(feature = "storage-gcs"),
+            not(feature = "storage-s3")
+        ))]
         _ => {
             panic!("Unknown storage config {:?}", storage_config);
         }

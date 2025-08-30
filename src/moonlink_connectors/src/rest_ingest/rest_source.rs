@@ -210,6 +210,7 @@ impl RestSource {
                 let lsn = self.lsn_generator.fetch_add(1, Ordering::SeqCst);
                 let file_rest_event = RestEvent::FileUploadEvent {
                     src_table_id,
+                    storage_config: request.storage_config.clone(),
                     files: request.files.clone(),
                     lsn,
                 };
@@ -504,6 +505,7 @@ mod tests {
                 src_table_id,
                 files,
                 lsn,
+                ..
             } => {
                 assert_eq!(*src_table_id, 1);
                 assert_eq!(*files, vec![filepath]);

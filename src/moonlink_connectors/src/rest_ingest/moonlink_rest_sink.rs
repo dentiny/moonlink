@@ -3,7 +3,7 @@ use crate::rest_ingest::event_request::RowEventOperation;
 use crate::rest_ingest::rest_event::RestEvent;
 use crate::rest_ingest::rest_source::SrcTableId;
 use crate::{Error, Result};
-use moonlink::TableEvent;
+use moonlink::{StorageConfig, TableEvent};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -135,10 +135,12 @@ impl RestSink {
             }
             RestEvent::FileUploadEvent {
                 src_table_id,
+                storage_config,
                 files,
                 lsn,
             } => {
-                self.process_file_upload(src_table_id, files, lsn).await?;
+                self.process_file_upload(src_table_id, storage_config, files, lsn)
+                    .await?;
                 self.mark_commit(src_table_id, lsn)?;
                 Ok(())
             }
@@ -167,10 +169,15 @@ impl RestSink {
     async fn process_file_upload(
         &self,
         src_table_id: SrcTableId,
+        storage_config: StorageConfig,
         files: Vec<String>,
         lsn: u64,
     ) -> Result<()> {
-        let table_event = TableEvent::LoadFiles { files, lsn };
+        let table_event = TableEvent::LoadFiles {
+            files,
+            lsn,
+            storage_config,
+        };
         self.send_table_event(src_table_id, table_event).await?;
         Ok(())
     }

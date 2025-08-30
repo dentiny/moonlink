@@ -148,6 +148,7 @@ mod tests {
     use crate::pg_replicate::table::{ColumnSchema, LookupKey, TableName};
     use futures::stream;
     use moonlink_error::ErrorStruct;
+    use more_asserts as ma;
     use tempfile;
     use tokio::sync::mpsc;
     use tokio::time::{timeout, Duration};
@@ -225,7 +226,7 @@ mod tests {
             .expect("channel lag")
             .expect("sender closed");
         let files: Vec<String> = match evt {
-            TableEvent::LoadFiles { files, lsn } => {
+            TableEvent::LoadFiles { files, lsn, .. } => {
                 assert_eq!(lsn, start_lsn);
                 assert!(!files.is_empty(), "should have written at least one file");
                 files
@@ -266,7 +267,7 @@ mod tests {
             .expect("channel lag")
             .expect("sender closed");
         match evt {
-            TableEvent::LoadFiles { files, lsn } => {
+            TableEvent::LoadFiles { files, lsn, .. } => {
                 assert!(files.is_empty());
                 assert_eq!(lsn, 0);
             }
@@ -314,13 +315,9 @@ mod tests {
             .expect("channel lag")
             .expect("sender closed");
         let files = match evt {
-            TableEvent::LoadFiles { files, lsn } => {
+            TableEvent::LoadFiles { files, lsn, .. } => {
                 assert_eq!(lsn, start_lsn);
-                assert!(
-                    files.len() >= 2,
-                    "expected at least 2 files, got {}",
-                    files.len()
-                );
+                ma::assert_ge!(files.len(), 2,);
                 files
             }
             _ => panic!("expected LoadFiles"),
@@ -394,9 +391,9 @@ mod tests {
             .expect("channel lag")
             .expect("sender closed");
         let files = match evt {
-            TableEvent::LoadFiles { files, lsn } => {
+            TableEvent::LoadFiles { files, lsn, .. } => {
                 assert_eq!(lsn, 7);
-                assert!(files.len() >= 3, "expected >= 3 files, got {}", files.len());
+                ma::assert_ge!(files.len(), 3);
                 files
             }
             _ => panic!("expected LoadFiles"),
@@ -432,7 +429,7 @@ mod tests {
             .expect("channel lag")
             .expect("sender closed");
         match evt {
-            TableEvent::LoadFiles { files, lsn } => {
+            TableEvent::LoadFiles { files, lsn, .. } => {
                 assert!(files.is_empty());
                 assert_eq!(lsn, 0);
             }
@@ -516,7 +513,7 @@ mod tests {
             .expect("channel lag")
             .expect("sender closed");
         match evt {
-            TableEvent::LoadFiles { files, lsn } => {
+            TableEvent::LoadFiles { files, lsn, .. } => {
                 assert_eq!(lsn, 9);
                 assert!(!files.is_empty());
             }

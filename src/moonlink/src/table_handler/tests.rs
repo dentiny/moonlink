@@ -2401,7 +2401,7 @@ async fn test_batch_ingestion_with_gcs() {
     let _test_guard = GcsTestGuard::new(bucket.clone()).await;
     let accessor_config = create_gcs_storage_config(&warehouse_uri);
     let storage_config = accessor_config.storage_config;
-    let gcs_filepath = format!("gs://{}/object", bucket);
+    let gcs_filepath = format!("gs://{bucket}/object");
 
     let temp_dir = tempdir().unwrap();
     let mooncake_table_config = MooncakeTableConfig {
@@ -2438,7 +2438,7 @@ async fn test_batch_ingestion_with_s3() {
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let storage_config = accessor_config.storage_config;
-    let s3_filepath = format!("s3://{}/object", bucket);
+    let s3_filepath = format!("s3://{bucket}/object");
 
     let temp_dir = tempdir().unwrap();
     let mooncake_table_config = MooncakeTableConfig {
