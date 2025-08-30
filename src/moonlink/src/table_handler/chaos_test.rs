@@ -883,6 +883,8 @@ impl TestEnvironment {
             config: mooncake_table_metadata.config.clone(),
             local_filesystem_optimization_enabled: config.local_filesystem_optimization_enabled,
             storage_config: config.storage_config.clone(),
+            is_upsert_table: config.special_table_option
+                == SpecialTableOption::UpsertDeleteIfExists,
         };
         tokio::spawn(async move {
             Self::dump_table_event(
