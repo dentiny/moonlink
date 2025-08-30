@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::Result;
+use crate::{Error, Result};
 use moonlink::row::IdentityProp;
 use moonlink::MooncakeTableId;
 use moonlink::{
@@ -48,7 +48,14 @@ impl MooncakeConfig {
     pub(crate) fn take_as_mooncake_table_config(
         self,
         temp_files_dir: String,
-    ) -> MooncakeTableConfig {
+    ) -> Result<MooncakeTableConfig> {
+        if !self.is_valid() {
+            return Err(Error::invalid_config(format!(
+                "Invalid config for {:?}",
+                &self
+            )));
+        }
+
         let index_merge_config = if self.skip_index_merge {
             FileIndexMergeConfig::disabled()
         } else {
@@ -65,7 +72,7 @@ impl MooncakeConfig {
         mooncake_table_config.data_compaction_config = data_compaction_config;
         mooncake_table_config.append_only = self.append_only.unwrap();
         mooncake_table_config.row_identity = self.row_identity.unwrap();
-        mooncake_table_config
+        Ok(mooncake_table_config)
     }
 }
 
@@ -122,11 +129,18 @@ impl TableConfig {
         self,
         temp_files_dir: String,
         mooncake_table_id: &MooncakeTableId,
-    ) -> MoonlinkTableConfig {
-        MoonlinkTableConfig {
+    ) -> Result<MoonlinkTableConfig> {
+        if !self.is_valid() {
+            return Err(Error::invalid_config(format!(
+                "Invalid config for {:?}",
+                &self
+            )));
+        }
+
+        let config = MoonlinkTableConfig {
             mooncake_table_config: self
                 .mooncake_config
-                .take_as_mooncake_table_config(temp_files_dir),
+                .take_as_mooncake_table_config(temp_files_dir)?,
             iceberg_table_config: IcebergTableConfig {
                 namespace: vec![mooncake_table_id.database.clone()],
                 table_name: mooncake_table_id.table.clone(),
@@ -139,7 +153,8 @@ impl TableConfig {
                 self.wal_config.unwrap(),
                 &mooncake_table_id.to_string(),
             ),
-        }
+        };
+        Ok(config)
     }
 }
 

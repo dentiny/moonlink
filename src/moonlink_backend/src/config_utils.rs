@@ -16,9 +16,8 @@ pub(crate) fn parse_event_table_config(
 
     // If table config is already valid, directly transform to moonlink config and return.
     if table_config.is_valid() {
-        return Ok(
-            table_config.take_as_moonlink_config(table_base_path.to_string(), mooncake_table_id)
-        );
+        return table_config
+            .take_as_moonlink_config(table_base_path.to_string(), mooncake_table_id);
     }
 
     // Otherwise manually set based on event table native properties.
@@ -48,7 +47,7 @@ pub(crate) fn parse_event_table_config(
     {
         mooncake_config.append_only = Some(true);
     }
-    Ok(table_config.take_as_moonlink_config(table_base_path.to_string(), mooncake_table_id))
+    table_config.take_as_moonlink_config(table_base_path.to_string(), mooncake_table_id)
 }
 
 /// Parse replication table config, and fill in default value if unassigned.
@@ -61,7 +60,5 @@ pub(crate) fn parse_replication_table_config(
         TableConfig::from_json_or_default(moonlink_table_config, table_base_path)?;
     table_config.mooncake_config.row_identity = Some(IdentityProp::FullRow);
     table_config.mooncake_config.append_only = Some(false);
-    let moonlink_table_config =
-        table_config.take_as_moonlink_config(table_base_path.to_string(), mooncake_table_id);
-    Ok(moonlink_table_config)
+    table_config.take_as_moonlink_config(table_base_path.to_string(), mooncake_table_id)
 }
