@@ -155,8 +155,14 @@ impl ReplicationManager {
                 flush_lsn,
             )
             .await?;
-        self.table_info
-            .insert(mooncake_table_id, (src_uri.to_string(), src_table_id));
+        match self.table_info.entry(mooncake_table_id) {
+            Entry::Vacant(entry) => {
+                entry.insert((src_uri.to_string(), src_table_id));
+            }
+            Entry::Occupied(_) => {
+                return Err(Error::rest_duplicate_table(src_table_id));
+            }
+        }
 
         debug!(src_table_id, "REST API table added through manager");
 
