@@ -13,6 +13,7 @@ services:
       - postgres
       - fake-gcs
       - nginx
+      - iceberg-rest
     command: sleep infinity
 
   postgres:
@@ -44,8 +45,19 @@ services:
 
   iceberg-rest:
     image: apache/iceberg-rest-fixture:latest
+    networks:
+      shared_network:
+        aliases:
+        - iceberg_rest.local
     ports:
       - "8181:8181"
+    environment:
+      CATALOG_CATALOG__IMPL: org.apache.iceberg.jdbc.JdbcCatalog
+      CATALOG_URI: jdbc:sqlite:/var/iceberg/iceberg.db
+      CATALOG_WAREHOUSE: file:///shared-iceberg-rest-warehouse
+    volumes:
+      - ./shared-iceberg-rest-db:/var/iceberg
+      - ./shared-iceberg-rest-warehouse:/shared-iceberg-rest-warehouse
 
   fake-gcs:
     image: fsouza/fake-gcs-server:latest

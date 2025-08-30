@@ -4,9 +4,7 @@ use iceberg::TableCreation;
 use rand::{distr::Alphanumeric, Rng};
 use std::collections::HashMap;
 
-const DEFAULT_REST_CATALOG_NAME: &str = "test";
-const DEFAULT_REST_CATALOG_URI: &str = "http://localhost:8181";
-const DEFAULT_WAREHOUSE_PATH: &str = "warehouse";
+const DEFAULT_REST_CATALOG_URI: &str = "http://iceberg_rest.local:8181";
 
 pub(crate) fn get_random_string() -> String {
     let rng = rand::rng();
@@ -16,18 +14,19 @@ pub(crate) fn get_random_string() -> String {
         .collect()
 }
 
-pub(crate) fn default_rest_catalog_config() -> RestCatalogConfig {
+/// Get rest catalog with random catalog name.
+pub(crate) fn get_random_rest_catalog_config() -> RestCatalogConfig {
     RestCatalogConfig {
-        name: DEFAULT_REST_CATALOG_NAME.to_string(),
+        name: get_random_string(),
         uri: DEFAULT_REST_CATALOG_URI.to_string(),
-        warehouse: DEFAULT_WAREHOUSE_PATH.to_string(),
+        warehouse: "file:///tmp/iceberg-test".to_string(),
         props: HashMap::new(),
     }
 }
 
-pub(crate) fn default_table_creation(table_name: String) -> TableCreation {
+pub(crate) fn default_table_creation(_namespace: String, table: String) -> TableCreation {
     TableCreation::builder()
-        .name(table_name)
+        .name(table.clone())
         .schema(
             Schema::builder()
                 .with_fields(vec![
@@ -38,5 +37,6 @@ pub(crate) fn default_table_creation(table_name: String) -> TableCreation {
                 .build()
                 .unwrap(),
         )
+        // .location(format!("file:///tmp/iceberg-test/{}/{}", namespace, table))
         .build()
 }

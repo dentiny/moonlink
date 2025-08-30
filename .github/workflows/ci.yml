@@ -214,23 +214,36 @@ jobs:
             timeout-minutes: 10
             cmd: |
               cargo test --lib --features=catalog-rest
+
     steps:
       - uses: actions/checkout@v5
 
-      # ─────────────────────── Start Iceberg-rest ──────────────────────────
-      - name: Start Iceberg-rest-fixture
+      - name: Prepare dirs for REST catalog
         run: |
-          docker run -d \
-            --name iceberg-rest-fixture \
+          mkdir -p "$GITHUB_WORKSPACE/iceberg-db" "$GITHUB_WORKSPACE/warehouse"
+
+      - name: Start Iceberg REST (file-backed SQLite)
+        run: |
+          docker run -d --name iceberg-rest-fixture \
             -p 8181:8181 \
-            apache/iceberg-rest-fixture
+            -e CATALOG_CATALOG__IMPL=org.apache.iceberg.jdbc.JdbcCatalog \
+            -e CATALOG_URI=jdbc:sqlite:/var/iceberg/iceberg.db \
+            -e CATALOG_JDBC_MAX_CONNECTIONS=1 \
+            -e CATALOG_WAREHOUSE=file:///warehouse \
+            -v "$GITHUB_WORKSPACE/iceberg-db:/var/iceberg" \
+            -v "$GITHUB_WORKSPACE/warehouse:/warehouse" \
+            apache/iceberg-rest-fixture:latest
+
+      - name: Add iceberg_rest.local to /etc/hosts
+        run: |
+          echo "127.0.0.1 iceberg_rest.local" | sudo tee -a /etc/hosts
 
       # ───────────────────── Wait for Iceberg-rest to be ready ───────────────────
       - name: Wait for Iceberg-rest-fixture ready
         timeout-minutes: 2
         run: |
           for i in {1..10}; do
-            if curl -sS http://localhost:8181/v1/config; then
+            if curl -sS http://iceberg_rest.local:8181/v1/config; then
               echo "Iceberg-rest-fixture is ready!"
               break
             fi

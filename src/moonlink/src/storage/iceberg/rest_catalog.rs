@@ -17,6 +17,8 @@ pub struct RestCatalog {
 
 impl RestCatalog {
     pub async fn new(mut config: RestCatalogConfig) -> Result<Self> {
+        println!("config = {config:?}");
+
         let builder = IcebergRestCatalogBuilder::default();
         config
             .props

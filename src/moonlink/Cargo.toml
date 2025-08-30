@@ -95,6 +95,7 @@ pprof = { version = "0.15", features = ["flamegraph", "criterion"] }
 rand = "0.9"
 rstest = "0.26"
 rstest_reuse = "0.7"
+serial_test = { workspace = true }
 tempfile = { workspace = true }
 
 [[bench]]
