@@ -15,7 +15,9 @@ const PARQUET_MAGIC: &[u8; 4] = b"PAR1";
 /// Get serialized uncompressed parquet metadata from the given local filepath.
 /// TODO(hjiang): Currently it only supports local filepath.
 pub(crate) async fn get_parquet_serialized_metadata(filepath: &str) -> Result<Vec<u8>> {
-    let mut file = tokio::fs::File::open(filepath).await?;
+    let mut file = tokio::fs::File::open(filepath)
+        .await
+        .map_err(|e| format!("Failed to open file {} with error {:?}", filepath, e))?;
 
     // Validate file size.
     let file_len = file.metadata().await?.len();
