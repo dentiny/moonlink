@@ -8,7 +8,6 @@ license = { workspace = true }
 default = ["storage-fs"]
 storage-all = ["storage-fs", "storage-s3", "storage-gcs"]
 test-utils = []
-rest-catalog = ["iceberg-catalog-rest"]
 
 storage-fs = ["opendal/services-fs", "iceberg/storage-fs"]
 storage-s3 = [
@@ -32,7 +31,7 @@ storage-gcs = [
     "reqwest",
 ]
 
-catalog-rest = []
+catalog-rest = ["iceberg-catalog-rest"]
 catalog-glue = []
 
 bench = []

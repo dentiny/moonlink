@@ -61,9 +61,9 @@ impl Catalog for RestCatalog {
 
     async fn list_tables(
         &self,
-        _namespace_ident: &NamespaceIdent,
+        namespace_ident: &NamespaceIdent,
     ) -> IcebergResult<Vec<TableIdent>> {
-        todo!("list tables is not supported");
+        self.catalog.list_tables(namespace_ident).await
     }
 
     async fn update_namespace(

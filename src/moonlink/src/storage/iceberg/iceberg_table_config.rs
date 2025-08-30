@@ -16,7 +16,8 @@ pub struct RestCatalogConfig {
     #[serde(default)]
     pub warehouse: String,
 
-    /// Optional configuration properties:
+    /// Optional configuration properties.
+    /// Unknown configs will be ignored.
     ///
     /// - prefix:          Optional URL path prefix to insert after the base URI and API version.
     /// - oauth2-server-uri: Custom OAuth2 server URI. Defaults to: [uri, PATH_V1:"v1", "oauth", "tokens"].join("/")
