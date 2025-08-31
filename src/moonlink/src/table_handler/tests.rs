@@ -2603,3 +2603,37 @@ async fn test_finish_initial_copy_overlaps_with_ongoing_snapshot() {
 
     env.shutdown().await;
 }
+
+/// Testing scenario:
+/// - A row has been in mooncake and iceberg snapshot
+/// - The row gets updated and sync-ed to mooncake/iceberg snapshot
+#[tokio::test]
+async fn test_row_overwrite_with_snapshot() {
+    let mut env = TestEnvironment::default().await;
+
+    // Append row to the table, commit, flush and persist to snapshot.
+    env.append_row(
+        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*lsn=*/ 1,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.flush_table_and_sync(/*lsn=*/ 2, /*xact_id=*/ None)
+        .await;
+
+    // Overwrite the row and perform the same operation again.
+    env.delete_row(
+        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*lsn=*/ 3,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.append_row(
+        /*id=*/ 1, /*name=*/ "Alice", /*age=*/ 10, /*lsn=*/ 4,
+        /*xact_id=*/ None,
+    )
+    .await;
+    env.flush_table_and_sync(/*lsn=*/ 5, /*xact_id=*/ None)
+        .await;
+
+    // Check mooncake snapshot.
+    env.verify_snapshot(/*target_lsn=*/ 5, /*ids=*/ &[1]).await;
+}
