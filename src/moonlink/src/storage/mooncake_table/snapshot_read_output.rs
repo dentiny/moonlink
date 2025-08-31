@@ -85,7 +85,7 @@ impl ReadOutput {
     }
 
     /// Attempt to download remote files and cache them locally, if possible.
-    /// Resolved files will be updated to [`resolved_data_files`] in-place.
+    /// Resolved files will be updated to [`resolved_data_files`] in-place in the given order.
     ///
     /// If any error happens, all involved cache handles will unreferenced, temporary files will be deleted as well.
     async fn resolve_remote_files(
