@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, oneshot};
 use tower_http::cors::{Any, CorsLayer};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 /// API state shared across handlers
 #[derive(Clone)]
@@ -48,7 +48,6 @@ pub enum RequestMode {
 /// Error response structure
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
-    pub error: String,
     pub message: String,
 }
 
@@ -110,7 +109,7 @@ pub struct ListTablesResponse {
 /// Optimize table
 /// ====================
 ///
-/// Request structure for table optimize.
+/// Request structure for table optimization.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OptimizeTableRequest {
     pub database: String,
@@ -118,7 +117,7 @@ pub struct OptimizeTableRequest {
     pub mode: String,
 }
 
-/// Response structure for table optimize.
+/// Response structure for table optimization.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct OptimizeTableResponse {}
 
@@ -126,7 +125,7 @@ pub struct OptimizeTableResponse {}
 /// Create SnapShot
 /// ====================
 ///
-/// Request structure for table optimize.
+/// Request structure for snapshot creation.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateSnapShotRequest {
     pub database: String,
@@ -134,7 +133,7 @@ pub struct CreateSnapShotRequest {
     pub lsn: u64,
 }
 
-/// Response structure for table optimize.
+/// Response structure for snapshot creation.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateSnapShotResponse {}
 
@@ -312,8 +311,10 @@ async fn create_table(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "invalid_schema".to_string(),
-                    message: e,
+                    message: format!(
+                        "Invalid schema on table {} creation {:?} because {:?}",
+                        table, payload.schema, e
+                    ),
                 }),
             ));
         }
@@ -328,7 +329,6 @@ async fn create_table(
             return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
-                    error: "serialization_failed".to_string(),
                     message: format!("Serialize table config failed: {e}"),
                 }),
             ));
@@ -360,16 +360,15 @@ async fn create_table(
                 lsn: 1,
             }))
         }
-        Err(e) => {
-            error!("Failed to create table '{}': {}", table, e);
-            Err((
-                get_backend_error_status_code(&e),
-                Json(ErrorResponse {
-                    error: "table_creation_failed".to_string(),
-                    message: format!("Failed to create table: {e}"),
-                }),
-            ))
-        }
+        Err(e) => Err((
+            get_backend_error_status_code(&e),
+            Json(ErrorResponse {
+                message: format!(
+                    "Failed to create table {} with ID {}.{}: {}",
+                    table, payload.database, payload.table, e
+                ),
+            }),
+        )),
     }
 }
 
@@ -390,8 +389,10 @@ async fn drop_table(
             (
                 get_backend_error_status_code(&e),
                 Json(ErrorResponse {
-                    error: "table_drop_failed".to_string(),
-                    message: format!("Failed to drop table: {e}"),
+                    message: format!(
+                        "Failed to drop table {} with ID {}.{}: {}",
+                        table, payload.database, payload.table, e
+                    ),
                 }),
             )
         })?;
@@ -407,7 +408,6 @@ async fn list_tables(
         Err(e) => Err((
             get_backend_error_status_code(&e),
             Json(ErrorResponse {
-                error: "table_list_failed".to_string(),
                 message: format!("Failed to list tables: {e}"),
             }),
         )),
@@ -432,9 +432,8 @@ async fn upload_files(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "invalid_operation".to_string(),
                     message: format!(
-                        "Invalid operation '{}'. Must be 'insert' or 'upload'",
+                        "Invalid operation '{}' for file upload. Must be 'insert' or 'upload'",
                         payload.operation
                     ),
                 }),
@@ -461,12 +460,10 @@ async fn upload_files(
         .send_event_request(rest_event_request)
         .await
         .map_err(|e| {
-            error!("Failed to send event request: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
-                    error: "file_upload_failed".to_string(),
-                    message: format!("Failed to process request: {e}"),
+                    message: format!("Failed to process request for file upload request: {e}"),
                 }),
             )
         })?;
@@ -490,18 +487,23 @@ async fn optimize_table(
     );
     match state
         .backend
-        .optimize_table(payload.database, payload.table, payload.mode.as_str())
+        .optimize_table(
+            payload.database.clone(),
+            payload.table.clone(),
+            payload.mode.as_str(),
+        )
         .await
     {
         Ok(_) => Ok(Json(OptimizeTableResponse {})),
         Err(e) => {
-            error!("Failed to optimize table '{}': {}", table, e);
             let status_code = get_backend_error_status_code(&e);
             Err((
                 status_code,
                 Json(ErrorResponse {
-                    error: "table_optimize_failed".to_string(),
-                    message: format!("Failed to optimize table: {e}"),
+                    message: format!(
+                        "Failed to optimize table {} with ID {}.{}: {}",
+                        table, payload.database, payload.table, e
+                    ),
                 }),
             ))
         }
@@ -520,18 +522,19 @@ async fn create_snapshot(
     );
     match state
         .backend
-        .create_snapshot(payload.database, payload.table, payload.lsn)
+        .create_snapshot(payload.database.clone(), payload.table.clone(), payload.lsn)
         .await
     {
         Ok(_) => Ok(Json(CreateSnapShotResponse {})),
         Err(e) => {
-            error!("Failed to create snapshot '{}': {}", table, e);
             let status_code = get_backend_error_status_code(&e);
             Err((
                 status_code,
                 Json(ErrorResponse {
-                    error: "create_snapshot_failed".to_string(),
-                    message: format!("Failed to create snapshot: {e}"),
+                    message: format!(
+                        "Failed to create snapshot for table {} with ID {}.{}: {}",
+                        table, payload.database, payload.table, e
+                    ),
                 }),
             ))
         }
@@ -549,8 +552,8 @@ async fn ingest_data(
         src_table_name, payload
     );
 
-    // Parse operation
-    let operation = match payload.operation.as_str() {
+    // Parse operation.
+    let operation = match payload.operation.to_lowercase().as_str() {
         "insert" => RowEventOperation::Insert,
         "upsert" => RowEventOperation::Upsert,
         "delete" => RowEventOperation::Delete,
@@ -558,9 +561,8 @@ async fn ingest_data(
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
-                    error: "invalid_operation".to_string(),
                     message: format!(
-                        "Invalid operation '{}'. Must be 'insert', 'upsert', or 'delete'",
+                        "Invalid operation '{}' for data ingestion. Must be 'insert', 'upsert', or 'delete'",
                         payload.operation
                     ),
                 }),
@@ -588,12 +590,12 @@ async fn ingest_data(
         .send_event_request(rest_event_request)
         .await
         .map_err(|e| {
-            error!("Failed to send event request: {}", e);
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(ErrorResponse {
-                    error: "ingestion_failed".to_string(),
-                    message: format!("Failed to process request: {e}"),
+                    message: format!(
+                        "Failed to process data ingestion request for table {src_table_name} because {e}"
+                    ),
                 }),
             )
         })?;
