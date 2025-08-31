@@ -467,7 +467,6 @@ mod tests {
         let filesystem_accessor = MockBaseFileSystemAccess::new();
         let (tx, _rx) = tokio::sync::mpsc::channel::<TableEvent>(8);
 
-        let temp_dir = tempdir().unwrap();
         let read_output = ReadOutput {
             data_file_paths: vec![
                 DataFileForRead::TemporaryDataFile("/tmp/filename_1".to_string()),
