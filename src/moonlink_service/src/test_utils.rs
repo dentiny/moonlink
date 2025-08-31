@@ -45,14 +45,31 @@ pub(crate) fn create_test_arrow_batch() -> RecordBatch {
 /// Test util function to generate a parquet under the given [`tempdir`].
 pub(crate) async fn generate_parquet_file(directory: &str) -> String {
     let schema = create_test_arrow_schema();
-    let record_batch = create_test_arrow_batch();
+    let ids = Int32Array::from(vec![1, 2, 3]);
+    let names = StringArray::from(vec!["Alice", "Bob", "Charlie"]);
+    let emails = StringArray::from(vec![
+        "Alice@gmail.com",
+        "Bob@gmail.com",
+        "Charlie@gmail.com",
+    ]);
+    let ages = Int32Array::from(vec![10, 20, 30]);
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            Arc::new(ids),
+            Arc::new(names),
+            Arc::new(emails),
+            Arc::new(ages),
+        ],
+    )
+    .unwrap();
     let dir_path = std::path::Path::new(directory);
     let file_path = dir_path.join("test.parquet");
     let file_path_str = file_path.to_str().unwrap().to_string();
     let file = tokio::fs::File::create(file_path).await.unwrap();
     let mut writer: AsyncArrowWriter<tokio::fs::File> =
         AsyncArrowWriter::try_new(file, schema, /*props=*/ None).unwrap();
-    writer.write(&record_batch).await.unwrap();
+    writer.write(&batch).await.unwrap();
     writer.close().await.unwrap();
     file_path_str
 }
