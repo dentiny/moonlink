@@ -98,20 +98,29 @@ impl SnapshotTableState {
         for (file_idx, (_, disk_deletion_vector)) in
             self.current_snapshot.disk_files.iter().enumerate()
         {
+            // Fast-path: there're no persisted deletion records for the current disk file.
+            if disk_deletion_vector.puffin_deletion_blob.is_none() {
+                let deleted_rows = disk_deletion_vector
+                    .committed_deletion_vector
+                    .collect_deleted_rows();
+                for cur_row_idx in deleted_rows.into_iter() {
+                    committed_unpersisted_committed_records.push(PositionDelete {
+                        data_file_number: file_idx as u32,
+                        data_file_row_number: cur_row_idx as u32,
+                    });
+                }
+                continue;
+            }
+
             // Get committed but persisted deletion records.
-            let persisted_deletion_record = if disk_deletion_vector.puffin_deletion_blob.is_none() {
-                BatchDeletionVector::new(disk_deletion_vector.num_rows)
-            } else {
-                disk_deletion_vector
-                    .puffin_deletion_blob
-                    .as_ref()
-                    .unwrap()
-                    .deletion_vector
-                    .clone()
-            };
+            let persisted_deletion_record = &disk_deletion_vector
+                .puffin_deletion_blob
+                .as_ref()
+                .unwrap()
+                .deletion_vector;
             let cur_committed_unpersisted = BatchDeletionVector::deleted_diff(
                 &disk_deletion_vector.committed_deletion_vector,
-                &persisted_deletion_record,
+                persisted_deletion_record,
             );
             for cur_row_idx in cur_committed_unpersisted.into_iter() {
                 committed_unpersisted_committed_records.push(PositionDelete {
@@ -121,9 +130,6 @@ impl SnapshotTableState {
             }
 
             // Get persisted deletion vector, in iceberg puffin blob format.
-            if disk_deletion_vector.puffin_deletion_blob.is_none() {
-                continue;
-            }
             let puffin_deletion_blob = disk_deletion_vector.puffin_deletion_blob.as_ref().unwrap();
 
             // Add one more reference for puffin cache handle.
