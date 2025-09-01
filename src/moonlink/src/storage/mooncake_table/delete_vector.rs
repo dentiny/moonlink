@@ -441,4 +441,52 @@ mod tests {
         // This should panic - trying to delete row_id=5 when capacity is only 3
         let _ = deletion_vector.delete_row(5);
     }
+
+    #[test]
+    fn test_diff_lhs_empty() {
+        let lhs = BatchDeletionVector::new(16);
+        let rhs = BatchDeletionVector::new(16);
+        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
+        assert!(diff.is_empty());
+    }
+
+    #[test]
+    fn test_diff_rhs_empty() {
+        let mut lhs = BatchDeletionVector::new(16);
+        lhs.delete_row(10);
+        let rhs = BatchDeletionVector::new(16);
+        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
+        assert_eq!(diff, vec![10]);
+    }
+
+    #[test]
+    fn test_diff_both_not_empty_lhs_superset_rhs() {
+        // Make non-empty lhs.
+        let mut lhs = BatchDeletionVector::new(16);
+        lhs.delete_row(8);
+        lhs.delete_row(10);
+        // Make non-empty rhs.
+        let mut rhs = BatchDeletionVector::new(16);
+        rhs.delete_row(10);
+
+        // Get difference and validate.
+        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
+        assert_eq!(diff, vec![8]);
+    }
+
+    #[test]
+    fn test_diff_both_not_empty_equal() {
+        // Make non-empty lhs.
+        let mut lhs = BatchDeletionVector::new(16);
+        lhs.delete_row(8);
+        lhs.delete_row(10);
+        // Make non-empty rhs.
+        let mut rhs = BatchDeletionVector::new(16);
+        rhs.delete_row(8);
+        rhs.delete_row(10);
+
+        // Get difference and validate.
+        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
+        assert!(diff.is_empty());
+    }
 }
