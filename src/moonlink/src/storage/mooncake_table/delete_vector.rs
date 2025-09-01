@@ -453,7 +453,7 @@ mod tests {
     #[test]
     fn test_diff_rhs_empty() {
         let mut lhs = BatchDeletionVector::new(16);
-        lhs.delete_row(10);
+        assert!(lhs.delete_row(10));
         let rhs = BatchDeletionVector::new(16);
         let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
         assert_eq!(diff, vec![10]);
@@ -463,11 +463,11 @@ mod tests {
     fn test_diff_both_not_empty_lhs_superset_rhs() {
         // Make non-empty lhs.
         let mut lhs = BatchDeletionVector::new(16);
-        lhs.delete_row(8);
-        lhs.delete_row(10);
+        assert!(lhs.delete_row(8));
+        assert!(lhs.delete_row(10));
         // Make non-empty rhs.
         let mut rhs = BatchDeletionVector::new(16);
-        rhs.delete_row(10);
+        assert!(rhs.delete_row(10));
 
         // Get difference and validate.
         let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
@@ -478,12 +478,12 @@ mod tests {
     fn test_diff_both_not_empty_equal() {
         // Make non-empty lhs.
         let mut lhs = BatchDeletionVector::new(16);
-        lhs.delete_row(8);
-        lhs.delete_row(10);
+        assert!(lhs.delete_row(8));
+        assert!(lhs.delete_row(10));
         // Make non-empty rhs.
         let mut rhs = BatchDeletionVector::new(16);
-        rhs.delete_row(8);
-        rhs.delete_row(10);
+        assert!(rhs.delete_row(8));
+        assert!(rhs.delete_row(10));
 
         // Get difference and validate.
         let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
