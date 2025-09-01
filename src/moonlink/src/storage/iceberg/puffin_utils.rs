@@ -13,6 +13,8 @@ use crate::NonEvictableHandle;
 /// Reference to puffin blob, which is always cached on-disk.
 #[derive(Clone, Debug)]
 pub struct PuffinBlobRef {
+    /// Invariant: puffin blob file represents the same deleted rows as batch deletion vector.
+    ///
     /// Puffin file cache handle.
     pub(crate) puffin_file_cache_handle: NonEvictableHandle,
     /// Start offset for the blob.
@@ -21,6 +23,8 @@ pub struct PuffinBlobRef {
     pub(crate) blob_size: u32,
     /// Number of rows deleted in the puffin blob.
     pub(crate) num_rows: usize,
+    /// Persisted deletion record.
+    pub(crate) deletion_vector: BatchDeletionVector,
 }
 
 /// Get puffin writer with the given file io.

@@ -221,6 +221,7 @@ pub(crate) async fn dump_deletion_vector_puffin(
         start_offset: 4_u32, // Puffin file starts with 4 magic bytes.
         blob_size: blob_size as u32,
         num_rows: deleted_rows_num,
+        deletion_vector: batch_deletion_vector,
     }
 }
 
