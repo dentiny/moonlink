@@ -8,7 +8,7 @@ use axum::{
 use moonlink::StorageConfig;
 use moonlink_backend::{table_config::TableConfig, table_status::TableStatus};
 use moonlink_backend::{EventRequest, FileEventOperation, RowEventOperation};
-use moonlink_backend::{FileEventRequest, RowEventRequest, REST_API_URI};
+use moonlink_backend::{FileEventRequest, RowEventRequest, SnapshotRequest, REST_API_URI};
 use moonlink_error::ErrorStatus;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -512,14 +512,39 @@ async fn optimize_table(
 
 /// Create snapshot endpoint
 async fn create_snapshot(
-    Path(table): Path<String>,
+    Path(src_table_name): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<CreateSnapShotRequest>,
 ) -> Result<Json<CreateSnapShotResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!(
-        "Received create snapshot request for '{}': {}",
-        &payload.database, table
+        "Received create snapshot request for table {} with ID {}.{}",
+        src_table_name, &payload.database, &payload.table,
     );
+
+    let (tx, mut rx) = mpsc::channel(1);
+    let snapshot_request = SnapshotRequest {
+        src_table_name: src_table_name.clone(),
+        lsn: payload.lsn,
+        tx,
+    };
+    let rest_event_request = EventRequest::SnapshotRequest(snapshot_request);
+    state
+        .backend
+        .send_event_request(rest_event_request)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Failed to process snapshot creation request: {e}"),
+                }),
+            )
+        })?;
+
+    // Block until snapshot creation event has been sent to moonlink table handler.
+    let _ = rx.recv().await;
+
+    // Now it's ensured all events before snapshot creation have been received by table handler, we could block wait snapshot creation completion.
     match state
         .backend
         .create_snapshot(payload.database.clone(), payload.table.clone(), payload.lsn)
@@ -533,7 +558,7 @@ async fn create_snapshot(
                 Json(ErrorResponse {
                     message: format!(
                         "Failed to create snapshot for table {} with ID {}.{}: {}",
-                        table, payload.database, payload.table, e
+                        src_table_name, payload.database, payload.table, e
                     ),
                 }),
             ))

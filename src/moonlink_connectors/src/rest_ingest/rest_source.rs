@@ -1,5 +1,6 @@
 use crate::rest_ingest::event_request::{
     EventRequest, FileEventOperation, FileEventRequest, RowEventOperation, RowEventRequest,
+    SnapshotRequest,
 };
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
 use crate::rest_ingest::rest_event::RestEvent;
@@ -106,6 +107,7 @@ impl RestSource {
         match request {
             EventRequest::FileRequest(request) => self.process_file_request(request),
             EventRequest::RowRequest(request) => self.process_row_request(request),
+            EventRequest::SnapshotRequest(request) => self.process_snapshot_request(request),
         }
     }
 
@@ -253,6 +255,21 @@ impl RestSource {
         ];
 
         Ok(events)
+    }
+
+    /// Process a snapshot request.
+    fn process_snapshot_request(&self, request: &SnapshotRequest) -> Result<Vec<RestEvent>> {
+        let src_table_id = self
+            .src_table_name_to_src_id
+            .get(&request.src_table_name)
+            .ok_or_else(|| RestSourceError::UnknownTable(request.src_table_name.clone()))?;
+
+        // Generate a snapshot request.
+        let event = vec![RestEvent::Snapshot {
+            src_table_id: *src_table_id,
+            lsn: request.lsn,
+        }];
+        Ok(event)
     }
 }
 

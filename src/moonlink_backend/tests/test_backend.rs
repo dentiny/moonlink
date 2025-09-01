@@ -486,7 +486,9 @@ mod tests {
             .unwrap();
 
         // Crash backend recovery and recreate backend.
-        backend.shutdown_connection(REST_API_URI, false).await;
+        backend
+            .shutdown_connection(REST_API_URI, /*postgres_drop_al*/ true)
+            .await;
         backend =
             create_backend_from_base_path(temp_dir.path().to_str().unwrap().to_string()).await;
         assert_scan_ids_eq(

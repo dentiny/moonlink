@@ -123,7 +123,7 @@ impl RestSink {
                 Ok(())
             }
             // ==================
-            // Table events
+            // File events
             // ==================
             //
             RestEvent::FileInsertEvent {
@@ -142,6 +142,15 @@ impl RestSink {
                 self.process_file_upload(src_table_id, storage_config, files, lsn)
                     .await?;
                 self.mark_commit(src_table_id, lsn)?;
+                Ok(())
+            }
+            // ==================
+            // Snapshot events
+            // ==================
+            //
+            RestEvent::Snapshot { src_table_id, lsn } => {
+                self.process_snapshot_creation_event(lsn, src_table_id)
+                    .await?;
                 Ok(())
             }
         }
@@ -261,6 +270,18 @@ impl RestSink {
             is_recovery: false,
         };
         self.send_table_event(src_table_id, commit_event).await?;
+        Ok(())
+    }
+
+    /// Send a snapshot creation request and block wait its completion.
+    async fn process_snapshot_creation_event(
+        &self,
+        lsn: u64,
+        src_table_id: SrcTableId,
+    ) -> Result<()> {
+        let snapshot_creation_event = TableEvent::ForceSnapshot { lsn: Some(lsn) };
+        self.send_table_event(src_table_id, snapshot_creation_event)
+            .await?;
         Ok(())
     }
 

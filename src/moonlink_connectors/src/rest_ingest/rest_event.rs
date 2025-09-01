@@ -41,6 +41,12 @@ pub enum RestEvent {
         /// LSN for the ingestion event.
         lsn: u64,
     },
+    Snapshot {
+        /// Source table id.
+        src_table_id: SrcTableId,
+        /// LSN to create snapshot.
+        lsn: u64,
+    },
 }
 
 impl RestEvent {
@@ -51,6 +57,7 @@ impl RestEvent {
             RestEvent::Commit { lsn, .. } => Some(*lsn),
             RestEvent::FileInsertEvent { .. } => None,
             RestEvent::FileUploadEvent { lsn, .. } => Some(*lsn),
+            RestEvent::Snapshot { .. } => None,
         }
     }
 }

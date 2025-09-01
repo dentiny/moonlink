@@ -160,12 +160,12 @@ fn get_optimize_table_payload(database: &str, table: &str, mode: &str) -> serde_
 
 /// Util function to get create snapshot payload.
 fn get_create_snapshot_payload(database: &str, table: &str, lsn: u64) -> serde_json::Value {
-    let optimize_table_payload = json!({
+    let snapshot_creation_payload = json!({
         "database": database,
         "table": table,
         "lsn": lsn
     });
-    optimize_table_payload
+    snapshot_creation_payload
 }
 
 /// Util function to create table via REST API.

@@ -53,6 +53,20 @@ pub struct FileEventRequest {
 }
 
 /// ======================
+/// Table snapshot request
+/// ======================
+///
+#[derive(Debug, Clone)]
+pub struct SnapshotRequest {
+    /// Src table name.
+    pub src_table_name: String,
+    /// Requested LSN.
+    pub lsn: u64,
+    /// Channel used to synchronize snapshot completion.
+    pub tx: mpsc::Sender<u64>,
+}
+
+/// ======================
 /// Event request
 /// ======================
 ///
@@ -60,6 +74,7 @@ pub struct FileEventRequest {
 pub enum EventRequest {
     RowRequest(RowEventRequest),
     FileRequest(FileEventRequest),
+    SnapshotRequest(SnapshotRequest),
 }
 
 impl EventRequest {
@@ -68,6 +83,7 @@ impl EventRequest {
         match &self {
             EventRequest::RowRequest(req) => req.tx.clone(),
             EventRequest::FileRequest(req) => req.tx.clone(),
+            EventRequest::SnapshotRequest(req) => Some(req.tx.clone()),
         }
     }
 }
