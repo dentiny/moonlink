@@ -21,6 +21,7 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::time::SystemTime;
     use tempfile::TempDir;
+    use tokio::sync::mpsc;
 
     // ───────────────────────────── Tests ─────────────────────────────
 
@@ -462,6 +463,7 @@ mod tests {
             .unwrap();
 
         // Ingest data into table.
+        let (tx, mut rx) = mpsc::channel(1);
         let row_event_request = RowEventRequest {
             src_table_name: "public.recovery_for_rest_table".to_string(),
             operation: RowEventOperation::Insert,
@@ -471,7 +473,7 @@ mod tests {
                 "age": 30
             }),
             timestamp: SystemTime::now(),
-            tx: None,
+            tx: Some(tx),
         };
         let rest_event_request = EventRequest::RowRequest(row_event_request);
         backend
@@ -479,9 +481,10 @@ mod tests {
             .await
             .unwrap();
 
-        // Force snapshot with LSN 2, LSN 1 = row insertion, LSN 2 = commit.
+        // Force snapshot to make sure all writes are persisted into iceberg so they could be recovered.
+        let lsn = rx.recv().await.unwrap();
         backend
-            .create_snapshot(DATABASE.to_string(), TABLE.to_string(), /*lsn=*/ 2)
+            .create_snapshot(DATABASE.to_string(), TABLE.to_string(), lsn)
             .await
             .unwrap();
 
@@ -491,14 +494,7 @@ mod tests {
             .await;
         backend =
             create_backend_from_base_path(temp_dir.path().to_str().unwrap().to_string()).await;
-        assert_scan_ids_eq(
-            &backend,
-            DATABASE.to_string(),
-            TABLE.to_string(),
-            /*lsn=*/ 2,
-            [1],
-        )
-        .await;
+        assert_scan_ids_eq(&backend, DATABASE.to_string(), TABLE.to_string(), lsn, [1]).await;
     }
 
     #[cfg(feature = "test-utils")]
