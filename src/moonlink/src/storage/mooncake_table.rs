@@ -1025,7 +1025,6 @@ impl MooncakeTable {
 
     /// Mark next iceberg snapshot as force, even if the payload is empty.
     pub(crate) fn force_empty_iceberg_payload(&mut self) {
-        assert!(!self.next_snapshot_task.force_empty_iceberg_payload);
         self.next_snapshot_task.force_empty_iceberg_payload = true;
     }
 

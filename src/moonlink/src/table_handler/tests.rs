@@ -2670,4 +2670,16 @@ async fn test_force_snapshot_for_empty_stream_flush() {
     // Verify mooncake snapshot content.
     env.set_readable_lsn(3);
     env.verify_snapshot(/*lsn=*/ 3, &[]).await;
+
+    // Verify iceberg snapshot content.
+    let mooncake_table_config =
+        MooncakeTableConfig::new(env.temp_dir.path().to_str().unwrap().to_string());
+    let mut iceberg_table_manager = env.create_iceberg_table_manager(mooncake_table_config);
+    let (next_file_id, snapshot) = iceberg_table_manager
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    assert_eq!(snapshot.flush_lsn.unwrap(), 3);
+    assert_eq!(next_file_id, 0);
+    assert!(snapshot.disk_files.is_empty());
 }
