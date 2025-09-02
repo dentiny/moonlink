@@ -739,10 +739,23 @@ impl TableHandler {
                         flush_result,
                     } => match flush_result {
                         Some(Ok(disk_slice)) => {
+                            let rows_persisted = disk_slice.output_files().len();
+                            let flush_lsn = disk_slice.lsn().unwrap();
+
                             if let Some(xact_id) = xact_id {
                                 table.apply_stream_flush_result(xact_id, disk_slice, event_id);
                             } else {
                                 table.apply_flush_result(disk_slice, event_id);
+                            }
+
+                            // Handle a special case: if there're no rows persisted in the flush operation (i.e., in a streaming transaction, all appended rows get deleted), mooncake and iceberg snapshot won't get created.
+                            // In case of pending force snapshot requests, we should also ack back, so snapshot requests never get blocked.
+                            if rows_persisted == 0
+                                && table_handler_state.has_pending_force_snapshot_request()
+                            {
+                                let replication_lsn = *replication_lsn_rx.borrow();
+                                table_handler_state
+                                    .update_iceberg_persisted_lsn(flush_lsn, replication_lsn);
                             }
                         }
                         Some(Err(e)) => {
