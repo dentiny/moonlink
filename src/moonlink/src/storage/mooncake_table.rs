@@ -255,7 +255,7 @@ pub struct SnapshotTask {
     /// streaming xact
     new_streaming_xact: Vec<TransactionStreamOutput>,
 
-    /// Schema change.
+    /// Schema change, or force snapshot.
     force_empty_iceberg_payload: bool,
 
     /// Committed deletion records, which have been persisted into iceberg, and should be pruned from mooncake snapshot.
@@ -1023,8 +1023,7 @@ impl MooncakeTable {
         self.mooncake_snapshot_ongoing = false;
     }
 
-    /// Update table schema to the provided [`updated_table_metadata`].
-    /// To synchronize on its completion, caller should trigger a force snapshot and block wait iceberg snapshot complete
+    /// Mark next iceberg snapshot as force, even if the payload is empty.
     pub(crate) fn force_empty_iceberg_payload(&mut self) {
         assert!(!self.next_snapshot_task.force_empty_iceberg_payload);
         self.next_snapshot_task.force_empty_iceberg_payload = true;

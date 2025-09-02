@@ -2637,3 +2637,37 @@ async fn test_row_overwrite_with_snapshot() {
     // Check mooncake snapshot.
     env.verify_snapshot(/*target_lsn=*/ 5, /*ids=*/ &[1]).await;
 }
+
+#[tokio::test]
+async fn test_force_snapshot_for_empty_stream_flush() {
+    let mut env = TestEnvironment::default().await;
+
+    env.append_row(
+        /*id=*/ 1,
+        /*name=*/ "Alice",
+        /*age=*/ 10,
+        /*lsn=*/ 1,
+        /*xact_id=*/ Some(1),
+    )
+    .await;
+    env.delete_row(
+        /*id=*/ 1,
+        /*name=*/ "Alice",
+        /*age=*/ 10,
+        /*lsn=*/ 2,
+        /*xact_id=*/ Some(1),
+    )
+    .await;
+    env.stream_commit(/*lsn=*/ 3, /*xact_id=*/ 1).await;
+
+    // Attempt an iceberg snapshot, with requested LSN already committed.
+    let rx = env.table_event_manager.initiate_snapshot(/*lsn=*/ 1).await;
+    TableEventManager::synchronize_force_snapshot_request(rx, /*requested_lsn=*/ 3)
+        .await
+        .unwrap();
+    // Verify force snapshot request never gets blocked.
+
+    // Verify mooncake snapshot content.
+    env.set_readable_lsn(3);
+    env.verify_snapshot(/*lsn=*/ 3, &[]).await;
+}
