@@ -1197,7 +1197,7 @@ async fn test_chaos_on_local_fs_with_index_merge() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1220,7 +1220,7 @@ async fn test_chaos_on_local_fs_with_data_compaction() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1270,7 +1270,7 @@ async fn test_local_system_optimization_chaos_with_index_merge() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1293,7 +1293,7 @@ async fn test_local_system_optimization_chaos_with_data_compaction() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1344,7 +1344,7 @@ async fn test_s3_chaos_with_index_merge() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -1366,7 +1366,7 @@ async fn test_s3_chaos_with_data_compaction() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -1414,7 +1414,7 @@ async fn test_gcs_chaos_with_index_merge() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -1436,7 +1436,7 @@ async fn test_gcs_chaos_with_data_compaction() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: accessor_config.storage_config,
     };
     let env = TestEnvironment::new(test_env_config).await;
@@ -1533,7 +1533,7 @@ async fn test_append_only_chaos_on_local_fs_with_no_background_maintenance() {
         special_table_option: SpecialTableOption::AppendOnly,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1556,7 +1556,7 @@ async fn test_append_only_chaos_on_local_fs_with_data_compaction() {
         special_table_option: SpecialTableOption::AppendOnly,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1606,7 +1606,7 @@ async fn test_upsert_chaos_with_index_merge() {
         special_table_option: SpecialTableOption::UpsertDeleteIfExists,
         maintenance_option: TableMaintenanceOption::IndexMerge,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
@@ -1629,7 +1629,7 @@ async fn test_upsert_chaos_with_data_compaction() {
         special_table_option: SpecialTableOption::UpsertDeleteIfExists,
         maintenance_option: TableMaintenanceOption::DataCompaction,
         error_injection_enabled: false,
-        event_count: 3500,
+        event_count: 4000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
