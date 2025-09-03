@@ -267,7 +267,7 @@ pub(crate) async fn replay(replay_filepath: &str) {
             #[allow(clippy::single_match)]
             match table_event {
                 TableEvent::EvictedFilesToDelete { evicted_files } => {
-                    io_utils::delete_local_files(evicted_files.files)
+                    io_utils::delete_local_files(&evicted_files.files)
                         .await
                         .unwrap();
                 }

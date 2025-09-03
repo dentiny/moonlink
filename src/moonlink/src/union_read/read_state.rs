@@ -9,7 +9,7 @@ use moonlink_table_metadata::{DeletionVector, MooncakeTableMetadata, PositionDel
 
 use bincode::config;
 use tracing::Instrument;
-use tracing::{error, info_span, warn};
+use tracing::{error, info_span};
 
 const BINCODE_CONFIG: config::Configuration = config::standard();
 
