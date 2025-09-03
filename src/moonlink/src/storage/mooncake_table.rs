@@ -1571,6 +1571,7 @@ impl MooncakeTable {
                 old_file_indices_removed: old_file_indices_to_remove_by_compaction,
                 data_file_records_remap: data_file_record_remap_by_compaction,
             },
+            evicted_files_to_delete: iceberg_persistence_res.evicted_files_to_delete,
         };
 
         // Send back completion notification to table handler.
@@ -1630,6 +1631,7 @@ mod mooncake_tests {
             },
             index_merge_result: IcebergSnapshotIndexMergeResult::default(),
             data_compaction_result: IcebergSnapshotDataCompactionResult::default(),
+            evicted_files_to_delete: Vec::new(),
         };
         // Valid snapshot result.
         MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(

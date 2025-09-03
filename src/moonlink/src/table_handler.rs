@@ -456,6 +456,7 @@ impl TableHandler {
                         mooncake_snapshot_result,
                     } => {
                         // Record mooncake snapshot completion.
+                        // Notice: operation completion record should be the first thing to do on event notification, and contains all information.
                         table.record_mooncake_snapshot_completion(&mooncake_snapshot_result);
 
                         // Spawn a detached best-effort task to delete evicted object storage cache.
@@ -577,7 +578,13 @@ impl TableHandler {
                         match iceberg_snapshot_result {
                             Ok(snapshot_res) => {
                                 // Record iceberg snapshot completion.
+                                // Notice: operation completion record should be the first thing to do on event notification, and contains all information.
                                 table.record_iceberg_snapshot_completion(&snapshot_res);
+
+                                // Start a background task to delete evicted files at best-effort.
+                                start_task_to_delete_evicted(
+                                    snapshot_res.evicted_files_to_delete.clone(),
+                                );
 
                                 // Update table maintenance operation status.
                                 if table_handler_state.table_maintenance_process_status
