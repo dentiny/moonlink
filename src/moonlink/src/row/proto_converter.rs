@@ -25,25 +25,23 @@ pub fn proto_to_moonlink_row(p: moonlink_pb::MoonlinkRow) -> Result<MoonlinkRow>
 }
 
 fn row_value_to_proto(v: RowValue) -> moonlink_pb::RowValue {
-    use moonlink_pb::row_value::Kind;
-    let kind = match v {
-        RowValue::Int32(x) => Kind::Int32(x),
-        RowValue::Int64(x) => Kind::Int64(x),
-        RowValue::Float32(x) => Kind::Float32(x),
-        RowValue::Float64(x) => Kind::Float64(x),
-        RowValue::Decimal(x) => Kind::Decimal128Be(x.to_be_bytes().to_vec()),
-        RowValue::Bool(x) => Kind::Bool(x),
-        RowValue::ByteArray(b) => Kind::Bytes(b.into()),
-        RowValue::FixedLenByteArray(arr) => Kind::FixedLenBytes(Vec::from(arr).into()),
-        RowValue::Array(items) => Kind::Array(moonlink_pb::Array {
+    match v {
+        RowValue::Int32(x) => moonlink_pb::RowValue::int32(x),
+        RowValue::Int64(x) => moonlink_pb::RowValue::int64(x),
+        RowValue::Float32(x) => moonlink_pb::RowValue::float32(x),
+        RowValue::Float64(x) => moonlink_pb::RowValue::float64(x),
+        RowValue::Decimal(x) => moonlink_pb::RowValue::decimal128_be(x.to_be_bytes().to_vec()),
+        RowValue::Bool(x) => moonlink_pb::RowValue::bool(x),
+        RowValue::ByteArray(b) => moonlink_pb::RowValue::bytes(b),
+        RowValue::FixedLenByteArray(arr) => moonlink_pb::RowValue::fixed_len_bytes(Vec::from(arr)),
+        RowValue::Array(items) => moonlink_pb::RowValue::array(moonlink_pb::Array {
             values: items.into_iter().map(row_value_to_proto).collect(),
         }),
-        RowValue::Struct(fields) => Kind::Struct(moonlink_pb::Struct {
+        RowValue::Struct(fields) => moonlink_pb::RowValue::struct_(moonlink_pb::Struct {
             fields: fields.into_iter().map(row_value_to_proto).collect(),
         }),
-        RowValue::Null => Kind::Null(moonlink_pb::Null {}),
-    };
-    moonlink_pb::RowValue { kind: Some(kind) }
+        RowValue::Null => moonlink_pb::RowValue::null(),
+    }
 }
 
 fn proto_to_row_value(p: moonlink_pb::RowValue) -> Result<RowValue> {
