@@ -55,7 +55,7 @@ pub fn export_metrics_to_moonlink_rows(
                         aggregation_temporality,
                         is_monotonic,
                     })) => {
-                        let temp = *aggregation_temporality as i32;
+                        let temp = *aggregation_temporality;
                         for dp in data_points {
                             rows.push(number_point_row(
                                 b"sum",
@@ -75,7 +75,7 @@ pub fn export_metrics_to_moonlink_rows(
                             aggregation_temporality,
                         },
                     )) => {
-                        let temp = *aggregation_temporality as i32;
+                        let temp = *aggregation_temporality;
                         for dp in data_points {
                             rows.push(hist_point_row(
                                 metric,
@@ -88,7 +88,7 @@ pub fn export_metrics_to_moonlink_rows(
                         }
                     }
                     _ => {
-                        panic!("Unsupported metrics type: {:?}", metric);
+                        panic!("Unsupported metrics type: {metric:?}");
                     }
                 }
             }
@@ -384,7 +384,9 @@ mod tests {
             start_time_unix_nano: 11,
             time_unix_nano: 22,
             value: Some(
-                opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(3.14),
+                opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsDouble(
+                    std::f64::consts::PI,
+                ),
             ),
             exemplars: vec![],
             flags: 0,
@@ -427,7 +429,7 @@ mod tests {
         assert_eq!(scope_attrs.values.len(), 1);
         let sa0 = as_array(&scope_attrs.values[0]).unwrap();
         assert_eq!(as_bytes(&sa0.values[0]).unwrap(), b"scope_ok".to_vec());
-        assert_eq!(as_bool(&sa0.values[1]).unwrap(), true);
+        assert!(as_bool(&sa0.values[1]).unwrap());
 
         assert_eq!(as_bytes(&r[4]).unwrap(), b"latency".to_vec());
         assert_eq!(as_bytes(&r[5]).unwrap(), b"ms".to_vec());
@@ -439,9 +441,9 @@ mod tests {
 
         assert_eq!(as_i64(&r[7]).unwrap(), 11);
         assert_eq!(as_i64(&r[8]).unwrap(), 22);
-        assert!((as_f64(&r[9]).unwrap() - 3.14).abs() < 1e-9);
+        assert!((as_f64(&r[9]).unwrap() - std::f64::consts::PI).abs() < 1e-9);
         assert_eq!(as_i32(&r[10]).unwrap(), -1);
-        assert_eq!(as_bool(&r[11]).unwrap(), false);
+        assert!(!as_bool(&r[11]).unwrap());
     }
 
     #[test]
@@ -511,7 +513,7 @@ mod tests {
             as_i32(&r[10]).unwrap(),
             AggregationTemporality::Cumulative as i32
         );
-        assert_eq!(as_bool(&r[11]).unwrap(), true);
+        assert!(as_bool(&r[11]).unwrap());
 
         // Check key-value pair conversion.
         let point_attrs = as_array(&r[6]).unwrap();
@@ -522,7 +524,7 @@ mod tests {
         assert_eq!(as_bytes(&arr_entry.values[0]).unwrap(), b"arr".to_vec());
         let arr_val = as_array(&arr_entry.values[1]).unwrap();
         assert_eq!(arr_val.values.len(), 2);
-        assert_eq!(as_bool(&arr_val.values[0]).unwrap(), true);
+        assert!(as_bool(&arr_val.values[0]).unwrap());
         assert!((as_f64(&arr_val.values[1]).unwrap() - 1.5).abs() < 1e-9);
 
         // "m" -> kvlist => array of [key, val]
