@@ -99,6 +99,8 @@ pub fn export_metrics_to_moonlink_rows(
 }
 
 /// Build a [`MoonlinkRow`] representing a single numeric metric data point (Gauge or Sum) from an OpenTelemetry [`NumberDataPoint`].
+#[allow(clippy::too_many_arguments)]
+#[allow(clippy::vec_init_then_push)]
 fn number_point_row(
     kind: &[u8], // "gauge" | "sum"
     metric: &Metric,
@@ -141,6 +143,7 @@ fn number_point_row(
 }
 
 /// Build a [`MoonlinkRow`] representing a single histogram metric data point from an OpenTelemetry [`HistogramDataPoint`].
+#[allow(clippy::vec_init_then_push)]
 fn hist_point_row(
     metric: &Metric,
     resource_attrs: &[KeyValue],
