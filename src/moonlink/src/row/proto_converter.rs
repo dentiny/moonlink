@@ -1,5 +1,6 @@
 use crate::row::{MoonlinkRow, RowValue};
-use moonlink_proto::moonlink as MoonlinkProto;
+use crate::{Error, Result};
+use moonlink_proto::moonlink as moonlink_pb;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -8,25 +9,23 @@ pub enum ProtoToMoonlinkRowError {
     InvalidValue(String),
 }
 
-pub fn moonlink_row_to_proto(row: MoonlinkRow) -> MoonlinkProto::MoonlinkRow {
-    MoonlinkProto::MoonlinkRow {
+pub fn moonlink_row_to_proto(row: MoonlinkRow) -> moonlink_pb::MoonlinkRow {
+    moonlink_pb::MoonlinkRow {
         values: row.values.into_iter().map(row_value_to_proto).collect(),
     }
 }
 
-pub fn proto_to_moonlink_row(
-    p: MoonlinkProto::MoonlinkRow,
-) -> Result<MoonlinkRow, ProtoToMoonlinkRowError> {
+pub fn proto_to_moonlink_row(p: moonlink_pb::MoonlinkRow) -> Result<MoonlinkRow> {
     Ok(MoonlinkRow::new(
         p.values
             .into_iter()
             .map(proto_to_row_value)
-            .collect::<Result<Vec<_>, _>>()?,
+            .collect::<Result<Vec<_>>>()?,
     ))
 }
 
-fn row_value_to_proto(v: RowValue) -> MoonlinkProto::RowValue {
-    use MoonlinkProto::row_value::Kind;
+fn row_value_to_proto(v: RowValue) -> moonlink_pb::RowValue {
+    use moonlink_pb::row_value::Kind;
     let kind = match v {
         RowValue::Int32(x) => Kind::Int32(x),
         RowValue::Int64(x) => Kind::Int64(x),
@@ -36,19 +35,19 @@ fn row_value_to_proto(v: RowValue) -> MoonlinkProto::RowValue {
         RowValue::Bool(x) => Kind::Bool(x),
         RowValue::ByteArray(b) => Kind::Bytes(b.into()),
         RowValue::FixedLenByteArray(arr) => Kind::FixedLenBytes(Vec::from(arr).into()),
-        RowValue::Array(items) => Kind::Array(MoonlinkProto::Array {
+        RowValue::Array(items) => Kind::Array(moonlink_pb::Array {
             values: items.into_iter().map(row_value_to_proto).collect(),
         }),
-        RowValue::Struct(fields) => Kind::Struct(MoonlinkProto::Struct {
+        RowValue::Struct(fields) => Kind::Struct(moonlink_pb::Struct {
             fields: fields.into_iter().map(row_value_to_proto).collect(),
         }),
-        RowValue::Null => Kind::Null(MoonlinkProto::Null {}),
+        RowValue::Null => Kind::Null(moonlink_pb::Null {}),
     };
-    MoonlinkProto::RowValue { kind: Some(kind) }
+    moonlink_pb::RowValue { kind: Some(kind) }
 }
 
-fn proto_to_row_value(p: MoonlinkProto::RowValue) -> Result<RowValue, ProtoToMoonlinkRowError> {
-    use MoonlinkProto::row_value::Kind;
+fn proto_to_row_value(p: moonlink_pb::RowValue) -> Result<RowValue> {
+    use moonlink_pb::row_value::Kind;
     let row_value = match p.kind.expect("RowValue.kind is required") {
         Kind::Int32(x) => RowValue::Int32(x),
         Kind::Int64(x) => RowValue::Int64(x),
@@ -56,7 +55,7 @@ fn proto_to_row_value(p: MoonlinkProto::RowValue) -> Result<RowValue, ProtoToMoo
         Kind::Float64(x) => RowValue::Float64(x),
         Kind::Decimal128Be(bytes) => {
             if bytes.len() != 16 {
-                return Err(ProtoToMoonlinkRowError::InvalidValue(
+                return Err(Error::pb_conversion_error(
                     "decimal128_be must be 16 bytes".to_string(),
                 ));
             }
@@ -75,13 +74,13 @@ fn proto_to_row_value(p: MoonlinkProto::RowValue) -> Result<RowValue, ProtoToMoo
             a.values
                 .into_iter()
                 .map(proto_to_row_value)
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<Vec<_>>>()?,
         ),
         Kind::Struct(s) => RowValue::Struct(
             s.fields
                 .into_iter()
                 .map(proto_to_row_value)
-                .collect::<Result<Vec<_>, _>>()?,
+                .collect::<Result<Vec<_>>>()?,
         ),
         Kind::Null(_) => RowValue::Null,
     };

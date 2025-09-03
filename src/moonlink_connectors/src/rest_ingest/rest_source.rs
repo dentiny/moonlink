@@ -247,7 +247,7 @@ impl RestSource {
                 let p: moonlink_proto::moonlink::MoonlinkRow =
                     prost::Message::decode(bytes.as_slice())
                         .map_err(RestSourceError::ProtobufDecoding)?;
-                moonlink::row::proto_to_moonlink_row(p).map_err(RestSourceError::from)?
+                moonlink::row::proto_to_moonlink_row(p)?
             }
         };
 
