@@ -54,10 +54,11 @@ impl Drop for ReadState {
         // Perform best-effort deletion by spawning detached task.
         tokio::spawn(
             async move {
-                for file in associated_files.into_iter() {
-                    if let Err(e) = tokio::fs::remove_file(&file).await {
-                        warn!(%file, error = ?e, "failed to delete associated file");
-                    }
+                if let Err(e) = io_utils::delete_local_files(&associated_files).await {
+                    error!(
+                        "Failed to delete associated files: {:?}: {:?}",
+                        associated_files, e
+                    );
                 }
             }
             .instrument(info_span!("read_state_cleanup")),

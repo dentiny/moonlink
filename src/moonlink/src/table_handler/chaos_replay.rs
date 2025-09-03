@@ -266,6 +266,11 @@ pub(crate) async fn replay(replay_filepath: &str) {
         while let Some(table_event) = table_event_receiver.recv().await {
             #[allow(clippy::single_match)]
             match table_event {
+                TableEvent::EvictedFilesToDelete { evicted_files } => {
+                    io_utils::delete_local_files(evicted_files.files)
+                        .await
+                        .unwrap();
+                }
                 TableEvent::FlushResult {
                     event_id,
                     xact_id,
