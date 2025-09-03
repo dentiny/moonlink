@@ -609,9 +609,14 @@ pub(crate) async fn replay(replay_filepath: &str) {
                         guard.remove(&snapshot_completion_event.uuid)
                     };
                     if let Some(completed_iceberg_snapshot) = completed_iceberg_snapshot_event {
-                        table.set_iceberg_snapshot_res(
-                            completed_iceberg_snapshot.iceberg_snapshot_result,
-                        );
+                        let iceberg_snapshot_result =
+                            completed_iceberg_snapshot.iceberg_snapshot_result;
+                        io_utils::delete_local_files(
+                            &iceberg_snapshot_result.evicted_files_to_delete,
+                        )
+                        .await
+                        .unwrap();
+                        table.set_iceberg_snapshot_res(iceberg_snapshot_result);
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.
