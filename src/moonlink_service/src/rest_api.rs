@@ -54,6 +54,16 @@ pub struct ErrorResponse {
 }
 
 /// ====================
+/// Get table schema
+/// ====================
+///
+#[derive(Debug, Serialize, Deserialize)]
+pub struct GetTableSchemaResponse {
+    /// A serialized json format schema.
+    pub serialized_schema: Vec<u8>,
+}
+
+/// ====================
 /// Create table
 /// ====================
 ///
@@ -225,6 +235,7 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/tables", get(list_tables))
         .route("/tables/{table}", post(create_table))
         .route("/tables/{table}", delete(drop_table))
+        .route("/schema/{database}/{table}", get(fetch_schema))
         .route("/ingest/{table}", post(ingest_data_json))
         .route("/ingestpb/{table}", post(ingest_data_protobuf))
         .route("/upload/{table}", post(upload_files))
@@ -489,13 +500,13 @@ async fn upload_files(
 }
 
 async fn optimize_table(
-    Path(table): Path<String>,
+    Path(src_table_name): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<OptimizeTableRequest>,
 ) -> Result<Json<OptimizeTableResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!(
         "Received table optimize request for '{}': {:?}",
-        table, payload
+        src_table_name, payload
     );
     match state
         .backend
@@ -514,12 +525,43 @@ async fn optimize_table(
                 Json(ErrorResponse {
                     message: format!(
                         "Failed to optimize table {} with ID {}.{}: {}",
-                        table, payload.database, payload.table, e
+                        src_table_name, payload.database, payload.table, e
                     ),
                 }),
             ))
         }
     }
+}
+
+/// Fetch schema for the requested table.
+async fn fetch_schema(
+    Path((database, table)): Path<(String, String)>,
+    State(state): State<ApiState>,
+) -> Result<Json<GetTableSchemaResponse>, (StatusCode, Json<ErrorResponse>)> {
+    debug!(
+        "Received fetch table schema request for '{}.{}'",
+        database, table
+    );
+    let schema = state
+        .backend
+        .get_table_schema(database.clone(), table.clone())
+        .await;
+
+    if schema.is_err() {
+        let err = schema.err().unwrap();
+        let status_code = get_backend_error_status_code(&err);
+        return Err((
+            status_code,
+            Json(ErrorResponse {
+                message: format!("Failed to get table schema for {database}.{table}: {err}"),
+            }),
+        ));
+    }
+
+    let schema = schema.unwrap();
+    // Serialization not expected to fail.
+    let serialized_schema = serde_json::to_vec(&*schema).unwrap();
+    Ok(Json(GetTableSchemaResponse { serialized_schema }))
 }
 
 /// Create snapshot endpoint

@@ -24,7 +24,7 @@ arrow = { version = "55", default-features = false, features = [
 ] }
 arrow-array = "55"
 arrow-ipc = "55"
-arrow-schema = "55"
+arrow-schema = { version = "55", features = ["serde"] }
 async-stream = "0.3"
 async-trait = "0.1"
 backon = { version = "1.5" }

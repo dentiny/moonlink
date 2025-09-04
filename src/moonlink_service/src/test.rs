@@ -1,4 +1,5 @@
 use arrow_array::RecordBatch;
+use arrow_schema::Schema;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use moonlink::row::{moonlink_row_to_proto, MoonlinkRow, RowValue};
@@ -10,7 +11,8 @@ use std::env;
 use tokio::net::TcpStream;
 
 use crate::rest_api::{
-    CreateTableResponse, FileUploadResponse, HealthResponse, IngestResponse, ListTablesResponse,
+    CreateTableResponse, FileUploadResponse, GetTableSchemaResponse, HealthResponse,
+    IngestResponse, ListTablesResponse,
 };
 use crate::test_utils::*;
 use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
@@ -440,6 +442,42 @@ async fn create_snapshot(client: &reqwest::Client, database: &str, table: &str, 
         response.status().is_success(),
         "Response status is {response:?}"
     );
+}
+
+#[tokio::test]
+async fn test_table_schema_fetch() {
+    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let config = get_service_config();
+    tokio::spawn(async move {
+        start_with_config(config).await.unwrap();
+    });
+    test_readiness_probe().await;
+
+    // Create test table.
+    let client = reqwest::Client::new();
+    create_table(&client, DATABASE, TABLE).await;
+
+    // Get schema back.
+    let payload = json!({
+        "database": DATABASE,
+        "table:": TABLE
+    });
+    let response = client
+        .get(format!("{REST_ADDR}/schema/{DATABASE}/{TABLE}"))
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "Response status is {response:?}"
+    );
+    let response: GetTableSchemaResponse = response.json().await.unwrap();
+
+    // Validate schema.
+    let arrow_schema: Schema = serde_json::from_slice(&response.serialized_schema).unwrap();
+    assert_eq!(arrow_schema, *create_test_arrow_schema());
 }
 
 /// Test Create Snapshot
