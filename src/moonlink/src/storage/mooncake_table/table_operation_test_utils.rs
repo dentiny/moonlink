@@ -420,8 +420,14 @@ pub(crate) async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
 ) {
-    let (_, iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
+    let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_data_files_to_delete) =
         sync_mooncake_snapshot(table, receiver).await;
+
+    // Unpin reference count made for compaction.
+    if let Some(payload) = data_compaction_payload.take_payload() {
+        let cur_evicted_files = payload.unpin_referenced_compaction_payload().await;
+        evicted_data_files_to_delete.extend(cur_evicted_files);
+    }
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
