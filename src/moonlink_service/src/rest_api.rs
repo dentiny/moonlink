@@ -7,13 +7,13 @@ use axum::{
 };
 use moonlink::StorageConfig;
 use moonlink_backend::{table_config::TableConfig, table_status::TableStatus};
-use moonlink_backend::{EventRequest, FileEventOperation, RowEventOperation};
 use moonlink_backend::{
-    FileEventRequest, IngestRequestPayload, RowEventRequest, SnapshotRequest, REST_API_URI,
+    EventRequest, FileEventOperation, FileEventRequest, IngestRequestPayload, RowEventOperation,
+    RowEventRequest, SnapshotRequest, REST_API_URI,
 };
+use moonlink_connectors::rest_ingest::schema_builder::{build_arrow_schema, FieldSchema};
 use moonlink_error::ErrorStatus;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, oneshot};
@@ -74,14 +74,6 @@ pub struct CreateTableRequest {
     pub table: String,
     pub schema: Vec<FieldSchema>,
     pub table_config: TableConfig,
-}
-
-/// Field schema definition
-#[derive(Debug, Serialize, Deserialize)]
-pub struct FieldSchema {
-    pub name: String,
-    pub data_type: String,
-    pub nullable: bool,
 }
 
 /// Response structure for table creation
@@ -273,77 +265,20 @@ async fn create_table(
         table, payload
     );
 
-    // Convert field schemas to Arrow schema with proper field IDs (like PostgreSQL)
-    use arrow_schema::{DataType, Field, Schema};
-
-    let mut field_id = 0;
-    let fields: Result<Vec<Field>, String> = payload
-        .schema
-        .iter()
-        .map(|field| {
-            let data_type_str = field.data_type.to_lowercase();
-            let data_type = match data_type_str.as_str() {
-                "int32" => DataType::Int32,
-                "int64" => DataType::Int64,
-                "string" | "text" => DataType::Utf8,
-                "boolean" | "bool" => DataType::Boolean,
-                "float32" => DataType::Float32,
-                "float64" => DataType::Float64,
-                "date32" => DataType::Date32,
-                // Decimal type.
-                dt if dt.starts_with("decimal(") && dt.ends_with(')') => {
-                    let inner = &dt[8..dt.len() - 1];
-                    let parts: Vec<&str> = inner.split(',').map(|s| s.trim()).collect();
-                    // Arrow type allows no "scale", which defaults to 0.
-                    if parts.len() == 1 {
-                        let precision: u8 = parts[0].parse().map_err(|_| {
-                            format!("Invalid decimal precision in: {}", field.data_type)
-                        })?;
-                        DataType::Decimal128(precision, 0)
-                    } else if parts.len() == 2 {
-                        // decimal(precision, scale)
-                        let precision: u8 = parts[0].parse().map_err(|_| {
-                            format!("Invalid decimal precision in: {}", field.data_type)
-                        })?;
-                        let scale: i8 = parts[1].parse().map_err(|_| {
-                            format!("Invalid decimal scale in: {}", field.data_type)
-                        })?;
-                        DataType::Decimal128(precision, scale)
-                    } else {
-                        return Err(format!("Invalid decimal type: {}", field.data_type));
-                    }
-                }
-                _ => return Err(format!("Unsupported data type: {}", field.data_type)),
-            };
-
-            // Create field with metadata (like PostgreSQL does)
-            let mut metadata = HashMap::new();
-            metadata.insert("PARQUET:field_id".to_string(), field_id.to_string());
-            field_id += 1;
-
-            let field_with_metadata =
-                Field::new(&field.name, data_type, field.nullable).with_metadata(metadata);
-
-            Ok(field_with_metadata)
-        })
-        .collect();
-
-    let fields = match fields {
-        Ok(fields) => fields,
+    let arrow_schema = match build_arrow_schema(&payload.schema) {
+        Ok(s) => s,
         Err(e) => {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     message: format!(
-                        "Invalid schema on table {} creation {:?} because {:?}",
+                        "Invalid schema on table {} creation {:?}: {}",
                         table, payload.schema, e
                     ),
                 }),
             ));
         }
     };
-
-    let arrow_schema = Schema::new(fields);
 
     // Serialization not expect to fail.
     let serialized_table_config = match serde_json::to_string(&payload.table_config) {

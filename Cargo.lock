@@ -4456,6 +4456,7 @@ version = "0.0.1"
 dependencies = [
  "arrow",
  "arrow-array",
+ "arrow-buffer",
  "arrow-ipc",
  "arrow-schema",
  "async-recursion",
@@ -4464,6 +4465,7 @@ dependencies = [
  "clap",
  "moonlink",
  "moonlink_backend",
+ "moonlink_connectors",
  "moonlink_error",
  "moonlink_metadata_store",
  "moonlink_proto",
