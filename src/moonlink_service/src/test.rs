@@ -480,6 +480,7 @@ async fn create_snapshot(client: &reqwest::Client, database: &str, table: &str, 
 }
 
 #[tokio::test]
+#[serial]
 async fn test_table_schema_fetch() {
     let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
     let config = get_service_config();
