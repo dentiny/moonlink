@@ -328,7 +328,9 @@ async fn sync_index_merge(receiver: &mut Receiver<TableEvent>) -> FileIndiceMerg
         panic!("Expected index merge completion notification, but get another one.");
     }
 }
-async fn sync_data_compaction(receiver: &mut Receiver<TableEvent>) -> DataCompactionResult {
+pub(crate) async fn sync_data_compaction(
+    receiver: &mut Receiver<TableEvent>,
+) -> DataCompactionResult {
     let notification = receiver.recv().await.unwrap();
     if let TableEvent::DataCompactionResult {
         data_compaction_result,
@@ -387,6 +389,24 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
         let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
         table.set_iceberg_snapshot_res(iceberg_snapshot_result);
     }
+}
+
+/// Test util function, which persist iceberg snapshot and reflect the change to mooncake snapshot.
+pub(crate) async fn create_iceberg_snapshot_and_reflect_to_mooncake_snapshot(
+    iceberg_snapshot_payload: IcebergSnapshotPayload,
+    table: &mut MooncakeTable,
+    receiver: &mut Receiver<TableEvent>,
+) -> (
+    u64,
+    Option<IcebergSnapshotPayload>,
+    IndexMergeMaintenanceStatus,
+    DataCompactionMaintenanceStatus,
+    Vec<String>,
+) {
+    table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+    let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
+    table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+    create_mooncake_snapshot_for_test(table, receiver).await
 }
 
 // Test util to block wait current mooncake snapshot completion, get the iceberg persistence payload, and perform a new mooncake snapshot and wait completion.
