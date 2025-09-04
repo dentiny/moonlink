@@ -11,7 +11,6 @@ use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::arrow::AsyncArrowWriter;
 
 use crate::storage::cache::object_storage::base_cache::InlineEvictedFiles;
-use crate::storage::compaction::cache_utils;
 use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, DataCompactionResult, RemappedRecordLocation,
     SingleFileToCompact,
@@ -292,12 +291,6 @@ impl CompactionBuilder {
             self.flush_arrow_writer().await?;
         }
 
-        // Unpin cache handle after usage, if necessary.
-        if let Some(cache_handle) = cache_handle {
-            let evicted_files = cache_handle.unreference().await;
-            evicted_files_to_delete.extend(evicted_files);
-        }
-
         // Sanity check on compaction result.
         let expected_compacted_num_rows = total_num_rows - deleted_rows_num;
         let actual_compacted_num_rows = old_to_new_remap.len();
@@ -419,8 +412,10 @@ impl CompactionBuilder {
         // All rows have been deleted.
         if old_record_loc_to_new_mapping.is_empty() {
             // After compaction finishes, unpin all pinned cache handles.
-            let cur_evicted_files =
-                cache_utils::unpin_referenced_compaction_payload(&self.compaction_payload).await;
+            let cur_evicted_files = self
+                .compaction_payload
+                .unpin_referenced_compaction_payload()
+                .await;
             evicted_files_to_delete.extend(cur_evicted_files);
 
             return Ok(DataCompactionResult {
@@ -452,8 +447,10 @@ impl CompactionBuilder {
         }
 
         // After compaction finishes, unpin all pinned cache handles.
-        let cur_evicted_files =
-            cache_utils::unpin_referenced_compaction_payload(&self.compaction_payload).await;
+        let cur_evicted_files = self
+            .compaction_payload
+            .unpin_referenced_compaction_payload()
+            .await;
         evicted_files_to_delete.extend(cur_evicted_files);
 
         Ok(DataCompactionResult {

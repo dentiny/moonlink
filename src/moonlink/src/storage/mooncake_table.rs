@@ -28,7 +28,6 @@ use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocatio
 use crate::error::Result;
 use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
-use crate::storage::compaction::cache_utils as compaction_cache_utils;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
 pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
@@ -1359,10 +1358,7 @@ impl MooncakeTable {
     }
 
     /// Perform data compaction, whose completion will be notified separately in async style.
-    pub(crate) async fn perform_data_compaction(
-        &mut self,
-        compaction_payload: DataCompactionPayload,
-    ) {
+    pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
         // Record index merge event initiation.
         let table_event_id = compaction_payload.uuid;
         if let Some(event_replay_tx) = &self.event_replay_tx {
@@ -1374,9 +1370,6 @@ impl MooncakeTable {
                 .send(MooncakeTableEvent::DataCompactionInitiation(table_event))
                 .unwrap();
         }
-
-        // Before compaction actually goes on, increment reference count for already pinned files, so they won't get deleted.
-        compaction_cache_utils::pin_referenced_compaction_payload(&compaction_payload).await;
 
         // Perform data compaction operation.
         let data_compaction_new_file_ids =

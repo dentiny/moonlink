@@ -254,7 +254,7 @@ pub(crate) async fn perform_data_compaction_for_test(
     data_compaction_payload: DataCompactionPayload,
 ) -> Vec<String> {
     // Perform and block wait data compaction.
-    table.perform_data_compaction(data_compaction_payload).await;
+    table.perform_data_compaction(data_compaction_payload);
     let data_compaction_result = sync_data_compaction(receiver).await;
 
     table.set_data_compaction_res(data_compaction_result);
@@ -510,7 +510,7 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
 
     // Perform and block wait data compaction.
-    table.perform_data_compaction(data_compaction_payload).await;
+    table.perform_data_compaction(data_compaction_payload);
     let data_compaction_result = sync_data_compaction(receiver).await;
 
     // Before create snapshot for compaction results, perform another deletion operations.

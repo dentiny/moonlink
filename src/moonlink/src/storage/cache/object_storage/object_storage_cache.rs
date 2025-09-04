@@ -149,7 +149,8 @@ impl ObjectStorageCacheInternal {
     /// Unreference the given cache entry.
     pub(super) fn unreference(&mut self, file_id: TableUniqueFileId) -> Vec<String> {
         let cache_entry_wrapper = self.non_evictable_cache.get_mut(&file_id);
-        let cache_entry_wrapper = cache_entry_wrapper.unwrap();
+        let cache_entry_wrapper =
+            cache_entry_wrapper.expect(&format!("No reference count for file id {:?}", file_id));
         cache_entry_wrapper.reference_count -= 1;
 
         // Aggregate cache entries to delete.

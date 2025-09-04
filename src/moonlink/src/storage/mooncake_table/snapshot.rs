@@ -563,11 +563,12 @@ impl SnapshotTableState {
         let force_empty_iceberg_payload = task.force_empty_iceberg_payload;
 
         // Decide whether to perform a data compaction.
-        //
-        // No need to pin puffin file during compaction:
-        // - only compaction deletes puffin file
-        // - there's no two ongoing compaction
         let data_compaction_payload = self.get_payload_to_compact(&opt.data_compaction_option);
+
+        // Before compaction actually taking place, we need to increment reference count for already pinned files.
+        if let Some(payload) = data_compaction_payload.get_payload_reference() {
+            payload.pin_referenced_compaction_payload().await;
+        }
 
         // Decide whether to merge an index merge, which cannot be performed together with data compaction.
         let mut file_indices_merge_payload = IndexMergeMaintenanceStatus::Unknown;

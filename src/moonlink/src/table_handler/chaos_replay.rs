@@ -240,6 +240,7 @@ pub(crate) async fn replay(replay_filepath: &str) {
     let pending_iceberg_snapshot_payloads_clone = pending_iceberg_snapshot_payloads.clone();
     let pending_index_merge_payloads_clone = pending_index_merge_payloads.clone();
     let pending_data_compaction_payloads_clone = pending_data_compaction_payloads.clone();
+    // TODO(hjiang): For data compaction payloads, if compaction is not taken for this particular payload, we need to decrement reference counts for all pinned files.
 
     // Maps from file id to data filepath.
     let data_files = Arc::new(Mutex::new(HashMap::new()));

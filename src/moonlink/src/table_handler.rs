@@ -472,6 +472,14 @@ impl TableHandler {
                         if table_handler_state.special_table_state == SpecialTableState::DropTable
                             && table_handler_state.can_drop_table_now(table.has_ongoing_flush())
                         {
+                            // Decrement reference count for data compaction payload if applicable.
+                            if let Some(payload) = mooncake_snapshot_result
+                                .data_compaction_payload
+                                .take_payload()
+                            {
+                                payload.unpin_referenced_compaction_payload().await;
+                            }
+
                             drop_table(&mut table, event_sync_sender).await;
                             return;
                         }
@@ -498,6 +506,9 @@ impl TableHandler {
                                     .unwrap();
                             }
                         }
+
+                        // Record whether data compaction actually takes place.
+                        let mut data_compaction_take_place = false;
 
                         // Only attempt new maintenance when there's no ongoing one.
                         if table_handler_state.table_maintenance_process_status
@@ -528,11 +539,12 @@ impl TableHandler {
                             // Get payload and try perform maintenance operations.
                             if let Some(data_compaction_payload) = mooncake_snapshot_result
                                 .data_compaction_payload
-                                .take_payload()
+                                .get_payload_reference()
                             {
+                                data_compaction_take_place = true;
                                 table_handler_state.table_maintenance_process_status =
                                     MaintenanceProcessStatus::InProcess;
-                                table.perform_data_compaction(data_compaction_payload).await;
+                                table.perform_data_compaction(data_compaction_payload.clone());
                             }
 
                             // ==========================
@@ -568,6 +580,16 @@ impl TableHandler {
                                 table_handler_state.table_maintenance_process_status =
                                     MaintenanceProcessStatus::InProcess;
                                 table.perform_index_merge(file_indices_merge_payload);
+                            }
+                        }
+
+                        // Decrement reference count for data compaction payload if applicable.
+                        if let Some(payload) = mooncake_snapshot_result
+                            .data_compaction_payload
+                            .take_payload()
+                        {
+                            if !data_compaction_take_place {
+                                payload.unpin_referenced_compaction_payload().await;
                             }
                         }
                     }

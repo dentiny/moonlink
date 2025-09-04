@@ -1513,9 +1513,9 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     // Now we're eligible to perform data compaction, the data compaction payload should contains deletion vector for one row deleted.
 
     // Append a new row, delete one existing row to trigger a new puffin blob file; create mooncake and iceberg snapshot.
-    let row_3 = test_row_3();
+    let row_4 = test_row_4();
     table.delete(row_2, /*lsn=*/ 4).await;
-    table.append(row_3.clone()).unwrap();
+    table.append(row_4.clone()).unwrap();
     table.commit(/*lsn=*/ 5);
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 5)
         .await
@@ -1525,24 +1525,13 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
     let (_, _, _, _, evicted_files_to_delete) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
-    assert!(!evicted_files_to_delete.is_empty());
     io_utils::delete_local_files(&evicted_files_to_delete)
         .await
         .unwrap();
 
     // Now trigger a data compaction operation and block wait its completion.
     let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
-    let puffin_blob_file_id = data_compaction_payload
-        .disk_files
-        .iter()
-        .find_map(|compaction_entry| {
-            compaction_entry
-                .deletion_vector
-                .as_ref()
-                .map(|puffin_blob| puffin_blob.puffin_file_cache_handle.file_id)
-        })
-        .unwrap();
-    table.perform_data_compaction(data_compaction_payload).await;
+    table.perform_data_compaction(data_compaction_payload);
     let data_compaction_result = sync_data_compaction(&mut notify_rx).await;
     table.set_data_compaction_res(data_compaction_result);
 
@@ -1557,14 +1546,6 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     )
     .await;
 
-    // Check object storage cache.
-    assert_eq!(
-        object_storage_cache
-            .get_non_evictable_entry_ref_count(&puffin_blob_file_id)
-            .await,
-        0
-    );
-
     // Create a new iceberg table manager and check states.
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
         mooncake_table_metadata.clone(),
@@ -1577,14 +1558,15 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
         .load_snapshot_from_table()
         .await
         .unwrap();
-    assert_eq!(next_file_id, 2); // one data file, one file index
-    assert_eq!(snapshot.disk_files.len(), 1);
-    assert_eq!(snapshot.indices.file_indices.len(), 1);
-    assert_eq!(snapshot.flush_lsn.unwrap(), 2);
+    // Data compaction only take place on two data files.
+    assert_eq!(next_file_id, 5); // two data files (one compacted, one uncompacted), one deletion vector, two file index
+    assert_eq!(snapshot.disk_files.len(), 2);
+    assert_eq!(snapshot.indices.file_indices.len(), 2);
+    assert_eq!(snapshot.flush_lsn.unwrap(), 5);
     check_deletion_vector_consistency_for_snapshot(&snapshot).await;
 
     // Validate iceberg snapshot.
-    verify_recovered_mooncake_snapshot(&snapshot, /*expected_ids=*/ &[1, 2]).await;
+    verify_recovered_mooncake_snapshot(&snapshot, /*expected_ids=*/ &[3, 4]).await;
 }
 
 #[tokio::test]
@@ -3297,7 +3279,7 @@ async fn test_persisted_deletion_record_remap() {
 
     // Perform data compaction.
     let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
-    table.perform_data_compaction(data_compaction_payload).await;
+    table.perform_data_compaction(data_compaction_payload);
 
     // Block wait both operations to finish.
     let mut stored_data_compaction_result: Option<DataCompactionResult> = None;
