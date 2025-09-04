@@ -1,5 +1,5 @@
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
-use opentelemetry_proto::tonic::common::v1::{any_value, AnyValue, KeyValue};
+use opentelemetry_proto::tonic::common::v1::{any_value, AnyValue, EntityRef, KeyValue};
 use opentelemetry_proto::tonic::metrics::v1::{
     number_data_point, Gauge, Histogram, HistogramDataPoint, Metric, NumberDataPoint, Sum,
 };
@@ -19,6 +19,11 @@ pub fn export_metrics_to_moonlink_rows(
             .resource
             .as_ref()
             .map(|r| r.attributes.as_slice())
+            .unwrap_or(&[]);
+        let resource_entity_refs = &rm
+            .resource
+            .as_ref()
+            .map(|r| r.entity_refs.as_slice())
             .unwrap_or(&[]);
         for sm in &rm.scope_metrics {
             let scope_name = sm
@@ -42,6 +47,7 @@ pub fn export_metrics_to_moonlink_rows(
                                 b"gauge",
                                 metric,
                                 resource_attrs,
+                                resource_entity_refs,
                                 &scope_name,
                                 scope_attrs,
                                 dp,
@@ -61,6 +67,7 @@ pub fn export_metrics_to_moonlink_rows(
                                 b"sum",
                                 metric,
                                 resource_attrs,
+                                resource_entity_refs,
                                 &scope_name,
                                 scope_attrs,
                                 dp,
@@ -80,6 +87,7 @@ pub fn export_metrics_to_moonlink_rows(
                             rows.push(hist_point_row(
                                 metric,
                                 resource_attrs,
+                                resource_entity_refs,
                                 &scope_name,
                                 scope_attrs,
                                 dp,
@@ -105,6 +113,7 @@ fn number_point_row(
     kind: &[u8], // "gauge" | "sum"
     metric: &Metric,
     resource_attrs: &[KeyValue],
+    resource_entity_refs: &[EntityRef],
     scope_name: &str,
     scope_attrs: &[KeyValue],
     dp: &NumberDataPoint,
@@ -112,31 +121,36 @@ fn number_point_row(
     is_monotonic: bool,
 ) -> moonlink_pb::MoonlinkRow {
     // TODO(hjiang): Add assertion on kind.
-    let mut values = Vec::with_capacity(12);
+    let mut values = Vec::with_capacity(13);
 
     // 0: kind
     values.push(RowValue::bytes(kind.to_vec()));
     // 1: resource_attrs
     values.push(kvs_to_rowvalue_array(resource_attrs));
-    // 2: scope_name
+    // 2: resource_entity_refs (array of entity-ref arrays)
+    values.push(entityrefs_to_rowvalue_array(
+        resource_entity_refs,
+        resource_attrs,
+    ));
+    // 3: scope_name
     values.push(RowValue::bytes(scope_name.to_string()));
-    // 3: scope_attrs
+    // 4: scope_attrs
     values.push(kvs_to_rowvalue_array(scope_attrs));
-    // 4: metric_name
+    // 5: metric_name
     values.push(RowValue::bytes(metric.name.clone()));
-    // 5: metric_unit
+    // 6: metric_unit
     values.push(RowValue::bytes(metric.unit.clone()));
-    // 6: point_attrs
+    // 7: point_attrs
     values.push(kvs_to_rowvalue_array(&dp.attributes));
-    // 7: start_time_unix_nano
+    // 8: start_time_unix_nano
     values.push(RowValue::int64(dp.start_time_unix_nano as i64));
-    // 8: time_unix_nano
+    // 9: time_unix_nano
     values.push(RowValue::int64(dp.time_unix_nano as i64));
-    // 9: value (nullable)
+    // 10: value (nullable)
     values.push(number_value_to_rowvalue(dp));
-    // 10: temporality (int32; -1 for gauge)
+    // 11: temporality (int32; -1 for gauge)
     values.push(RowValue::int32(temporality));
-    // 11: is_monotonic
+    // 12: is_monotonic
     values.push(RowValue::bool(is_monotonic));
 
     moonlink_pb::MoonlinkRow { values }
@@ -147,6 +161,7 @@ fn number_point_row(
 fn hist_point_row(
     metric: &Metric,
     resource_attrs: &[KeyValue],
+    resource_entity_refs: &[EntityRef],
     scope_name: &str,
     scope_attrs: &[KeyValue],
     dp: &HistogramDataPoint,
@@ -158,28 +173,33 @@ fn hist_point_row(
     values.push(RowValue::bytes(b"histogram".to_vec()));
     // 1: resource_attrs
     values.push(kvs_to_rowvalue_array(resource_attrs));
-    // 2: scope_name
+    // 2: resource_entity_refs
+    values.push(entityrefs_to_rowvalue_array(
+        resource_entity_refs,
+        resource_attrs,
+    ));
+    // 3: scope_name
     values.push(RowValue::bytes(scope_name.to_string()));
-    // 3: scope_attrs
+    // 4: scope_attrs
     values.push(kvs_to_rowvalue_array(scope_attrs));
-    // 4: metric_name
+    // 5: metric_name
     values.push(RowValue::bytes(metric.name.clone()));
-    // 5: metric_unit
+    // 6: metric_unit
     values.push(RowValue::bytes(metric.unit.clone()));
-    // 6: point_attrs
+    // 7: point_attrs
     values.push(kvs_to_rowvalue_array(&dp.attributes));
-    // 7: start_time_unix_nano
+    // 8: start_time_unix_nano
     values.push(RowValue::int64(dp.start_time_unix_nano as i64));
-    // 8: time_unix_nano
+    // 9: time_unix_nano
     values.push(RowValue::int64(dp.time_unix_nano as i64));
-    // 9: count
+    // 10: count
     values.push(RowValue::int64(dp.count as i64));
-    // 10: sum (nullable)
+    // 11: sum (nullable)
     values.push(match dp.sum {
         Some(v) => RowValue::float64(v),
         None => RowValue::null(),
     });
-    // 11: explicit_bounds (array of float64)
+    // 12: explicit_bounds (array of float64)
     values.push(RowValue::array(Array {
         values: dp
             .explicit_bounds
@@ -187,7 +207,7 @@ fn hist_point_row(
             .map(|v| RowValue::float64(*v))
             .collect(),
     }));
-    // 12: bucket_counts (array of int64)
+    // 13: bucket_counts (array of int64)
     values.push(RowValue::array(Array {
         values: dp
             .bucket_counts
@@ -195,10 +215,59 @@ fn hist_point_row(
             .map(|v| RowValue::int64(*v as i64))
             .collect(),
     }));
-    // 13: temporality
+    // 14: temporality
     values.push(RowValue::int32(temporality));
 
     moonlink_pb::MoonlinkRow { values }
+}
+
+/// Util function to convert resource `entity_refs` into a row value array.
+/// Each EntityRef is represented as:
+/// [ type(bytes),
+///   id_pairs(array of [key(bytes), value(RowValue)]),
+///   description_pairs(array of [key(bytes), value(RowValue)]),
+///   schema_url(bytes) ]
+fn entityrefs_to_rowvalue_array(entity_refs: &[EntityRef], attrs: &[KeyValue]) -> RowValue {
+    use std::collections::HashMap;
+    let mut attr_map: HashMap<&str, &AnyValue> = HashMap::with_capacity(attrs.len());
+    for kv in attrs {
+        if let Some(v) = kv.value.as_ref() {
+            attr_map.insert(kv.key.as_str(), v);
+        }
+    }
+
+    let mut out = Vec::with_capacity(entity_refs.len());
+    for er in entity_refs {
+        let id_pairs = er
+            .id_keys
+            .iter()
+            .map(|k| {
+                let val = attr_map.get(k.as_str()).copied();
+                RowValue::array(Array {
+                    values: vec![RowValue::bytes(k.clone()), any_to_rowvalue(val)],
+                })
+            })
+            .collect();
+        let desc_pairs = er
+            .description_keys
+            .iter()
+            .map(|k| {
+                let val = attr_map.get(k.as_str()).copied();
+                RowValue::array(Array {
+                    values: vec![RowValue::bytes(k.clone()), any_to_rowvalue(val)],
+                })
+            })
+            .collect();
+        out.push(RowValue::array(Array {
+            values: vec![
+                RowValue::bytes(er.r#type.clone()),
+                RowValue::array(Array { values: id_pairs }),
+                RowValue::array(Array { values: desc_pairs }),
+                RowValue::bytes(er.schema_url.clone()),
+            ],
+        }));
+    }
+    RowValue::array(Array { values: out })
 }
 
 /// Util function to convert key-value into row value array.
@@ -266,7 +335,7 @@ mod tests {
     use moonlink_pb::{row_value, Array, RowValue};
     use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
     use opentelemetry_proto::tonic::common::v1::{
-        any_value, AnyValue, InstrumentationScope, KeyValue,
+        any_value, AnyValue, EntityRef, InstrumentationScope, KeyValue,
     };
     use opentelemetry_proto::tonic::metrics::v1::{
         metric, AggregationTemporality, Gauge, Histogram, HistogramDataPoint, Metric,
@@ -312,34 +381,6 @@ mod tests {
             )),
         }
     }
-
-    fn make_req_with_metrics(
-        metrics: Vec<Metric>,
-        resource_attrs: Vec<KeyValue>,
-        scope_name: &str,
-        scope_attrs: Vec<KeyValue>,
-    ) -> ExportMetricsServiceRequest {
-        ExportMetricsServiceRequest {
-            resource_metrics: vec![ResourceMetrics {
-                resource: Some(Resource {
-                    attributes: resource_attrs,
-                    dropped_attributes_count: 0,
-                }),
-                scope_metrics: vec![ScopeMetrics {
-                    scope: Some(InstrumentationScope {
-                        name: scope_name.to_string(),
-                        version: "".into(),
-                        attributes: scope_attrs,
-                        dropped_attributes_count: 0,
-                    }),
-                    metrics,
-                    schema_url: "".into(),
-                }],
-                schema_url: "".into(),
-            }],
-        }
-    }
-
     fn as_bytes(rv: &RowValue) -> Option<Vec<u8>> {
         match rv.kind.as_ref()? {
             row_value::Kind::Bytes(b) => Some(b.clone().to_vec()),
@@ -380,8 +421,37 @@ mod tests {
         matches!(rv.kind, Some(row_value::Kind::Null(_)))
     }
 
+    fn make_req_with_metrics(
+        metrics: Vec<Metric>,
+        resource_attrs: Vec<KeyValue>,
+        resource_entity_refs: Vec<EntityRef>,
+        scope_name: &str,
+        scope_attrs: Vec<KeyValue>,
+    ) -> ExportMetricsServiceRequest {
+        ExportMetricsServiceRequest {
+            resource_metrics: vec![ResourceMetrics {
+                resource: Some(Resource {
+                    attributes: resource_attrs,
+                    dropped_attributes_count: 0,
+                    entity_refs: resource_entity_refs,
+                }),
+                scope_metrics: vec![ScopeMetrics {
+                    scope: Some(InstrumentationScope {
+                        name: scope_name.to_string(),
+                        version: "".into(),
+                        attributes: scope_attrs,
+                        dropped_attributes_count: 0,
+                    }),
+                    metrics,
+                    schema_url: "".into(),
+                }],
+                schema_url: "".into(),
+            }],
+        }
+    }
+
     #[test]
-    fn test_gauge_number_point() {
+    fn test_gauge_number_point_with_entity_refs() {
         let dp = NumberDataPoint {
             attributes: vec![kv_str("dp_k", "dp_v")],
             start_time_unix_nano: 11,
@@ -408,6 +478,12 @@ mod tests {
         let req = make_req_with_metrics(
             vec![metric],
             vec![kv_str("res_k", "res_v")],
+            vec![EntityRef {
+                r#type: "service".into(),
+                id_keys: vec!["res_k".into()],
+                description_keys: vec![],
+                schema_url: "".into(),
+            }],
             "myscope",
             vec![kv_bool("scope_ok", true)],
         );
@@ -415,11 +491,16 @@ mod tests {
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 1);
         let r = &rows[0].values;
-        assert_eq!(r.len(), 12);
-        // Columns:
-        // 0 kind, 1 resource_attrs, 2 scope_name, 3 scope_attrs, 4 metric_name, 5 unit,
-        // 6 point_attrs, 7 start, 8 time, 9 value, 10 temporality (-1), 11 is_monotonic(false)
+        assert_eq!(r.len(), 13);
+
+        // Columns (after adding entity_refs):
+        // 0 kind, 1 resource_attrs, 2 resource_entity_refs,
+        // 3 scope_name, 4 scope_attrs,
+        // 5 metric_name, 6 unit,
+        // 7 point_attrs, 8 start, 9 time, 10 value,
+        // 11 temporality (-1), 12 is_monotonic(false)
         assert_eq!(as_bytes(&r[0]).unwrap(), b"gauge".to_vec());
+
         // resource attrs -> array of [key, val] entries
         let res_attrs = as_array(&r[1]).unwrap();
         assert_eq!(res_attrs.values.len(), 1);
@@ -427,26 +508,37 @@ mod tests {
         assert_eq!(as_bytes(&entry.values[0]).unwrap(), b"res_k".to_vec());
         assert_eq!(as_bytes(&entry.values[1]).unwrap(), b"res_v".to_vec());
 
-        assert_eq!(as_bytes(&r[2]).unwrap(), b"myscope".to_vec());
-        let scope_attrs = as_array(&r[3]).unwrap();
+        // entity_refs -> one ref: ["service", id_pairs([[res_k, res_v]]), desc_pairs([]), schema_url("")]
+        let ers = as_array(&r[2]).unwrap();
+        assert_eq!(ers.values.len(), 1);
+        let er0 = as_array(&ers.values[0]).unwrap();
+        assert_eq!(as_bytes(&er0.values[0]).unwrap(), b"service".to_vec());
+        let id_pairs = as_array(&er0.values[1]).unwrap();
+        assert_eq!(id_pairs.values.len(), 1);
+        let id0 = as_array(&id_pairs.values[0]).unwrap();
+        assert_eq!(as_bytes(&id0.values[0]).unwrap(), b"res_k".to_vec());
+        assert_eq!(as_bytes(&id0.values[1]).unwrap(), b"res_v".to_vec());
+
+        assert_eq!(as_bytes(&r[3]).unwrap(), b"myscope".to_vec());
+        let scope_attrs = as_array(&r[4]).unwrap();
         assert_eq!(scope_attrs.values.len(), 1);
         let sa0 = as_array(&scope_attrs.values[0]).unwrap();
         assert_eq!(as_bytes(&sa0.values[0]).unwrap(), b"scope_ok".to_vec());
         assert!(as_bool(&sa0.values[1]).unwrap());
 
-        assert_eq!(as_bytes(&r[4]).unwrap(), b"latency".to_vec());
-        assert_eq!(as_bytes(&r[5]).unwrap(), b"ms".to_vec());
+        assert_eq!(as_bytes(&r[5]).unwrap(), b"latency".to_vec());
+        assert_eq!(as_bytes(&r[6]).unwrap(), b"ms".to_vec());
 
-        let point_attrs = as_array(&r[6]).unwrap();
+        let point_attrs = as_array(&r[7]).unwrap();
         let pa0 = as_array(&point_attrs.values[0]).unwrap();
         assert_eq!(as_bytes(&pa0.values[0]).unwrap(), b"dp_k".to_vec());
         assert_eq!(as_bytes(&pa0.values[1]).unwrap(), b"dp_v".to_vec());
 
-        assert_eq!(as_i64(&r[7]).unwrap(), 11);
-        assert_eq!(as_i64(&r[8]).unwrap(), 22);
-        assert!((as_f64(&r[9]).unwrap() - std::f64::consts::PI).abs() < 1e-9);
-        assert_eq!(as_i32(&r[10]).unwrap(), -1);
-        assert!(!as_bool(&r[11]).unwrap());
+        assert_eq!(as_i64(&r[8]).unwrap(), 11);
+        assert_eq!(as_i64(&r[9]).unwrap(), 22);
+        assert!((as_f64(&r[10]).unwrap() - std::f64::consts::PI).abs() < 1e-9);
+        assert_eq!(as_i32(&r[11]).unwrap(), -1);
+        assert!(!as_bool(&r[12]).unwrap());
     }
 
     #[test]
@@ -497,29 +589,31 @@ mod tests {
         let req = make_req_with_metrics(
             vec![metric],
             /*resource_attrs=*/ vec![],
+            /*resource_entity_refs=*/ vec![],
             /*scope_name=*/ "svc",
             /*scope_attrs=*/ vec![],
         );
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 1);
         let r = &rows[0].values;
-        assert_eq!(r.len(), 12);
+        assert_eq!(r.len(), 13);
 
         assert_eq!(as_bytes(&r[0]).unwrap(), b"sum".to_vec());
         let res_attrs = as_array(&r[1]).unwrap();
         assert!(res_attrs.values.is_empty());
-        assert_eq!(as_bytes(&r[2]).unwrap(), b"svc".to_vec());
-        assert_eq!(as_bytes(&r[4]).unwrap(), b"requests".to_vec());
-        assert_eq!(as_bytes(&r[5]).unwrap(), b"1".to_vec());
-        assert_eq!(as_i64(&r[9]).unwrap(), 7);
+        // r[2] is entity_refs (empty)
+        assert_eq!(as_bytes(&r[3]).unwrap(), b"svc".to_vec());
+        assert_eq!(as_bytes(&r[5]).unwrap(), b"requests".to_vec());
+        assert_eq!(as_bytes(&r[6]).unwrap(), b"1".to_vec());
+        assert_eq!(as_i64(&r[10]).unwrap(), 7);
         assert_eq!(
-            as_i32(&r[10]).unwrap(),
+            as_i32(&r[11]).unwrap(),
             AggregationTemporality::Cumulative as i32
         );
-        assert!(as_bool(&r[11]).unwrap());
+        assert!(as_bool(&r[12]).unwrap());
 
         // Check key-value pair conversion.
-        let point_attrs = as_array(&r[6]).unwrap();
+        let point_attrs = as_array(&r[7]).unwrap();
         assert_eq!(point_attrs.values.len(), 2);
 
         // "arr" -> [true, 1.5]
@@ -581,6 +675,7 @@ mod tests {
         let req = make_req_with_metrics(
             vec![metric],
             /*resource_attrs=*/ vec![],
+            /*resource_entity_refs=*/ vec![],
             /*scope_name=*/ "scope",
             /*scope_attrs=*/ vec![],
         );
@@ -590,23 +685,24 @@ mod tests {
         // First row checks.
         {
             let r = &rows[0].values;
-            assert_eq!(r.len(), 14);
+            assert_eq!(r.len(), 15);
             assert_eq!(as_bytes(&r[0]).unwrap(), b"histogram".to_vec());
             assert!(as_array(&r[1]).unwrap().values.is_empty()); // resource attrs
-            assert_eq!(as_bytes(&r[2]).unwrap(), b"scope".to_vec()); // scope name
-            assert!(as_array(&r[3]).unwrap().values.is_empty()); // scope attrs
-            assert_eq!(as_bytes(&r[4]).unwrap(), b"latency_hist".to_vec()); // metrics name
-            assert_eq!(as_bytes(&r[5]).unwrap(), b"ms".to_vec()); // unit
-            assert_eq!(as_array(&r[6]).unwrap().values.len(), 1); // point attrs
-            assert_eq!(as_i64(&r[9]).unwrap(), 3); // count
-            assert!((as_f64(&r[10]).unwrap() - 4.5).abs() < 1e-9); // sum
-            let bounds = as_array(&r[11]).unwrap();
+                                                                 // r[2] is entity_refs (empty)
+            assert_eq!(as_bytes(&r[3]).unwrap(), b"scope".to_vec()); // scope name
+            assert!(as_array(&r[4]).unwrap().values.is_empty()); // scope attrs
+            assert_eq!(as_bytes(&r[5]).unwrap(), b"latency_hist".to_vec()); // metric name
+            assert_eq!(as_bytes(&r[6]).unwrap(), b"ms".to_vec()); // unit
+            assert_eq!(as_array(&r[7]).unwrap().values.len(), 1); // point attrs
+            assert_eq!(as_i64(&r[10]).unwrap(), 3); // count
+            assert!((as_f64(&r[11]).unwrap() - 4.5).abs() < 1e-9); // sum
+            let bounds = as_array(&r[12]).unwrap();
             assert_eq!(bounds.values.len(), 3);
             assert!((as_f64(&bounds.values[0]).unwrap() - 0.0).abs() < 1e-9);
             assert!((as_f64(&bounds.values[1]).unwrap() - 5.0).abs() < 1e-9);
             assert!((as_f64(&bounds.values[2]).unwrap() - 10.0).abs() < 1e-9);
 
-            let counts = as_array(&r[12]).unwrap();
+            let counts = as_array(&r[13]).unwrap();
             assert_eq!(counts.values.len(), 4);
             assert_eq!(as_i64(&counts.values[0]).unwrap(), 1);
             assert_eq!(as_i64(&counts.values[1]).unwrap(), 2);
@@ -614,7 +710,7 @@ mod tests {
             assert_eq!(as_i64(&counts.values[3]).unwrap(), 0);
 
             assert_eq!(
-                as_i32(&r[13]).unwrap(),
+                as_i32(&r[14]).unwrap(),
                 AggregationTemporality::Delta as i32
             );
         }
@@ -622,8 +718,8 @@ mod tests {
         // Second row (no sum).
         {
             let r = &rows[1].values;
-            assert_eq!(r.len(), 14);
-            assert!(is_null(&r[10])); // sum is null
+            assert_eq!(r.len(), 15);
+            assert!(is_null(&r[11])); // sum is null
         }
     }
 }
