@@ -491,7 +491,7 @@ async fn test_table_schema_fetch() {
 
     // Create test table.
     let client = reqwest::Client::new();
-    create_table(&client, DATABASE, TABLE).await;
+    create_table(&client, DATABASE, TABLE, /*nested=*/ false).await;
 
     // Get schema back.
     let payload = json!({
