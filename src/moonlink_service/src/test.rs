@@ -1,5 +1,4 @@
 use arrow_array::RecordBatch;
-use arrow_schema::Schema;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use moonlink::row::{moonlink_row_to_proto, MoonlinkRow, RowValue};
@@ -512,8 +511,7 @@ async fn test_table_schema_fetch() {
     let response: GetTableSchemaResponse = response.json().await.unwrap();
 
     // Validate schema.
-    let arrow_schema: Schema = serde_json::from_slice(&response.serialized_schema).unwrap();
-    assert_eq!(arrow_schema, *create_test_arrow_schema());
+    assert_eq!(response.schema, *create_test_arrow_schema());
 }
 
 /// Test Create Snapshot

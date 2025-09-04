@@ -1,3 +1,4 @@
+use arrow_schema::Schema;
 use axum::{
     extract::{Path, State},
     http::{Method, StatusCode},
@@ -59,8 +60,8 @@ pub struct ErrorResponse {
 ///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetTableSchemaResponse {
-    /// A serialized json format schema.
-    pub serialized_schema: Vec<u8>,
+    /// Table schema.
+    pub schema: Schema,
 }
 
 /// ====================
@@ -477,26 +478,26 @@ async fn fetch_schema(
         "Received fetch table schema request for '{}.{}'",
         database, table
     );
-    let schema = state
+    match state
         .backend
         .get_table_schema(database.clone(), table.clone())
-        .await;
-
-    if schema.is_err() {
-        let err = schema.err().unwrap();
-        let status_code = get_backend_error_status_code(&err);
-        return Err((
-            status_code,
-            Json(ErrorResponse {
-                message: format!("Failed to get table schema for {database}.{table}: {err}"),
-            }),
-        ));
+        .await
+    {
+        Ok(schema) => Ok(Json(GetTableSchemaResponse {
+            schema: schema.as_ref().clone(),
+        })),
+        Err(e) => {
+            let status_code = get_backend_error_status_code(&e);
+            Err((
+                status_code,
+                Json(ErrorResponse {
+                    message: format!(
+                        "Failed to get table schema for table {database}.{table}: {e}"
+                    ),
+                }),
+            ))
+        }
     }
-
-    let schema = schema.unwrap();
-    // Serialization not expected to fail.
-    let serialized_schema = serde_json::to_vec(&*schema).unwrap();
-    Ok(Json(GetTableSchemaResponse { serialized_schema }))
 }
 
 /// Create snapshot endpoint
