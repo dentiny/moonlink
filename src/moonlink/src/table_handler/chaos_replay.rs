@@ -685,7 +685,7 @@ pub(crate) async fn replay(replay_filepath: &str) {
                         .remove(&data_compaction_initiation_event.uuid)
                         .unwrap()
                 };
-                table.perform_data_compaction(payload);
+                table.perform_data_compaction(payload).await;
             }
             MooncakeTableEvent::DataCompactionCompletion(data_compaction_completion_event) => {
                 assert!(ongoing_data_compaction_id.remove(&data_compaction_completion_event.uuid));

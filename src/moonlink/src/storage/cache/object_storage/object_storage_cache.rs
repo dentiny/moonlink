@@ -356,7 +356,6 @@ impl ObjectStorageCache {
         let config = ObjectStorageCacheConfig::default_for_test(temp_dir);
         Self::new(config)
     }
-
     #[cfg(feature = "bench")]
     pub fn default_for_bench() -> Self {
         let config = ObjectStorageCacheConfig::default_for_bench();

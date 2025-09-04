@@ -532,9 +532,7 @@ impl TableHandler {
                             {
                                 table_handler_state.table_maintenance_process_status =
                                     MaintenanceProcessStatus::InProcess;
-                                
-
-                                table.perform_data_compaction(data_compaction_payload);
+                                table.perform_data_compaction(data_compaction_payload).await;
                             }
 
                             // ==========================

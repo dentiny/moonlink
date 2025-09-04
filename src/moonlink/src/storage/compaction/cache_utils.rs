@@ -1,27 +1,39 @@
 use crate::storage::mooncake_table::DataCompactionPayload;
 
 /// This file implements util function on compaction and object storage cache.
-/// 
+///
 /// Compaction protocol with object storage cache works as follows:
 /// - To prevent files used for compaction gets deleted, already referenced files should be pinned again before compaction in the eventloop; no IO operation is involved.
 /// - For unreferenced files, they'll be downloaded from remote and pinned at object storage cache at best effort; this happens in the process of compaction within a background thread.
 /// - After compaction, all referenced cache handles shall be unpinned.
-/// 
+///
 /// Pin all existing pinnned files before compaction, so they're guaranteed to be valid during compaction.
-pub(crate) async fn pin_referenced_compaction_payload(data_compaction_payload: &DataCompactionPayload) {
+pub(crate) async fn pin_referenced_compaction_payload(
+    data_compaction_payload: &DataCompactionPayload,
+) {
     let filesystem_accessor = &*data_compaction_payload.filesystem_accessor;
 
     for cur_compaction_payload in &data_compaction_payload.disk_files {
         // Pin data files, which have already been pinned.
         if cur_compaction_payload.data_file_cache_handle.is_some() {
             let file_id = cur_compaction_payload.file_id;
-            data_compaction_payload.object_storage_cache.get_cache_entry(file_id, /*remote_filepath=*/"", filesystem_accessor).await.unwrap();
+            let (_, cur_evicted_files) = data_compaction_payload
+                .object_storage_cache
+                .get_cache_entry(file_id, /*remote_filepath=*/ "", filesystem_accessor)
+                .await
+                .unwrap();
+            assert!(cur_evicted_files.is_empty());
         }
 
         // Pin puffin blobs, which have already been pinned.
         if let Some(puffin_blob_ref) = &cur_compaction_payload.deletion_vector {
             let file_id = puffin_blob_ref.puffin_file_cache_handle.file_id;
-            data_compaction_payload.object_storage_cache.get_cache_entry(file_id, /*remote_filepath=*/"", filesystem_accessor).await.unwrap();
+            let (_, cur_evicted_files) = data_compaction_payload
+                .object_storage_cache
+                .get_cache_entry(file_id, /*remote_filepath=*/ "", filesystem_accessor)
+                .await
+                .unwrap();
+            assert!(cur_evicted_files.is_empty());
         }
     }
 
@@ -31,14 +43,21 @@ pub(crate) async fn pin_referenced_compaction_payload(data_compaction_payload: &
             // Index block files always live in cache.
             let cache_handle = cur_index_block.cache_handle.as_ref().unwrap();
             let file_id = cache_handle.file_id;
-            data_compaction_payload.object_storage_cache.get_cache_entry(file_id, /*remote_filepath=*/"", filesystem_accessor).await.unwrap();
+            let (_, cur_evicted_files) = data_compaction_payload
+                .object_storage_cache
+                .get_cache_entry(file_id, /*remote_filepath=*/ "", filesystem_accessor)
+                .await
+                .unwrap();
+            assert!(cur_evicted_files.is_empty());
         }
     }
 }
 
 /// Unpin all referenced files after compaction, so they could be evicted and deleted.
 /// Return evicted files to delete.
-pub(crate) async fn unpin_referenced_compaction_payload(data_compaction_payload: &DataCompactionPayload) -> Vec<String> {
+pub(crate) async fn unpin_referenced_compaction_payload(
+    data_compaction_payload: &DataCompactionPayload,
+) -> Vec<String> {
     let mut evicted_files_to_delete = vec![];
 
     for cur_compaction_payload in &data_compaction_payload.disk_files {

@@ -1540,8 +1540,9 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
                 .deletion_vector
                 .as_ref()
                 .map(|puffin_blob| puffin_blob.puffin_file_cache_handle.file_id)
-        }).unwrap();
-    table.perform_data_compaction(data_compaction_payload);
+        })
+        .unwrap();
+    table.perform_data_compaction(data_compaction_payload).await;
     let data_compaction_result = sync_data_compaction(&mut notify_rx).await;
     table.set_data_compaction_res(data_compaction_result);
 
@@ -1557,7 +1558,12 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     .await;
 
     // Check object storage cache.
-    assert_eq!(object_storage_cache.get_non_evictable_entry_ref_count(&puffin_blob_file_id).await, 0);
+    assert_eq!(
+        object_storage_cache
+            .get_non_evictable_entry_ref_count(&puffin_blob_file_id)
+            .await,
+        0
+    );
 
     // Create a new iceberg table manager and check states.
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
@@ -3291,7 +3297,7 @@ async fn test_persisted_deletion_record_remap() {
 
     // Perform data compaction.
     let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
-    table.perform_data_compaction(data_compaction_payload);
+    table.perform_data_compaction(data_compaction_payload).await;
 
     // Block wait both operations to finish.
     let mut stored_data_compaction_result: Option<DataCompactionResult> = None;
