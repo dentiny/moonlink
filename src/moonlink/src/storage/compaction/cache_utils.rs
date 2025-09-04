@@ -11,29 +11,21 @@ use crate::storage::mooncake_table::DataCompactionPayload;
 pub(crate) async fn pin_referenced_compaction_payload(
     data_compaction_payload: &DataCompactionPayload,
 ) {
-    let filesystem_accessor = &*data_compaction_payload.filesystem_accessor;
-
     for cur_compaction_payload in &data_compaction_payload.disk_files {
         // Pin data files, which have already been pinned.
-        if cur_compaction_payload.data_file_cache_handle.is_some() {
-            let file_id = cur_compaction_payload.file_id;
-            let (_, cur_evicted_files) = data_compaction_payload
+        if let Some(cache_handle) = &cur_compaction_payload.data_file_cache_handle {
+            data_compaction_payload
                 .object_storage_cache
-                .get_cache_entry(file_id, /*remote_filepath=*/ "", filesystem_accessor)
-                .await
-                .unwrap();
-            assert!(cur_evicted_files.is_empty());
+                .increment_reference_count(cache_handle)
+                .await;
         }
 
         // Pin puffin blobs, which have already been pinned.
         if let Some(puffin_blob_ref) = &cur_compaction_payload.deletion_vector {
-            let file_id = puffin_blob_ref.puffin_file_cache_handle.file_id;
-            let (_, cur_evicted_files) = data_compaction_payload
+            data_compaction_payload
                 .object_storage_cache
-                .get_cache_entry(file_id, /*remote_filepath=*/ "", filesystem_accessor)
-                .await
-                .unwrap();
-            assert!(cur_evicted_files.is_empty());
+                .increment_reference_count(&puffin_blob_ref.puffin_file_cache_handle)
+                .await;
         }
     }
 
@@ -42,13 +34,10 @@ pub(crate) async fn pin_referenced_compaction_payload(
         for cur_index_block in cur_file_index.index_blocks.iter() {
             // Index block files always live in cache.
             let cache_handle = cur_index_block.cache_handle.as_ref().unwrap();
-            let file_id = cache_handle.file_id;
-            let (_, cur_evicted_files) = data_compaction_payload
+            data_compaction_payload
                 .object_storage_cache
-                .get_cache_entry(file_id, /*remote_filepath=*/ "", filesystem_accessor)
-                .await
-                .unwrap();
-            assert!(cur_evicted_files.is_empty());
+                .increment_reference_count(cache_handle)
+                .await;
         }
     }
 }

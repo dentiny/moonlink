@@ -506,6 +506,20 @@ impl CacheTrait for ObjectStorageCache {
         let mut guard = self.cache.write().await;
         guard.delete_cache_entry(file_id, /*panic_if_non_existent=*/ false)
     }
+
+    async fn increment_reference_count(&self, cache_handle: &NonEvictableHandle) {
+        let mut guard = self.cache.write().await;
+        let value = guard.non_evictable_cache.get_mut(&cache_handle.file_id);
+        if let Some(value) = value {
+            ma::assert_gt!(value.reference_count, 0);
+            value.reference_count += 1;
+            return;
+        }
+        panic!(
+            "Requested to increment reference count for file id {:?} and file path {:?}, but not pinned in cache.",
+            cache_handle.file_id, cache_handle.get_cache_filepath(),
+        );
+    }
 }
 
 #[cfg(test)]
