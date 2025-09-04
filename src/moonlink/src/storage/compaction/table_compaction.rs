@@ -5,6 +5,7 @@ use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::TableUniqueFileId;
 use crate::CacheTrait;
+use crate::NonEvictableHandle;
 
 use std::borrow::Borrow;
 use std::collections::HashMap;
@@ -17,6 +18,8 @@ use std::sync::Arc;
 pub struct SingleFileToCompact {
     /// Unique file id to lookup in the object storage cache.
     pub(crate) file_id: TableUniqueFileId,
+    /// Data file cache handle.
+    pub(crate) data_file_cache_handle: Option<NonEvictableHandle>,
     /// Remote data file; only persisted data files will be compacted.
     pub(crate) filepath: String,
     /// Deletion vector.

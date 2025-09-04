@@ -1465,7 +1465,7 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     let cache_temp_dir = tempdir().unwrap();
 
     // Create mooncake table and table event notification receiver.
-    let cache = ObjectStorageCache::new(ObjectStorageCacheConfig::new(
+    let object_storage_cache = ObjectStorageCache::new(ObjectStorageCacheConfig::new(
         /*max_bytes=*/ u64::MAX,
         cache_temp_dir.path().to_str().unwrap().to_string(),
         /*optimize_local_filesystem=*/ false,
@@ -1473,7 +1473,7 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     let (mut table, mut notify_rx) = create_mooncake_table_and_notify(
         mooncake_table_metadata.clone(),
         iceberg_table_config.clone(),
-        Arc::new(cache), // Use separate cache for each table.
+        Arc::new(object_storage_cache.clone()), // Use separate cache for each table.
     )
     .await;
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
@@ -1532,6 +1532,15 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
 
     // Now trigger a data compaction operation and block wait its completion.
     let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
+    let puffin_blob_file_id = data_compaction_payload
+        .disk_files
+        .iter()
+        .find_map(|compaction_entry| {
+            compaction_entry
+                .deletion_vector
+                .as_ref()
+                .map(|puffin_blob| puffin_blob.puffin_file_cache_handle.file_id)
+        }).unwrap();
     table.perform_data_compaction(data_compaction_payload);
     let data_compaction_result = sync_data_compaction(&mut notify_rx).await;
     table.set_data_compaction_res(data_compaction_result);
@@ -1546,6 +1555,9 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
         &mut notify_rx,
     )
     .await;
+
+    // Check object storage cache.
+    assert_eq!(object_storage_cache.get_non_evictable_entry_ref_count(&puffin_blob_file_id).await, 0);
 
     // Create a new iceberg table manager and check states.
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
