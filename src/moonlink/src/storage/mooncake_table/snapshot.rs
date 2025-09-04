@@ -388,7 +388,7 @@ impl SnapshotTableState {
             //
             // If the old entry is pinned cache handle, unreference.
             let old_entry = old_entry.unwrap();
-            if let Some(mut cache_handle) = old_entry.cache_handle {
+            if let Some(cache_handle) = old_entry.cache_handle {
                 // The old entry is no longer needed for mooncake table, directly mark it deleted from cache, so we could reclaim the disk space back ASAP.
                 let cur_evicted_files = cache_handle.unreference_and_delete().await;
                 evicted_files_to_delete.extend(cur_evicted_files);
@@ -413,7 +413,7 @@ impl SnapshotTableState {
             }
 
             // Unpin and request to delete all cached puffin files.
-            if let Some(mut puffin_deletion_blob) = old_entry.puffin_deletion_blob {
+            if let Some(puffin_deletion_blob) = old_entry.puffin_deletion_blob {
                 let cur_evicted_files = puffin_deletion_blob
                     .puffin_file_cache_handle
                     .unreference_and_delete()

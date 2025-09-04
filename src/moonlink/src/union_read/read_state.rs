@@ -34,7 +34,7 @@ impl Drop for ReadState {
         let cache_handles = std::mem::take(&mut self.cache_handles);
         tokio::spawn(async move {
             let mut evicted_files_to_delete = vec![];
-            for mut cur_cache_handle in cache_handles.into_iter() {
+            for cur_cache_handle in cache_handles.into_iter() {
                 let cur_evicted_files = cur_cache_handle.unreference().await;
                 evicted_files_to_delete.extend(cur_evicted_files);
             }

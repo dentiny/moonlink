@@ -273,8 +273,7 @@ impl CompactionBuilder {
         }
 
         // Unpin cache handle after usage, if necessary.
-        // TODO(hjiang): Better error propagation, cache handle should be always unpinned whether success or failure.
-        if let Some(mut cache_handle) = cache_handle {
+        if let Some(cache_handle) = cache_handle {
             let evicted_files = cache_handle.unreference().await;
             evicted_files_to_delete.extend(evicted_files);
         }
