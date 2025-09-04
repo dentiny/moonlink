@@ -84,6 +84,8 @@ impl DataCompactionPayload {
     /// - For unreferenced files, they'll be downloaded from remote and pinned at object storage cache at best effort; this happens in the process of compaction within a background thread.
     /// - After compaction, all referenced cache handles shall be unpinned.
     ///
+    /// Notice, the protocol only considers data files and deletion vectors.
+    ///
     /// Pin all existing pinnned files before compaction, so they're guaranteed to be valid during compaction.
     pub(crate) async fn pin_referenced_compaction_payload(&self) {
         for cur_compaction_payload in &self.disk_files {
@@ -98,17 +100,6 @@ impl DataCompactionPayload {
             if let Some(puffin_blob_ref) = &cur_compaction_payload.deletion_vector {
                 self.object_storage_cache
                     .increment_reference_count(&puffin_blob_ref.puffin_file_cache_handle)
-                    .await;
-            }
-        }
-
-        // Pin index blocks, which have already been pinned.
-        for cur_file_index in &self.file_indices {
-            for cur_index_block in cur_file_index.index_blocks.iter() {
-                // Index block files always live in cache.
-                let cache_handle = cur_index_block.cache_handle.as_ref().unwrap();
-                self.object_storage_cache
-                    .increment_reference_count(cache_handle)
                     .await;
             }
         }
@@ -130,16 +121,6 @@ impl DataCompactionPayload {
             if let Some(puffin_blob_ref) = &cur_compaction_payload.deletion_vector {
                 let cur_evicted_files =
                     puffin_blob_ref.puffin_file_cache_handle.unreference().await;
-                evicted_files_to_delete.extend(cur_evicted_files);
-            }
-        }
-
-        // Unpin index blocks, which have already been pinned.
-        for cur_file_index in &self.file_indices {
-            for cur_index_block in cur_file_index.index_blocks.iter() {
-                // Index block files always live in cache.
-                let cache_handle = cur_index_block.cache_handle.as_ref().unwrap();
-                let cur_evicted_files = cache_handle.unreference().await;
                 evicted_files_to_delete.extend(cur_evicted_files);
             }
         }

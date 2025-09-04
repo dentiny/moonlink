@@ -375,13 +375,8 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
     receiver: &mut Receiver<TableEvent>,
 ) {
     // Create mooncake snapshot and block wait completion.
-    let (_, iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
+    let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_data_files_to_delete) =
         create_mooncake_snapshot_for_test(table, receiver).await;
-
-    // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
-    io_utils::delete_local_files(&evicted_data_files_to_delete)
-        .await
-        .unwrap();
 
     // Create iceberg snapshot if possible.
     if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
@@ -389,6 +384,17 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
         let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
         table.set_iceberg_snapshot_res(iceberg_snapshot_result);
     }
+
+    // Decrement reference count for pinned files.
+    if let Some(payload) = data_compaction_payload.take_payload() {
+        let cur_evicted_files = payload.unpin_referenced_compaction_payload().await;
+        evicted_data_files_to_delete.extend(cur_evicted_files);
+    }
+
+    // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
+    io_utils::delete_local_files(&evicted_data_files_to_delete)
+        .await
+        .unwrap();
 }
 
 /// Test util function, which persist iceberg snapshot and reflect the change to mooncake snapshot.
@@ -611,7 +617,19 @@ pub(crate) async fn drop_read_states_and_create_mooncake_snapshot(
     receiver: &mut Receiver<TableEvent>,
 ) {
     drop_read_states(read_states).await;
-    let (_, _, _, _, _) = create_mooncake_snapshot_for_test(table, receiver).await;
+    let (_, _, _, data_compaction_payload, mut evicted_files_to_delete) =
+        create_mooncake_snapshot_for_test(table, receiver).await;
+
+    // Unpin previously pinned files.
+    if let Some(payload) = data_compaction_payload.take_payload() {
+        let cur_evicted_files = payload.unpin_referenced_compaction_payload().await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+    }
+
+    // Delete evicted files immediately to surface possible errors.
+    io_utils::delete_local_files(&evicted_files_to_delete)
+        .await
+        .unwrap();
 }
 
 /// Perform a read request for the given table.
@@ -626,8 +644,19 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
 ) -> Arc<MooncakeTableMetadata> {
     table.force_empty_iceberg_payload();
     // Create a mooncake and iceberg snapshot to reflect both data files and schema changes.
-    let (_, iceberg_snapshot_payload, _, _, _) =
+    let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_files_to_delete) =
         create_mooncake_snapshot_for_test(table, notify_rx).await;
+
+    // Unpin previously pinned files.
+    if let Some(payload) = data_compaction_payload.take_payload() {
+        let cur_evicted_files = payload.unpin_referenced_compaction_payload().await;
+        evicted_files_to_delete.extend(cur_evicted_files);
+    }
+    // Delete evicted files immediately to surface possible errors.
+    io_utils::delete_local_files(&evicted_files_to_delete)
+        .await
+        .unwrap();
+
     if let Some(mut iceberg_snapshot_payload) = iceberg_snapshot_payload {
         let alter_table_request = AlterTableRequest {
             new_columns: vec![],
