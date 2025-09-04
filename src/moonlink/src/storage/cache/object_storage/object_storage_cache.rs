@@ -559,6 +559,41 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_increment_ref_count() {
+        let cache_file_directory = tempdir().unwrap();
+        let test_cache_file =
+            create_test_file(cache_file_directory.path(), TEST_CACHE_FILENAME_1).await;
+
+        let config = ObjectStorageCacheConfig {
+            // Set max bytes larger than one file, but less than two files.
+            max_bytes: CONTENT.len() as u64,
+            cache_directory: cache_file_directory.path().to_str().unwrap().to_string(),
+            optimize_local_filesystem: false,
+        };
+        let cache = ObjectStorageCache::new(config);
+
+        // Import cache entry.
+        let cache_entry = CacheEntry {
+            cache_filepath: test_cache_file.to_str().unwrap().to_string(),
+            file_metadata: FileMetadata {
+                file_size: CONTENT.len() as u64,
+            },
+        };
+        let file_id = get_table_unique_file_id(/*file_id=*/ 0);
+        let (cache_handle, evicted_files_to_delete) =
+            cache.import_cache_entry(file_id, cache_entry.clone()).await;
+        assert_eq!(
+            cache_handle.cache_entry.cache_filepath,
+            test_cache_file.to_str().unwrap().to_string()
+        );
+        assert!(evicted_files_to_delete.is_empty());
+
+        // Increment the reference count.
+        cache.increment_reference_count(&cache_handle).await;
+        assert_eq!(cache.get_non_evictable_entry_ref_count(&file_id).await, 2);
+    }
+
+    #[tokio::test]
     async fn test_concurrent_object_storage_cache() {
         const PARALLEL_TASK_NUM: usize = 10;
         let mut handle_futures = Vec::with_capacity(PARALLEL_TASK_NUM);
