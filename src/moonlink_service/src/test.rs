@@ -1,4 +1,5 @@
 use arrow_array::RecordBatch;
+use arrow_ipc::reader::StreamReader;
 use async_recursion::async_recursion;
 use bytes::Bytes;
 use moonlink::row::{moonlink_row_to_proto, MoonlinkRow, RowValue};
@@ -512,7 +513,10 @@ async fn test_table_schema_fetch() {
     let response: GetTableSchemaResponse = response.json().await.unwrap();
 
     // Validate schema.
-    assert_eq!(response.schema, *create_test_arrow_schema());
+    let serialized_schema = response.serialized_schema;
+    let reader = StreamReader::try_new(serialized_schema.as_slice(), /*projection=*/ None).unwrap();
+    let schema = reader.schema();
+    assert_eq!(schema, create_test_arrow_schema());
 }
 
 /// Test Create Snapshot

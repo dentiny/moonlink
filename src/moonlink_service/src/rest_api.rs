@@ -1,4 +1,4 @@
-use arrow_schema::Schema;
+use arrow_ipc::writer::StreamWriter;
 use axum::{
     extract::{Path, State},
     http::{Method, StatusCode},
@@ -15,6 +15,7 @@ use moonlink_backend::{
 use moonlink_connectors::rest_ingest::schema_builder::{build_arrow_schema, FieldSchema};
 use moonlink_error::ErrorStatus;
 use serde::{Deserialize, Serialize};
+use std::io::Cursor;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, oneshot};
@@ -60,8 +61,8 @@ pub struct ErrorResponse {
 ///
 #[derive(Debug, Serialize, Deserialize)]
 pub struct GetTableSchemaResponse {
-    /// Table schema.
-    pub schema: Schema,
+    /// Serialized arrow schema in ipc format.
+    pub serialized_schema: Vec<u8>,
 }
 
 /// ====================
@@ -478,26 +479,30 @@ async fn fetch_schema(
         "Received fetch table schema request for '{}.{}'",
         database, table
     );
-    match state
+    let schema = state
         .backend
         .get_table_schema(database.clone(), table.clone())
-        .await
-    {
-        Ok(schema) => Ok(Json(GetTableSchemaResponse {
-            schema: schema.as_ref().clone(),
-        })),
-        Err(e) => {
-            let status_code = get_backend_error_status_code(&e);
-            Err((
-                status_code,
-                Json(ErrorResponse {
-                    message: format!(
-                        "Failed to get table schema for table {database}.{table}: {e}"
-                    ),
-                }),
-            ))
-        }
+        .await;
+    if schema.is_err() {
+        let err = schema.err().unwrap();
+        let status_code = get_backend_error_status_code(&err);
+        return Err((
+            status_code,
+            Json(ErrorResponse {
+                message: format!("Failed to get table schema for {database}.{table}: {err}"),
+            }),
+        ));
     }
+
+    // Serialize with arrow-ipc.
+    let mut buf = Cursor::new(Vec::<u8>::new());
+    // Serialization is not expected to fail.
+    let schema = schema.unwrap();
+    let mut writer = StreamWriter::try_new(&mut buf, &schema).unwrap();
+    writer.finish().unwrap();
+    let serialized_schema = buf.into_inner();
+
+    Ok(Json(GetTableSchemaResponse { serialized_schema }))
 }
 
 /// Create snapshot endpoint
