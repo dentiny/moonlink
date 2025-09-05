@@ -189,15 +189,15 @@ impl JsonToMoonlinkRowConverter {
                         let child_value = match obj.get(child_name) {
                             Some(v) => v,
                             None => {
-                                if !child_field.is_nullable() {
-                                    return Err(JsonToMoonlinkRowError::MissingField(format!(
-                                        "{}.{}",
-                                        field.name(),
-                                        child_name
-                                    )));
+                                if child_field.is_nullable() {
+                                    values.push(RowValue::Null);
+                                    continue;
                                 }
-                                values.push(RowValue::Null);
-                                continue;
+                                return Err(JsonToMoonlinkRowError::MissingField(format!(
+                                    "{}.{}",
+                                    field.name(),
+                                    child_name
+                                )));
                             }
                         };
                         let converted =
