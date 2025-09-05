@@ -1,10 +1,11 @@
 use arrow_ipc::writer::StreamWriter;
 use axum::{
+    error_handling::HandleErrorLayer,
     extract::{Path, State},
     http::{Method, StatusCode},
-    response::Json,
+    response::{Json, Response},
     routing::{delete, get, post},
-    Router,
+    BoxError, Router,
 };
 use moonlink::StorageConfig;
 use moonlink_backend::{table_config::TableConfig, table_status::TableStatus};
@@ -19,8 +20,13 @@ use std::io::Cursor;
 use std::sync::Arc;
 use std::time::SystemTime;
 use tokio::sync::{mpsc, oneshot};
+use tower::timeout::TimeoutLayer;
+use tower::ServiceBuilder;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{debug, info};
+
+/// Default timeout for all REST API calls.
+const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// API state shared across handlers
 #[derive(Clone)]
@@ -238,6 +244,21 @@ fn get_backend_error_status_code(error: &moonlink_backend::Error) -> StatusCode 
 
 /// Create the router with all API endpoints    
 pub fn create_router(state: ApiState) -> Router {
+    let timeout_layer = ServiceBuilder::new()
+        .layer(HandleErrorLayer::new(|err: BoxError| async move {
+            if err.is::<tower::timeout::error::Elapsed>() {
+                return Response::builder()
+                    .status(StatusCode::REQUEST_TIMEOUT)
+                    .body::<String>("request timed out".into())
+                    .unwrap();
+            }
+            Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body("internal middleware error".into())
+                .unwrap()
+        }))
+        .layer(TimeoutLayer::new(DEFAULT_REST_TIMEOUT));
+
     Router::new()
         .route("/health", get(health_check))
         .route("/tables", get(list_tables))
@@ -257,6 +278,7 @@ pub fn create_router(state: ApiState) -> Router {
                 .allow_methods([Method::GET, Method::POST, Method::DELETE])
                 .allow_headers(Any),
         )
+        .layer(timeout_layer)
 }
 
 /// Health check endpoint
