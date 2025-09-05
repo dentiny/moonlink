@@ -1,6 +1,6 @@
 use crate::rest_ingest::event_request::{
-    EventRequest, FileEventOperation, FileEventRequest, IngestRequestPayload, RowEventOperation,
-    RowEventRequest, SnapshotRequest,
+    EventRequest, FileEventOperation, FileEventRequest, FlushRequest, IngestRequestPayload,
+    RowEventOperation, RowEventRequest, SnapshotRequest,
 };
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
 use crate::rest_ingest::rest_event::RestEvent;
@@ -112,6 +112,7 @@ impl RestSource {
             EventRequest::FileRequest(request) => self.process_file_request(request),
             EventRequest::RowRequest(request) => self.process_row_request(request),
             EventRequest::SnapshotRequest(request) => self.process_snapshot_request(request),
+            EventRequest::FlushRequest(request) => self.process_flush_request(request),
         }
     }
 
@@ -283,6 +284,20 @@ impl RestSource {
         let event = vec![RestEvent::Snapshot {
             src_table_id: *src_table_id,
             lsn: request.lsn,
+        }];
+        Ok(event)
+    }
+
+    /// Process a flush request.
+    fn process_flush_request(&self, request: &FlushRequest) -> Result<Vec<RestEvent>> {
+        let src_table_id = self
+            .src_table_name_to_src_id
+            .get(&request.src_table_name)
+            .ok_or_else(|| RestSourceError::UnknownTable(request.src_table_name.clone()))?;
+
+        // Generate flush request.
+        let event = vec![RestEvent::Flush {
+            src_table_id: *src_table_id,
         }];
         Ok(event)
     }

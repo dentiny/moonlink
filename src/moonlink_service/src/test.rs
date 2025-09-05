@@ -193,6 +193,16 @@ fn get_create_snapshot_payload(database: &str, table: &str, lsn: u64) -> serde_j
     snapshot_creation_payload
 }
 
+/// Util function to get table flush payload.
+fn get_flush_table_payload(database: &str, table: &str, lsn: u64) -> serde_json::Value {
+    let flush_table_payload = json!({
+        "database": database,
+        "table": table,
+        "lsn": lsn
+    });
+    flush_table_payload
+}
+
 /// Util function to create table via REST API.
 async fn create_table(client: &reqwest::Client, database: &str, table: &str, nested: bool) {
     // REST API doesn't allow duplicate source table name.
@@ -461,6 +471,23 @@ async fn test_optimize_table_on_data_mode() {
     run_optimize_table_test("data").await;
 }
 
+/// Util function to sync flush via REST API.
+async fn flush_table(client: &reqwest::Client, database: &str, table: &str, lsn: u64) {
+    let payload = get_flush_table_payload(database, table, lsn);
+    let crafted_src_table_name = format!("{database}.{table}");
+    let response = client
+        .post(format!("{REST_ADDR}/tables/{crafted_src_table_name}/flush"))
+        .header("content-type", "application/json")
+        .json(&payload)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.status().is_success(),
+        "Response status is {response:?}"
+    );
+}
+
 /// Util function to create snapshot via REST API.
 async fn create_snapshot(client: &reqwest::Client, database: &str, table: &str, lsn: u64) {
     let payload = get_create_snapshot_payload(database, table, lsn);
@@ -560,7 +587,8 @@ async fn test_create_snapshot() {
     let response: IngestResponse = response.json().await.unwrap();
     let lsn = response.lsn.unwrap();
 
-    // After all changes reflected at mooncake snapshot, trigger an iceberg snapshot.
+    // After all changes reflected at mooncake snapshot, flush table and trigger an iceberg snapshot.
+    flush_table(&client, DATABASE, TABLE, lsn).await;
     create_snapshot(&client, DATABASE, TABLE, lsn).await;
 
     let mut moonlink_stream = TcpStream::connect(MOONLINK_ADDR).await.unwrap();

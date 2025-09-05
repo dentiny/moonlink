@@ -14,8 +14,8 @@ pub use moonlink::ReadState;
 use moonlink::{MooncakeTableId, MoonlinkTableConfig};
 use moonlink::{ReadStateFilepathRemap, TableEventManager};
 pub use moonlink_connectors::rest_ingest::event_request::{
-    EventRequest, FileEventOperation, FileEventRequest, IngestRequestPayload, RowEventOperation,
-    RowEventRequest, SnapshotRequest,
+    EventRequest, FileEventOperation, FileEventRequest, FlushRequest, IngestRequestPayload,
+    RowEventOperation, RowEventRequest, SnapshotRequest,
 };
 pub use moonlink_connectors::rest_ingest::rest_event::RestEvent;
 pub use moonlink_connectors::rest_ingest::rest_source::RestSource;
@@ -363,7 +363,6 @@ impl MoonlinkBackend {
 
     /// Wait for the WAL flush LSN to reach the requested LSN. Note that WAL flush LSN will update
     /// up till the latest commit that has been persisted in to the WAL.
-    #[cfg(feature = "test-utils")]
     pub async fn wait_for_wal_flush(
         &self,
         database: String,

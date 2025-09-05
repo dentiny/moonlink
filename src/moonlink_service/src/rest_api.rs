@@ -9,8 +9,8 @@ use axum::{
 use moonlink::StorageConfig;
 use moonlink_backend::{table_config::TableConfig, table_status::TableStatus};
 use moonlink_backend::{
-    EventRequest, FileEventOperation, FileEventRequest, IngestRequestPayload, RowEventOperation,
-    RowEventRequest, SnapshotRequest, REST_API_URI,
+    EventRequest, FileEventOperation, FileEventRequest, FlushRequest, IngestRequestPayload,
+    RowEventOperation, RowEventRequest, SnapshotRequest, REST_API_URI,
 };
 use moonlink_connectors::rest_ingest::schema_builder::{build_arrow_schema, FieldSchema};
 use moonlink_error::ErrorStatus;
@@ -197,6 +197,20 @@ pub struct FileUploadResponse {
 }
 
 /// ====================
+/// Flush
+/// ====================
+///
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncFlushRequest {
+    pub database: String,
+    pub table: String,
+    pub lsn: u64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SyncFlushResponse {}
+
+/// ====================
 /// Health check
 /// ====================
 ///
@@ -235,6 +249,7 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/upload/{table}", post(upload_files))
         .route("/tables/{table}/optimize", post(optimize_table))
         .route("/tables/{table}/snapshot", post(create_snapshot))
+        .route("/tables/{table}/flush", post(flush_table))
         .with_state(state)
         .layer(
             CorsLayer::new()
@@ -553,6 +568,62 @@ async fn create_snapshot(
                 Json(ErrorResponse {
                     message: format!(
                         "Failed to create snapshot for table {} with ID {}.{}: {}",
+                        src_table_name, payload.database, payload.table, e
+                    ),
+                }),
+            ))
+        }
+    }
+}
+
+/// Flush table endpoint.
+async fn flush_table(
+    Path(src_table_name): Path<String>,
+    State(state): State<ApiState>,
+    Json(payload): Json<SyncFlushRequest>,
+) -> Result<Json<SyncFlushResponse>, (StatusCode, Json<ErrorResponse>)> {
+    debug!(
+        "Received flush table request for table {} with ID {}.{}",
+        src_table_name, &payload.database, &payload.table,
+    );
+
+    let (tx, mut rx) = mpsc::channel(1);
+    let flush_request = FlushRequest {
+        src_table_name: src_table_name.clone(),
+        lsn: payload.lsn,
+        tx,
+    };
+    let rest_event_request = EventRequest::FlushRequest(flush_request);
+    state
+        .backend
+        .send_event_request(rest_event_request)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    message: format!("Failed to process flush sync request: {e}"),
+                }),
+            )
+        })?;
+
+    // Block until flush sync event has been sent to moonlink table handler.
+    let _ = rx.recv().await;
+
+    // Now it's ensured all events before flush sync have been received by table handler, we could block wait flush completion.
+    match state
+        .backend
+        .wait_for_wal_flush(payload.database.clone(), payload.table.clone(), payload.lsn)
+        .await
+    {
+        Ok(_) => Ok(Json(SyncFlushResponse {})),
+        Err(e) => {
+            let status_code = get_backend_error_status_code(&e);
+            Err((
+                status_code,
+                Json(ErrorResponse {
+                    message: format!(
+                        "Failed to sync flush for table {} with ID {}.{}: {}",
                         src_table_name, payload.database, payload.table, e
                     ),
                 }),
