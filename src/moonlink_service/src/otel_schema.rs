@@ -339,7 +339,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_table_creation_and_ingestion() {
+    async fn test_gauge_table_creation_ingestion() {
         let table_temp_dir = tempdir().unwrap();
         let table_path = table_temp_dir.path().to_str().unwrap().to_string();
         let iceberg_table_config = IcebergTableConfig::default();
@@ -405,6 +405,97 @@ mod tests {
             }],
             "myscope",
             vec![kv_bool("scope_ok", true)],
+        );
+        let row_pbs = export_metrics_to_moonlink_rows(&req);
+        for cur_row_pb in row_pbs.into_iter() {
+            let cur_row = proto_to_moonlink_row(cur_row_pb).unwrap();
+            table.append(cur_row).unwrap();
+        }
+    }
+
+    #[tokio::test]
+    async fn test_sum_table_creation_ingestion() {
+        let table_temp_dir = tempdir().unwrap();
+        let table_path = table_temp_dir.path().to_str().unwrap().to_string();
+        let iceberg_table_config = IcebergTableConfig::default();
+        let table_config = MooncakeTableConfig::new(table_path.clone());
+        let wal_config = WalConfig::default();
+        let wal_manager = WalManager::new(&wal_config);
+        let object_storage_cache_config = ObjectStorageCacheConfig::new(
+            /*max_bytes=*/u64::MAX, 
+            /*cache_directory=*/table_path.clone(), 
+            /*optimize_local_filesystem=*/true);
+        let object_storage_cache = Arc::new(ObjectStorageCache::new(object_storage_cache_config));
+        let storage_config = StorageConfig::FileSystem { root_directory: table_path.clone(), atomic_write_dir: None };
+        let accessor_config = AccessorConfig {
+            storage_config,
+            timeout_config: FsTimeoutConfig::default(),
+            retry_config: FsRetryConfig::default(),
+            chaos_config: None,
+        };
+        let table_filesystem_accessor = Arc::new(FileSystemAccessor::new(accessor_config));
+
+        let mut table = MooncakeTable::new(
+            otlp_metrics_gsh_schema().as_ref().clone(),
+            /*name=*/"table".to_string(), 
+            /*table_id=*/0, 
+            /*base_path=*/std::path::PathBuf::from(table_path.clone()),
+            iceberg_table_config, 
+            table_config, 
+            wal_manager, 
+            object_storage_cache, 
+            table_filesystem_accessor,
+        ).await.unwrap();
+
+        let arr_any = any_array(vec![
+            AnyValue {
+                value: Some(any_value::Value::BoolValue(true)),
+            },
+            AnyValue {
+                value: Some(any_value::Value::DoubleValue(1.5)),
+            },
+        ]);
+        let kvlist_any = any_kvlist(vec![kv_str("x", "y"), kv_i64("n", 42)]);
+        let dp_attrs = vec![
+            KeyValue {
+                key: "arr".into(),
+                value: Some(arr_any),
+            },
+            KeyValue {
+                key: "m".into(),
+                value: Some(kvlist_any),
+            },
+        ];
+
+        let dp = NumberDataPoint {
+            attributes: dp_attrs,
+            start_time_unix_nano: 1000,
+            time_unix_nano: 2000,
+            value: Some(
+                opentelemetry_proto::tonic::metrics::v1::number_data_point::Value::AsInt(7),
+            ),
+            exemplars: vec![],
+            flags: 0,
+        };
+
+        let metric = Metric {
+            name: "requests".into(),
+            description: "".into(),
+            unit: "1".into(),
+            metadata: vec![],
+            data: Some(metric::Data::Sum(Sum {
+                data_points: vec![dp],
+                aggregation_temporality: AggregationTemporality::Cumulative as i32,
+                is_monotonic: true,
+            })),
+        };
+
+        let req = make_req_with_metrics(
+            vec![metric],
+            /*resource_attrs=*/ vec![],
+            /*resource_entity_refs=*/ vec![],
+            /*scope_name=*/ "svc",
+            /*scope_attrs=*/ vec![],
         );
         let row_pbs = export_metrics_to_moonlink_rows(&req);
         for cur_row_pb in row_pbs.into_iter() {
