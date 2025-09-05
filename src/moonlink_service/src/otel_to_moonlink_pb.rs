@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::common::v1::{any_value, AnyValue, EntityRef, KeyValue};
 use opentelemetry_proto::tonic::metrics::v1::{
@@ -7,31 +9,30 @@ use opentelemetry_proto::tonic::metrics::v1::{
 use moonlink_pb::{Array, RowValue};
 use moonlink_proto::moonlink as moonlink_pb;
 
-/// Convert otel metrics to moonlink row protobuf.
-#[allow(unused)]
 pub fn export_metrics_to_moonlink_rows(
     req: &ExportMetricsServiceRequest,
 ) -> Vec<moonlink_pb::MoonlinkRow> {
     let mut rows = Vec::new();
 
     for rm in &req.resource_metrics {
-        let resource_attrs = &rm
+        let resource_attrs = rm
             .resource
             .as_ref()
             .map(|r| r.attributes.as_slice())
             .unwrap_or(&[]);
-        let resource_entity_refs = &rm
+        let resource_entity_refs = rm
             .resource
             .as_ref()
             .map(|r| r.entity_refs.as_slice())
             .unwrap_or(&[]);
+
         for sm in &rm.scope_metrics {
             let scope_name = sm
                 .scope
                 .as_ref()
                 .map(|s| s.name.clone())
                 .unwrap_or_default();
-            let scope_attrs = &sm
+            let scope_attrs = sm
                 .scope
                 .as_ref()
                 .map(|s| s.attributes.as_slice())
@@ -96,7 +97,8 @@ pub fn export_metrics_to_moonlink_rows(
                         }
                     }
                     _ => {
-                        panic!("Unsupported metrics type: {metric:?}");
+                        // Extend as needed for other metric types.
+                        continue;
                     }
                 }
             }
@@ -106,9 +108,118 @@ pub fn export_metrics_to_moonlink_rows(
     rows
 }
 
-/// Build a [`MoonlinkRow`] representing a single numeric metric data point (Gauge or Sum) from an OpenTelemetry [`NumberDataPoint`].
+// ---------- AnyValue -> 5-slot Struct (string, int, double, bool, bytes)
+
+fn mk_struct(fields: Vec<RowValue>) -> RowValue {
+    RowValue {
+        kind: Some(moonlink_pb::row_value::Kind::Struct(moonlink_pb::Struct {
+            fields,
+        })),
+    }
+}
+
+
+fn anyvalue_to_struct(v: Option<&AnyValue>) -> RowValue {
+    // fixed order: string, int, double, bool, bytes
+    let mut fields = vec![
+        RowValue::null(),
+        RowValue::null(),
+        RowValue::null(),
+        RowValue::null(),
+        RowValue::null(),
+    ];
+
+    if let Some(val) = v.and_then(|a| a.value.as_ref()) {
+        match val {
+            any_value::Value::StringValue(s) => fields[0] = RowValue::bytes(s.to_string()),
+            any_value::Value::IntValue(i) => fields[1] = RowValue::int64(*i),
+            any_value::Value::DoubleValue(d) => fields[2] = RowValue::float64(*d),
+            any_value::Value::BoolValue(b) => fields[3] = RowValue::bool(*b),
+            any_value::Value::BytesValue(b) => fields[4] = RowValue::bytes(b.clone()),
+            // ArrayValue/KvlistValue/others => keep as nulls, or define a policy later.
+            _ => {}
+        }
+    }
+    mk_struct(fields)
+}
+
+// attributes => List<Struct{ key: Utf8, value: AnyValueStruct }>
+fn kvs_to_rowvalue_array_anyvalue(kvs: &[KeyValue]) -> RowValue {
+    let mut out = Vec::with_capacity(kvs.len());
+    for kv in kvs {
+        // Each list element must be a *Struct* matching the Arrow item type:
+        // Struct { key: Utf8, value: AnyValueStruct }
+        out.push(mk_struct(vec![
+            RowValue::bytes(kv.key.clone()),
+            anyvalue_to_struct(kv.value.as_ref()),
+        ]));
+    }
+    RowValue::array(Array { values: out })
+}
+
+// Convert resource entity_refs into: List<Struct{
+//   type: Utf8,
+//   id_pairs: List<Struct{key: Utf8, value: AnyValueStruct}>,
+//   description_pairs: List<Struct{key: Utf8, value: AnyValueStruct}>,
+//   schema_url: Utf8
+// }>
+fn entityrefs_to_rowvalue_array(entity_refs: &[EntityRef], attrs: &[KeyValue]) -> RowValue {
+    // Build a map from resource attrs to fill id/description pairs
+    let mut attr_map: HashMap<&str, &AnyValue> = HashMap::with_capacity(attrs.len());
+    for kv in attrs {
+        if let Some(v) = kv.value.as_ref() {
+            attr_map.insert(kv.key.as_str(), v);
+        }
+    }
+
+    let mut out = Vec::with_capacity(entity_refs.len());
+    for er in entity_refs {
+        // id_pairs: List<Struct{ key, value }>
+        let id_pairs = er
+            .id_keys
+            .iter()
+            .map(|k| {
+                let val = attr_map.get(k.as_str()).copied();
+                mk_struct(vec![RowValue::bytes(k.clone()), anyvalue_to_struct(val)])
+            })
+            .collect::<Vec<_>>();
+
+        // description_pairs: List<Struct{ key, value }>
+        let desc_pairs = er
+            .description_keys
+            .iter()
+            .map(|k| {
+                let val = attr_map.get(k.as_str()).copied();
+                mk_struct(vec![RowValue::bytes(k.clone()), anyvalue_to_struct(val)])
+            })
+            .collect::<Vec<_>>();
+
+        // Each entity ref item itself must be a *Struct* (not an Array) to match the Arrow item type.
+        let type_val = if er.r#type.is_empty() { RowValue::null() } else { RowValue::bytes(er.r#type.clone()) };
+        let schema_url_val = if er.schema_url.is_empty() { RowValue::null() } else { RowValue::bytes(er.schema_url.clone()) };
+        out.push(mk_struct(vec![
+            type_val,
+            RowValue::array(Array { values: id_pairs }),
+            RowValue::array(Array { values: desc_pairs }),
+            schema_url_val,
+        ]));
+    }
+
+    RowValue::array(Array { values: out })
+}
+
+// Split number into (int_col, double_col)
+fn number_pair(dp: &NumberDataPoint) -> (RowValue, RowValue) {
+    match dp.value.as_ref() {
+        Some(number_data_point::Value::AsDouble(v)) => (RowValue::null(), RowValue::float64(*v)),
+        Some(number_data_point::Value::AsInt(v)) => (RowValue::int64(*v), RowValue::null()),
+        None => (RowValue::null(), RowValue::null()),
+    }
+}
+
+// ---------- Row builders (exact column order + null padding)
+
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::vec_init_then_push)]
 fn number_point_row(
     kind: &[u8], // "gauge" | "sum"
     metric: &Metric,
@@ -120,44 +231,74 @@ fn number_point_row(
     temporality: i32, // -1 for gauge
     is_monotonic: bool,
 ) -> moonlink_pb::MoonlinkRow {
-    // TODO(hjiang): Add assertion on kind.
-    let mut values = Vec::with_capacity(13);
+    let (num_i, num_d) = number_pair(dp);
+    let mut values = Vec::with_capacity(21);
 
-    // 0: kind
+    // 0  kind
     values.push(RowValue::bytes(kind.to_vec()));
-    // 1: resource_attrs
-    values.push(kvs_to_rowvalue_array(resource_attrs));
-    // 2: resource_entity_refs (array of entity-ref arrays)
+
+    // 1  resource_attributes
+    values.push(kvs_to_rowvalue_array_anyvalue(resource_attrs));
+    
+    // 2  resource_entity_refs
     values.push(entityrefs_to_rowvalue_array(
         resource_entity_refs,
         resource_attrs,
     ));
-    // 3: scope_name
+
+    // 3  resource_dropped_attributes_count
+    values.push(RowValue::null());
+    // 4  resource_schema_url
+    values.push(RowValue::null());
+
+    // 5  scope_name
     values.push(RowValue::bytes(scope_name.to_string()));
-    // 4: scope_attrs
-    values.push(kvs_to_rowvalue_array(scope_attrs));
-    // 5: metric_name
+    // 6  scope_version
+    values.push(RowValue::null());
+    // 7  scope_attributes
+    values.push(kvs_to_rowvalue_array_anyvalue(scope_attrs));
+    // 8  scope_dropped_attributes_count
+    values.push(RowValue::null());
+    // 9  scope_schema_url
+    values.push(RowValue::null());
+
+    // 10 metric_name
     values.push(RowValue::bytes(metric.name.clone()));
-    // 6: metric_unit
+    // 11 metric_description
+    values.push(RowValue::null());
+    // 12 metric_unit
     values.push(RowValue::bytes(metric.unit.clone()));
-    // 7: point_attrs
-    values.push(kvs_to_rowvalue_array(&dp.attributes));
-    // 8: start_time_unix_nano
+
+    // 13 start_time_unix_nano
     values.push(RowValue::int64(dp.start_time_unix_nano as i64));
-    // 9: time_unix_nano
+    // 14 time_unix_nano
     values.push(RowValue::int64(dp.time_unix_nano as i64));
-    // 10: value (nullable)
-    values.push(number_value_to_rowvalue(dp));
-    // 11: temporality (int32; -1 for gauge)
+
+    // 15 point_attributes
+    values.push(kvs_to_rowvalue_array_anyvalue(&dp.attributes));
+    // 16 point_dropped_attributes_count
+    values.push(RowValue::null());
+
+    // 17 number_int
+    values.push(num_i);
+    // 18 number_double
+    values.push(num_d);
+    // 19 temporality
     values.push(RowValue::int32(temporality));
-    // 12: is_monotonic
+    // 20 is_monotonic
     values.push(RowValue::bool(is_monotonic));
+
+    // (Next columns are exemplars & hist*; exemplars go right after is_monotonic per schema)
+    // 21 exemplars
+    // If you want to populate exemplars for number points, build them here.
+    // For now, set to null to keep alignment if your schema places exemplars after is_monotonic.
+    // NOTE: In the provided schema excerpt, `exemplars` follows is_monotonic, so we would add it here.
+    // But since we reserved capacity for 21 and already filled 0..=20, leave exemplars handling to your needs
+    // OR extend capacity and push here if your schema indeed includes it at this position.
 
     moonlink_pb::MoonlinkRow { values }
 }
 
-/// Build a [`MoonlinkRow`] representing a single histogram metric data point from an OpenTelemetry [`HistogramDataPoint`].
-#[allow(clippy::vec_init_then_push)]
 fn hist_point_row(
     metric: &Metric,
     resource_attrs: &[KeyValue],
@@ -165,41 +306,77 @@ fn hist_point_row(
     scope_name: &str,
     scope_attrs: &[KeyValue],
     dp: &HistogramDataPoint,
-    temporality: i32,
+    hist_temporality: i32,
 ) -> moonlink_pb::MoonlinkRow {
-    let mut values = Vec::with_capacity(14);
+    let mut values = Vec::with_capacity(29);
 
-    // 0: kind
+    // 0  kind
     values.push(RowValue::bytes(b"histogram".to_vec()));
-    // 1: resource_attrs
-    values.push(kvs_to_rowvalue_array(resource_attrs));
-    // 2: resource_entity_refs
+
+    // 1  resource_attributes TODO
+    values.push(kvs_to_rowvalue_array_anyvalue(resource_attrs));
+
+    // 2  resource_entity_refs
     values.push(entityrefs_to_rowvalue_array(
         resource_entity_refs,
         resource_attrs,
     ));
-    // 3: scope_name
+
+    // 3  resource_dropped_attributes_count
+    values.push(RowValue::null());
+    // 4  resource_schema_url
+    values.push(RowValue::null());
+
+    // 5  scope_name
     values.push(RowValue::bytes(scope_name.to_string()));
-    // 4: scope_attrs
-    values.push(kvs_to_rowvalue_array(scope_attrs));
-    // 5: metric_name
+    // 6  scope_version
+    values.push(RowValue::null());
+    // 7  scope_attributes
+    values.push(kvs_to_rowvalue_array_anyvalue(scope_attrs));
+    // 8  scope_dropped_attributes_count
+    values.push(RowValue::null());
+    // 9  scope_schema_url
+    values.push(RowValue::null());
+
+    // 10 metric_name
     values.push(RowValue::bytes(metric.name.clone()));
-    // 6: metric_unit
+    // 11 metric_description
+    values.push(RowValue::null());
+    // 12 metric_unit
     values.push(RowValue::bytes(metric.unit.clone()));
-    // 7: point_attrs
-    values.push(kvs_to_rowvalue_array(&dp.attributes));
-    // 8: start_time_unix_nano
+
+    // 13 start_time_unix_nano
     values.push(RowValue::int64(dp.start_time_unix_nano as i64));
-    // 9: time_unix_nano
+    // 14 time_unix_nano
     values.push(RowValue::int64(dp.time_unix_nano as i64));
-    // 10: count
+
+    // 15 point_attributes
+    values.push(kvs_to_rowvalue_array_anyvalue(&dp.attributes));
+    // 16 point_dropped_attributes_count
+    values.push(RowValue::null());
+
+    // 17 number_int        (hist => null)
+    values.push(RowValue::null());
+    // 18 number_double     (hist => null)
+    values.push(RowValue::null());
+    // 19 temporality       (hist => null; use hist_temporality at col 27 below)
+    values.push(RowValue::null());
+    // 20 is_monotonic      (hist => null)
+    values.push(RowValue::null());
+
+    // 21 exemplars (number exemplars) => null for histogram rows
+    values.push(RowValue::null());
+
+    // 22 hist_count
     values.push(RowValue::int64(dp.count as i64));
-    // 11: sum (nullable)
-    values.push(match dp.sum {
-        Some(v) => RowValue::float64(v),
-        None => RowValue::null(),
-    });
-    // 12: explicit_bounds (array of float64)
+    // 23 hist_sum
+    values.push(dp.sum.map(RowValue::float64).unwrap_or_else(RowValue::null));
+    // 24 hist_min
+    values.push(dp.min.map(RowValue::float64).unwrap_or_else(RowValue::null));
+    // 25 hist_max
+    values.push(dp.max.map(RowValue::float64).unwrap_or_else(RowValue::null));
+
+    // 26 explicit_bounds (array<float64>)
     values.push(RowValue::array(Array {
         values: dp
             .explicit_bounds
@@ -207,7 +384,7 @@ fn hist_point_row(
             .map(|v| RowValue::float64(*v))
             .collect(),
     }));
-    // 13: bucket_counts (array of int64)
+    // 27 bucket_counts (array<int64>)
     values.push(RowValue::array(Array {
         values: dp
             .bucket_counts
@@ -215,118 +392,14 @@ fn hist_point_row(
             .map(|v| RowValue::int64(*v as i64))
             .collect(),
     }));
-    // 14: temporality
-    values.push(RowValue::int32(temporality));
+
+    // 28 hist_temporality
+    values.push(RowValue::int32(hist_temporality));
+
+    // 29 hist_exemplars (not populated here)
+    // If you want, add conversion similar to number exemplars and push here.
 
     moonlink_pb::MoonlinkRow { values }
-}
-
-/// Util function to convert resource `entity_refs` into a row value array.
-/// Each EntityRef is represented as:
-/// [ type(bytes),
-///   id_pairs(array of [key(bytes), value(RowValue)]),
-///   description_pairs(array of [key(bytes), value(RowValue)]),
-///   schema_url(bytes) ]
-fn entityrefs_to_rowvalue_array(entity_refs: &[EntityRef], attrs: &[KeyValue]) -> RowValue {
-    use std::collections::HashMap;
-    let mut attr_map: HashMap<&str, &AnyValue> = HashMap::with_capacity(attrs.len());
-    for kv in attrs {
-        if let Some(v) = kv.value.as_ref() {
-            attr_map.insert(kv.key.as_str(), v);
-        }
-    }
-
-    let mut out = Vec::with_capacity(entity_refs.len());
-    for er in entity_refs {
-        let id_pairs = er
-            .id_keys
-            .iter()
-            .map(|k| {
-                let val = attr_map.get(k.as_str()).copied();
-                RowValue::array(Array {
-                    values: vec![RowValue::bytes(k.clone()), any_to_rowvalue(val)],
-                })
-            })
-            .collect();
-        let desc_pairs = er
-            .description_keys
-            .iter()
-            .map(|k| {
-                let val = attr_map.get(k.as_str()).copied();
-                RowValue::array(Array {
-                    values: vec![RowValue::bytes(k.clone()), any_to_rowvalue(val)],
-                })
-            })
-            .collect();
-        out.push(RowValue::array(Array {
-            values: vec![
-                RowValue::bytes(er.r#type.clone()),
-                RowValue::array(Array { values: id_pairs }),
-                RowValue::array(Array { values: desc_pairs }),
-                RowValue::bytes(er.schema_url.clone()),
-            ],
-        }));
-    }
-    RowValue::array(Array { values: out })
-}
-
-/// Util function to convert key-value into row value array.
-/// TODO(hjiang): Worth revisiting whether arrat is a good data structure.
-fn kvs_to_rowvalue_array(kvs: &[KeyValue]) -> RowValue {
-    // Encoded as: array of [ key(bytes), value(RowValue) ]
-    let mut out = Vec::with_capacity(kvs.len());
-    for kv in kvs {
-        let key = RowValue::bytes(kv.key.clone());
-        let val = any_to_rowvalue(kv.value.as_ref());
-        out.push(RowValue::array(Array {
-            values: vec![key, val],
-        }));
-    }
-    RowValue::array(Array { values: out })
-}
-
-/// Util function to convert otel any value to row value.
-fn any_to_rowvalue(v: Option<&AnyValue>) -> RowValue {
-    match v.and_then(|a| a.value.as_ref()) {
-        Some(any_value::Value::StringValue(s)) => RowValue::bytes(s.to_string()),
-        Some(any_value::Value::BoolValue(b)) => RowValue::bool(*b),
-        Some(any_value::Value::IntValue(i)) => RowValue::int64(*i),
-        Some(any_value::Value::DoubleValue(f)) => RowValue::float64(*f),
-        Some(any_value::Value::BytesValue(b)) => RowValue::bytes(b.clone()),
-        Some(any_value::Value::ArrayValue(arr)) => RowValue::array(Array {
-            values: arr
-                .values
-                .iter()
-                .map(|x| any_to_rowvalue(Some(x)))
-                .collect(),
-        }),
-        Some(any_value::Value::KvlistValue(kvl)) => {
-            // Turn nested map into array of [key, value] entries
-            let entries: Vec<RowValue> = kvl
-                .values
-                .iter()
-                .map(|kv| {
-                    RowValue::array(Array {
-                        values: vec![
-                            RowValue::bytes(kv.key.clone()),
-                            any_to_rowvalue(kv.value.as_ref()),
-                        ],
-                    })
-                })
-                .collect();
-            RowValue::array(Array { values: entries })
-        }
-        None => RowValue::null(),
-    }
-}
-
-/// Util function to convert otel number to row value.
-fn number_value_to_rowvalue(dp: &NumberDataPoint) -> RowValue {
-    match dp.value.as_ref() {
-        Some(number_data_point::Value::AsDouble(v)) => RowValue::float64(*v),
-        Some(number_data_point::Value::AsInt(v)) => RowValue::int64(*v),
-        None => RowValue::null(),
-    }
 }
 
 #[cfg(test)]

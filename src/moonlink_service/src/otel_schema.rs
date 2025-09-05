@@ -1,7 +1,9 @@
 use std::{collections::HashMap, sync::Arc};
 use arrow_schema::{DataType, Field, Fields, Schema, SchemaRef};
 
-// ------------------- ID helpers -------------------
+// ============================
+// Parquet field-id aware Arrow schema builders
+// ============================
 
 fn next_md(ids: &mut i32) -> HashMap<String, String> {
     let mut md = HashMap::new();
@@ -14,78 +16,152 @@ fn field_with_id(name: &str, dt: DataType, nullable: bool, ids: &mut i32) -> Fie
     Field::new(name, dt, nullable).with_metadata(next_md(ids))
 }
 
-// List<Item> where the *item field* is also tagged with an id.
+// List<Item> where the *item* field is also tagged with an id.
 fn list_of_with_id(name: &str, dt: DataType, nullable: bool, ids: &mut i32) -> DataType {
     let item = field_with_id(name, dt, nullable, ids);
     DataType::List(Arc::new(item))
 }
 
-// ------------------- Your builders, now “id-aware” -------------------
-
+// ---- AnyValue Struct: {string_value?, int_value?, double_value?, bool_value?, bytes_value?}
 fn any_value_struct(ids: &mut i32) -> DataType {
     DataType::Struct(Fields::from(vec![
-        field_with_id("string_value", DataType::Utf8,   true, ids),
-        field_with_id("int_value",    DataType::Int64,  true, ids),
-        field_with_id("double_value", DataType::Float64,true, ids),
-        field_with_id("bool_value",   DataType::Boolean,true, ids),
-        field_with_id("bytes_value",  DataType::Binary, true, ids),
+        field_with_id("string_value", DataType::Utf8, true, ids),
+        field_with_id("int_value", DataType::Int64, true, ids),
+        field_with_id("double_value", DataType::Float64, true, ids),
+        field_with_id("bool_value", DataType::Boolean, true, ids),
+        field_with_id("bytes_value", DataType::Binary, true, ids),
     ]))
 }
 
-/// attributes: List<Struct<key Utf8, value AnyValue>>
+/// attributes: List<Struct{ key: Utf8, value: AnyValueStruct }>
 fn attributes_field(name: &str, ids: &mut i32) -> Field {
     let kv_struct = DataType::Struct(Fields::from(vec![
-        field_with_id("key",   DataType::Utf8, false, ids),
-        field_with_id("value", any_value_struct(ids),  true,  ids),
+        field_with_id("key", DataType::Utf8, false, ids),
+        field_with_id("value", any_value_struct(ids), true, ids),
     ]));
-    field_with_id(name, list_of_with_id("item", kv_struct, true, ids), true, ids)
+    field_with_id(
+        name,
+        list_of_with_id("item", kv_struct, true, ids),
+        true,
+        ids,
+    )
 }
 
-/// Exemplar struct (int or double value)
+/// kv_pairs: List<Struct{ key: Utf8, value: AnyValueStruct }>
+fn kv_pairs_field(name: &str, ids: &mut i32) -> Field {
+    let kv_struct = DataType::Struct(Fields::from(vec![
+        field_with_id("key", DataType::Utf8, false, ids),
+        field_with_id("value", any_value_struct(ids), true, ids),
+    ]));
+    field_with_id(
+        name,
+        list_of_with_id("item", kv_struct, true, ids),
+        true,
+        ids,
+    )
+}
+
+/// One EntityRef: { type: Utf8, id_pairs: List<KV>, description_pairs: List<KV>, schema_url: Utf8 }
+fn entity_ref_struct(ids: &mut i32) -> DataType {
+    DataType::Struct(Fields::from(vec![
+        field_with_id("type", DataType::Utf8, true, ids),
+        // Build fresh kv_pairs (assign unique parquet field ids)
+        kv_pairs_field("id_pairs", ids).clone(),
+        kv_pairs_field("description_pairs", ids).clone(),
+        field_with_id("schema_url", DataType::Utf8, true, ids),
+    ]))
+}
+
+/// resource_entity_refs: List<entity_ref_struct>
+fn entity_refs_field(ids: &mut i32) -> Field {
+    field_with_id(
+        "resource_entity_refs",
+        list_of_with_id("item", entity_ref_struct(ids), true, ids),
+        true,
+        ids,
+    )
+}
+
+/// Exemplar struct (int or double value) + filtered_attributes (as attributes-field)
 fn exemplar_struct(ids: &mut i32) -> DataType {
     DataType::Struct(Fields::from(vec![
-        field_with_id("time_unix_nano", DataType::Int64,         false, ids),
-        field_with_id("as_int",         DataType::Int64,          true,  ids),
-        field_with_id("as_double",      DataType::Float64,        true,  ids),
-        field_with_id("trace_id",       DataType::FixedSizeBinary(16), true, ids),
-        field_with_id("span_id",        DataType::FixedSizeBinary(8),  true, ids),
+        field_with_id("time_unix_nano", DataType::Int64, false, ids),
+        field_with_id("as_int", DataType::Int64, true, ids),
+        field_with_id("as_double", DataType::Float64, true, ids),
+        field_with_id("trace_id", DataType::FixedSizeBinary(16), true, ids),
+        field_with_id("span_id", DataType::FixedSizeBinary(8), true, ids),
         attributes_field("filtered_attributes", ids),
     ]))
 }
 
 fn common_metric_fields(ids: &mut i32) -> Vec<Field> {
     vec![
+        // 0  kind
         field_with_id("kind", DataType::Utf8, false, ids),
 
+        // 1  resource_attributes
+        // TODO: resource_attributes
         attributes_field("resource_attributes", ids),
-        field_with_id("resource_dropped_attributes_count", DataType::Int64, true, ids),
+
+        // 2  resource_entity_refs
+        // TODO: entity_refs_field
+        entity_refs_field(ids), // <--- NEW at column index 2
+
+        // 3  resource_dropped_attributes_count
+        field_with_id(
+            "resource_dropped_attributes_count",
+            DataType::Int64,
+            true,
+            ids,
+        ),
+        // 4  resource_schema_url
         field_with_id("resource_schema_url", DataType::Utf8, true, ids),
 
+        // 5  scope_name
         field_with_id("scope_name", DataType::Utf8, true, ids),
+
+        // 6  scope_version
         field_with_id("scope_version", DataType::Utf8, true, ids),
+
+        // 7  scope_attributes
         attributes_field("scope_attributes", ids),
+
+        // 8  scope_dropped_attributes_count
         field_with_id("scope_dropped_attributes_count", DataType::Int64, true, ids),
+
+        // 9  scope_schema_url
         field_with_id("scope_schema_url", DataType::Utf8, true, ids),
 
+        // 10 metric_name
         field_with_id("metric_name", DataType::Utf8, false, ids),
+
+        // 11 metric_description
         field_with_id("metric_description", DataType::Utf8, true, ids),
+
+        // 12 metric_unit
         field_with_id("metric_unit", DataType::Utf8, true, ids),
 
+        // 13 start_time_unix_nano
         field_with_id("start_time_unix_nano", DataType::Int64, true, ids),
+
+        // 14 time_unix_nano
         field_with_id("time_unix_nano", DataType::Int64, false, ids),
 
+        // 15 point_attributes
         attributes_field("point_attributes", ids),
+
+        // 16 point_dropped_attributes_count
         field_with_id("point_dropped_attributes_count", DataType::Int64, true, ids),
     ]
 }
 
 fn number_point_fields(ids: &mut i32) -> Vec<Field> {
     vec![
-        field_with_id("number_int",    DataType::Int64,   true,  ids),
-        field_with_id("number_double", DataType::Float64, true,  ids),
+        field_with_id("number_int", DataType::Int64, true, ids),
+        field_with_id("number_double", DataType::Float64, true, ids),
 
-        field_with_id("temporality",   DataType::Int32,   true,  ids),
-        field_with_id("is_monotonic",  DataType::Boolean, true,  ids),
+        field_with_id("temporality", DataType::Int32, true, ids),
+        field_with_id("is_monotonic", DataType::Boolean, true, ids),
 
         field_with_id(
             "exemplars",
@@ -98,13 +174,23 @@ fn number_point_fields(ids: &mut i32) -> Vec<Field> {
 
 fn histogram_point_fields(ids: &mut i32) -> Vec<Field> {
     vec![
-        field_with_id("hist_count", DataType::Int64,  true, ids),
-        field_with_id("hist_sum",   DataType::Float64, true, ids),
-        field_with_id("hist_min",   DataType::Float64, true, ids),
-        field_with_id("hist_max",   DataType::Float64, true, ids),
+        field_with_id("hist_count", DataType::Int64, true, ids),
+        field_with_id("hist_sum", DataType::Float64, true, ids),
+        field_with_id("hist_min", DataType::Float64, true, ids),
+        field_with_id("hist_max", DataType::Float64, true, ids),
 
-        field_with_id("explicit_bounds", list_of_with_id("item", DataType::Float64, true, ids), true, ids),
-        field_with_id("bucket_counts",   list_of_with_id("item", DataType::Int64,  true, ids), true, ids),
+        field_with_id(
+            "explicit_bounds",
+            list_of_with_id("item", DataType::Float64, true, ids),
+            true,
+            ids,
+        ),
+        field_with_id(
+            "bucket_counts",
+            list_of_with_id("item", DataType::Int64, true, ids),
+            true,
+            ids,
+        ),
 
         field_with_id("hist_temporality", DataType::Int32, true, ids),
 
@@ -330,3 +416,128 @@ mod tests {
         }
     }
 }
+
+/*
+[
+  "gauge",
+  [["res_k", "res_v"]],
+  ["service", [["res_k", "res_v"]], [], ""],
+  "myscope",
+  [["scope_ok", true]],
+  "latency",
+  "ms",
+  [["dp_k", "dp_v"]],
+  11,
+  22,
+  3.141592653589793,
+  -1,
+  false
+]
+*/
+
+/*
+
+Schema
+├─ kind: Utf8 (required) [fid=1]
+
+├─ resource_attributes: List<item: Struct> (nullable) [fid=10]
+│  └─ item: Struct (nullable) [fid=10]
+│     ├─ key: Utf8 (required) [fid=2]
+│     └─ value: Struct (nullable) [fid=8]
+│        ├─ string_value: Utf8 (nullable) [fid=3]
+│        ├─ int_value: Int64 (nullable) [fid=4]
+│        ├─ double_value: Float64 (nullable) [fid=5]
+│        ├─ bool_value: Boolean (nullable) [fid=6]
+│        └─ bytes_value: Binary (nullable) [fid=7]
+
+├─ resource_dropped_attributes_count: Int64 (nullable) [fid=11]
+├─ resource_schema_url: Utf8 (nullable) [fid=12]
+
+├─ scope_name: Utf8 (nullable) [fid=13]
+├─ scope_version: Utf8 (nullable) [fid=14]
+
+├─ scope_attributes: List<item: Struct> (nullable) [fid=23]
+│  └─ item: Struct (nullable) [fid=22]
+│     ├─ key: Utf8 (required) [fid=15]
+│     └─ value: Struct (nullable) [fid=21]
+│        ├─ string_value: Utf8 (nullable) [fid=16]
+│        ├─ int_value: Int64 (nullable) [fid=17]
+│        ├─ double_value: Float64 (nullable) [fid=18]
+│        ├─ bool_value: Boolean (nullable) [fid=19]
+│        └─ bytes_value: Binary (nullable) [fid=20]
+
+├─ scope_dropped_attributes_count: Int64 (nullable) [fid=24]
+├─ scope_schema_url: Utf8 (nullable) [fid=25]
+
+├─ metric_name: Utf8 (required) [fid=26]
+├─ metric_description: Utf8 (nullable) [fid=27]
+├─ metric_unit: Utf8 (nullable) [fid=28]
+
+├─ start_time_unix_nano: Int64 (nullable) [fid=29]
+├─ time_unix_nano: Int64 (required) [fid=30]
+
+├─ point_attributes: List<item: Struct> (nullable) [fid=39]
+│  └─ item: Struct (nullable) [fid=38]
+│     ├─ key: Utf8 (required) [fid=31]
+│     └─ value: Struct (nullable) [fid=37]
+│        ├─ string_value: Utf8 (nullable) [fid=32]
+│        ├─ int_value: Int64 (nullable) [fid=33]
+│        ├─ double_value: Float64 (nullable) [fid=34]
+│        ├─ bool_value: Boolean (nullable) [fid=35]
+│        └─ bytes_value: Binary (nullable) [fid=36]
+
+├─ point_dropped_attributes_count: Int64 (nullable) [fid=40]
+
+├─ number_int: Int64 (nullable) [fid=41]
+├─ number_double: Float64 (nullable) [fid=42]
+├─ temporality: Int32 (nullable) [fid=43]
+├─ is_monotonic: Boolean (nullable) [fid=44]
+
+├─ exemplars: List<item: Struct> (nullable) [fid=60]
+│  └─ item: Struct (nullable) [fid=59]
+│     ├─ time_unix_nano: Int64 (required) [fid=45]
+│     ├─ as_int: Int64 (nullable) [fid=46]
+│     ├─ as_double: Float64 (nullable) [fid=47]
+│     ├─ trace_id: FixedSizeBinary(16) (nullable) [fid=48]
+│     ├─ span_id: FixedSizeBinary(8) (nullable) [fid=49]
+│     └─ filtered_attributes: List<item: Struct> (nullable) [fid=58]
+│        └─ item: Struct (nullable) [fid=57]
+│           ├─ key: Utf8 (required) [fid=50]
+│           └─ value: Struct (nullable) [fid=56]
+│              ├─ string_value: Utf8 (nullable) [fid=51]
+│              ├─ int_value: Int64 (nullable) [fid=52]
+│              ├─ double_value: Float64 (nullable) [fid=53]
+│              ├─ bool_value: Boolean (nullable) [fid=54]
+│              └─ bytes_value: Binary (nullable) [fid=55]
+
+├─ hist_count: Int64 (nullable) [fid=61]
+├─ hist_sum: Float64 (nullable) [fid=62]
+├─ hist_min: Float64 (nullable) [fid=63]
+├─ hist_max: Float64 (nullable) [fid=64]
+
+├─ explicit_bounds: List<Float64> (nullable) [fid=66]
+│  └─ item: Float64 (nullable) [fid=65]
+
+├─ bucket_counts: List<Int64> (nullable) [fid=68]
+│  └─ item: Int64 (nullable) [fid=67]
+
+├─ hist_temporality: Int32 (nullable) [fid=69]
+
+├─ hist_exemplars: List<item: Struct> (nullable) [fid=85]
+│  └─ item: Struct (nullable) [fid=84]
+│     ├─ time_unix_nano: Int64 (required) [fid=70]
+│     ├─ as_int: Int64 (nullable) [fid=71]
+│     ├─ as_double: Float64 (nullable) [fid=72]
+│     ├─ trace_id: FixedSizeBinary(16) (nullable) [fid=73]
+│     ├─ span_id: FixedSizeBinary(8) (nullable) [fid=74]
+│     └─ filtered_attributes: List<item: Struct> (nullable) [fid=83]
+│        └─ item: Struct (nullable) [fid=82]
+│           ├─ key: Utf8 (required) [fid=75]
+│           └─ value: Struct (nullable) [fid=81]
+│              ├─ string_value: Utf8 (nullable) [fid=76]
+│              ├─ int_value: Int64 (nullable) [fid=77]
+│              ├─ double_value: Float64 (nullable) [fid=78]
+│              ├─ bool_value: Boolean (nullable) [fid=79]
+│              └─ bytes_value: Binary (nullable) [fid=80]
+
+*/
