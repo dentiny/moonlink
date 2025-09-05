@@ -147,9 +147,6 @@ impl ColumnStoreBuffer {
         &mut self,
         row: MoonlinkRow,
     ) -> Result<(u64, usize, Option<(u64, Arc<RecordBatch>)>)> {
-
-        println!("\n\nrow = {:?}", row);
-
         let mut new_batch: Option<(u64, Arc<RecordBatch>)> = None;
         // Check if we need to finalize the current batch
         if self.current_row_count >= self.max_rows_per_buffer {
@@ -157,7 +154,6 @@ impl ColumnStoreBuffer {
         }
 
         for (idx, cell) in row.values.iter().enumerate() {
-            println!("idx = {}, cell = {:?}", idx, cell);
             self.current_batch_builder[idx].append_value(cell)?;
         }
         self.current_row_count += 1;

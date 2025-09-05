@@ -310,32 +310,32 @@ fn hist_point_row(
 ) -> moonlink_pb::MoonlinkRow {
     let mut values = Vec::with_capacity(29);
 
-    // 0  kind
+    // 0 kind
     values.push(RowValue::bytes(b"histogram".to_vec()));
 
-    // 1  resource_attributes TODO
+    // 1 resource_attributes TODO
     values.push(kvs_to_rowvalue_array_anyvalue(resource_attrs));
 
-    // 2  resource_entity_refs
+    // 2 resource_entity_refs
     values.push(entityrefs_to_rowvalue_array(
         resource_entity_refs,
         resource_attrs,
     ));
 
-    // 3  resource_dropped_attributes_count
+    // 3 resource_dropped_attributes_count
     values.push(RowValue::null());
-    // 4  resource_schema_url
+    // 4 resource_schema_url
     values.push(RowValue::null());
 
-    // 5  scope_name
+    // 5 scope_name
     values.push(RowValue::bytes(scope_name.to_string()));
-    // 6  scope_version
+    // 6 scope_version
     values.push(RowValue::null());
-    // 7  scope_attributes
+    // 7 scope_attributes
     values.push(kvs_to_rowvalue_array_anyvalue(scope_attrs));
-    // 8  scope_dropped_attributes_count
+    // 8 scope_dropped_attributes_count
     values.push(RowValue::null());
-    // 9  scope_schema_url
+    // 9 scope_schema_url
     values.push(RowValue::null());
 
     // 10 metric_name
@@ -384,6 +384,7 @@ fn hist_point_row(
             .map(|v| RowValue::float64(*v))
             .collect(),
     }));
+
     // 27 bucket_counts (array<int64>)
     values.push(RowValue::array(Array {
         values: dp
@@ -396,16 +397,13 @@ fn hist_point_row(
     // 28 hist_temporality
     values.push(RowValue::int32(hist_temporality));
 
-    // 29 hist_exemplars (not populated here)
-    // If you want, add conversion similar to number exemplars and push here.
-
     moonlink_pb::MoonlinkRow { values }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use moonlink_pb::{row_value, Array, RowValue};
+    use moonlink_pb::{row_value, Array, RowValue, Struct as MlStruct};
     use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
     use opentelemetry_proto::tonic::common::v1::{
         any_value, AnyValue, EntityRef, InstrumentationScope, KeyValue,
@@ -415,6 +413,8 @@ mod tests {
         NumberDataPoint, ResourceMetrics, ScopeMetrics, Sum,
     };
     use opentelemetry_proto::tonic::resource::v1::Resource;
+
+    // ---------- Small builders ----------
 
     fn kv_str(key: &str, val: &str) -> KeyValue {
         KeyValue {
@@ -454,6 +454,38 @@ mod tests {
             )),
         }
     }
+
+    fn make_req_with_metrics(
+        metrics: Vec<Metric>,
+        resource_attrs: Vec<KeyValue>,
+        resource_entity_refs: Vec<EntityRef>,
+        scope_name: &str,
+        scope_attrs: Vec<KeyValue>,
+    ) -> ExportMetricsServiceRequest {
+        ExportMetricsServiceRequest {
+            resource_metrics: vec![ResourceMetrics {
+                resource: Some(Resource {
+                    attributes: resource_attrs,
+                    dropped_attributes_count: 0,
+                    entity_refs: resource_entity_refs,
+                }),
+                scope_metrics: vec![ScopeMetrics {
+                    scope: Some(InstrumentationScope {
+                        name: scope_name.to_string(),
+                        version: "".into(),
+                        attributes: scope_attrs,
+                        dropped_attributes_count: 0,
+                    }),
+                    metrics,
+                    schema_url: "".into(),
+                }],
+                schema_url: "".into(),
+            }],
+        }
+    }
+
+    // ---------- RowValue readers ----------
+
     fn as_bytes(rv: &RowValue) -> Option<Vec<u8>> {
         match rv.kind.as_ref()? {
             row_value::Kind::Bytes(b) => Some(b.clone().to_vec()),
@@ -490,38 +522,46 @@ mod tests {
             _ => None,
         }
     }
+    fn as_struct(rv: &RowValue) -> Option<&MlStruct> {
+        match rv.kind.as_ref()? {
+            row_value::Kind::Struct(s) => Some(s),
+            _ => None,
+        }
+    }
     fn is_null(rv: &RowValue) -> bool {
         matches!(rv.kind, Some(row_value::Kind::Null(_)))
     }
 
-    fn make_req_with_metrics(
-        metrics: Vec<Metric>,
-        resource_attrs: Vec<KeyValue>,
-        resource_entity_refs: Vec<EntityRef>,
-        scope_name: &str,
-        scope_attrs: Vec<KeyValue>,
-    ) -> ExportMetricsServiceRequest {
-        ExportMetricsServiceRequest {
-            resource_metrics: vec![ResourceMetrics {
-                resource: Some(Resource {
-                    attributes: resource_attrs,
-                    dropped_attributes_count: 0,
-                    entity_refs: resource_entity_refs,
-                }),
-                scope_metrics: vec![ScopeMetrics {
-                    scope: Some(InstrumentationScope {
-                        name: scope_name.to_string(),
-                        version: "".into(),
-                        attributes: scope_attrs,
-                        dropped_attributes_count: 0,
-                    }),
-                    metrics,
-                    schema_url: "".into(),
-                }],
-                schema_url: "".into(),
-            }],
+    // ---------- 5-slot AnyValueStruct helpers ----------
+    // Layout: [0] string, [1] int, [2] double, [3] bool, [4] bytes
+    fn any_slots(rv: &RowValue) -> Option<&[RowValue]> {
+        Some(&as_struct(rv)?.fields)
+    }
+    fn any_is_string_bytes(rv: &RowValue, expected: &[u8]) -> bool {
+        any_slots(rv)
+            .and_then(|f| f.get(0))
+            .and_then(|s| as_bytes(s))
+            .map(|b| b == expected)
+            .unwrap_or(false)
+    }
+    fn any_get_i64(rv: &RowValue) -> Option<i64> {
+        any_slots(rv).and_then(|f| f.get(1)).and_then(as_i64)
+    }
+    fn any_get_f64(rv: &RowValue) -> Option<f64> {
+        any_slots(rv).and_then(|f| f.get(2)).and_then(as_f64)
+    }
+    fn any_get_bool(rv: &RowValue) -> Option<bool> {
+        any_slots(rv).and_then(|f| f.get(3)).and_then(as_bool)
+    }
+    fn any_all_null(rv: &RowValue) -> bool {
+        if let Some(fs) = any_slots(rv) {
+            fs.iter().all(is_null)
+        } else {
+            false
         }
     }
+
+    // ---------- Tests ----------
 
     #[test]
     fn test_gauge_number_point_with_entity_refs() {
@@ -564,58 +604,64 @@ mod tests {
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 1);
         let r = &rows[0].values;
-        assert_eq!(r.len(), 13);
+        assert_eq!(r.len(), 21, "number row should have 21 columns (0..=20)");
 
-        // Columns (after adding entity_refs):
-        // 0 kind, 1 resource_attrs, 2 resource_entity_refs,
-        // 3 scope_name, 4 scope_attrs,
-        // 5 metric_name, 6 unit,
-        // 7 point_attrs, 8 start, 9 time, 10 value,
-        // 11 temporality (-1), 12 is_monotonic(false)
+        // Indices per new layout:
+        // 0 kind, 1 res_attrs, 2 entity_refs, 3 res_drop, 4 res_schema_url,
+        // 5 scope_name, 6 scope_version, 7 scope_attrs, 8 scope_drop, 9 scope_schema_url,
+        // 10 metric_name, 11 metric_desc, 12 metric_unit,
+        // 13 start, 14 time, 15 point_attrs, 16 point_drop,
+        // 17 number_int, 18 number_double, 19 temporality, 20 is_monotonic
         assert_eq!(as_bytes(&r[0]).unwrap(), b"gauge".to_vec());
 
-        // resource attrs -> array of [key, val] entries
+        // resource attrs -> Array<Struct{key, any_struct}>
         let res_attrs = as_array(&r[1]).unwrap();
         assert_eq!(res_attrs.values.len(), 1);
-        let entry = as_array(&res_attrs.values[0]).unwrap();
-        assert_eq!(as_bytes(&entry.values[0]).unwrap(), b"res_k".to_vec());
-        assert_eq!(as_bytes(&entry.values[1]).unwrap(), b"res_v".to_vec());
+        let entry = as_struct(&res_attrs.values[0]).unwrap();
+        assert_eq!(as_bytes(&entry.fields[0]).unwrap(), b"res_k".to_vec());
+        assert!(any_is_string_bytes(&entry.fields[1], b"res_v"));
 
-        // entity_refs -> one ref: ["service", id_pairs([[res_k, res_v]]), desc_pairs([]), schema_url("")]
+        // entity_refs -> Array<Struct{type, id_pairs, desc_pairs, schema_url}>
         let ers = as_array(&r[2]).unwrap();
         assert_eq!(ers.values.len(), 1);
-        let er0 = as_array(&ers.values[0]).unwrap();
-        assert_eq!(as_bytes(&er0.values[0]).unwrap(), b"service".to_vec());
-        let id_pairs = as_array(&er0.values[1]).unwrap();
+        let er0 = as_struct(&ers.values[0]).unwrap();
+        assert_eq!(as_bytes(&er0.fields[0]).unwrap(), b"service".to_vec());
+
+        // id_pairs: Array<Struct{key, any_struct}>
+        let id_pairs = as_array(&er0.fields[1]).unwrap();
         assert_eq!(id_pairs.values.len(), 1);
-        let id0 = as_array(&id_pairs.values[0]).unwrap();
-        assert_eq!(as_bytes(&id0.values[0]).unwrap(), b"res_k".to_vec());
-        assert_eq!(as_bytes(&id0.values[1]).unwrap(), b"res_v".to_vec());
+        let id0 = as_struct(&id_pairs.values[0]).unwrap();
+        assert_eq!(as_bytes(&id0.fields[0]).unwrap(), b"res_k".to_vec());
+        assert!(any_is_string_bytes(&id0.fields[1], b"res_v"));
 
-        assert_eq!(as_bytes(&r[3]).unwrap(), b"myscope".to_vec());
-        let scope_attrs = as_array(&r[4]).unwrap();
+        // scope
+        assert_eq!(as_bytes(&r[5]).unwrap(), b"myscope".to_vec());
+        let scope_attrs = as_array(&r[7]).unwrap();
         assert_eq!(scope_attrs.values.len(), 1);
-        let sa0 = as_array(&scope_attrs.values[0]).unwrap();
-        assert_eq!(as_bytes(&sa0.values[0]).unwrap(), b"scope_ok".to_vec());
-        assert!(as_bool(&sa0.values[1]).unwrap());
+        let sa0 = as_struct(&scope_attrs.values[0]).unwrap();
+        assert_eq!(as_bytes(&sa0.fields[0]).unwrap(), b"scope_ok".to_vec());
+        assert_eq!(any_get_bool(&sa0.fields[1]).unwrap(), true);
 
-        assert_eq!(as_bytes(&r[5]).unwrap(), b"latency".to_vec());
-        assert_eq!(as_bytes(&r[6]).unwrap(), b"ms".to_vec());
+        // metric
+        assert_eq!(as_bytes(&r[10]).unwrap(), b"latency".to_vec());
+        assert_eq!(as_bytes(&r[12]).unwrap(), b"ms".to_vec());
 
-        let point_attrs = as_array(&r[7]).unwrap();
-        let pa0 = as_array(&point_attrs.values[0]).unwrap();
-        assert_eq!(as_bytes(&pa0.values[0]).unwrap(), b"dp_k".to_vec());
-        assert_eq!(as_bytes(&pa0.values[1]).unwrap(), b"dp_v".to_vec());
+        // point
+        let point_attrs = as_array(&r[15]).unwrap();
+        let pa0 = as_struct(&point_attrs.values[0]).unwrap();
+        assert_eq!(as_bytes(&pa0.fields[0]).unwrap(), b"dp_k".to_vec());
+        assert!(any_is_string_bytes(&pa0.fields[1], b"dp_v"));
 
-        assert_eq!(as_i64(&r[8]).unwrap(), 11);
-        assert_eq!(as_i64(&r[9]).unwrap(), 22);
-        assert!((as_f64(&r[10]).unwrap() - std::f64::consts::PI).abs() < 1e-9);
-        assert_eq!(as_i32(&r[11]).unwrap(), -1);
-        assert!(!as_bool(&r[12]).unwrap());
+        assert_eq!(as_i64(&r[13]).unwrap(), 11);
+        assert_eq!(as_i64(&r[14]).unwrap(), 22);
+        assert!((as_f64(&r[18]).unwrap() - std::f64::consts::PI).abs() < 1e-9); // number_double
+        assert_eq!(as_i32(&r[19]).unwrap(), -1); // temporality
+        assert_eq!(as_bool(&r[20]).unwrap(), false); // is_monotonic
     }
 
     #[test]
     fn test_sum_number_point_int_and_nested_attrs() {
+        // These nested AnyValue kinds are currently encoded as an AnyValueStruct with all-null slots.
         let arr_any = any_array(vec![
             AnyValue {
                 value: Some(any_value::Value::BoolValue(true)),
@@ -669,47 +715,43 @@ mod tests {
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 1);
         let r = &rows[0].values;
-        assert_eq!(r.len(), 13);
+        assert_eq!(r.len(), 21);
 
         assert_eq!(as_bytes(&r[0]).unwrap(), b"sum".to_vec());
-        let res_attrs = as_array(&r[1]).unwrap();
-        assert!(res_attrs.values.is_empty());
-        // r[2] is entity_refs (empty)
-        assert_eq!(as_bytes(&r[3]).unwrap(), b"svc".to_vec());
-        assert_eq!(as_bytes(&r[5]).unwrap(), b"requests".to_vec());
-        assert_eq!(as_bytes(&r[6]).unwrap(), b"1".to_vec());
-        assert_eq!(as_i64(&r[10]).unwrap(), 7);
+        assert!(as_array(&r[1]).unwrap().values.is_empty()); // resource attrs
+        // r[2] entity_refs empty
+
+        assert_eq!(as_bytes(&r[5]).unwrap(), b"svc".to_vec());
+        assert_eq!(as_bytes(&r[10]).unwrap(), b"requests".to_vec());
+        assert_eq!(as_bytes(&r[12]).unwrap(), b"1".to_vec());
+
+        // value is int -> column 17
+        assert_eq!(as_i64(&r[17]).unwrap(), 7);
         assert_eq!(
-            as_i32(&r[11]).unwrap(),
+            as_i32(&r[19]).unwrap(),
             AggregationTemporality::Cumulative as i32
         );
-        assert!(as_bool(&r[12]).unwrap());
+        assert!(as_bool(&r[20]).unwrap());
 
-        // Check key-value pair conversion.
-        let point_attrs = as_array(&r[7]).unwrap();
+        // point attributes at col 15: Array<Struct{key, any_struct}>
+        let point_attrs = as_array(&r[15]).unwrap();
         assert_eq!(point_attrs.values.len(), 2);
 
-        // "arr" -> [true, 1.5]
-        let arr_entry = as_array(&point_attrs.values[0]).unwrap();
-        assert_eq!(as_bytes(&arr_entry.values[0]).unwrap(), b"arr".to_vec());
-        let arr_val = as_array(&arr_entry.values[1]).unwrap();
-        assert_eq!(arr_val.values.len(), 2);
-        assert!(as_bool(&arr_val.values[0]).unwrap());
-        assert!((as_f64(&arr_val.values[1]).unwrap() - 1.5).abs() < 1e-9);
+        // "arr" -> AnyValueStruct with all-null slots (policy for ArrayValue)
+        {
+            let arr_entry = as_struct(&point_attrs.values[0]).unwrap();
+            assert_eq!(as_bytes(&arr_entry.fields[0]).unwrap(), b"arr".to_vec());
+            let any_struct = &arr_entry.fields[1];
+            assert!(any_all_null(any_struct));
+        }
 
-        // "m" -> kvlist => array of [key, val]
-        let map_entry = as_array(&point_attrs.values[1]).unwrap();
-        assert_eq!(as_bytes(&map_entry.values[0]).unwrap(), b"m".to_vec());
-        let kv_array = as_array(&map_entry.values[1]).unwrap();
-        assert_eq!(kv_array.values.len(), 2);
-
-        let kv0 = as_array(&kv_array.values[0]).unwrap();
-        assert_eq!(as_bytes(&kv0.values[0]).unwrap(), b"x".to_vec());
-        assert_eq!(as_bytes(&kv0.values[1]).unwrap(), b"y".to_vec());
-
-        let kv1 = as_array(&kv_array.values[1]).unwrap();
-        assert_eq!(as_bytes(&kv1.values[0]).unwrap(), b"n".to_vec());
-        assert_eq!(as_i64(&kv1.values[1]).unwrap(), 42);
+        // "m" -> AnyValueStruct with all-null slots (policy for KvlistValue)
+        {
+            let map_entry = as_struct(&point_attrs.values[1]).unwrap();
+            assert_eq!(as_bytes(&map_entry.fields[0]).unwrap(), b"m".to_vec());
+            let any_struct = &map_entry.fields[1];
+            assert!(any_all_null(any_struct));
+        }
     }
 
     #[test]
@@ -755,27 +797,36 @@ mod tests {
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 2);
 
-        // First row checks.
+        // First row checks (with sum).
         {
             let r = &rows[0].values;
-            assert_eq!(r.len(), 15);
+            assert_eq!(r.len(), 29, "histogram row should have 29 columns (0..=28)");
             assert_eq!(as_bytes(&r[0]).unwrap(), b"histogram".to_vec());
             assert!(as_array(&r[1]).unwrap().values.is_empty()); // resource attrs
-                                                                 // r[2] is entity_refs (empty)
-            assert_eq!(as_bytes(&r[3]).unwrap(), b"scope".to_vec()); // scope name
-            assert!(as_array(&r[4]).unwrap().values.is_empty()); // scope attrs
-            assert_eq!(as_bytes(&r[5]).unwrap(), b"latency_hist".to_vec()); // metric name
-            assert_eq!(as_bytes(&r[6]).unwrap(), b"ms".to_vec()); // unit
-            assert_eq!(as_array(&r[7]).unwrap().values.len(), 1); // point attrs
-            assert_eq!(as_i64(&r[10]).unwrap(), 3); // count
-            assert!((as_f64(&r[11]).unwrap() - 4.5).abs() < 1e-9); // sum
-            let bounds = as_array(&r[12]).unwrap();
+            // r[2] entity_refs empty
+            assert_eq!(as_bytes(&r[5]).unwrap(), b"scope".to_vec()); // scope name
+            assert!(as_array(&r[7]).unwrap().values.is_empty()); // scope attrs
+            assert_eq!(as_bytes(&r[10]).unwrap(), b"latency_hist".to_vec()); // metric name
+            assert_eq!(as_bytes(&r[12]).unwrap(), b"ms".to_vec()); // unit
+
+            // point attrs @ 15
+            let pas = as_array(&r[15]).unwrap();
+            assert_eq!(pas.values.len(), 1);
+            let pa0 = as_struct(&pas.values[0]).unwrap();
+            assert_eq!(as_bytes(&pa0.fields[0]).unwrap(), b"h".to_vec());
+            assert!(any_is_string_bytes(&pa0.fields[1], b"a"));
+
+            // hist fields
+            assert_eq!(as_i64(&r[22]).unwrap(), 3); // count
+            assert!((as_f64(&r[23]).unwrap() - 4.5).abs() < 1e-9); // sum
+
+            let bounds = as_array(&r[26]).unwrap();
             assert_eq!(bounds.values.len(), 3);
             assert!((as_f64(&bounds.values[0]).unwrap() - 0.0).abs() < 1e-9);
             assert!((as_f64(&bounds.values[1]).unwrap() - 5.0).abs() < 1e-9);
             assert!((as_f64(&bounds.values[2]).unwrap() - 10.0).abs() < 1e-9);
 
-            let counts = as_array(&r[13]).unwrap();
+            let counts = as_array(&r[27]).unwrap();
             assert_eq!(counts.values.len(), 4);
             assert_eq!(as_i64(&counts.values[0]).unwrap(), 1);
             assert_eq!(as_i64(&counts.values[1]).unwrap(), 2);
@@ -783,7 +834,7 @@ mod tests {
             assert_eq!(as_i64(&counts.values[3]).unwrap(), 0);
 
             assert_eq!(
-                as_i32(&r[14]).unwrap(),
+                as_i32(&r[28]).unwrap(),
                 AggregationTemporality::Delta as i32
             );
         }
@@ -791,8 +842,8 @@ mod tests {
         // Second row (no sum).
         {
             let r = &rows[1].values;
-            assert_eq!(r.len(), 15);
-            assert!(is_null(&r[11])); // sum is null
+            assert_eq!(r.len(), 29);
+            assert!(is_null(&r[23])); // sum is null
         }
     }
 }
