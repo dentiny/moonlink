@@ -41,10 +41,12 @@ pub use mooncake_table::table_status::TableSnapshotStatus;
 pub use mooncake_table::table_status_reader::TableStatusReader;
 pub use mooncake_table::MooncakeTable;
 pub use mooncake_table::SnapshotReadOutput;
+pub use mooncake_table::TableMetadata;
 pub(crate) use mooncake_table::SnapshotTableState;
 pub use mooncake_table_config::DiskSliceWriterConfig;
 pub use mooncake_table_config::IcebergPersistenceConfig;
 pub use mooncake_table_config::MooncakeTableConfig;
+use moonlink_proto::moonlink;
 pub use wal::{PersistentWalMetadata, WalConfig, WalManager, WalTransactionState};
 
 pub use filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;

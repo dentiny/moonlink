@@ -2,6 +2,7 @@ mod error;
 mod otel_to_moonlink_pb;
 pub(crate) mod rest_api;
 mod rpc_server;
+mod otel_schema;
 
 pub use error::Result;
 
