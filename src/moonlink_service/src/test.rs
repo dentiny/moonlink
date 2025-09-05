@@ -1,6 +1,5 @@
 use arrow_array::RecordBatch;
 use arrow_ipc::reader::StreamReader;
-use async_recursion::async_recursion;
 use bytes::Bytes;
 use moonlink::row::{moonlink_row_to_proto, MoonlinkRow, RowValue};
 use more_asserts as ma;
@@ -57,54 +56,38 @@ fn get_service_config() -> ServiceConfig {
     }
 }
 
-/// Util function to delete and all subdirectories and files in the given directory.
-#[async_recursion]
-async fn cleanup_directory(dir: &str) {
-    let dir = std::path::Path::new(dir);
-    let mut entries = tokio::fs::read_dir(dir).await.unwrap();
-    while let Some(entry) = entries.next_entry().await.unwrap() {
-        let entry_path = entry.path();
-        if entry_path.is_dir() {
-            cleanup_directory(entry_path.to_str().unwrap()).await;
-            tokio::fs::remove_dir_all(&entry_path).await.unwrap();
-        } else {
-            tokio::fs::remove_file(&entry_path).await.unwrap();
-        }
-    }
-}
-
 struct TestGuard {
     dir: String,
 }
 
 impl TestGuard {
-    async fn new(dir: &str) -> Self {
-        cleanup_directory(dir).await;
+    fn new(dir: &str) -> Self {
+        Self::cleanup_sync(dir);
         Self {
             dir: dir.to_string(),
+        }
+    }
+
+    fn cleanup_sync(dir: &str) {
+        let dir = std::path::Path::new(dir);
+        if dir.exists() {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if path.is_dir() {
+                    Self::cleanup_sync(path.to_str().unwrap());
+                    std::fs::remove_dir_all(path).unwrap();
+                } else {
+                    std::fs::remove_file(path).unwrap();
+                }
+            }
         }
     }
 }
 
 impl Drop for TestGuard {
     fn drop(&mut self) {
-        fn cleanup_sync(dir: &str) {
-            let dir = std::path::Path::new(dir);
-            if dir.exists() {
-                for entry in std::fs::read_dir(dir).unwrap() {
-                    let entry = entry.unwrap();
-                    let path = entry.path();
-                    if path.is_dir() {
-                        cleanup_sync(path.to_str().unwrap());
-                        std::fs::remove_dir_all(path).unwrap();
-                    } else {
-                        std::fs::remove_file(path).unwrap();
-                    }
-                }
-            }
-        }
-
-        cleanup_sync(&self.dir);
+        Self::cleanup_sync(&self.dir);
     }
 }
 
@@ -275,7 +258,7 @@ async fn read_all_batches(url: &str) -> Vec<RecordBatch> {
 #[tokio::test]
 #[serial]
 async fn test_health_check_endpoint() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -303,7 +286,7 @@ async fn test_health_check_endpoint() {
 #[tokio::test]
 #[serial]
 async fn test_schema() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -385,7 +368,7 @@ async fn optimize_table(client: &reqwest::Client, database: &str, table: &str, m
 
 /// Util function to test optimize table
 async fn run_optimize_table_test(mode: &str) {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -510,7 +493,7 @@ async fn create_snapshot(client: &reqwest::Client, database: &str, table: &str, 
 #[tokio::test]
 #[serial]
 async fn test_table_schema_fetch() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -550,7 +533,7 @@ async fn test_table_schema_fetch() {
 #[tokio::test]
 #[serial]
 async fn test_create_snapshot() {
-    cleanup_directory(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -618,16 +601,13 @@ async fn test_create_snapshot() {
     )
     .await
     .unwrap();
-
-    // Cleanup shared directory.
-    cleanup_directory(&get_moonlink_backend_dir()).await;
 }
 
 /// Test basic table creation, insertion and query.
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_data_ingestion() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -687,7 +667,7 @@ async fn test_moonlink_standalone_data_ingestion() {
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_file_upload() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -759,7 +739,7 @@ async fn test_moonlink_standalone_file_upload() {
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_protobuf_ingestion() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -835,7 +815,7 @@ async fn test_moonlink_standalone_protobuf_ingestion() {
 #[tokio::test]
 #[serial]
 async fn test_moonlink_standalone_file_insert() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -908,7 +888,7 @@ async fn test_moonlink_standalone_file_insert() {
 #[tokio::test]
 #[serial]
 async fn test_multiple_tables_creation() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -926,7 +906,7 @@ async fn test_multiple_tables_creation() {
 #[tokio::test]
 #[serial]
 async fn test_drop_table() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -953,7 +933,7 @@ async fn test_drop_table() {
 #[tokio::test]
 #[serial]
 async fn test_list_tables() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -997,7 +977,7 @@ async fn test_list_tables() {
 #[tokio::test]
 #[serial]
 async fn test_bulk_ingest_files() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -1027,7 +1007,7 @@ async fn test_bulk_ingest_files() {
 #[tokio::test]
 #[serial]
 async fn test_invalid_operation() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -1084,7 +1064,7 @@ async fn test_invalid_operation() {
 #[tokio::test]
 #[serial]
 async fn test_non_existent_table() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -1140,7 +1120,7 @@ async fn test_non_existent_table() {
 #[tokio::test]
 #[serial]
 async fn test_create_table_with_invalid_config() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -1208,7 +1188,7 @@ async fn test_create_table_with_invalid_config() {
 #[tokio::test]
 #[serial]
 async fn test_schema_invalid_struct_missing_fields() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
@@ -1243,7 +1223,7 @@ async fn test_schema_invalid_struct_missing_fields() {
 #[tokio::test]
 #[serial]
 async fn test_schema_invalid_list_missing_item() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir()).await;
+    let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
         start_with_config(config).await.unwrap();
