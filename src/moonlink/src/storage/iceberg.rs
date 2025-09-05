@@ -28,7 +28,6 @@ pub(super) mod rest_catalog;
 mod schema_utils;
 mod snapshot_utils;
 mod table_commit_proxy;
-pub(super) mod table_event_manager;
 pub(super) mod table_manager;
 pub(super) mod table_property;
 pub(super) mod utils;

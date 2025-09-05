@@ -16,14 +16,14 @@ use crate::storage::filesystem::s3::s3_test_utils::*;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
+use crate::storage::mooncake_table::table_event_manager::TableEventManager;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::table_handler_timer::create_table_handler_timers;
 use crate::union_read::ReadStateManager;
-use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig};
-use crate::{StorageConfig, TableEventManager};
+use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig, StorageConfig};
 
 use function_name::named;
 use more_asserts as ma;
