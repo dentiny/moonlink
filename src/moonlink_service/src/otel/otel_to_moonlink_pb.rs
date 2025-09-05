@@ -443,8 +443,8 @@ mod tests {
     }
     fn any_is_string_bytes(rv: &RowValue, expected: &[u8]) -> bool {
         any_slots(rv)
-            .and_then(|f| f.get(0))
-            .and_then(|s| as_bytes(s))
+            .and_then(|f| f.first())
+            .and_then(as_bytes)
             .map(|b| b == expected)
             .unwrap_or(false)
     }
@@ -536,7 +536,7 @@ mod tests {
         assert_eq!(scope_attrs.values.len(), 1);
         let sa0 = as_struct(&scope_attrs.values[0]).unwrap();
         assert_eq!(as_bytes(&sa0.fields[0]).unwrap(), b"scope_ok".to_vec());
-        assert_eq!(any_get_bool(&sa0.fields[1]).unwrap(), true);
+        assert!(any_get_bool(&sa0.fields[1]).unwrap());
 
         // metric
         assert_eq!(as_bytes(&r[10]).unwrap(), b"latency".to_vec());
@@ -552,7 +552,7 @@ mod tests {
         assert_eq!(as_i64(&r[14]).unwrap(), 22);
         assert!((as_f64(&r[18]).unwrap() - std::f64::consts::PI).abs() < 1e-9); // number_double
         assert_eq!(as_i32(&r[19]).unwrap(), -1); // temporality
-        assert_eq!(as_bool(&r[20]).unwrap(), false); // is_monotonic
+        assert!(!as_bool(&r[20]).unwrap()); // is_monotonic
     }
 
     #[test]
