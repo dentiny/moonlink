@@ -895,6 +895,10 @@ impl MooncakeTable {
     /// Applies the result of a flush to the snapshot task.
     /// Adds the disk slice to `next_snapshot_task`.
     pub fn apply_flush_result(&mut self, disk_slice: DiskSliceWriter, flush_event_id: uuid::Uuid) {
+        if disk_slice.output_files().iter().map(|f| f.0.file_id().0).collect::<Vec<_>>() == vec![10000000000007200] {
+            println!("flush lsn = {:?}", disk_slice.lsn());
+        }
+
         // Record events for flush completion.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_completion(
