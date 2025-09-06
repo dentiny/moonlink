@@ -1,3 +1,4 @@
+use crate::Result;
 use axum::error_handling::HandleErrorLayer;
 use axum::http::Method;
 use axum::{
@@ -15,7 +16,6 @@ use tokio::sync::oneshot;
 use tower::timeout::TimeoutLayer;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::cors::{Any, CorsLayer};
-use tracing::error;
 
 /// Default timeout for otel API calls.
 const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -55,7 +55,7 @@ pub async fn start_otel_service(
     state: OtelState,
     port: u16,
     shutdown_signal: oneshot::Receiver<()>,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> Result<()> {
     let app = create_otel_router(state);
     let addr = format!("0.0.0.0:{port}");
 
@@ -86,13 +86,10 @@ async fn handle_metrics(
                 bytes,
             )
         }
-        Err(e) => {
-            error!("decode metrics failed: {e}");
-            (
-                StatusCode::BAD_REQUEST,
-                [(header::CONTENT_TYPE, "text/plain")],
-                format!("protobuf decode failed: {e}").into_bytes(),
-            )
-        }
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            [(header::CONTENT_TYPE, "text/plain")],
+            format!("protobuf decode failed: {e}").into_bytes(),
+        ),
     }
 }
