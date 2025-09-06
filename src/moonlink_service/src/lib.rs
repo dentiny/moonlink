@@ -120,6 +120,15 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
         (None, None)
     };
 
+    // Optionally start otel HTTP endpoint.
+    // TODO(hjiang): Integrate with service config.
+    let otel_state = otel::service::OtelState{};
+    let otel_handle = tokio::spawn(async move {
+        if let Err(e) = otel::service::start_otel_service(otel_state, /*port=*/3435).await {
+            error!("OTEL service failed: {}", e);
+        }
+    });
+
     // Optionally start TCP server.
     let tcp_api_handle = if let Some(port) = config.tcp_port {
         let backend_clone = backend.clone();
@@ -154,6 +163,8 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
             .unwrap();
         handle.await?;
     }
+
+    otel_handle.abort();
 
     if let Some(handle) = tcp_api_handle {
         handle.abort();

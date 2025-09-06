@@ -65,8 +65,8 @@ postgres-replication = { git = "https://github.com/Mooncake-labs/rust-postgres.g
 postgres-types = { git = "https://github.com/Mooncake-Labs/rust-postgres.git", rev = "14c8e599f5551a8caa96ff5023685a6f537a1455", features = [
   "with-serde_json-1",
 ] }
-prost = "0.14"
-prost-types = "0.14"
+prost = "0.13"
+prost-types = "0.13"
 rand = "0.9"
 regex = "1.11"
 roaring = "0.11"
@@ -95,6 +95,10 @@ tracing = "0.1"
 typed-builder = "0.20"
 url = "2.5"
 uuid = { version = "1.18", default-features = false, features = ["v4"] }
+opentelemetry = { version = "0.30", features = ["trace", "metrics", "logs"] }
+opentelemetry_sdk = { version = "0.30", features = ["trace", "metrics", "logs"] }
+opentelemetry-otlp = { version = "0.30", features = ["reqwest-blocking-client", "http-proto", "trace", "metrics", "logs"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "chrono"] }
 
 [profile.release-with-debug]
 inherits = "release"

@@ -8,6 +8,7 @@ license = { workspace = true }
 default = ["storage-fs"]
 rest_api_demo = ["dep:reqwest"]
 standalone-test = []
+otel-integration = []
 
 storage-s3 = ["moonlink/storage-s3"]
 storage-gcs = ["moonlink/storage-gcs"]
@@ -35,6 +36,10 @@ tokio = { workspace = true }
 tower = { version = "0.5" }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
+tracing-subscriber = { workspace = true }
 
 [dev-dependencies]
 arrow = { workspace = true }

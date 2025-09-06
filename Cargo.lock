@@ -1527,7 +1527,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8030735ecb0d128428b64cd379809817e620a40e5001c54465b99ec5feec2857"
 dependencies = [
  "futures-core",
- "prost 0.13.5",
+ "prost",
  "prost-types",
  "tonic 0.12.3",
  "tracing-core",
@@ -1546,7 +1546,7 @@ dependencies = [
  "hdrhistogram",
  "humantime",
  "hyper-util",
- "prost 0.13.5",
+ "prost",
  "prost-types",
  "serde",
  "serde_json",
@@ -4282,7 +4282,7 @@ dependencies = [
  "parquet",
  "pico-args",
  "pprof",
- "prost 0.14.1",
+ "prost",
  "rand 0.9.2",
  "reqwest",
  "roaring",
@@ -4362,7 +4362,7 @@ dependencies = [
  "pin-project-lite",
  "postgres-native-tls",
  "postgres-replication",
- "prost 0.14.1",
+ "prost",
  "serde",
  "serde_json",
  "serial_test",
@@ -4433,7 +4433,7 @@ name = "moonlink_proto"
 version = "0.0.1"
 dependencies = [
  "bytes",
- "prost 0.14.1",
+ "prost",
  "prost-build",
  "protoc-bin-vendored",
 ]
@@ -4471,9 +4471,12 @@ dependencies = [
  "moonlink_proto",
  "moonlink_rpc",
  "more-asserts",
+ "opentelemetry",
+ "opentelemetry-otlp",
  "opentelemetry-proto",
+ "opentelemetry_sdk",
  "parquet",
- "prost 0.14.1",
+ "prost",
  "reqwest",
  "serde",
  "serde_json",
@@ -4484,6 +4487,7 @@ dependencies = [
  "tower 0.5.2",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4850,6 +4854,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry-http"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "50f6639e842a97dbea8886e3439710ae463120091e2e064518ba8e716e6ac36d"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "http 1.3.1",
+ "opentelemetry",
+ "reqwest",
+]
+
+[[package]]
+name = "opentelemetry-otlp"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbee664a43e07615731afc539ca60c6d9f1a9425e25ca09c57bc36c87c55852b"
+dependencies = [
+ "http 1.3.1",
+ "opentelemetry",
+ "opentelemetry-http",
+ "opentelemetry-proto",
+ "opentelemetry_sdk",
+ "prost",
+ "reqwest",
+ "thiserror 2.0.16",
+ "tracing",
+]
+
+[[package]]
 name = "opentelemetry-proto"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4857,7 +4891,7 @@ checksum = "2e046fd7660710fe5a05e8748e70d9058dc15c94ba914e7c4faa7c728f0e8ddc"
 dependencies = [
  "opentelemetry",
  "opentelemetry_sdk",
- "prost 0.13.5",
+ "prost",
  "tonic 0.13.1",
 ]
 
@@ -4871,6 +4905,9 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "opentelemetry",
+ "percent-encoding",
+ "rand 0.9.2",
+ "serde_json",
  "thiserror 2.0.16",
 ]
 
@@ -5400,17 +5437,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2796faa41db3ec313a31f7624d9286acf277b52de526150b7e69f3debf891ee5"
 dependencies = [
  "bytes",
- "prost-derive 0.13.5",
-]
-
-[[package]]
-name = "prost"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7231bd9b3d3d33c86b58adbac74b5ec0ad9f496b19d22801d773636feaa95f3d"
-dependencies = [
- "bytes",
- "prost-derive 0.14.1",
+ "prost-derive",
 ]
 
 [[package]]
@@ -5426,7 +5453,7 @@ dependencies = [
  "once_cell",
  "petgraph 0.7.1",
  "prettyplease",
- "prost 0.13.5",
+ "prost",
  "prost-types",
  "regex",
  "syn 2.0.106",
@@ -5447,25 +5474,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "prost-derive"
-version = "0.14.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
-dependencies = [
- "anyhow",
- "itertools 0.14.0",
- "proc-macro2",
- "quote",
- "syn 2.0.106",
-]
-
-[[package]]
 name = "prost-types"
 version = "0.13.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52c2c1bf36ddb1a1c396b3601a3cec27c2462e45f07c386894ec3ccf5332bd16"
 dependencies = [
- "prost 0.13.5",
+ "prost",
 ]
 
 [[package]]
@@ -5911,6 +5925,7 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "encoding_rs",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "h2",
@@ -7387,7 +7402,7 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "pin-project",
- "prost 0.13.5",
+ "prost",
  "socket2 0.5.10",
  "tokio",
  "tokio-stream",
@@ -7414,7 +7429,7 @@ dependencies = [
  "hyper-util",
  "percent-encoding",
  "pin-project",
- "prost 0.13.5",
+ "prost",
  "tokio",
  "tokio-stream",
  "tower 0.5.2",
