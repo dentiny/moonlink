@@ -562,7 +562,7 @@ jobs:
           make-default: true
 
       - name: Wait for PostgreSQL
-        timeout-minutes: 10
+        timeout-minutes: 2
         run: |
           set -euo pipefail
           for i in {1..10}; do
