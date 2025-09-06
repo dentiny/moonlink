@@ -26,7 +26,10 @@ moonlink_error = { path = "../moonlink_error" }
 moonlink_metadata_store = { path = "../moonlink_metadata_store" }
 moonlink_proto = { path = "../moonlink_proto" }
 moonlink_rpc = { path = "../moonlink_rpc" }
+opentelemetry = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 opentelemetry-proto = { version = "0.30", default-features = false, features = ["gen-tonic", "metrics"] }
+opentelemetry_sdk = { workspace = true }
 prost = { workspace = true }
 reqwest = { version = "0.12", features = ["json"], optional = true }
 serde = { workspace = true }
@@ -36,9 +39,6 @@ tokio = { workspace = true }
 tower = { version = "0.5" }
 tower-http = { version = "0.6", features = ["cors", "trace"] }
 tracing = { workspace = true }
-opentelemetry = { workspace = true }
-opentelemetry_sdk = { workspace = true }
-opentelemetry-otlp = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 [dev-dependencies]

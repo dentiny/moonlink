@@ -1,9 +1,6 @@
-use opentelemetry_sdk::{
-    metrics::{PeriodicReader},
-    runtime,
-};
-use opentelemetry_otlp::WithExportConfig;
 use opentelemetry::metrics::MeterProvider;
+use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::{metrics::PeriodicReader, runtime};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main]
@@ -16,9 +13,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Starting OTEL debug test...");
 
     // Start the OTEL service first
-    let otel_state = moonlink_service::otel::service::OtelState{};
+    let otel_state = moonlink_service::otel::service::OtelState {};
     let otel_handle = tokio::spawn(async move {
-        if let Err(e) = moonlink_service::otel::service::start_otel_service(otel_state, 3435).await {
+        if let Err(e) = moonlink_service::otel::service::start_otel_service(otel_state, 3435).await
+        {
             eprintln!("OTEL service failed: {}", e);
         }
     });
@@ -49,12 +47,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let provider = opentelemetry_sdk::metrics::MeterProvider::builder()
         .with_reader(reader)
         .build();
-    
+
     // Set it as the global provider
     opentelemetry::global::set_meter_provider(provider.clone());
 
     let meter = provider.meter("debug-meter");
-    let hist = meter.f64_histogram("debug_latency_ms").with_unit("ms").init();
+    let hist = meter
+        .f64_histogram("debug_latency_ms")
+        .with_unit("ms")
+        .init();
     let counter = meter.u64_counter("debug_requests_total").init();
 
     println!("Starting to record metrics...");
@@ -75,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Flush and shutdown cleanly
     println!("Shutting down meter provider...");
     provider.shutdown().unwrap();
-    
+
     // Cancel the OTEL service
     println!("Stopping OTEL service...");
     otel_handle.abort();
