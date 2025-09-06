@@ -123,16 +123,28 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     };
 
     // Optionally start otel HTTP endpoint.
-    let (otel_api_handle, otel_api_shutdown_signal) = if let Some(port) = config.otel_api_port {
-        let otel_state = otel::service::OtelState {};
-        let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
-        let handle = tokio::spawn(async move {
-            if let Err(e) = otel::service::start_otel_service(otel_state, port, shutdown_rx).await {
-                error!("OTEL service failed: {}", e);
-            }
-            info!("Starting OTLP/HTTP metrics starts at port {port}");
-        });
-        (Some(handle), Some(shutdown_tx))
+    let (otel_api_handle, otel_api_shutdown_signal) = if let Some(otel_port) = config.otel_api_port
+    {
+        if let Some(rest_port) = config.rest_api_port {
+            let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel();
+            let backend_clone = backend.clone();
+            let handle = tokio::spawn(async move {
+                if let Err(e) = otel::service::start_otel_service(
+                    otel_port,
+                    rest_port,
+                    backend_clone,
+                    shutdown_rx,
+                )
+                .await
+                {
+                    error!("OTEL service failed: {}", e);
+                }
+                info!("Starting OTLP/HTTP metrics starts at port {otel_port}");
+            });
+            (Some(handle), Some(shutdown_tx))
+        } else {
+            (None, None)
+        }
     } else {
         (None, None)
     };

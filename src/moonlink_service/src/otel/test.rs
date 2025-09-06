@@ -50,7 +50,7 @@ async fn test_opentelemetry_export() {
 
     // Update counter.
     for _ in 0..10 {
-        counter.add(1, &[KeyValue::new("key", "value")]);
+        counter.add(1, &[KeyValue::new("moonlink.mooncake_table_id", "id")]);
     }
 
     // Shutdown and flush.

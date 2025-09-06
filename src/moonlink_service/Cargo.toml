@@ -6,7 +6,7 @@ license = { workspace = true }
 
 [features]
 default = ["storage-fs"]
-rest_api_demo = ["dep:reqwest"]
+rest_api_demo = []
 standalone-test = []
 otel-integration = []
 
@@ -29,9 +29,10 @@ moonlink_rpc = { path = "../moonlink_rpc" }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry-proto = { version = "0.30", default-features = false, features = ["gen-tonic", "metrics"] }
+opentelemetry-semantic-conventions = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 prost = { workspace = true }
-reqwest = { version = "0.12", features = ["json"], optional = true }
+reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }

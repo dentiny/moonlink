@@ -1,4 +1,4 @@
-use arrow_schema::{DataType, Field, Fields, Schema, SchemaRef};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use std::{collections::HashMap, sync::Arc};
 
 fn get_next_metadata(ids: &mut i32) -> HashMap<String, String> {
@@ -264,13 +264,13 @@ fn histogram_point_fields(ids: &mut i32) -> Vec<Field> {
 
 /// Unified Arrow schema for Gauge / Sum / Histogram rows (one row per datapoint).
 #[allow(unused)]
-pub(crate) fn otlp_metrics_gsh_schema() -> SchemaRef {
+pub(crate) fn otlp_metrics_gsh_schema() -> Schema {
     let mut ids = 0;
     let mut fields = Vec::new();
     fields.extend(common_metric_fields(&mut ids));
     fields.extend(number_point_fields(&mut ids));
     fields.extend(histogram_point_fields(&mut ids));
-    Arc::new(Schema::new(fields))
+    Schema::new(fields)
 }
 
 #[cfg(test)]
@@ -317,7 +317,7 @@ mod tests {
         let table_filesystem_accessor = Arc::new(FileSystemAccessor::new(accessor_config));
 
         let table = MooncakeTable::new(
-            otlp_metrics_gsh_schema().as_ref().clone(),
+            otlp_metrics_gsh_schema(),
             /*name=*/ "table".to_string(),
             /*table_id=*/ 0,
             /*base_path=*/ std::path::PathBuf::from(table_path.clone()),
