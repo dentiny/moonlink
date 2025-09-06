@@ -79,3 +79,6 @@ mod mock_filesystem_test;
 
 #[cfg(test)]
 mod snapshot_fetcher_test;
+
+#[cfg(test)]
+mod catalog_test_impl;
