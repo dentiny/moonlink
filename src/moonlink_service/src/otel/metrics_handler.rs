@@ -13,6 +13,7 @@ use opentelemetry_proto::tonic::collector::metrics::v1::{
     ExportMetricsServiceRequest, ExportMetricsServiceResponse,
 };
 use serde_json::json;
+use tokio::sync::Mutex;
 use tracing::error;
 
 /// Database which manages all moonlink internal metrics.
@@ -27,7 +28,7 @@ pub(crate) struct MetricsHandler {
     /// HTTP request client, used to access REST API.
     rest_client: reqwest::Client,
     /// All table names.
-    tables: HashSet<String>,
+    tables: Arc<Mutex<HashSet<String>>>,
     /// Moonlink backend.
     moonlink_backend: Arc<moonlink_backend::MoonlinkBackend>,
 }
@@ -120,6 +121,7 @@ impl MetricsHandler {
             .filter(|cur_table_status| cur_table_status.database == DATABASE)
             .map(|cur_table_status| cur_table_status.table)
             .collect::<HashSet<_>>();
+        let tables = Arc::new(Mutex::new(tables));
         Ok(Self {
             rest_addr,
             rest_client,
@@ -128,8 +130,8 @@ impl MetricsHandler {
         })
     }
 
-    /// Create a mooncake table for an otel request.
-    async fn create_table(&mut self, mooncake_table_id: &str) -> Result<()> {
+    /// Create a mooncake table for once, if it hasn't been created.
+    async fn create_table_for_once(&self, mooncake_table_id: &str) -> Result<()> {
         let crafted_src_table_name = format!("{DATABASE}.{mooncake_table_id}");
         // Fake REST ingestion.
         let serialized_table_config = json!({
@@ -139,17 +141,28 @@ impl MetricsHandler {
             }
         })
         .to_string();
-        self.moonlink_backend
-            .create_table(
-                DATABASE.to_string(),
-                mooncake_table_id.to_string(),
-                crafted_src_table_name,
-                REST_API_URI.to_string(),
-                serialized_table_config,
-                Some(otlp_metrics_gsh_schema()),
-            )
-            .await?;
-        assert!(self.tables.insert(mooncake_table_id.to_string()));
+
+        // Table creation for duplicate table name leads to error, so intentionally place table creation under critical section.
+        // Performance is not a big concern here, since it only happens when new table metrics are received.
+        {
+            let mut guard = self.tables.lock().await;
+            if guard.contains(mooncake_table_id) {
+                return Ok(());
+            }
+
+            self.moonlink_backend
+                .create_table(
+                    DATABASE.to_string(),
+                    mooncake_table_id.to_string(),
+                    crafted_src_table_name,
+                    REST_API_URI.to_string(),
+                    serialized_table_config,
+                    Some(otlp_metrics_gsh_schema()),
+                )
+                .await?;
+            assert!(guard.insert(mooncake_table_id.to_string()));
+        }
+
         Ok(())
     }
 
@@ -184,14 +197,13 @@ impl MetricsHandler {
 
     /// Handle request for the incoming metrics request.
     pub(crate) async fn handle_request(
-        &mut self,
+        &self,
         request: ExportMetricsServiceRequest,
     ) -> Result<ExportMetricsServiceResponse> {
         // TODO(hjiang): Currently only supports metrics from one single table.
         let mooncake_table_id = get_metrics_table_name_from_request(&request);
-        if !self.tables.contains(&mooncake_table_id) {
-            self.create_table(&mooncake_table_id).await?;
-        }
+        self.create_table_for_once(&mooncake_table_id).await?;
+
         let moonlink_row_pbs = otel_to_moonlink_pb::export_metrics_to_moonlink_rows(&request);
         for cur_row_pb in moonlink_row_pbs.into_iter() {
             self.insert_row(&mooncake_table_id, cur_row_pb).await;

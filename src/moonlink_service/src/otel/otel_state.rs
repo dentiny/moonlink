@@ -7,7 +7,7 @@ use std::sync::Arc;
 #[derive(Clone)]
 pub struct OtelState {
     /// Metrics handler.
-    pub(crate) metrics_handler: MetricsHandler,
+    pub(crate) metrics_handler: Arc<MetricsHandler>,
 }
 
 impl OtelState {
@@ -15,7 +15,8 @@ impl OtelState {
         rest_port: u16,
         moonlink_backend: Arc<moonlink_backend::MoonlinkBackend>,
     ) -> Result<Self> {
-        let metrics_handler = MetricsHandler::new(rest_port, moonlink_backend.clone()).await?;
+        let metrics_handler =
+            Arc::new(MetricsHandler::new(rest_port, moonlink_backend.clone()).await?);
         Ok(Self { metrics_handler })
     }
 }

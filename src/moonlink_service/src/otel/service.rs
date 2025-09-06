@@ -71,7 +71,7 @@ pub async fn start_otel_service(
 }
 
 async fn handle_metrics(
-    State(mut state): State<OtelState>,
+    State(state): State<OtelState>,
     _headers: HeaderMap,
     body: Bytes,
 ) -> (StatusCode, [(header::HeaderName, &'static str); 1], Vec<u8>) {
