@@ -1,4 +1,5 @@
 use arrow_array::{Int32Array, RecordBatch, StringArray};
+use more_asserts as ma;
 use tempfile::tempdir;
 use tokio::sync::broadcast;
 use tokio::sync::watch;
@@ -2210,7 +2211,7 @@ async fn test_append_only_table_full_pipeline() {
         !snapshot.disk_files.is_empty(),
         "Snapshot should contain data files"
     );
-    assert!(next_file_id > 0, "Next file ID should be incremented");
+    ma::assert_gt!(next_file_id, 0);
 
     // Test 4: Streaming transactions work
     println!("Testing streaming transactions...");

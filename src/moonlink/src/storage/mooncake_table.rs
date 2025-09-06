@@ -1222,12 +1222,7 @@ impl MooncakeTable {
         }
 
         // Perform commit operation.
-        assert!(
-            lsn >= self.next_snapshot_task.commit_lsn_baseline,
-            "Commit LSN {} is less than the current commit LSN baseline {}",
-            lsn,
-            self.next_snapshot_task.commit_lsn_baseline
-        );
+        ma::assert_ge!(lsn, self.next_snapshot_task.commit_lsn_baseline);
         self.next_snapshot_task.commit_lsn_baseline = lsn;
         self.next_snapshot_task.new_commit_point = Some(self.mem_slice.get_commit_check_point());
         assert!(
