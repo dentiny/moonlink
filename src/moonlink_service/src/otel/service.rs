@@ -17,7 +17,8 @@ use tower::{BoxError, ServiceBuilder};
 use tower_http::cors::{Any, CorsLayer};
 use tracing::error;
 
-const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+/// Default timeout for otel API calls.
+const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[derive(Clone)]
 pub struct OtelState;
