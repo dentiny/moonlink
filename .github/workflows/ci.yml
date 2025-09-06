@@ -562,6 +562,7 @@ jobs:
           make-default: true
 
       - name: Wait for PostgreSQL
+        timeout-minutes: 10
         run: |
           set -euo pipefail
           for i in {1..10}; do
@@ -576,11 +577,13 @@ jobs:
           exit 1
 
       - name: Configure PostgreSQL for logical replication
+        timeout-minutes: 2
         run: |
           PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c "ALTER SYSTEM SET wal_level = 'logical';"
           PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d postgres -c "SELECT pg_reload_conf();"
 
       - name: Restart PostgreSQL to apply wal_level
+        timeout-minutes: 2
         run: |
           set -euo pipefail
           docker restart postgres
