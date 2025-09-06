@@ -4,8 +4,60 @@ use arrow_array::{Int32Array, RecordBatch, StringArray};
 use parquet::arrow::AsyncArrowWriter;
 use serde_json::json;
 
+use crate::{ServiceConfig, READINESS_PROBE_PORT};
+
 use std::collections::HashMap;
 use std::sync::Arc;
+
+/// Moonlink backend directory.
+pub(crate) fn get_moonlink_backend_dir() -> String {
+    if let Ok(backend_dir) = std::env::var("MOONLINK_BACKEND_DIR") {
+        backend_dir
+    } else {
+        "/workspaces/moonlink/.shared-nginx".to_string()
+    }
+}
+
+/// Util function to get nginx address
+pub(crate) fn get_nginx_addr() -> String {
+    std::env::var("NGINX_ADDR").unwrap_or_else(|_| NGINX_ADDR.to_string())
+}
+
+/// Local nginx server IP/port address.
+pub(crate) const NGINX_ADDR: &str = "http://nginx.local:80";
+/// Local moonlink REST API IP/port address.
+pub(crate) const REST_ADDR: &str = "http://127.0.0.1:3030";
+/// Local moonlink server IP/port address.
+pub(crate) const MOONLINK_ADDR: &str = "127.0.0.1:3031";
+/// Test database name.
+pub(crate) const DATABASE: &str = "test-database";
+/// Test table name.
+pub(crate) const TABLE: &str = "test-table";
+
+pub(crate) fn get_service_config() -> ServiceConfig {
+    let moonlink_backend_dir = get_moonlink_backend_dir();
+    let nginx_addr = get_nginx_addr();
+
+    ServiceConfig {
+        base_path: moonlink_backend_dir.clone(),
+        data_server_uri: Some(nginx_addr),
+        rest_api_port: Some(3030),
+        tcp_port: Some(3031),
+    }
+}
+
+/// Send request to readiness endpoint.
+pub(crate) async fn test_readiness_probe() {
+    let url = format!("http://127.0.0.1:{READINESS_PROBE_PORT}/ready");
+    loop {
+        if let Ok(resp) = reqwest::get(&url).await {
+            if resp.status() == reqwest::StatusCode::OK {
+                return;
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+}
 
 /// Util function to create test arrow schema.
 pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {

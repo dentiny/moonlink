@@ -3,10 +3,13 @@ use opentelemetry_otlp::{Protocol, WithExportConfig};
 use opentelemetry_sdk::metrics::{PeriodicReader, SdkMeterProvider};
 use tracing_subscriber::EnvFilter;
 
+use crate::test_guard::TestGuard;
+
 #[tokio::test]
 async fn test_opentelemetry_export() {
+    // Set the tracing inside of otel sdk, otherwise hard to troubleshoot.
     let _ = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env()) // respects RUST_LOG
+        .with_env_filter(EnvFilter::from_default_env())
         .try_init();
 
     let exporter = opentelemetry_otlp::MetricExporter::builder()

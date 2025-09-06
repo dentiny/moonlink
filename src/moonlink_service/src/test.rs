@@ -6,103 +6,18 @@ use more_asserts as ma;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use serde_json::json;
 use serial_test::serial;
-use std::env;
 use tokio::net::TcpStream;
 
 use crate::rest_api::{
     CreateTableResponse, FileUploadResponse, GetTableSchemaResponse, HealthResponse,
     IngestResponse, ListTablesResponse,
 };
+use crate::test_guard::TestGuard;
 use crate::test_utils::*;
-use crate::{start_with_config, ServiceConfig, READINESS_PROBE_PORT};
+use crate::start_with_config;
 use moonlink::decode_serialized_read_state_for_testing;
 use moonlink_backend::table_status::TableStatus;
 use moonlink_rpc::{load_files, scan_table_begin, scan_table_end};
-
-/// Moonlink backend directory.
-fn get_moonlink_backend_dir() -> String {
-    if let Ok(backend_dir) = env::var("MOONLINK_BACKEND_DIR") {
-        backend_dir
-    } else {
-        "/workspaces/moonlink/.shared-nginx".to_string()
-    }
-}
-
-/// Util function to get nginx address
-fn get_nginx_addr() -> String {
-    env::var("NGINX_ADDR").unwrap_or_else(|_| NGINX_ADDR.to_string())
-}
-
-/// Local nginx server IP/port address.
-const NGINX_ADDR: &str = "http://nginx.local:80";
-/// Local moonlink REST API IP/port address.
-const REST_ADDR: &str = "http://127.0.0.1:3030";
-/// Local moonlink server IP/port address.
-const MOONLINK_ADDR: &str = "127.0.0.1:3031";
-/// Test database name.
-const DATABASE: &str = "test-database";
-/// Test table name.
-const TABLE: &str = "test-table";
-
-fn get_service_config() -> ServiceConfig {
-    let moonlink_backend_dir = get_moonlink_backend_dir();
-    let nginx_addr = get_nginx_addr();
-
-    ServiceConfig {
-        base_path: moonlink_backend_dir.clone(),
-        data_server_uri: Some(nginx_addr),
-        rest_api_port: Some(3030),
-        tcp_port: Some(3031),
-    }
-}
-
-struct TestGuard {
-    dir: String,
-}
-
-impl TestGuard {
-    fn new(dir: &str) -> Self {
-        Self::cleanup_sync(dir);
-        Self {
-            dir: dir.to_string(),
-        }
-    }
-
-    fn cleanup_sync(dir: &str) {
-        let dir = std::path::Path::new(dir);
-        if dir.exists() {
-            for entry in std::fs::read_dir(dir).unwrap() {
-                let entry = entry.unwrap();
-                let path = entry.path();
-                if path.is_dir() {
-                    Self::cleanup_sync(path.to_str().unwrap());
-                    std::fs::remove_dir_all(path).unwrap();
-                } else {
-                    std::fs::remove_file(path).unwrap();
-                }
-            }
-        }
-    }
-}
-
-impl Drop for TestGuard {
-    fn drop(&mut self) {
-        Self::cleanup_sync(&self.dir);
-    }
-}
-
-/// Send request to readiness endpoint.
-async fn test_readiness_probe() {
-    let url = format!("http://127.0.0.1:{READINESS_PROBE_PORT}/ready");
-    loop {
-        if let Ok(resp) = reqwest::get(&url).await {
-            if resp.status() == reqwest::StatusCode::OK {
-                return;
-            }
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-    }
-}
 
 /// Util function to get table creation payload.
 fn get_create_table_payload(database: &str, table: &str) -> serde_json::Value {

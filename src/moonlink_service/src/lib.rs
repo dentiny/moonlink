@@ -176,8 +176,17 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     Ok(())
 }
 
-#[cfg(all(test, feature = "standalone-test"))]
-mod test;
+#[cfg(all(
+    test,
+    any(feature = "standalone-test", feature = "otel-integration")
+))]
+mod test_guard;
+
+#[cfg(all(
+    test,
+    any(feature = "standalone-test", feature = "otel-integration")
+))]
+mod test_utils;
 
 #[cfg(all(test, feature = "standalone-test"))]
-mod test_utils;
+mod test;
