@@ -75,7 +75,7 @@ async fn handle_metrics(
     match ExportMetricsServiceRequest::decode(body) {
         Ok(req) => {
             // TODO(hjiang): Need to integrate with mooncake table.
-            println!("request = {:?}", req);
+            println!("request = {req:?}");
 
             let resp = ExportMetricsServiceResponse::default();
             let bytes = resp.encode_to_vec();
