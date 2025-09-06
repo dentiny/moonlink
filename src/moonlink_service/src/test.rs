@@ -12,9 +12,9 @@ use crate::rest_api::{
     CreateTableResponse, FileUploadResponse, GetTableSchemaResponse, HealthResponse,
     IngestResponse, ListTablesResponse,
 };
+use crate::start_with_config;
 use crate::test_guard::TestGuard;
 use crate::test_utils::*;
-use crate::start_with_config;
 use moonlink::decode_serialized_read_state_for_testing;
 use moonlink_backend::table_status::TableStatus;
 use moonlink_rpc::{load_files, scan_table_begin, scan_table_end};

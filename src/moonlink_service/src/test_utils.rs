@@ -42,6 +42,7 @@ pub(crate) fn get_service_config() -> ServiceConfig {
         base_path: moonlink_backend_dir.clone(),
         data_server_uri: Some(nginx_addr),
         rest_api_port: Some(3030),
+        otel_api_port: Some(3435),
         tcp_port: Some(3031),
     }
 }

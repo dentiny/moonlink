@@ -1,3 +1,5 @@
+use axum::error_handling::HandleErrorLayer;
+use axum::http::Method;
 use axum::{
     body::Bytes,
     http::{header, HeaderMap, StatusCode},
@@ -9,12 +11,11 @@ use opentelemetry_proto::tonic::collector::metrics::v1::{
     ExportMetricsServiceRequest, ExportMetricsServiceResponse,
 };
 use prost::Message;
+use tokio::sync::oneshot;
+use tower::timeout::TimeoutLayer;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::cors::{Any, CorsLayer};
-use tower::timeout::TimeoutLayer;
-use axum::error_handling::HandleErrorLayer;
-use axum::http::Method;
-use tracing::{error, info};
+use tracing::error;
 
 const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
@@ -52,18 +53,16 @@ pub fn create_otel_router(state: OtelState) -> Router {
 pub async fn start_otel_service(
     state: OtelState,
     port: u16,
-    // shutdown_signal: oneshot::Receiver<()>,
+    shutdown_signal: oneshot::Receiver<()>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let app = create_otel_router(state);
     let addr = format!("0.0.0.0:{port}");
 
-    info!("Starting OTLP/HTTP metrics service on http://{addr}/v1/metrics");
-
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app)
-        // .with_graceful_shutdown(async {
-        //     shutdown_signal.await.ok();
-        // })
+        .with_graceful_shutdown(async {
+            shutdown_signal.await.ok();
+        })
         .await?;
 
     Ok(())
@@ -75,6 +74,7 @@ async fn handle_metrics(
 ) -> (StatusCode, [(header::HeaderName, &'static str); 1], Vec<u8>) {
     match ExportMetricsServiceRequest::decode(body) {
         Ok(req) => {
+            // TODO(hjiang): Need to integrate with mooncake table.
             println!("request = {:?}", req);
 
             let resp = ExportMetricsServiceResponse::default();
