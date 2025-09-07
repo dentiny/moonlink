@@ -820,7 +820,7 @@ async fn test_multiple_tables_creation() {
 
 #[tokio::test]
 #[serial]
-async fn test_drop_table() {
+async fn test_drop_and_recreate_table() {
     let _guard = TestGuard::new(&get_moonlink_backend_dir());
     let config = get_service_config();
     tokio::spawn(async move {
@@ -839,9 +839,16 @@ async fn test_drop_table() {
     // Drop test table.
     drop_table(&client, DATABASE, TABLE).await;
 
-    // List table before drop.
+    // List table after drop.
     let list_results = list_tables(&client).await;
     assert_eq!(list_results.len(), 0);
+
+    // Recreate the same table.
+    create_table(&client, DATABASE, TABLE, /*nested=*/ false).await;
+
+    // List table after recreation.
+    let list_results = list_tables(&client).await;
+    assert_eq!(list_results.len(), 1);
 }
 
 /// Testing scenario: create multiple tables, and check list table result.
