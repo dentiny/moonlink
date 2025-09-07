@@ -1,7 +1,6 @@
 mod config_utils;
 mod error;
 pub mod file_utils;
-mod logging;
 mod parquet_utils;
 mod recovery_utils;
 pub mod table_config;
@@ -57,8 +56,6 @@ impl MoonlinkBackend {
         data_server_uri: Option<String>,
         metadata_store_accessor: Box<dyn MetadataStoreTrait>,
     ) -> Result<Self> {
-        logging::init_logging();
-
         // Create local filepath remap logic, so IO requests could be routed to data server.
         let base_path_arc = Arc::new(base_path.clone());
         let data_server_uri_arc = Arc::new(data_server_uri.clone());

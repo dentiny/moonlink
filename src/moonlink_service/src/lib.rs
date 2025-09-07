@@ -1,4 +1,5 @@
 mod error;
+mod logging;
 mod otel;
 pub(crate) mod rest_api;
 mod rpc_server;
@@ -74,6 +75,9 @@ fn setup_readiness_probe() -> Arc<ServiceStatus> {
 }
 
 pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
+    // Set logging config before service start.
+    logging::init_logging();
+
     // Register HTTP endpoint for readiness probe.
     let service_status = if config.in_standalone_deployment_mode() {
         Some(setup_readiness_probe())
