@@ -29,7 +29,6 @@ moonlink_rpc = { path = "../moonlink_rpc" }
 opentelemetry = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 opentelemetry-proto = { version = "0.30", default-features = false, features = ["gen-tonic", "metrics"] }
-opentelemetry-semantic-conventions = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 prost = { workspace = true }
 reqwest = { workspace = true }
