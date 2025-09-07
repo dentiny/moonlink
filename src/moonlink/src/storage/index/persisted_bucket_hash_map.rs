@@ -398,11 +398,7 @@ impl IndexBlockBuilder {
                 self.entry_writer.flush().await?;
             }
         }
-        if self.entry_writer.byte_align() {
-            self.entry_writer.flush().await?;
-        }
-        self.entry_writer.flush().await?;
-        drop(self.entry_writer);
+        self.entry_writer.close().await?;
 
         Ok(IndexBlock::new(
             self.bucket_start_idx,

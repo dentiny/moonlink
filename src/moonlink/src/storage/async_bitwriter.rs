@@ -176,7 +176,7 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
     /// This should be called before the final flush to ensure the output is byte-aligned.
     /// Returns `true` if a flush is required due to buffer spill.
     #[must_use]
-    pub fn byte_align(&mut self) -> bool {
+    fn byte_align(&mut self) -> bool {
         let cur_bit_len = self.bitqueue.len();
         if cur_bit_len == 0 {
             return false;
@@ -186,6 +186,19 @@ impl<W: AsyncWrite + Unpin + Send + Sync, E: Endianness> BitWriter<W, E> {
             to_flush = self.write_bit(false);
         }
         to_flush
+    }
+
+    /// Close the current bit writer, several steps involved:
+    /// - Pads the current bit queue with zeros until aligned to the next byte boundary.
+    /// - Flush both active buffer and inactive one.
+    pub async fn close(mut self) -> io::Result<()> {
+        if self.byte_align() {
+            // If active buffer full, the flush here clear the active buffer and do a switch with inactive one.
+            self.flush().await?;
+        }
+        // Flush whatever left in the active buffer.
+        self.flush().await?;
+        Ok(())
     }
 }
 
