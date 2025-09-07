@@ -413,7 +413,13 @@ impl MooncakeTable {
         mut disk_slice: DiskSliceWriter,
         flush_event_id: uuid::Uuid,
     ) {
-        if disk_slice.output_files().iter().map(|f| f.0.file_id().0).collect::<Vec<_>>() == vec![10000000000007200] {
+        if disk_slice
+            .output_files()
+            .iter()
+            .map(|f| f.0.file_id().0)
+            .collect::<Vec<_>>()
+            == vec![10000000000007200]
+        {
             println!("flush lsn = {:?}", disk_slice.lsn());
         }
 

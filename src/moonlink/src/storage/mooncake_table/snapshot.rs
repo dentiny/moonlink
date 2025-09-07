@@ -542,6 +542,16 @@ impl SnapshotTableState {
             self.current_snapshot.flush_lsn = Some(new_flush_lsn);
         }
 
+        // Update LSN if applicable.
+        if let Some(new_largest_flush_lsn) = task.new_largest_flush_lsn {
+            // It's ok for new largest flush LSN to regress.
+            if self.current_snapshot.largest_flush_lsn.is_none()
+                || new_largest_flush_lsn > self.current_snapshot.largest_flush_lsn.unwrap()
+            {
+                self.current_snapshot.largest_flush_lsn = Some(new_largest_flush_lsn);
+            }
+        }
+
         if task.commit_lsn_baseline != 0 {
             self.current_snapshot.snapshot_version = task.commit_lsn_baseline;
         }
@@ -581,9 +591,11 @@ impl SnapshotTableState {
 
         // TODO(hjiang): When there's only schema evolution, we should also flush even no flush.
         let flush_lsn = self.current_snapshot.flush_lsn.unwrap_or(0);
+        let largest_flush_lsn = self.current_snapshot.largest_flush_lsn.unwrap_or(0);
         if opt.iceberg_snapshot_option != IcebergSnapshotOption::Skip
             && (force_empty_iceberg_payload || flush_by_table_write)
             && flush_lsn < task.min_ongoing_flush_lsn
+            && flush_lsn == largest_flush_lsn
         {
             // Getting persistable committed deletion logs is not cheap, which requires iterating through all logs,
             // so we only aggregate when there's committed deletion.

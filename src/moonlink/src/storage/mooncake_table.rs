@@ -175,6 +175,8 @@ pub struct Snapshot {
     /// At iceberg snapshot creation, we should only dump consistent data files and deletion logs.
     /// Data file flush LSN is recorded here, to get corresponding deletion logs from "committed deletion logs".
     pub(crate) flush_lsn: Option<u64>,
+    /// LSN of largest completed flush operations.
+    pub(crate) largest_flush_lsn: Option<u64>,
     /// indices
     pub(crate) indices: MooncakeIndex,
 }
@@ -186,6 +188,7 @@ impl Snapshot {
             disk_files: HashMap::new(),
             snapshot_version: 0,
             flush_lsn: None,
+            largest_flush_lsn: None,
             indices: MooncakeIndex::new(),
         }
     }
@@ -249,8 +252,11 @@ pub struct SnapshotTask {
     /// Commit LSN baseline of the previous snapshot task.
     /// We use this to determine if commit_lsn_baseline has been updated.
     prev_commit_lsn_baseline: u64,
-    /// Assigned at a flush operation.
+    /// Assigned at a flush operation completion, which means all flushes with LSN <= [`new_flush_lsn`] have finished.
     new_flush_lsn: Option<u64>,
+    /// Assigned at a flush operation completion, which records the largest flush LSN completed.
+    new_largest_flush_lsn: Option<u64>,
+
     new_commit_point: Option<RecordLocation>,
 
     /// streaming xact
@@ -292,6 +298,7 @@ impl SnapshotTask {
             commit_lsn_baseline: 0,
             prev_commit_lsn_baseline: 0,
             new_flush_lsn: None,
+            new_largest_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
             force_empty_iceberg_payload: false,
@@ -895,10 +902,6 @@ impl MooncakeTable {
     /// Applies the result of a flush to the snapshot task.
     /// Adds the disk slice to `next_snapshot_task`.
     pub fn apply_flush_result(&mut self, disk_slice: DiskSliceWriter, flush_event_id: uuid::Uuid) {
-        if disk_slice.output_files().iter().map(|f| f.0.file_id().0).collect::<Vec<_>>() == vec![10000000000007200] {
-            println!("flush lsn = {:?}", disk_slice.lsn());
-        }
-
         // Record events for flush completion.
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_flush_event_completion(
@@ -925,8 +928,12 @@ impl MooncakeTable {
 
     // Attempts to set the flush LSN for the next iceberg snapshot. Note that we can only set the flush LSN if it's less than the current min pending flush LSN. Otherwise, LSNs will be persisted to iceberg in the wrong order.
     fn try_set_next_flush_lsn(&mut self, lsn: u64) {
+        if self.next_snapshot_task.new_largest_flush_lsn.is_none()
+            || self.next_snapshot_task.new_largest_flush_lsn.unwrap() < lsn
+        {
+            self.next_snapshot_task.new_largest_flush_lsn = Some(lsn);
+        }
         let min_pending_lsn = self.get_min_ongoing_flush_lsn();
-
         if lsn < min_pending_lsn {
             if let Some(old_flush_lsn) = self.next_snapshot_task.new_flush_lsn {
                 ma::assert_le!(old_flush_lsn, lsn);

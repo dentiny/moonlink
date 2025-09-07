@@ -317,7 +317,7 @@ pub(crate) async fn sync_iceberg_snapshot(
     {
         iceberg_snapshot_result.unwrap()
     } else {
-        panic!("Expected iceberg completion snapshot notification, but get mooncake one.");
+        panic!("Expected iceberg completion snapshot notification, but get {notification:?}.");
     }
 }
 async fn sync_index_merge(receiver: &mut Receiver<TableEvent>) -> FileIndiceMergeResult {
