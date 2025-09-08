@@ -425,4 +425,14 @@ impl SnapshotTableState {
             }
         }
     }
+
+    /// Prune committed deletion logs, which cannot be deleted previously due to ongoing compaction.
+    pub(super) fn prune_committed_deletion_logs_for_completed_compaction(
+        &mut self,
+        task: &SnapshotTask,
+    ) {
+        if !task.data_compaction_result.is_empty() {
+            self.committed_deletion_logs_in_compaction.clear();
+        }
+    }
 }

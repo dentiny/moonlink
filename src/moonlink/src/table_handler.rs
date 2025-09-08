@@ -705,6 +705,7 @@ impl TableHandler {
                                 table.set_data_compaction_res(data_compaction_res)
                             }
                             Err(err) => {
+                                // TODO(hjiang): Need to record failed compaction result back to snapshot, so committed deletion logs could be pruned.
                                 error!(error = ?err, "failed to perform compaction");
                             }
                         }

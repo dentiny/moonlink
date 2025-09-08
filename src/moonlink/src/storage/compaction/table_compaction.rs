@@ -1,6 +1,7 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
+use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::TableUniqueFileId;
@@ -73,6 +74,14 @@ impl std::fmt::Debug for DataCompactionPayload {
 }
 
 impl DataCompactionPayload {
+    /// Get data file ids to compact.
+    pub fn get_data_files(&self) -> HashSet<FileId> {
+        self.disk_files
+            .iter()
+            .map(|f| f.file_id.file_id)
+            .collect::<HashSet<_>>()
+    }
+
     /// Get max possible number of new file ids number.
     pub fn get_new_compacted_data_file_ids_number(&self) -> u32 {
         // In worst case, we create two new files (one data file, one index block) per data file.

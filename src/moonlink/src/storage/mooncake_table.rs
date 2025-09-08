@@ -273,6 +273,8 @@ pub struct SnapshotTask {
     index_merge_result: FileIndiceMergeResult,
 
     /// --- States related to data compaction operation ---
+    /// Disk file ids which take part in the compaction.
+    compacting_data_files: HashSet<FileId>,
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
     data_compaction_result: DataCompactionResult,
 
@@ -307,6 +309,7 @@ impl SnapshotTask {
             // Index merge related fields.
             index_merge_result: FileIndiceMergeResult::default(),
             // Data compaction related fields.
+            compacting_data_files: HashSet::new(),
             data_compaction_result: DataCompactionResult::default(),
             // Iceberg persistence result.
             iceberg_persisted_records: IcebergPersistedRecords::default(),
@@ -1398,6 +1401,10 @@ impl MooncakeTable {
         };
         let schema_ref = self.metadata.schema.clone();
         let table_notify_tx_copy = self.table_notify.as_ref().unwrap().clone();
+
+        // Record data files being compacted.
+        assert!(self.next_snapshot_task.compacting_data_files.is_empty());
+        self.next_snapshot_task.compacting_data_files = compaction_payload.get_data_files();
 
         // Create a detached task, whose completion will be notified separately.
         tokio::task::spawn(
