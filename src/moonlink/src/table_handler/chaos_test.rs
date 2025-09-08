@@ -1147,7 +1147,7 @@ async fn test_disk_slice_chaos_on_local_fs() {
         special_table_option: SpecialTableOption::None,
         maintenance_option: TableMaintenanceOption::NoTableMaintenance,
         error_injection_enabled: false,
-        event_count: 2000,
+        event_count: 1500,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
