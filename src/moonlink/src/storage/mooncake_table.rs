@@ -406,6 +406,15 @@ impl SnapshotTask {
     }
 }
 
+/// Background task (i.e., mooncake snapshot) status, which is used for validation.
+#[derive(Clone, Debug, Default)]
+struct BackgroundTaskStatus {
+    mooncake_snapshot_ongoing: bool,
+    iceberg_snapshot_ongoing: bool,
+    index_merge_ongoing: bool,
+    data_compaction_ongoing: bool,
+}
+
 /// MooncakeTable is a disk table + mem slice.
 /// Transactions will append data to the mem slice.
 ///
@@ -430,8 +439,9 @@ pub struct MooncakeTable {
 
     /// Current snapshot of the table
     snapshot: Arc<RwLock<SnapshotTableState>>,
-    /// Whether there's ongoing mooncake snapshot.
-    mooncake_snapshot_ongoing: bool,
+
+    /// Background task status, which is ONLY used for invariant validation.
+    background_task_status_for_validation: BackgroundTaskStatus,
 
     table_snapshot_watch_sender: watch::Sender<u64>,
     table_snapshot_watch_receiver: watch::Receiver<u64>,
@@ -562,7 +572,7 @@ impl MooncakeTable {
                 )
                 .await?,
             )),
-            mooncake_snapshot_ongoing: false,
+            background_task_status_for_validation: BackgroundTaskStatus::default(),
             next_snapshot_task: SnapshotTask::new(table_metadata.as_ref().config.clone()),
             transaction_stream_states: HashMap::new(),
             table_snapshot_watch_sender,
@@ -658,6 +668,13 @@ impl MooncakeTable {
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
     pub(crate) fn set_iceberg_snapshot_res(&mut self, iceberg_snapshot_res: IcebergSnapshotResult) {
+        assert!(
+            self.background_task_status_for_validation
+                .iceberg_snapshot_ongoing
+        );
+        self.background_task_status_for_validation
+            .iceberg_snapshot_ongoing = false;
+
         // ---- Update mooncake table fields ----
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
         Self::assert_flush_lsn_on_iceberg_snapshot_res(
@@ -715,6 +732,13 @@ impl MooncakeTable {
 
     /// Set file indices merge result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
     pub(crate) fn set_file_indices_merge_res(&mut self, file_indices_res: FileIndiceMergeResult) {
+        assert!(
+            self.background_task_status_for_validation
+                .index_merge_ongoing
+        );
+        self.background_task_status_for_validation
+            .index_merge_ongoing = false;
+
         // TODO(hjiang): Should be able to use HashSet at beginning so no need to convert.
         assert!(self.next_snapshot_task.index_merge_result.is_empty());
         self.next_snapshot_task.index_merge_result = file_indices_res;
@@ -722,6 +746,13 @@ impl MooncakeTable {
 
     /// Set data compaction result, which will be sync-ed to mooncake and iceberg snapshot in the next periodic snapshot iteration.
     pub(crate) fn set_data_compaction_res(&mut self, data_compaction_res: DataCompactionResult) {
+        assert!(
+            self.background_task_status_for_validation
+                .data_compaction_ongoing
+        );
+        self.background_task_status_for_validation
+            .data_compaction_ongoing = false;
+
         assert!(self.next_snapshot_task.data_compaction_result.is_empty());
         self.next_snapshot_task.data_compaction_result = data_compaction_res;
     }
@@ -1002,8 +1033,13 @@ impl MooncakeTable {
         }
 
         // Check invariant: there should be at most one ongoing mooncake snapshot.
-        assert!(!self.mooncake_snapshot_ongoing);
-        self.mooncake_snapshot_ongoing = true;
+        assert!(
+            !self
+                .background_task_status_for_validation
+                .mooncake_snapshot_ongoing
+        );
+        self.background_task_status_for_validation
+            .mooncake_snapshot_ongoing = true;
 
         self.next_snapshot_task.new_rows = Some(self.mem_slice.get_latest_rows());
         let mut next_snapshot_task = std::mem::take(&mut self.next_snapshot_task);
@@ -1034,8 +1070,12 @@ impl MooncakeTable {
 
     /// Notify mooncake snapshot as completed.
     pub fn mark_mooncake_snapshot_completed(&mut self) {
-        assert!(self.mooncake_snapshot_ongoing);
-        self.mooncake_snapshot_ongoing = false;
+        assert!(
+            self.background_task_status_for_validation
+                .mooncake_snapshot_ongoing
+        );
+        self.background_task_status_for_validation
+            .mooncake_snapshot_ongoing = false;
     }
 
     /// Mark next iceberg snapshot as force, even if the payload is empty.
@@ -1305,6 +1345,14 @@ impl MooncakeTable {
         &mut self,
         file_indice_merge_payload: FileIndiceMergePayload,
     ) {
+        assert!(
+            !self
+                .background_task_status_for_validation
+                .index_merge_ongoing
+        );
+        self.background_task_status_for_validation
+            .index_merge_ongoing = true;
+
         // Record index merge event initiation.
         let table_event_id = file_indice_merge_payload.uuid;
         if let Some(event_replay_tx) = &self.event_replay_tx {
@@ -1369,6 +1417,14 @@ impl MooncakeTable {
 
     /// Perform data compaction, whose completion will be notified separately in async style.
     pub(crate) fn perform_data_compaction(&mut self, compaction_payload: DataCompactionPayload) {
+        assert!(
+            !self
+                .background_task_status_for_validation
+                .data_compaction_ongoing
+        );
+        self.background_task_status_for_validation
+            .data_compaction_ongoing = true;
+
         // Record index merge event initiation.
         let table_event_id = compaction_payload.uuid;
         if let Some(event_replay_tx) = &self.event_replay_tx {
@@ -1597,6 +1653,13 @@ impl MooncakeTable {
     pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
         // Check invariant: there's at most one ongoing iceberg snapshot.
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
+        assert!(
+            !self
+                .background_task_status_for_validation
+                .iceberg_snapshot_ongoing
+        );
+        self.background_task_status_for_validation
+            .iceberg_snapshot_ongoing = true;
 
         // Create a detached task, whose completion will be notified separately.
         let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
