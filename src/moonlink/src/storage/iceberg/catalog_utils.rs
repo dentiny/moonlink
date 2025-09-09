@@ -4,6 +4,8 @@ use crate::storage::iceberg::file_catalog::FileCatalog;
 use crate::storage::iceberg::iceberg_table_config::IcebergCatalogConfig;
 use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
+#[cfg(feature = "catalog-rest")]
+use crate::storage::iceberg::rest_catalog::RestCatalog;
 
 use iceberg::spec::Schema as IcebergSchema;
 use iceberg::spec::TableMetadata;
