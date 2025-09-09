@@ -1,6 +1,4 @@
-use crate::storage::iceberg::catalog_test_impl::{
-    test_update_table_impl, test_update_table_with_requirement_check_failed_impl,
-};
+use crate::storage::iceberg::catalog_test_impl::*;
 use crate::storage::iceberg::rest_catalog::RestCatalog;
 use crate::storage::iceberg::rest_catalog_test_guard::RestCatalogTestGuard;
 use crate::storage::iceberg::rest_catalog_test_utils::*;
@@ -141,6 +139,29 @@ async fn test_update_table() {
         .await
         .unwrap();
     test_update_table_impl(&mut catalog, namespace.clone(), table.clone()).await;
+    catalog
+        .drop_table(&TableIdent::new(
+            NamespaceIdent::new(namespace.clone()),
+            table.clone(),
+        ))
+        .await
+        .unwrap();
+    catalog
+        .drop_namespace(&NamespaceIdent::new(namespace.clone()))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_update_schema() {
+    let namespace = get_random_string();
+    let table = get_random_string();
+    let mut catalog = RestCatalog::new(default_rest_catalog_config(), default_accessor_config())
+        .await
+        .unwrap();
+    test_update_schema_impl(&mut catalog, namespace.to_string(), table.to_string()).await;
+
+    // Clean up test.
     catalog
         .drop_table(&TableIdent::new(
             NamespaceIdent::new(namespace.clone()),
