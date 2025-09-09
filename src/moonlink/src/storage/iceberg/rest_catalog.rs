@@ -153,7 +153,8 @@ impl Catalog for RestCatalog {
     ) -> IcebergResult<Table> {
         let old_table = self.catalog.create_table(namespace_ident, creation).await?;
 
-        // Intentionally perform a schema evolution to reflect desired iceberg schema.
+        // On table creation, iceberg-rust normalize field id, which breaks the mapping between mooncake table arrow schema and iceberg schema.
+        // Intentionally perform a schema evolution to reflect desired schema.
         let add_schema_update = TableUpdate::AddSchema {
             schema: self.iceberg_schema.as_ref().unwrap().clone(),
         };
