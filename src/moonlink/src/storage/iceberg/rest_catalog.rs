@@ -158,7 +158,9 @@ impl Catalog for RestCatalog {
         let add_schema_update = TableUpdate::AddSchema {
             schema: self.iceberg_schema.as_ref().unwrap().clone(),
         };
-        let set_schema_update = TableUpdate::SetCurrentSchema { schema_id: -1 };
+        let set_schema_update = TableUpdate::SetCurrentSchema {
+            schema_id: TableMetadataBuilder::LAST_ADDED,
+        };
         let table_commit = TableCommitProxy {
             ident: old_table.identifier().clone(),
             requirements: Vec::new(),
