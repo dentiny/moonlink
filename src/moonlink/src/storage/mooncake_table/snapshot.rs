@@ -65,8 +65,6 @@ pub(crate) struct SnapshotTableState {
     /// - It's persisted in iceberg;
     /// - It's not being compacted, so compaction remap only happens in mooncake snapshot.
     ///
-    /// Here we record those which have been persisted into iceberg, but still used in compaction.
-    pub(crate) committed_deletion_logs_in_compaction: Vec<ProcessedDeletionRecord>,
     /// Data files which are being compacted.
     pub(crate) compacting_data_files: HashSet<FileId>,
 
@@ -177,7 +175,6 @@ impl SnapshotTableState {
             table_notify: None,
             committed_deletion_log: Vec::new(),
             uncommitted_deletion_log: Vec::new(),
-            committed_deletion_logs_in_compaction: Vec::new(),
             compacting_data_files: HashSet::new(),
             unpersisted_records: UnpersistedRecords::new(table_config),
             non_streaming_batch_id_counter,
@@ -285,9 +282,11 @@ impl SnapshotTableState {
                         new_committed_deletion_log.push(cur_deletion_log);
                         continue;
                     }
+                    // Persisted committed deletion records fall into two categories:
+                    // - Included in the compaction, which get removed due to "failed" remap;
+                    // - Not included in the compaction, which convert to the newly compacted data files' deletion record after remap.
                     if self.compacting_data_files.contains(file_id) {
-                        self.committed_deletion_logs_in_compaction
-                            .push(cur_deletion_log);
+                        new_committed_deletion_log.push(cur_deletion_log);
                     }
                 }
             }
@@ -530,9 +529,6 @@ impl SnapshotTableState {
         // Remap deletion logs.
         self.remap_uncommitted_deletion_logs_after_compaction(&mut task);
         self.remap_committed_deletion_logs_after_compaction(&mut task);
-
-        // Prune committed deletion logs used ongoing compaction.
-        self.prune_committed_deletion_logs_for_completed_compaction(&task);
 
         // Prune unpersisted records.
         //

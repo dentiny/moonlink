@@ -1,6 +1,5 @@
 use super::data_batches::create_batch_from_rows;
 use crate::error::Result;
-use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::snapshot::SnapshotTableState;
 use crate::storage::mooncake_table::snapshot_read_output::{
     DataFileForRead, ReadOutput as SnapshotReadOutput,
@@ -98,35 +97,8 @@ impl SnapshotTableState {
         for (file_idx, (_, disk_deletion_vector)) in
             self.current_snapshot.disk_files.iter().enumerate()
         {
-            // Fast-path: there're no persisted deletion records for the current disk file.
             if disk_deletion_vector.puffin_deletion_blob.is_none() {
-                let deleted_rows = disk_deletion_vector
-                    .committed_deletion_vector
-                    .collect_deleted_rows();
-                for cur_row_idx in deleted_rows.into_iter() {
-                    committed_unpersisted_committed_records.push(PositionDelete {
-                        data_file_number: file_idx as u32,
-                        data_file_row_number: cur_row_idx as u32,
-                    });
-                }
                 continue;
-            }
-
-            // Get committed but persisted deletion records.
-            let persisted_deletion_record = &disk_deletion_vector
-                .puffin_deletion_blob
-                .as_ref()
-                .unwrap()
-                .deletion_vector;
-            let cur_committed_unpersisted = BatchDeletionVector::deleted_diff(
-                &disk_deletion_vector.committed_deletion_vector,
-                persisted_deletion_record,
-            );
-            for cur_row_idx in cur_committed_unpersisted.into_iter() {
-                committed_unpersisted_committed_records.push(PositionDelete {
-                    data_file_number: file_idx as u32,
-                    data_file_row_number: cur_row_idx as u32,
-                });
             }
 
             // Get persisted deletion vector, in iceberg puffin blob format.
@@ -153,6 +125,21 @@ impl SnapshotTableState {
                 offset: puffin_deletion_blob.start_offset,
                 size: puffin_deletion_blob.blob_size,
             });
+        }
+
+        // Get committed but un-persisted deletion vector.
+        for deletion in self.committed_deletion_log.iter() {
+            if let RecordLocation::DiskFile(file_id, row_id) = &deletion.pos {
+                for (id, (file, _)) in self.current_snapshot.disk_files.iter().enumerate() {
+                    if file.file_id() == *file_id {
+                        committed_unpersisted_committed_records.push(PositionDelete {
+                            data_file_number: id as u32,
+                            data_file_row_number: *row_id as u32,
+                        });
+                        break;
+                    }
+                }
+            }
         }
 
         (

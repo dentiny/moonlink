@@ -163,7 +163,6 @@ impl IcebergTableManager {
         let persisted_deletion_vector = PuffinBlobRef {
             // Deletion vector should be pinned on cache.
             puffin_file_cache_handle: cache_handle.unwrap(),
-            deletion_vector: batch_deletion_vector.clone(),
             start_offset: data_file.content_offset().unwrap() as u32,
             blob_size: data_file.content_size_in_bytes().unwrap() as u32,
             num_rows: num_rows as usize,

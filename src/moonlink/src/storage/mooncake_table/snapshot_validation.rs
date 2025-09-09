@@ -86,24 +86,6 @@ impl SnapshotTableState {
                     .committed_deletion_vector
                     .get_num_rows_deleted()
             );
-
-            // Persisted deletion vector, which is the in-memory format for puffin blob, is a subset of batch deletion vector.
-            if cur_disk_file_entry.puffin_deletion_blob.is_none() {
-                continue;
-            }
-            let committed_deleted_rows = cur_disk_file_entry
-                .committed_deletion_vector
-                .collect_deleted_rows();
-            let committed_deleted_rows = committed_deleted_rows.into_iter().collect::<HashSet<_>>();
-            let persisted_deleted_rows = cur_disk_file_entry
-                .puffin_deletion_blob
-                .as_ref()
-                .unwrap()
-                .deletion_vector
-                .collect_deleted_rows();
-            for cur_row_idx in persisted_deleted_rows.into_iter() {
-                assert!(committed_deleted_rows.contains(&cur_row_idx));
-            }
         }
     }
 

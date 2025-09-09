@@ -23,8 +23,6 @@ pub struct PuffinBlobRef {
     pub(crate) blob_size: u32,
     /// Number of rows deleted in the puffin blob.
     pub(crate) num_rows: usize,
-    /// Persisted deletion record.
-    pub(crate) deletion_vector: BatchDeletionVector,
 }
 
 /// Get puffin writer with the given file io.

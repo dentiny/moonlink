@@ -172,43 +172,6 @@ impl BatchDeletionVector {
         }
         deleted
     }
-
-    /// Get the row indices that are deleted in [`lhs`] but NOT deleted in [`rhs`].
-    /// Precondition: the deleted rows set for [`lhs`] is a superset for [`rhs`], otherwise it's undefine behavior.
-    pub(crate) fn deleted_diff(lhs: &BatchDeletionVector, rhs: &BatchDeletionVector) -> Vec<u64> {
-        assert_eq!(lhs.max_rows, rhs.max_rows);
-
-        // Case where lhs is empty.
-        let Some(lhs_vec) = &lhs.deletion_vector else {
-            return Vec::new();
-        };
-
-        // Case where rhs is empty.
-        let rhs_vec_opt = &rhs.deletion_vector;
-        if rhs_vec_opt.is_none() {
-            return lhs.collect_deleted_rows();
-        }
-        let rhs_vec = rhs_vec_opt.as_ref().unwrap();
-
-        let mut out = Vec::new();
-        for (byte_idx, (&lb, &rb)) in lhs_vec.iter().zip(rhs_vec.iter()).enumerate() {
-            let mask = (!lb) & rb;
-            if mask == 0 {
-                continue;
-            }
-            for bit_idx in 0..8 {
-                if (mask & (1 << bit_idx)) != 0 {
-                    let row_idx = byte_idx * 8 + bit_idx;
-                    if row_idx >= lhs.max_rows {
-                        break;
-                    }
-                    out.push(row_idx as u64);
-                }
-            }
-        }
-
-        out
-    }
 }
 
 #[cfg(test)]
@@ -440,53 +403,5 @@ mod tests {
 
         // This should panic - trying to delete row_id=5 when capacity is only 3
         let _ = deletion_vector.delete_row(5);
-    }
-
-    #[test]
-    fn test_diff_lhs_empty() {
-        let lhs = BatchDeletionVector::new(16);
-        let rhs = BatchDeletionVector::new(16);
-        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
-        assert!(diff.is_empty());
-    }
-
-    #[test]
-    fn test_diff_rhs_empty() {
-        let mut lhs = BatchDeletionVector::new(16);
-        assert!(lhs.delete_row(10));
-        let rhs = BatchDeletionVector::new(16);
-        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
-        assert_eq!(diff, vec![10]);
-    }
-
-    #[test]
-    fn test_diff_both_not_empty_lhs_superset_rhs() {
-        // Make non-empty lhs.
-        let mut lhs = BatchDeletionVector::new(16);
-        assert!(lhs.delete_row(8));
-        assert!(lhs.delete_row(10));
-        // Make non-empty rhs.
-        let mut rhs = BatchDeletionVector::new(16);
-        assert!(rhs.delete_row(10));
-
-        // Get difference and validate.
-        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
-        assert_eq!(diff, vec![8]);
-    }
-
-    #[test]
-    fn test_diff_both_not_empty_equal() {
-        // Make non-empty lhs.
-        let mut lhs = BatchDeletionVector::new(16);
-        assert!(lhs.delete_row(8));
-        assert!(lhs.delete_row(10));
-        // Make non-empty rhs.
-        let mut rhs = BatchDeletionVector::new(16);
-        assert!(rhs.delete_row(8));
-        assert!(rhs.delete_row(10));
-
-        // Get difference and validate.
-        let diff = BatchDeletionVector::deleted_diff(&lhs, &rhs);
-        assert!(diff.is_empty());
     }
 }
