@@ -20,7 +20,7 @@ impl RestCatalogTestGuard {
             create_test_table_schema().unwrap(),
         )
         .await
-        .expect("Catalog creation fail");
+        .unwrap();
         let ns_ident = NamespaceIdent::new(namespace);
         catalog.create_namespace(&ns_ident, HashMap::new()).await?;
         let table_ident = if let Some(t) = table {
@@ -53,7 +53,7 @@ impl Drop for RestCatalogTestGuard {
                     create_test_table_schema().unwrap(),
                 )
                 .await
-                .expect("Catalog creation fail");
+                .unwrap();
                 if let Some(t) = table {
                     catalog.drop_table(&t).await.unwrap();
                 }

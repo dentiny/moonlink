@@ -81,3 +81,7 @@ mod snapshot_fetcher_test;
 
 #[cfg(test)]
 mod catalog_test_impl;
+
+#[cfg(feature = "catalog-rest")]
+#[cfg(test)]
+mod iceberg_rest_catalog_test;
