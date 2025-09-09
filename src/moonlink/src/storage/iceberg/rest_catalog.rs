@@ -13,9 +13,9 @@ use iceberg::puffin::PuffinWriter;
 use iceberg::spec::TableMetadataBuilder;
 use iceberg::spec::{Schema as IcebergSchema, TableMetadata};
 use iceberg::table::Table;
-use iceberg::CatalogBuilder;
 use iceberg::Result as IcebergResult;
 use iceberg::{Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent};
+use iceberg::{CatalogBuilder, TableUpdate};
 use iceberg_catalog_rest::{
     RestCatalog as IcebergRestCatalog, RestCatalogBuilder as IcebergRestCatalogBuilder,
     REST_CATALOG_PROP_URI, REST_CATALOG_PROP_WAREHOUSE,
@@ -25,8 +25,13 @@ use std::collections::{HashMap, HashSet};
 #[derive(Debug)]
 pub struct RestCatalog {
     pub(crate) catalog: IcebergRestCatalog,
+    /// Similar to opendal operator, which also provides an abstraction above different storage backends.
     file_io: FileIO,
+    /// Table location.
     warehouse_location: String,
+    /// Used to overwrite iceberg metadata at table creation.
+    iceberg_schema: Option<IcebergSchema>,
+    /// Used to record puffin blob metadata in one transaction, and cleaned up after transaction commits.
     ///
     /// Maps from "puffin filepath" to "puffin blob metadata".
     deletion_vector_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
@@ -40,6 +45,35 @@ pub struct RestCatalog {
 impl RestCatalog {
     #[allow(dead_code)]
     pub async fn new(
+        mut config: RestCatalogConfig,
+        accessor_config: AccessorConfig,
+        iceberg_schema: IcebergSchema,
+    ) -> IcebergResult<Self> {
+        let builder = IcebergRestCatalogBuilder::default();
+        config
+            .props
+            .insert(REST_CATALOG_PROP_URI.to_string(), config.uri);
+        config.props.insert(
+            REST_CATALOG_PROP_WAREHOUSE.to_string(),
+            config.warehouse.clone(),
+        );
+        let warehouse_location = config.warehouse.clone();
+        let catalog = builder.load(config.name, config.props).await?;
+        let file_io = iceberg_io_utils::create_file_io(&accessor_config)?;
+        Ok(Self {
+            catalog,
+            file_io,
+            warehouse_location,
+            iceberg_schema: Some(iceberg_schema),
+            deletion_vector_blobs_to_add: HashMap::new(),
+            file_index_blobs_to_add: HashMap::new(),
+            puffin_blobs_to_remove: HashSet::new(),
+            data_files_to_remove: HashSet::new(),
+        })
+    }
+
+    /// Create a rest catalog, which get initialized lazily with no schema populated.
+    pub async fn new_without_schema(
         mut config: RestCatalogConfig,
         accessor_config: AccessorConfig,
     ) -> IcebergResult<Self> {
@@ -58,6 +92,7 @@ impl RestCatalog {
             catalog,
             file_io,
             warehouse_location,
+            iceberg_schema: None,
             deletion_vector_blobs_to_add: HashMap::new(),
             file_index_blobs_to_add: HashMap::new(),
             puffin_blobs_to_remove: HashSet::new(),
@@ -116,7 +151,21 @@ impl Catalog for RestCatalog {
         namespace_ident: &NamespaceIdent,
         creation: TableCreation,
     ) -> IcebergResult<Table> {
-        self.catalog.create_table(namespace_ident, creation).await
+        let old_table = self.catalog.create_table(namespace_ident, creation).await?;
+
+        // Intentionally perform a schema evolution to reflect desired iceberg schema.
+        let add_schema_update = TableUpdate::AddSchema {
+            schema: self.iceberg_schema.as_ref().unwrap().clone(),
+        };
+        let set_schema_update = TableUpdate::SetCurrentSchema { schema_id: -1 };
+        let table_commit = TableCommitProxy {
+            ident: old_table.identifier().clone(),
+            requirements: Vec::new(),
+            updates: vec![add_schema_update, set_schema_update],
+        }
+        .take_as_table_commit();
+        let updated_table = self.update_table(table_commit).await?;
+        Ok(updated_table)
     }
 
     async fn load_table(&self, table_ident: &TableIdent) -> IcebergResult<Table> {

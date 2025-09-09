@@ -22,9 +22,15 @@ pub async fn create_catalog(
             Ok(Box::new(FileCatalog::new(accessor_config, iceberg_schema)?))
         }
         #[cfg(feature = "catalog-rest")]
-        IcebergCatalogConfig::Rest { .. } => Err(iceberg::Error::new(
-            iceberg::ErrorKind::FeatureUnsupported,
-            "Only File catalog is supported currently",
+        IcebergCatalogConfig::Rest {
+            rest_catalog_config,
+        } => Ok(Box::new(
+            RestCatalog::new(
+                rest_catalog_config,
+                config.data_accessor_config,
+                iceberg_schema,
+            )
+            .await?,
         )),
         #[cfg(feature = "catalog-glue")]
         IcebergCatalogConfig::Glue { .. } => Err(iceberg::Error::new(
@@ -43,9 +49,11 @@ pub async fn create_catalog_without_schema(
             Ok(Box::new(FileCatalog::new_without_schema(accessor_config)?))
         }
         #[cfg(feature = "catalog-rest")]
-        IcebergCatalogConfig::Rest { .. } => Err(iceberg::Error::new(
-            iceberg::ErrorKind::FeatureUnsupported,
-            "Only File catalog is supported currently",
+        IcebergCatalogConfig::Rest {
+            rest_catalog_config,
+        } => Ok(Box::new(
+            RestCatalog::new_without_schema(rest_catalog_config, config.data_accessor_config)
+                .await?,
         )),
         #[cfg(feature = "catalog-glue")]
         IcebergCatalogConfig::Glue { .. } => Err(iceberg::Error::new(

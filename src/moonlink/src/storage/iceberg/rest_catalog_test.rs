@@ -1,4 +1,5 @@
 use crate::storage::iceberg::catalog_test_impl::*;
+use crate::storage::iceberg::catalog_test_utils::*;
 use crate::storage::iceberg::rest_catalog::RestCatalog;
 use crate::storage::iceberg::rest_catalog_test_guard::RestCatalogTestGuard;
 use crate::storage::iceberg::rest_catalog_test_utils::*;
@@ -13,9 +14,13 @@ async fn test_create_table() {
         .unwrap();
     let rest_catalog_config = default_rest_catalog_config();
     let accessor_config = default_accessor_config();
-    let catalog = RestCatalog::new(rest_catalog_config, accessor_config)
-        .await
-        .unwrap();
+    let catalog = RestCatalog::new(
+        rest_catalog_config,
+        accessor_config,
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
     let namespace = NamespaceIdent::new(namespace);
     let table_creation = default_table_creation(table.clone());
     let table_name = table_creation.name.clone();
@@ -35,9 +40,13 @@ async fn test_drop_table() {
         .unwrap();
     let rest_catalog_config = default_rest_catalog_config();
     let accessor_config = default_accessor_config();
-    let catalog = RestCatalog::new(rest_catalog_config, accessor_config)
-        .await
-        .unwrap();
+    let catalog = RestCatalog::new(
+        rest_catalog_config,
+        accessor_config,
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
     let table_ident = guard.table.clone().unwrap();
     guard.table = None;
     assert!(catalog.table_exists(&table_ident).await.unwrap());
@@ -54,9 +63,13 @@ async fn test_table_exists() {
         .unwrap();
     let rest_catalog_config = default_rest_catalog_config();
     let accessor_config = default_accessor_config();
-    let catalog = RestCatalog::new(rest_catalog_config, accessor_config)
-        .await
-        .unwrap();
+    let catalog = RestCatalog::new(
+        rest_catalog_config,
+        accessor_config,
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
 
     // Check table existence.
     let table_ident = guard.table.clone().unwrap();
@@ -76,9 +89,13 @@ async fn test_load_table() {
         .unwrap();
     let rest_catalog_config = default_rest_catalog_config();
     let accessor_config = default_accessor_config();
-    let catalog = RestCatalog::new(rest_catalog_config, accessor_config)
-        .await
-        .unwrap();
+    let catalog = RestCatalog::new(
+        rest_catalog_config,
+        accessor_config,
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
     let table_ident = guard.table.clone().unwrap();
     let result = catalog.load_table(&table_ident).await.unwrap();
     let result_table_ident = result.identifier().clone();
@@ -89,9 +106,13 @@ async fn test_load_table() {
 async fn test_update_table_with_requirement_check_failed() {
     let namespace = get_random_string();
     let table = get_random_string();
-    let catalog = RestCatalog::new(default_rest_catalog_config(), default_accessor_config())
-        .await
-        .unwrap();
+    let catalog = RestCatalog::new(
+        default_rest_catalog_config(),
+        default_accessor_config(),
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
     test_update_table_with_requirement_check_failed_impl(
         &catalog,
         namespace.clone(),
@@ -115,9 +136,13 @@ async fn test_update_table_with_requirement_check_failed() {
 async fn test_update_table() {
     let namespace = get_random_string();
     let table = get_random_string();
-    let mut catalog = RestCatalog::new(default_rest_catalog_config(), default_accessor_config())
-        .await
-        .unwrap();
+    let mut catalog = RestCatalog::new(
+        default_rest_catalog_config(),
+        default_accessor_config(),
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
     test_update_table_impl(&mut catalog, namespace.clone(), table.clone()).await;
     catalog
         .drop_table(&TableIdent::new(
@@ -136,9 +161,13 @@ async fn test_update_table() {
 async fn test_update_schema() {
     let namespace = get_random_string();
     let table = get_random_string();
-    let mut catalog = RestCatalog::new(default_rest_catalog_config(), default_accessor_config())
-        .await
-        .unwrap();
+    let mut catalog = RestCatalog::new(
+        default_rest_catalog_config(),
+        default_accessor_config(),
+        create_test_table_schema().unwrap(),
+    )
+    .await
+    .unwrap();
     test_update_schema_impl(&mut catalog, namespace.to_string(), table.to_string()).await;
 
     // Clean up test.
