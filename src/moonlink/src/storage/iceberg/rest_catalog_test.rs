@@ -3,6 +3,7 @@ use crate::storage::iceberg::catalog_test_utils::*;
 use crate::storage::iceberg::rest_catalog::RestCatalog;
 use crate::storage::iceberg::rest_catalog_test_guard::RestCatalogTestGuard;
 use crate::storage::iceberg::rest_catalog_test_utils::*;
+use crate::storage::iceberg::schema_utils::assert_is_same_schema;
 use iceberg::{Catalog, NamespaceIdent, TableIdent};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -63,13 +64,10 @@ async fn test_table_exists() {
         .unwrap();
     let rest_catalog_config = default_rest_catalog_config();
     let accessor_config = default_accessor_config();
-    let catalog = RestCatalog::new(
-        rest_catalog_config,
-        accessor_config,
-        create_test_table_schema().unwrap(),
-    )
-    .await
-    .unwrap();
+    let iceberg_schema = create_test_table_schema().unwrap();
+    let catalog = RestCatalog::new(rest_catalog_config, accessor_config, iceberg_schema.clone())
+        .await
+        .unwrap();
 
     // Check table existence.
     let table_ident = guard.table.clone().unwrap();
@@ -77,7 +75,12 @@ async fn test_table_exists() {
 
     // List tables and validate.
     let tables = catalog.list_tables(table_ident.namespace()).await.unwrap();
-    assert_eq!(tables, vec![table_ident]);
+    assert_eq!(tables, vec![table_ident.clone()]);
+
+    // Load table and check schema.
+    let table = catalog.load_table(&table_ident).await.unwrap();
+    let actual_schema = table.metadata().current_schema();
+    assert_is_same_schema(actual_schema.as_ref().clone(), iceberg_schema);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

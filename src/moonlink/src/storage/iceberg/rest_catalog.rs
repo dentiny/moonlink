@@ -13,9 +13,9 @@ use iceberg::puffin::PuffinWriter;
 use iceberg::spec::TableMetadataBuilder;
 use iceberg::spec::{Schema as IcebergSchema, TableMetadata};
 use iceberg::table::Table;
+use iceberg::CatalogBuilder;
 use iceberg::Result as IcebergResult;
 use iceberg::{Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent};
-use iceberg::{CatalogBuilder, TableUpdate};
 use iceberg_catalog_rest::{
     RestCatalog as IcebergRestCatalog, RestCatalogBuilder as IcebergRestCatalogBuilder,
     REST_CATALOG_PROP_URI, REST_CATALOG_PROP_WAREHOUSE,
@@ -152,22 +152,32 @@ impl Catalog for RestCatalog {
         creation: TableCreation,
     ) -> IcebergResult<Table> {
         let old_table = self.catalog.create_table(namespace_ident, creation).await?;
+        let old_metadata = old_table.metadata();
+
+        // Craft a new schema with a new schema id, which has to be different from the existing one.
+        let old_schema = self.iceberg_schema.as_ref().unwrap().clone();
+        let new_schema_id = old_schema.schema_id() + 1;
+        let mut new_schema_builder = old_schema.into_builder();
+        new_schema_builder = new_schema_builder.with_schema_id(new_schema_id);
+        let new_schema = new_schema_builder.build()?;
 
         // On table creation, iceberg-rust normalize field id, which breaks the mapping between mooncake table arrow schema and iceberg schema.
         // Intentionally perform a schema evolution to reflect desired schema.
-        let add_schema_update = TableUpdate::AddSchema {
-            schema: self.iceberg_schema.as_ref().unwrap().clone(),
-        };
-        let set_schema_update = TableUpdate::SetCurrentSchema {
-            schema_id: TableMetadataBuilder::LAST_ADDED,
-        };
-        let table_commit = TableCommitProxy {
+        let mut builder = TableMetadataBuilder::new_from_metadata(
+            old_metadata.clone(),
+            /*current_file_location=*/ None,
+        );
+        builder = builder.add_current_schema(new_schema)?;
+        let build_result = builder.build()?;
+        let normalized_updates = build_result.changes;
+        let new_commit = TableCommitProxy {
             ident: old_table.identifier().clone(),
             requirements: Vec::new(),
-            updates: vec![add_schema_update, set_schema_update],
+            updates: normalized_updates,
         }
         .take_as_table_commit();
-        let updated_table = self.update_table(table_commit).await?;
+
+        let updated_table = self.catalog.update_table(new_commit).await?;
         Ok(updated_table)
     }
 
