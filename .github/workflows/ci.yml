@@ -524,8 +524,30 @@ jobs:
         timeout-minutes: 10
         run: |
           RUST_BACKTRACE=1 cargo test table_handler::regression --features=chaos-test -p moonlink -- --nocapture
+  
+  # ───────────── 13 · Replay chaos test  ─────────────
+  replay_chaos_test:
+    name: Replay chaos test
+    runs-on: ubuntu-latest
 
-  # ───────────── 13 · PostgreSQL Integration Tests ─────────────
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          shared-key: ${{ steps.toolchain.outputs.cachekey }}
+
+      - uses: rui314/setup-mold@v1
+        with:
+          mold-version: 2.40.3
+          make-default: true
+
+      - name: Start replay chaos test
+        timeout-minutes: 10
+        run: |
+          RUST_BACKTRACE=1 cargo test table_handler::test_replay_chaos --features=chaos-test -p moonlink -- --nocapture
+
+  # ───────────── 14 · PostgreSQL Integration Tests ─────────────
   postgres_tests:
     name: PostgreSQL Integration Tests
     runs-on: ubuntu-latest
@@ -614,7 +636,7 @@ jobs:
         run: |
           cargo test --package moonlink_backend --test '*'
 
-  # ───────────── 14 · Moonlink Service Integration Tests ─────────────
+  # ───────────── 15 · Moonlink Service Integration Tests ─────────────
   moonlink_service_tests:
     name: Moonlink Service Integration Tests
     runs-on: ubuntu-latest
