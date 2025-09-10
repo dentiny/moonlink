@@ -72,10 +72,7 @@ impl IcebergTableManager {
     }
 
     // Validate data files to add don't belong to iceberg snapshot.
-    fn validate_new_data_files(
-        &self,
-        new_data_files: &Vec<MooncakeDataFileRef>,
-    ) -> IcebergResult<()> {
+    fn validate_new_data_files(&self, new_data_files: &[MooncakeDataFileRef]) -> IcebergResult<()> {
         for cur_data_file in new_data_files.iter() {
             if self
                 .persisted_data_files
@@ -91,10 +88,7 @@ impl IcebergTableManager {
     }
 
     // Validate data files to remove don't belong to iceberg snapshot.
-    fn validate_old_data_files(
-        &self,
-        old_data_files: &Vec<MooncakeDataFileRef>,
-    ) -> IcebergResult<()> {
+    fn validate_old_data_files(&self, old_data_files: &[MooncakeDataFileRef]) -> IcebergResult<()> {
         for cur_data_file in old_data_files.iter() {
             if !self
                 .persisted_data_files
