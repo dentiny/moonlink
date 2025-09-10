@@ -99,7 +99,7 @@ async fn test_schema() {
     );
     let response: CreateTableResponse = response.json().await.unwrap();
     assert_eq!(response.database, DATABASE);
-    assert_eq!(response.table, crafted_src_table_name);
+    assert_eq!(response.table, TABLE);
     assert_eq!(response.lsn, 1);
 }
 
