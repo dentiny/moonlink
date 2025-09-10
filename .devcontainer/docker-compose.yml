@@ -13,6 +13,7 @@ services:
       - postgres
       - fake-gcs
       - nginx
+      - iceberg-rest
     command: sleep infinity
 
   postgres:
