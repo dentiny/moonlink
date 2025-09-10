@@ -82,6 +82,7 @@ pub fn init_logging(log_directory: Option<impl AsRef<Path>>) -> Option<LoggingGu
     }
 }
 
+#[cfg(feature = "log-rotation-test")]
 #[cfg(test)]
 mod tests {
     use super::{init_logging, DEFAULT_LOG_FILE_SIZE};
@@ -89,7 +90,6 @@ mod tests {
     use tempfile::tempdir;
     use tracing::info;
 
-    #[cfg(feature = "log-rotation-test")]
     #[test]
     fn test_log_rotation() {
         let temp_dir = tempdir().unwrap();
