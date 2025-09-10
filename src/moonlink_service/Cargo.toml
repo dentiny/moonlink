@@ -12,6 +12,7 @@ rest_api_demo = []
 standalone-test = []
 otel-integration = []
 postgres-integration = []
+log-rotation-test = []
 
 storage-s3 = ["moonlink/storage-s3"]
 storage-gcs = ["moonlink/storage-gcs"]
@@ -23,6 +24,7 @@ arrow-schema = { workspace = true }
 axum = "0.8"
 clap = { workspace = true }
 console-subscriber = { version = "0.4", optional = true }
+flexi_logger = { version = "0.31", features = ["trc"] }
 moonlink = { workspace = true }
 moonlink_backend = { workspace = true }
 moonlink_connectors = { workspace = true }

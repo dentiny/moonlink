@@ -38,6 +38,8 @@ pub struct ServiceConfig {
     pub otel_api_port: Option<u16>,
     /// Used for moonlink standalone deployment.
     pub tcp_port: Option<u16>,
+    /// Log persistence directory.
+    pub log_directory: Option<String>,
 }
 
 impl ServiceConfig {
@@ -76,7 +78,7 @@ fn setup_readiness_probe() -> Arc<ServiceStatus> {
 
 pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     // Set logging config before service start.
-    logging::init_logging();
+    let _guard = logging::init_logging(config.log_directory.clone());
 
     // Register HTTP endpoint for readiness probe.
     let service_status = if config.in_standalone_deployment_mode() {

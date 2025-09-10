@@ -26,6 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             tcp_port: None,
             otel_api_port: None,
             data_server_uri: None,
+            log_directory: None,
         })
         .await
         {

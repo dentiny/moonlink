@@ -5,6 +5,9 @@ use flexi_logger::{
     writers::{FileLogWriter, FileLogWriterHandle},
     Cleanup, Criterion, FileSpec, LogSpecification, Naming, WriteMode,
 };
+use tracing_subscriber::{
+    fmt, fmt::time, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer, Registry,
+};
 
 /// Default log file size upper bound (change as needed).
 pub const DEFAULT_LOG_FILE_SIZE: u64 = 4 * 1024 * 1024; // 4 MiB
@@ -22,6 +25,7 @@ pub struct LoggingGuard {
 /// - If directory is not specified, logs will be streamed to stdout and stderr.
 ///
 /// Returns a guard which needs to be kept alive.
+#[must_use]
 pub fn init_logging(log_directory: Option<impl AsRef<Path>>) -> Option<LoggingGuard> {
     match log_directory {
         Some(dir) => {
@@ -54,10 +58,6 @@ pub fn init_logging(log_directory: Option<impl AsRef<Path>>) -> Option<LoggingGu
             })
         }
         None => {
-            use tracing_subscriber::{
-                fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Registry,
-            };
-
             let env_filter =
                 EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
