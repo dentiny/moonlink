@@ -295,13 +295,13 @@ async fn health_check() -> Json<HealthResponse> {
 
 /// Table creation endpoint
 async fn create_table(
-    Path(table): Path<String>,
+    Path(src_table_name): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<CreateTableRequest>,
 ) -> Result<Json<CreateTableResponse>, (StatusCode, Json<ErrorResponse>)> {
     debug!(
         "Received table creation request for '{}': {:?}",
-        table, payload
+        src_table_name, payload
     );
 
     let arrow_schema = match build_arrow_schema(&payload.schema) {
@@ -312,7 +312,7 @@ async fn create_table(
                 Json(ErrorResponse {
                     message: format!(
                         "Invalid schema on table {} creation {:?}: {}",
-                        table, payload.schema, e
+                        src_table_name, payload.schema, e
                     ),
                 }),
             ));
@@ -338,7 +338,7 @@ async fn create_table(
         .create_table(
             payload.database.clone(),
             payload.table.clone(),
-            table.clone(),
+            src_table_name.clone(),
             REST_API_URI.to_string(),
             serialized_table_config,
             Some(arrow_schema),
@@ -348,11 +348,11 @@ async fn create_table(
         Ok(()) => {
             info!(
                 "Successfully created table '{}' with ID {}:{}",
-                table, payload.database, payload.table,
+                src_table_name, payload.database, payload.table,
             );
             Ok(Json(CreateTableResponse {
                 database: payload.database.clone(),
-                table,
+                table: payload.table.clone(),
                 // A new table is always with LSN 1.
                 lsn: 1,
             }))
@@ -362,7 +362,7 @@ async fn create_table(
             Json(ErrorResponse {
                 message: format!(
                     "Failed to create table {} with ID {}.{}: {}",
-                    table, payload.database, payload.table, e
+                    src_table_name, payload.database, payload.table, e
                 ),
             }),
         )),
@@ -371,11 +371,14 @@ async fn create_table(
 
 /// Table drop endpoint
 async fn drop_table(
-    Path(table): Path<String>,
+    Path(src_table_name): Path<String>,
     State(state): State<ApiState>,
     Json(payload): Json<DropTableRequest>,
 ) -> Result<Json<DropTableResponse>, (StatusCode, Json<ErrorResponse>)> {
-    debug!("Received table drop request for '{}': {:?}", table, payload);
+    debug!(
+        "Received table drop request for '{}': {:?}",
+        src_table_name, payload
+    );
 
     // Drop table in backend
     state
@@ -388,7 +391,7 @@ async fn drop_table(
                 Json(ErrorResponse {
                     message: format!(
                         "Failed to drop table {} with ID {}.{}: {}",
-                        table, payload.database, payload.table, e
+                        src_table_name, payload.database, payload.table, e
                     ),
                 }),
             )
