@@ -68,7 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             {"name": "email", "data_type": "string", "nullable": true},
             {"name": "age", "data_type": "int32", "nullable": true}
         ],
-        "table_config": {}
+        "table_config": {
+            "mooncake": {
+                "append_only": true,
+                "row_identity": "None"
+            }
+        }
     });
 
     let response = client
@@ -105,7 +110,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "name": "Alice Johnson",
             "email": "alice@example.com",
             "age": 30
-        }
+        },
+        "request_mode": "async"
     });
 
     let response = client
@@ -137,7 +143,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "name": "Bob Smith",
             "email": "bob@example.com",
             "age": 25
-        }
+        },
+        "request_mode": "async"
     });
 
     let response = client
@@ -176,7 +183,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "data": {
             "id": 999,
             "name": "Should Fail"
-        }
+        },
+        "request_mode": "async"
     });
 
     let response = client
@@ -252,7 +260,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
      \"data\": {{
        \"id\": 123,
        \"name\": \"Example Record\"
-     }}
+     }},
+     \"request_mode\": \"async\"
    }}"
     );
 
