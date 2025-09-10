@@ -18,6 +18,7 @@ use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
 use crate::storage::mooncake_table::table_event_manager::TableEventManager;
 use crate::storage::mooncake_table::{table_creation_test_utils::*, TableMetadata};
+use crate::table_handler::chaos_replay::replay;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
 use crate::table_handler::test_utils::*;
 use crate::table_handler::{TableEvent, TableHandler};
@@ -776,6 +777,7 @@ struct TestEnvConfig {
 struct TestEnvironment {
     chaos_test_arg: ChaosTestArgs,
     test_env_config: TestEnvConfig,
+    chaos_dump_filepath: String,
     cache_temp_dir: TempDir,
     table_temp_dir: TempDir,
     object_storage_cache: ObjectStorageCache,
@@ -890,10 +892,17 @@ impl TestEnvironment {
             is_upsert_table: config.special_table_option
                 == SpecialTableOption::UpsertDeleteIfExists,
         };
+
+        let chaos_dump_filepath = format!("/tmp/chaos_test_{}", Self::generate_random_filename());
+        let chaos_dump_filepath_clone = chaos_dump_filepath.clone();
+        println!(
+            "Mooncake table events for test {} dumped to {}",
+            config.test_name, chaos_dump_filepath
+        );
         tokio::spawn(async move {
             Self::dump_table_event(
+                chaos_dump_filepath,
                 table_event_replay_rx,
-                config.test_name,
                 table_metadata_replay,
             )
             .await;
@@ -902,6 +911,7 @@ impl TestEnvironment {
         Self {
             chaos_test_arg,
             test_env_config: config,
+            chaos_dump_filepath: chaos_dump_filepath_clone,
             cache_temp_dir,
             table_temp_dir,
             object_storage_cache,
@@ -934,17 +944,14 @@ impl TestEnvironment {
 
     /// Continuously read from table replay channel and dump to local json file.
     async fn dump_table_event(
+        chaos_dump_filepath: String,
         mut table_event_replay_rx: mpsc::UnboundedReceiver<MooncakeTableEvent>,
-        test_name: &str,
         table_metadata_replay: ReplayTableMetadata,
     ) {
-        let filepath = format!("/tmp/chaos_test_{}", Self::generate_random_filename());
-        println!("Mooncake table events for test {test_name} dumped to {filepath}");
-
         let mut file = tokio::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(filepath)
+            .open(chaos_dump_filepath)
             .await
             .unwrap();
 
@@ -1637,4 +1644,34 @@ async fn test_upsert_chaos_with_data_compaction() {
     };
     let env = TestEnvironment::new(test_env_config).await;
     chaos_test_impl(env).await;
+}
+
+/// ============================
+/// Replay system validation
+/// ============================
+///
+#[named]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_replay_chaos_with_no_background_maintenance() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
+    let test_env_config = TestEnvConfig {
+        test_name: function_name!(),
+        local_filesystem_optimization_enabled: true,
+        disk_slice_write_chaos_enabled: false,
+        special_table_option: SpecialTableOption::None,
+        maintenance_option: TableMaintenanceOption::NoTableMaintenance,
+        error_injection_enabled: false,
+        event_count: 3000,
+        storage_config: StorageConfig::FileSystem {
+            root_directory,
+            atomic_write_dir: None,
+        },
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    let chaos_dump_filepath = env.chaos_dump_filepath.clone();
+    chaos_test_impl(env).await;
+
+    // Replay mooncake table events.
+    replay(&chaos_dump_filepath).await;
 }
