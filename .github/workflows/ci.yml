@@ -545,7 +545,7 @@ jobs:
       - name: Start replay chaos test
         timeout-minutes: 10
         run: |
-          RUST_BACKTRACE=1 cargo test table_handler::test_replay_chaos --features=chaos-test -p moonlink -- --nocapture
+          RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_replay_chaos --features=chaos-test -p moonlink -- --nocapture
 
   # ───────────── 14 · PostgreSQL Integration Tests ─────────────
   postgres_tests:
