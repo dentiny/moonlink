@@ -261,6 +261,16 @@ impl ReplicationConnection {
                 debug!(src_table_name, "adding REST API table");
 
                 let src_table_id = conn.next_src_table_id();
+                let unique_table_id = UniqueTableId {
+                    mooncake_table_id: mooncake_table_id.clone(),
+                    src_table_id,
+                };
+
+                // Validate the same table is not added for multiple times.
+                if self.table_states.contains_key(&unique_table_id) {
+                    return Err(Error::rest_duplicate_table(src_table_id));
+                }
+
                 let table_components = TableComponents {
                     read_state_filepath_remap,
                     object_storage_cache: self.object_storage_cache.clone(),
@@ -310,12 +320,6 @@ impl ReplicationConnection {
                     event_manager: table_resources.table_event_manager,
                     status_reader: table_resources.table_status_reader,
                 };
-
-                let unique_table_id = UniqueTableId {
-                    mooncake_table_id: mooncake_table_id.clone(),
-                    src_table_id,
-                };
-                // TODO(hjiang): Add assertion or error propagation.
                 self.table_states.insert(unique_table_id, table_state);
                 debug!(
                     src_table_id,
