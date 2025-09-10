@@ -1,14 +1,20 @@
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
+use crate::storage::iceberg::catalog_test_utils::create_test_table_schema;
 use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
+use crate::storage::iceberg::rest_catalog::RestCatalog;
 use crate::storage::iceberg::rest_catalog_test_utils::*;
 use crate::storage::iceberg::schema_utils::assert_is_same_schema;
 use crate::storage::iceberg::table_manager::TableManager;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
+use crate::IcebergCatalogConfig;
 
 use iceberg::arrow::arrow_schema_to_schema;
+use iceberg::Catalog;
+use iceberg::NamespaceIdent;
+use iceberg::TableIdent;
 use tempfile::tempdir;
 
 /// Test util functions to create moonlink rows.
@@ -26,6 +32,51 @@ fn test_row_with_updated_schema() -> MoonlinkRow {
         RowValue::Int32(100),
         RowValue::ByteArray("new_string".as_bytes().to_vec()),
     ])
+}
+
+struct TestGuard {
+    iceberg_table_config: IcebergTableConfig,
+}
+impl TestGuard {
+    fn new(iceberg_table_config: IcebergTableConfig) -> Self {
+        Self {
+            iceberg_table_config,
+        }
+    }
+    /// Test util function to drop the test namespace and table.
+    async fn drop_namespace_and_table(iceberg_table_config: IcebergTableConfig) {
+        let rest_catalog_config = match &iceberg_table_config.metadata_accessor_config {
+            IcebergCatalogConfig::Rest {
+                rest_catalog_config,
+            } => rest_catalog_config.clone(),
+            other => panic!("Expects to have rest catalog config, but receives {other:?}"),
+        };
+        let catalog = RestCatalog::new(
+            rest_catalog_config,
+            iceberg_table_config.data_accessor_config.clone(),
+            create_test_table_schema().unwrap(),
+        )
+        .await
+        .unwrap();
+
+        let namespace_ident = NamespaceIdent::from_vec(iceberg_table_config.namespace).unwrap();
+        let table_ident = TableIdent::new(
+            namespace_ident.clone(),
+            iceberg_table_config.table_name.clone(),
+        );
+        catalog.drop_table(&table_ident).await.unwrap();
+        catalog.drop_namespace(&namespace_ident).await.unwrap();
+    }
+}
+impl Drop for TestGuard {
+    fn drop(&mut self) {
+        let iceberg_table_config = self.iceberg_table_config.clone();
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                Self::drop_namespace_and_table(iceberg_table_config).await;
+            });
+        })
+    }
 }
 
 /// This file test iceberg table manager integration with rest catalog.
@@ -128,11 +179,12 @@ async fn test_schema_update_with_no_table_write_impl(iceberg_table_config: Icebe
     assert_is_same_schema(actual_schema.as_ref().clone(), expected_schema);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_schema_update_with_no_table_write() {
     // Local filesystem for iceberg.
     let iceberg_temp_dir = tempdir().unwrap();
     let iceberg_table_config = get_rest_iceberg_table_config(&iceberg_temp_dir);
+    let _guard = TestGuard::new(iceberg_table_config.clone());
 
     // Common testing logic.
     test_schema_update_with_no_table_write_impl(iceberg_table_config).await;
@@ -230,11 +282,12 @@ async fn test_schema_update_impl(iceberg_table_config: IcebergTableConfig) {
     assert_eq!(snapshot.indices.file_indices.len(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_schema_update() {
     // Local filesystem for iceberg.
     let iceberg_temp_dir = tempdir().unwrap();
     let iceberg_table_config = get_rest_iceberg_table_config(&iceberg_temp_dir);
+    let _guard = TestGuard::new(iceberg_table_config.clone());
 
     // Common testing logic.
     test_schema_update_impl(iceberg_table_config).await;
