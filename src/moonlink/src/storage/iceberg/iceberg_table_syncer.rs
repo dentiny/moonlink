@@ -71,6 +71,44 @@ impl IcebergTableManager {
         schema_utils::assert_table_schema_id(self.iceberg_table.as_ref().unwrap());
     }
 
+    // Validate data files to add don't belong to iceberg snapshot.
+    fn validate_new_data_files(
+        &self,
+        new_data_files: &Vec<MooncakeDataFileRef>,
+    ) -> IcebergResult<()> {
+        for cur_data_file in new_data_files.iter() {
+            if self
+                .persisted_data_files
+                .contains_key(&cur_data_file.file_id())
+            {
+                return Err(IcebergError::new(
+                    iceberg::ErrorKind::PreconditionFailed,
+                    format!("Data file to add {cur_data_file:?} already persisted in iceberg."),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    // Validate data files to remove don't belong to iceberg snapshot.
+    fn validate_old_data_files(
+        &self,
+        old_data_files: &Vec<MooncakeDataFileRef>,
+    ) -> IcebergResult<()> {
+        for cur_data_file in old_data_files.iter() {
+            if !self
+                .persisted_data_files
+                .contains_key(&cur_data_file.file_id())
+            {
+                return Err(IcebergError::new(
+                    iceberg::ErrorKind::PreconditionFailed,
+                    format!("Data file to remove {cur_data_file:?} is not persisted in iceberg."),
+                ));
+            }
+        }
+        Ok(())
+    }
+
     /// Util function to get unique table file id for the deletion vector puffin file.
     ///
     /// Notice: only deletion vector puffin generates new file ids.
@@ -533,6 +571,10 @@ impl IcebergTableManager {
         let old_data_files = take_data_files_to_remove(&mut snapshot_payload);
         let new_file_indices = take_file_indices_to_import(&mut snapshot_payload);
         let old_file_indices = take_file_indices_to_remove(&mut snapshot_payload);
+
+        // Validate data files to add and remove are valid.
+        self.validate_new_data_files(&new_data_files)?;
+        self.validate_old_data_files(&old_data_files)?;
 
         // Persist data files.
         let data_file_import_result = self
