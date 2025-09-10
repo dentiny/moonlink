@@ -40,6 +40,10 @@ struct Cli {
     /// For example: http://34.19.1.175:8080.
     #[arg(long)]
     data_server_uri: Option<String>,
+
+    /// Log directory, stream to stdout/stderr if unspecified.
+    #[arg(long)]
+    log_dir: Option<String>,
 }
 
 #[tokio::main]
@@ -66,6 +70,7 @@ pub async fn main() -> Result<()> {
         } else {
             Some(cli.otel_port.unwrap_or(DEFAULT_OTEL_PORT))
         },
+        log_directory: None,
     };
 
     start_with_config(config).await
