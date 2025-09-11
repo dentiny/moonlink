@@ -611,7 +611,14 @@ impl PostgresConnection {
         let cfg = self.source.get_cdc_stream_config().unwrap();
         let source = self.source.clone();
 
-        tokio::spawn(async move { run_event_loop(cfg, sink, receiver, source).await })
+        tokio::spawn(async move {
+            run_event_loop(cfg, sink, receiver, source)
+                .await
+                .map_err(|err| {
+                    error!("Postgres replication eventloop failed: {:?}", err);
+                    err
+                })
+        })
     }
 }
 
