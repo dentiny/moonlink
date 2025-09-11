@@ -624,6 +624,8 @@ jobs:
         timeout-minutes: 10
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          MOONLINK_BACKEND_DIR: ${{ github.workspace }}/.shared-nginx
+          NGINX_ADDR: http://nginx.local:80
         run: |
           cargo test --package moonlink_connectors --lib --features connector-pg
           cargo test --package moonlink_metadata_store --tests --features "metadata-all test-utils storage-s3 storage-gcs"
