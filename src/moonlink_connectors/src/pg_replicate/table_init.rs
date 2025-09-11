@@ -63,7 +63,9 @@ async fn recreate_directory(dir: &PathBuf) -> Result<()> {
             }
         }
     }
-    tokio::fs::create_dir_all(dir).await?;
+    tokio::fs::create_dir_all(dir).await.map_err(|e| {
+        std::io::Error::new(e.kind(), format!("Failed to create directory {:?}", dir))
+    })?;
 
     Ok(())
 }
@@ -83,13 +85,18 @@ pub async fn build_table_components(
     let write_cache_path = PathBuf::from(base_path).join(&mooncake_table_id);
     recreate_directory(&write_cache_path).await?;
     // Make sure temporary directory exists.
-    tokio::fs::create_dir_all(
-        &table_components
-            .moonlink_table_config
-            .mooncake_table_config
-            .temp_files_directory,
-    )
-    .await?;
+    let temp_files_directory = &table_components
+        .moonlink_table_config
+        .mooncake_table_config
+        .temp_files_directory;
+    tokio::fs::create_dir_all(&temp_files_directory)
+        .await
+        .map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("Failed to create directory {:?}", temp_files_directory),
+            )
+        })?;
 
     let wal_config = table_components
         .moonlink_table_config

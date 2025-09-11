@@ -268,14 +268,20 @@ impl SqliteMetadataStore {
     async fn create_database_file_if_non_existent(location: &str) -> Result<()> {
         let path = std::path::Path::new(&location);
         if let Some(parent) = path.parent() {
-            tokio::fs::create_dir_all(parent).await?;
+            tokio::fs::create_dir_all(&parent).await.map_err(|e| {
+                std::io::Error::new(e.kind(), format!("Failed to create directory {parent:?}"))
+            })?;
         }
+
         tokio::fs::OpenOptions::new()
             .create(true)
             .truncate(false)
             .write(true)
-            .open(location)
-            .await?;
+            .open(&location)
+            .await
+            .map_err(|e| {
+                std::io::Error::new(e.kind(), format!("Failed to open file {location:?}"))
+            })?;
         Ok(())
     }
 

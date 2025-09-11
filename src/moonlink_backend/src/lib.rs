@@ -96,7 +96,12 @@ impl MoonlinkBackend {
         };
 
         // Canonicalize moonlink backend directory, so all paths stored are of absolute path.
-        tokio::fs::create_dir_all(&base_path).await?;
+        tokio::fs::create_dir_all(&base_path).await.map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("Failed to create directory {base_path:?}"),
+            )
+        })?;
         let base_path = tokio::fs::canonicalize(base_path).await?;
         let base_path_str = base_path.to_str().unwrap();
 
