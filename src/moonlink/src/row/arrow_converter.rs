@@ -74,6 +74,15 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
             buf.copy_from_slice(slice);
             RowValue::FixedLenByteArray(buf)
         }
+        arrow_schema::DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, tz_opt)
+            if tz_opt.as_deref().map_or(true, |tz| tz == "UTC") =>
+        {
+            let a = arr
+                .as_any()
+                .downcast_ref::<arrow_array::TimestampMicrosecondArray>()
+                .unwrap();
+            RowValue::Int64(a.value(row_idx))
+        }
         _ => {
             panic!("Unimplemented type {:?}", arr.data_type());
         }
@@ -86,6 +95,7 @@ mod tests {
     use arrow::array::{
         BinaryBuilder, BooleanBuilder, Date32Builder, FixedSizeBinaryBuilder, Float32Builder,
         Float64Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
+        TimestampMicrosecondBuilder,
     };
     use arrow_array::ArrayRef;
     use arrow_schema::{DataType, Field, Schema};
@@ -133,6 +143,10 @@ mod tests {
         fxb_b.append_value([0xAB; 16]).unwrap();
         fxb_b.append_null();
 
+        let mut ts_b = TimestampMicrosecondBuilder::new();
+        ts_b.append_value(1_234_567_i64); // 1970-01-01 00:00:01.234567 UTC
+        ts_b.append_null();
+
         let arrays: Vec<ArrayRef> = vec![
             Arc::new(i16_b.finish()),
             Arc::new(i32_b.finish()),
@@ -144,6 +158,7 @@ mod tests {
             Arc::new(utf8_b.finish()),
             Arc::new(bin_b.finish()),
             Arc::new(fxb_b.finish()),
+            Arc::new(ts_b.finish()),
         ];
 
         let schema = Schema::new(vec![
@@ -157,6 +172,11 @@ mod tests {
             Field::new("s", DataType::Utf8, true),
             Field::new("bin", DataType::Binary, true),
             Field::new("uuid_like", DataType::FixedSizeBinary(16), true),
+            Field::new(
+                "ts",
+                DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None),
+                true,
+            ),
         ]);
 
         let batch = RecordBatch::try_new(Arc::new(schema), arrays).unwrap();
@@ -177,6 +197,7 @@ mod tests {
                 RowValue::ByteArray(b"hello".to_vec()),
                 RowValue::ByteArray(vec![1, 2, 3]),
                 RowValue::FixedLenByteArray([0xABu8; 16]),
+                RowValue::Int64(1_234_567_i64),
             ]
         );
 
