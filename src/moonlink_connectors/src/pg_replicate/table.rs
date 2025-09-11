@@ -3,6 +3,8 @@ use std::fmt::Display;
 use pg_escape::quote_identifier;
 use tokio_postgres::types::Type;
 
+use crate::{Error, PostgresSourceError, Result};
+
 #[derive(Debug, Clone)]
 pub struct TableName {
     pub schema: String,
@@ -10,12 +12,18 @@ pub struct TableName {
 }
 
 impl TableName {
-    pub fn parse_schema_name(table_name: &str) -> (String, String) {
+    pub fn parse_schema_name(
+        table_name: &str,
+    ) -> std::result::Result<(String, String), PostgresSourceError> {
         let tokens: Vec<&str> = table_name.split('.').collect();
-        assert_eq!(tokens.len(), 2);
+        if tokens.len() != 2 {
+            return Err(PostgresSourceError::InvalidSourceTableName(
+                table_name.to_string(),
+            ));
+        }
         let schema = tokens[0].to_string();
         let name = tokens[1].to_string();
-        (schema, name)
+        Ok((schema, name))
     }
     pub fn get_schema_name(&self) -> String {
         format!("{}.{}", self.schema, self.name)
