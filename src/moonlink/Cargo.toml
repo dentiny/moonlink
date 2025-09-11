@@ -30,7 +30,7 @@ storage-gcs = [
 ]
 
 catalog-rest = ["iceberg-catalog-rest"]
-catalog-glue = []
+catalog-glue = ["iceberg-catalog-glue"]
 
 bench = []
 
@@ -58,6 +58,7 @@ hashbrown = { workspace = true }
 hmac = { version = "0.12", optional = true }
 iceberg = { workspace = true }
 iceberg-catalog-rest = { workspace = true, optional = true }
+iceberg-catalog-glue = { workspace = true, optional = true }
 itertools = { workspace = true }
 lru = { workspace = true }
 memmap2 = "0.9"
