@@ -119,7 +119,8 @@ pub(crate) fn create_file_io(accessor_config: &AccessorConfig) -> IcebergResult<
                     .with_prop(iceberg::io::GCS_SERVICE_PATH, endpoint.as_ref().unwrap())
                     .with_prop(iceberg::io::GCS_NO_AUTH, "true")
                     .with_prop(iceberg::io::GCS_ALLOW_ANONYMOUS, "true")
-                    .with_prop(iceberg::io::GCS_DISABLE_CONFIG_LOAD, "true");
+                    .with_prop(iceberg::io::GCS_DISABLE_CONFIG_LOAD, "true")
+                    .with_prop(iceberg::io::GCS_DISABLE_VM_METADATA, "true");
                 return file_io_builder.build();
             }
 
@@ -129,7 +130,8 @@ pub(crate) fn create_file_io(accessor_config: &AccessorConfig) -> IcebergResult<
                 .with_prop(iceberg::io::S3_REGION, region)
                 .with_prop(iceberg::io::S3_ACCESS_KEY_ID, access_key_id)
                 .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key)
-                .with_prop(iceberg::io::S3_DISABLE_CONFIG_LOAD, "true");
+                .with_prop(iceberg::io::S3_DISABLE_CONFIG_LOAD, "true")
+                .with_prop(iceberg::io::S3_DISABLE_EC2_METADATA, "true");
             file_io_builder.build()
         }
         #[cfg(feature = "storage-s3")]
@@ -144,7 +146,8 @@ pub(crate) fn create_file_io(accessor_config: &AccessorConfig) -> IcebergResult<
                 .with_prop(iceberg::io::S3_REGION, region)
                 .with_prop(iceberg::io::S3_ACCESS_KEY_ID, access_key_id)
                 .with_prop(iceberg::io::S3_SECRET_ACCESS_KEY, secret_access_key)
-                .with_prop(iceberg::io::S3_DISABLE_CONFIG_LOAD, "true");
+                .with_prop(iceberg::io::S3_DISABLE_CONFIG_LOAD, "true")
+                .with_prop(iceberg::io::S3_DISABLE_EC2_METADATA, "true");
             if let Some(endpoint) = endpoint {
                 file_io_builder = file_io_builder.with_prop(iceberg::io::S3_ENDPOINT, endpoint);
             }

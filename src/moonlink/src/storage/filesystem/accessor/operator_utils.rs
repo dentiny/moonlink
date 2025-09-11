@@ -52,7 +52,8 @@ fn create_opendal_operator_impl(storage_config: &StorageConfig) -> Result<Operat
                 .endpoint("https://storage.googleapis.com")
                 .access_key_id(access_key_id)
                 .secret_access_key(secret_access_key)
-                .disable_config_load();
+                .disable_config_load()
+                .disable_ec2_metadata();
             Ok(Operator::new(builder)?.finish())
         }
         #[cfg(feature = "storage-s3")]
@@ -68,7 +69,8 @@ fn create_opendal_operator_impl(storage_config: &StorageConfig) -> Result<Operat
                 .region(region)
                 .access_key_id(access_key_id)
                 .secret_access_key(secret_access_key)
-                .disable_config_load();
+                .disable_config_load()
+                .disable_ec2_metadata();
             if let Some(endpoint) = endpoint {
                 builder = builder.endpoint(endpoint);
             }
