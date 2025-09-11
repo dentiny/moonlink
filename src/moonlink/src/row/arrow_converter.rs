@@ -83,6 +83,13 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
                 .unwrap();
             RowValue::Int64(a.value(row_idx))
         }
+        arrow_schema::DataType::Time64(arrow::datatypes::TimeUnit::Microsecond) => {
+            let a = arr
+                .as_any()
+                .downcast_ref::<arrow_array::Time64MicrosecondArray>()
+                .unwrap();
+            RowValue::Int64(a.value(row_idx))
+        }
         _ => {
             panic!("Unimplemented type {:?}", arr.data_type());
         }
@@ -95,7 +102,7 @@ mod tests {
     use arrow::array::{
         BinaryBuilder, BooleanBuilder, Date32Builder, FixedSizeBinaryBuilder, Float32Builder,
         Float64Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
-        TimestampMicrosecondBuilder,
+        Time64MicrosecondBuilder, TimestampMicrosecondBuilder,
     };
     use arrow_array::ArrayRef;
     use arrow_schema::{DataType, Field, Schema};
@@ -147,6 +154,10 @@ mod tests {
         ts_b.append_value(1_234_567_i64); // 1970-01-01 00:00:01.234567 UTC
         ts_b.append_null();
 
+        let mut t64_us = Time64MicrosecondBuilder::new();
+        t64_us.append_value(1_234_567_i64);
+        t64_us.append_null();
+
         let arrays: Vec<ArrayRef> = vec![
             Arc::new(i16_b.finish()),
             Arc::new(i32_b.finish()),
@@ -159,6 +170,7 @@ mod tests {
             Arc::new(bin_b.finish()),
             Arc::new(fxb_b.finish()),
             Arc::new(ts_b.finish()),
+            Arc::new(t64_us.finish()),
         ];
 
         let schema = Schema::new(vec![
@@ -175,6 +187,11 @@ mod tests {
             Field::new(
                 "ts",
                 DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, None),
+                true,
+            ),
+            Field::new(
+                "t64_us",
+                DataType::Time64(arrow::datatypes::TimeUnit::Microsecond),
                 true,
             ),
         ]);
@@ -198,6 +215,7 @@ mod tests {
                 RowValue::ByteArray(vec![1, 2, 3]),
                 RowValue::FixedLenByteArray([0xABu8; 16]),
                 RowValue::Int64(1_234_567_i64),
+                RowValue::Int64(1_234_567),
             ]
         );
 
