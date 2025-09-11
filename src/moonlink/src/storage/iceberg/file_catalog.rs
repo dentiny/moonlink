@@ -165,8 +165,13 @@ impl FileCatalog {
     ) -> IcebergResult<TableMetadata> {
         let metadata = table_metadata.metadata;
         let mut metadata_builder = metadata.into_builder(/*current_file_location=*/ None);
-        metadata_builder =
-            metadata_builder.add_current_schema(self.iceberg_schema.as_ref().unwrap().clone())?;
+        let old_schema = self.iceberg_schema.as_ref().unwrap().clone();
+        let new_schema_id = old_schema.schema_id() + 1;
+        let mut new_schema_builder = old_schema.into_builder();
+        new_schema_builder = new_schema_builder.with_schema_id(new_schema_id);
+        let new_schema = new_schema_builder.build()?;
+
+        metadata_builder = metadata_builder.add_current_schema(new_schema)?;
         let new_table_metadata = metadata_builder.build()?;
         Ok(new_table_metadata.metadata)
     }

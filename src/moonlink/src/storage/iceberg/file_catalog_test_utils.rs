@@ -25,13 +25,13 @@ pub(crate) fn create_test_file_catalog(tmp_dir: &TempDir, iceberg_schema: Schema
 // Test util function to get iceberg schema,
 pub(crate) fn get_test_schema() -> Schema {
     let field = NestedField::required(
-        /*id=*/ 1,
+        /*id=*/ 0,
         "field_name".to_string(),
         IcebergType::Primitive(PrimitiveType::Int),
     );
 
     Schema::builder()
-        .with_schema_id(0)
+        .with_schema_id(1)
         .with_fields(vec![Arc::new(field)])
         .build()
         .unwrap()
@@ -51,7 +51,7 @@ pub(crate) fn get_updated_test_schema() -> Schema {
     );
 
     Schema::builder()
-        .with_schema_id(1)
+        .with_schema_id(2)
         .with_fields(vec![Arc::new(field_1), Arc::new(field_2)])
         .build()
         .unwrap()
