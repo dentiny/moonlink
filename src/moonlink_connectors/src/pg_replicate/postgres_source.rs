@@ -43,6 +43,9 @@ pub enum PostgresSourceError {
 
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("invalid source table name: {0}")]
+    InvalidSourceTableName(String),
 }
 
 pub struct PostgresSource {
@@ -165,7 +168,7 @@ impl PostgresSource {
         replication_client.begin_readonly_transaction().await?;
         let (src_table_id, table_name) = if src_table_id.is_none() {
             assert!(table_name.is_some());
-            let (schema, name) = TableName::parse_schema_name(table_name.unwrap());
+            let (schema, name) = TableName::parse_schema_name(table_name.unwrap())?;
             let table_name = TableName { schema, name };
             (
                 replication_client
