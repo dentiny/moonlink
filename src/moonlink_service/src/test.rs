@@ -4,9 +4,6 @@ use serde_json::json;
 use serial_test::serial;
 use tokio::net::TcpStream;
 
-#[cfg(feature = "postgres-integration")]
-use tokio_postgres::NoTls;
-
 use crate::rest_api::{CreateTableResponse, FileUploadResponse, HealthResponse, IngestResponse};
 use crate::start_with_config;
 use crate::test_guard::TestGuard;
@@ -929,6 +926,7 @@ async fn test_schema_invalid_list_missing_item() {
 #[serial]
 async fn test_create_table_from_postgres_endpoint() {
     use crate::rest_api::CreateTableFromPostgresResponse;
+    use tokio_postgres::NoTls;
 
     // Integration test for PostgreSQL table mirroring endpoint
     // This test creates a table in PostgreSQL, then tests mirroring it to Moonlink
@@ -940,12 +938,12 @@ async fn test_create_table_from_postgres_endpoint() {
     wait_for_server_ready().await;
 
     // Set up PostgreSQL connection and create test table
-    let src_uri = "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable";
+    let src_uri = get_database_uri();
     let table_name = "postgres_mirror_test";
     let src_table_name = format!("public.{table_name}");
 
     // Connect to PostgreSQL and create test table
-    let (client, connection) = tokio_postgres::connect(src_uri, NoTls).await.unwrap();
+    let (client, connection) = tokio_postgres::connect(&src_uri, NoTls).await.unwrap();
     let _connection_handle = tokio::spawn(async move {
         let _ = connection.await;
     });
@@ -974,7 +972,7 @@ async fn test_create_table_from_postgres_endpoint() {
 
     let crafted_src_table_name = format!("{database}.{moonlink_table}");
     let payload =
-        get_create_table_from_postgres_payload(database, moonlink_table, src_uri, &src_table_name);
+        get_create_table_from_postgres_payload(database, moonlink_table, &src_uri, &src_table_name);
 
     let response = client
         .post(format!(

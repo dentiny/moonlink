@@ -21,6 +21,14 @@ pub(crate) fn get_moonlink_backend_dir() -> String {
     }
 }
 
+/// Util function to get database URI.
+#[cfg(feature = "postgres-integration")]
+pub(crate) fn get_database_uri() -> String {
+    pub const SRC_URI: &str =
+        "postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable";
+    std::env::var("DATABASE_URL").unwrap_or_else(|_| SRC_URI.to_string())
+}
+
 /// Util function to get nginx address
 pub(crate) fn get_nginx_addr() -> String {
     std::env::var("NGINX_ADDR").unwrap_or_else(|_| NGINX_ADDR.to_string())
