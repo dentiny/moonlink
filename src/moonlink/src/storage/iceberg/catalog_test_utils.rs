@@ -7,7 +7,7 @@ use iceberg::{NamespaceIdent, TableCreation};
 // Test util function to get test table schema.
 pub(crate) fn create_test_table_schema() -> IcebergResult<Schema> {
     let field = NestedField::required(
-        /*id=*/ 1,
+        /*id=*/ 0,
         "field_name".to_string(),
         IcebergType::Primitive(PrimitiveType::Int),
     );
