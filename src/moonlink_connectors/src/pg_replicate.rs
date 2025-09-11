@@ -23,7 +23,8 @@ use crate::replication_state::ReplicationState;
 use crate::Result;
 use futures::StreamExt;
 use moonlink::{
-    MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, TableEvent, WalManager,
+    MooncakeTableId, MoonlinkTableConfig, ObjectStorageCache, ReadStateFilepathRemap, TableEvent,
+    WalManager,
 };
 use native_tls::{Certificate, TlsConnector};
 use postgres_native_tls::{MakeTlsConnector, TlsStream};
@@ -453,10 +454,10 @@ impl PostgresConnection {
     }
 
     /// Add table to PostgreSQL replication
-    pub async fn add_table<T: std::fmt::Display>(
+    pub async fn add_table(
         &mut self,
         table_name: &str,
-        mooncake_table_id: &T,
+        mooncake_table_id: &MooncakeTableId,
         moonlink_table_config: &mut MoonlinkTableConfig,
         is_recovery: bool,
         table_base_path: &str,
