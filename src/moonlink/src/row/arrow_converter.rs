@@ -2,8 +2,8 @@ use super::moonlink_type::RowValue;
 use crate::row::MoonlinkRow;
 use arrow::array::Array;
 use arrow_array::{
-    BinaryArray, BooleanArray, FixedSizeBinaryArray, Float32Array, Float64Array, Int32Array,
-    Int64Array, RecordBatch, StringArray,
+    BinaryArray, BooleanArray, Date32Array, FixedSizeBinaryArray, Float32Array, Float64Array,
+    Int16Array, Int32Array, Int64Array, RecordBatch, StringArray,
 };
 
 /// Convert arrow record batch to moonlink rows.
@@ -31,6 +31,10 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
     }
 
     match arr.data_type() {
+        arrow_schema::DataType::Int16 => {
+            let a = arr.as_any().downcast_ref::<Int16Array>().unwrap();
+            RowValue::Int32(a.value(row_idx) as i32)
+        }
         arrow_schema::DataType::Int32 => {
             let a = arr.as_any().downcast_ref::<Int32Array>().unwrap();
             RowValue::Int32(a.value(row_idx))
@@ -50,6 +54,10 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
         arrow_schema::DataType::Boolean => {
             let a = arr.as_any().downcast_ref::<BooleanArray>().unwrap();
             RowValue::Bool(a.value(row_idx))
+        }
+        arrow_schema::DataType::Date32 => {
+            let a = arr.as_any().downcast_ref::<Date32Array>().unwrap();
+            RowValue::Int32(a.value(row_idx) as i32)
         }
         arrow_schema::DataType::Utf8 => {
             let a = arr.as_any().downcast_ref::<StringArray>().unwrap();
@@ -76,8 +84,8 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
 mod tests {
     use super::*;
     use arrow::array::{
-        BinaryBuilder, BooleanBuilder, FixedSizeBinaryBuilder, Float32Builder, Float64Builder,
-        Int32Builder, Int64Builder, StringBuilder,
+        BinaryBuilder, BooleanBuilder, Date32Builder, FixedSizeBinaryBuilder, Float32Builder,
+        Float64Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
     };
     use arrow_array::ArrayRef;
     use arrow_schema::{DataType, Field, Schema};
@@ -85,6 +93,10 @@ mod tests {
 
     #[test]
     fn test_arrow_to_moonlink_row_conversion() {
+        let mut i16_b = Int16Builder::new();
+        i16_b.append_value(16);
+        i16_b.append_null();
+
         let mut i32_b = Int32Builder::new();
         i32_b.append_value(42);
         i32_b.append_null();
@@ -92,6 +104,10 @@ mod tests {
         let mut i64_b = Int64Builder::new();
         i64_b.append_value(9_223_372_036_854_775_i64);
         i64_b.append_null();
+
+        let mut date32_b = Date32Builder::new();
+        date32_b.append_value(1); // 1970-01-02
+        date32_b.append_null();
 
         let mut f32_b = Float32Builder::new();
         f32_b.append_value(3.5);
@@ -118,10 +134,12 @@ mod tests {
         fxb_b.append_null();
 
         let arrays: Vec<ArrayRef> = vec![
+            Arc::new(i16_b.finish()),
             Arc::new(i32_b.finish()),
             Arc::new(i64_b.finish()),
             Arc::new(f32_b.finish()),
             Arc::new(f64_b.finish()),
+            Arc::new(date32_b.finish()),
             Arc::new(bool_b.finish()),
             Arc::new(utf8_b.finish()),
             Arc::new(bin_b.finish()),
@@ -129,10 +147,12 @@ mod tests {
         ];
 
         let schema = Schema::new(vec![
+            Field::new("i16", DataType::Int16, true),
             Field::new("i32", DataType::Int32, true),
             Field::new("i64", DataType::Int64, true),
             Field::new("f32", DataType::Float32, true),
             Field::new("f64", DataType::Float64, true),
+            Field::new("date32", DataType::Date32, true),
             Field::new("b", DataType::Boolean, true),
             Field::new("s", DataType::Utf8, true),
             Field::new("bin", DataType::Binary, true),
@@ -147,10 +167,12 @@ mod tests {
         assert_eq!(
             rows[0].values,
             vec![
+                RowValue::Int32(16),
                 RowValue::Int32(42),
                 RowValue::Int64(9_223_372_036_854_775),
                 RowValue::Float32(3.5),
                 RowValue::Float64(6.25),
+                RowValue::Int32(1),
                 RowValue::Bool(true),
                 RowValue::ByteArray(b"hello".to_vec()),
                 RowValue::ByteArray(vec![1, 2, 3]),
