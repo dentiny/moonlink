@@ -25,6 +25,8 @@ pub(super) fn record_batch_to_moonlink_row(batch: &RecordBatch) -> Vec<MoonlinkR
 }
 
 /// From arrow value to moonlink row value.
+///
+/// TODO(hjiang): Add composite and array type support.
 fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
     if arr.is_null(row_idx) {
         return RowValue::Null;
@@ -57,7 +59,7 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
         }
         arrow_schema::DataType::Date32 => {
             let a = arr.as_any().downcast_ref::<Date32Array>().unwrap();
-            RowValue::Int32(a.value(row_idx) as i32)
+            RowValue::Int32(a.value(row_idx))
         }
         arrow_schema::DataType::Utf8 => {
             let a = arr.as_any().downcast_ref::<StringArray>().unwrap();
@@ -75,7 +77,7 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
             RowValue::FixedLenByteArray(buf)
         }
         arrow_schema::DataType::Timestamp(arrow::datatypes::TimeUnit::Microsecond, tz_opt)
-            if tz_opt.as_deref().map_or(true, |tz| tz == "UTC") =>
+            if tz_opt.as_deref().is_none_or(|tz| tz == "UTC") =>
         {
             let a = arr
                 .as_any()
