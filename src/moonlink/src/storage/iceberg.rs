@@ -87,3 +87,7 @@ mod catalog_test_impl;
 #[cfg(feature = "catalog-rest")]
 #[cfg(test)]
 mod iceberg_rest_catalog_test;
+
+#[cfg(feature = "catalog-glue")]
+#[cfg(test)]
+mod glue_catalog_test;

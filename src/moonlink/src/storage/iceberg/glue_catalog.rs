@@ -151,8 +151,12 @@ impl Catalog for GlueCatalog {
         namespace_ident: &NamespaceIdent,
         creation: TableCreation,
     ) -> IcebergResult<Table> {
+        println!("before create table");
+
         let old_table = self.catalog.create_table(namespace_ident, creation).await?;
         let old_metadata = old_table.metadata();
+
+        println!("after create table");
 
         // Craft a new schema with a new schema id, which has to be different from the existing one.
         let old_schema = self.iceberg_schema.as_ref().unwrap().clone();
@@ -177,7 +181,12 @@ impl Catalog for GlueCatalog {
         }
         .take_as_table_commit();
 
+        println!("before update table");
+
         let updated_table = self.catalog.update_table(new_commit).await?;
+
+        println!("after create table");
+
         Ok(updated_table)
     }
 
