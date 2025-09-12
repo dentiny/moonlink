@@ -631,6 +631,16 @@ jobs:
         run: |
           RUST_BACKTRACE=1 cargo test table_handler::chaos_test::test_replay_chaos --features=chaos-test -p moonlink -- --nocapture
 
+      #  ────────────────────── Upload chaos dump ────────────────────────────
+      - name: Upload chaos dumps
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-dumps-${{ github.run_id }}-${{ github.job }}-${{ matrix.target || 'no-matrix' }}
+          path: /tmp/chaos_test_*
+          retention-days: 3
+          if-no-files-found: warn
+
   # ───────────── 15 · PostgreSQL Integration Tests ─────────────
   postgres_tests:
     name: PostgreSQL Integration Tests
