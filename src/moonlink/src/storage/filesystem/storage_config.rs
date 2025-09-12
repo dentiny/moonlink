@@ -125,6 +125,46 @@ impl StorageConfig {
         }
     }
 
+    /// Get region for object storage config.
+    pub fn get_region(&self) -> Option<String> {
+        match &self {
+            #[cfg(feature = "storage-fs")]
+            StorageConfig::FileSystem { .. } => None,
+            #[cfg(feature = "storage-gcs")]
+            StorageConfig::Gcs { region, .. } => Some(region.clone()),
+            #[cfg(feature = "storage-s3")]
+            StorageConfig::S3 { region, .. } => Some(region.clone()),
+        }
+    }
+
+    /// Get access key id.
+    pub fn get_access_key_id(&self) -> Option<String> {
+        match &self {
+            #[cfg(feature = "storage-fs")]
+            StorageConfig::FileSystem { .. } => None,
+            #[cfg(feature = "storage-gcs")]
+            StorageConfig::Gcs { access_key_id, .. } => Some(access_key_id.clone()),
+            #[cfg(feature = "storage-s3")]
+            StorageConfig::S3 { access_key_id, .. } => Some(access_key_id.clone()),
+        }
+    }
+
+    /// Get secret access key.
+    pub fn get_secret_access_key(&self) -> Option<String> {
+        match &self {
+            #[cfg(feature = "storage-fs")]
+            StorageConfig::FileSystem { .. } => None,
+            #[cfg(feature = "storage-gcs")]
+            StorageConfig::Gcs {
+                secret_access_key, ..
+            } => Some(secret_access_key.clone()),
+            #[cfg(feature = "storage-s3")]
+            StorageConfig::S3 {
+                secret_access_key, ..
+            } => Some(secret_access_key.clone()),
+        }
+    }
+
     /// Extract security metadata entry from current filesystem config.
     pub fn extract_security_metadata_entry(&self) -> Option<MoonlinkTableSecret> {
         match &self {

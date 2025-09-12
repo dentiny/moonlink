@@ -1,3 +1,5 @@
+#[cfg(feature = "catalog-glue")]
+use crate::storage::iceberg::aws_security_config::AwsSecurityConfig;
 use crate::{storage::filesystem::accessor_config::AccessorConfig, StorageConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -33,10 +35,23 @@ pub struct RestCatalogConfig {
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GlueCatalogConfig {
+    /// ========================
+    /// AWS security configs.
+    /// ========================
+    ///
+    #[cfg(feature = "catalog-glue")]
+    #[serde(rename = "aws_security_config")]
+    pub aws_security_config: AwsSecurityConfig,
+
+    /// ========================
+    /// Glue properties
+    /// ========================
+    ///
     #[serde(rename = "name")]
     #[serde(default)]
     pub name: String,
 
+    /// Glue catalog URI.
     #[serde(rename = "uri")]
     #[serde(default)]
     pub uri: String,
@@ -45,13 +60,15 @@ pub struct GlueCatalogConfig {
     #[serde(default)]
     pub catalog_id: Option<String>,
 
+    /// Notice, it should match data access config.
     #[serde(rename = "warehouse")]
     #[serde(default)]
     pub warehouse: String,
 
-    #[serde(rename = "props")]
+    /// If unassigned (default option), use https://s3.{s3_region}.amazonaws.com as endpoint.
+    #[serde(rename = "s3_endpoint")]
     #[serde(default)]
-    pub props: HashMap<String, String>,
+    pub s3_endpoint: Option<String>,
 }
 
 pub type FileCatalogConfig = AccessorConfig;

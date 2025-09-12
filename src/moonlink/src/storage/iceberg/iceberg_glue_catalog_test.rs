@@ -1,6 +1,7 @@
 use crate::row::MoonlinkRow;
 use crate::row::RowValue;
 use crate::storage::filesystem::s3::s3_test_utils::create_s3_storage_config;
+use crate::storage::filesystem::s3::s3_test_utils::S3_TEST_ENDPOINT;
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
 use crate::storage::iceberg::catalog_test_utils::create_test_table_schema;
 use crate::storage::iceberg::glue_catalog::GlueCatalog;
@@ -39,13 +40,13 @@ fn test_row_with_updated_schema() -> MoonlinkRow {
 
 /// Test util function to create iceberg table config.
 fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTableConfig {
-    let glue_catalog_props = create_glue_catalog_properties(warehouse_uri.clone());
     let glue_catalog_config = GlueCatalogConfig {
+        aws_security_config: create_aws_security_config(),
         name: get_random_glue_catalog_name(),
         uri: TEST_GLUE_ENDPOINT.to_string(),
         catalog_id: None,
         warehouse: warehouse_uri.clone(),
-        props: glue_catalog_props,
+        s3_endpoint: Some(S3_TEST_ENDPOINT.to_string()),
     };
 
     let accessor_config = create_s3_storage_config(&warehouse_uri);

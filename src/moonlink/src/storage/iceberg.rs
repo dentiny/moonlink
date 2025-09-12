@@ -24,6 +24,7 @@ mod table_update_proxy;
 
 #[cfg(feature = "catalog-glue")]
 pub(super) mod glue_catalog;
+
 #[cfg(feature = "catalog-rest")]
 pub(super) mod rest_catalog;
 
@@ -42,6 +43,9 @@ mod s3_test_utils;
 #[cfg(feature = "storage-gcs")]
 #[cfg(test)]
 mod gcs_test_utils;
+
+#[cfg(feature = "catalog-glue")]
+mod aws_security_config;
 
 #[cfg(test)]
 mod tests;

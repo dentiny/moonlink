@@ -1,14 +1,10 @@
 use crate::storage::filesystem::s3::s3_test_utils::*;
+use crate::storage::iceberg::aws_security_config::AwsSecurityConfig;
 use crate::storage::iceberg::file_catalog_test_utils::get_test_schema;
 use crate::storage::iceberg::glue_catalog::GlueCatalog;
 use crate::storage::iceberg::iceberg_table_config::GlueCatalogConfig;
 use crate::storage::iceberg::moonlink_catalog::CatalogAccess;
-use iceberg::io::{S3_ACCESS_KEY_ID, S3_ENDPOINT, S3_REGION, S3_SECRET_ACCESS_KEY};
 use iceberg::{Catalog, NamespaceIdent, TableCreation, TableIdent};
-use iceberg_catalog_glue::{
-    AWS_ACCESS_KEY_ID, AWS_REGION_NAME, AWS_SECRET_ACCESS_KEY, GLUE_CATALOG_PROP_URI,
-    GLUE_CATALOG_PROP_WAREHOUSE,
-};
 use rand::{distr::Alphanumeric, Rng};
 use std::collections::HashMap;
 
@@ -45,51 +41,26 @@ pub(crate) fn get_random_table() -> String {
     get_random_string()
 }
 
-/// Test util function to create glue catalog properties.
-pub(crate) fn create_glue_catalog_properties(warehouse_uri: String) -> HashMap<String, String> {
-    HashMap::from([
-        // AWS configs.
-        (
-            AWS_ACCESS_KEY_ID.to_string(),
-            TEST_AWS_ACCESS_ID.to_string(),
-        ),
-        (
-            AWS_SECRET_ACCESS_KEY.to_string(),
-            TEST_AWS_ACCESS_SECRET.to_string(),
-        ),
-        (AWS_REGION_NAME.to_string(), TEST_AWS_RETION.to_string()),
-        // S3 configs.
-        (S3_ENDPOINT.to_string(), S3_TEST_ENDPOINT.to_string()),
-        (
-            S3_ACCESS_KEY_ID.to_string(),
-            S3_TEST_ACCESS_KEY_ID.to_string(),
-        ),
-        (
-            S3_SECRET_ACCESS_KEY.to_string(),
-            S3_TEST_SECRET_ACCESS_KEY.to_string(),
-        ),
-        (S3_REGION.to_string(), S3_TEST_REGION.to_string()),
-        // Glue configs.
-        (
-            GLUE_CATALOG_PROP_URI.to_string(),
-            TEST_GLUE_ENDPOINT.to_string(),
-        ),
-        (
-            GLUE_CATALOG_PROP_WAREHOUSE.to_string(),
-            warehouse_uri.clone(),
-        ),
-    ])
+/// Test util function to create aws security config.
+pub(crate) fn create_aws_security_config() -> AwsSecurityConfig {
+    AwsSecurityConfig {
+        access_key_id: TEST_AWS_ACCESS_ID.to_string(),
+        security_access_key: TEST_AWS_ACCESS_SECRET.to_string(),
+        region: TEST_AWS_RETION.to_string(),
+    }
 }
 
 /// Test util function to create a glue catalog.
 pub(crate) async fn create_glue_catalog(warehouse_uri: String) -> GlueCatalog {
-    let props = create_glue_catalog_properties(warehouse_uri.clone());
     let glue_config = GlueCatalogConfig {
+        // AWS security config.
+        aws_security_config: create_aws_security_config(),
+        // Glue configs.
         name: get_random_glue_catalog_name(),
         uri: TEST_GLUE_ENDPOINT.to_string(),
         catalog_id: None,
         warehouse: warehouse_uri.clone(),
-        props,
+        s3_endpoint: Some(S3_TEST_ENDPOINT.to_string()),
     };
     let accessor_config = create_s3_storage_config(&warehouse_uri);
     let glue_catalog = GlueCatalog::new(glue_config, accessor_config, get_test_schema())
