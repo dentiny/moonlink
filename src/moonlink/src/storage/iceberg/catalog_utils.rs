@@ -1,6 +1,8 @@
 #[cfg(test)]
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::file_catalog::FileCatalog;
+#[cfg(feature = "catalog-glue")]
+use crate::storage::iceberg::glue_catalog::GlueCatalog;
 use crate::storage::iceberg::iceberg_table_config::IcebergCatalogConfig;
 use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
 use crate::storage::iceberg::moonlink_catalog::MoonlinkCatalog;
@@ -44,9 +46,15 @@ pub async fn create_catalog(
             .await?,
         )),
         #[cfg(feature = "catalog-glue")]
-        IcebergCatalogConfig::Glue { .. } => Err(iceberg::Error::new(
-            iceberg::ErrorKind::FeatureUnsupported,
-            "Only File catalog is supported currently",
+        IcebergCatalogConfig::Glue {
+            glue_catalog_config,
+        } => Ok(Box::new(
+            GlueCatalog::new(
+                glue_catalog_config,
+                config.data_accessor_config,
+                iceberg_schema,
+            )
+            .await?,
         )),
     }
 }
@@ -67,9 +75,11 @@ pub async fn create_catalog_without_schema(
                 .await?,
         )),
         #[cfg(feature = "catalog-glue")]
-        IcebergCatalogConfig::Glue { .. } => Err(iceberg::Error::new(
-            iceberg::ErrorKind::FeatureUnsupported,
-            "Only File catalog is supported currently",
+        IcebergCatalogConfig::Glue {
+            glue_catalog_config,
+        } => Ok(Box::new(
+            GlueCatalog::new_without_schema(glue_catalog_config, config.data_accessor_config)
+                .await?,
         )),
     }
 }

@@ -91,4 +91,12 @@ mod iceberg_rest_catalog_test;
 
 #[cfg(feature = "catalog-glue")]
 #[cfg(test)]
+mod glue_catalog_test_utils;
+
+#[cfg(feature = "catalog-glue")]
+#[cfg(test)]
 mod glue_catalog_test;
+
+#[cfg(feature = "catalog-glue")]
+#[cfg(test)]
+mod iceberg_glue_catalog_test;
