@@ -43,7 +43,7 @@ pub struct GlueCatalogConfig {
 
     #[serde(rename = "catalog_id")]
     #[serde(default)]
-    pub catalog_id: String,
+    pub catalog_id: Option<String>,
 
     #[serde(rename = "warehouse")]
     #[serde(default)]

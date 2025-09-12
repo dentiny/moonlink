@@ -28,6 +28,7 @@ pub(crate) static S3_TEST_WAREHOUSE_URI_PREFIX: &str = "s3://test-minio-warehous
 pub(crate) static S3_TEST_ACCESS_KEY_ID: &str = "minioadmin";
 pub(crate) static S3_TEST_SECRET_ACCESS_KEY: &str = "minioadmin";
 pub(crate) static S3_TEST_ENDPOINT: &str = "http://s3.local:9000";
+pub(crate) static S3_TEST_REGION: &str = "us-east-1";
 
 /// Create a S3 catalog config.
 pub(crate) fn create_s3_storage_config(warehouse_uri: &str) -> AccessorConfig {
@@ -35,7 +36,7 @@ pub(crate) fn create_s3_storage_config(warehouse_uri: &str) -> AccessorConfig {
     let storage_config = StorageConfig::S3 {
         access_key_id: S3_TEST_ACCESS_KEY_ID.to_string(),
         secret_access_key: S3_TEST_SECRET_ACCESS_KEY.to_string(),
-        region: "auto".to_string(), // minio doesn't care about region.
+        region: S3_TEST_REGION.to_string(), // minio doesn't care about region.
         bucket: bucket.to_string(),
         endpoint: Some(S3_TEST_ENDPOINT.to_string()),
     };

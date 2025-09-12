@@ -18,7 +18,7 @@ use iceberg::Result as IcebergResult;
 use iceberg::{Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent};
 use iceberg_catalog_glue::{
     GlueCatalog as IcebergGlueCatalog, GlueCatalogBuilder as IcebergGlueCatalogBuilder,
-    GLUE_CATALOG_PROP_URI, GLUE_CATALOG_PROP_WAREHOUSE, GLUE_CATALOG_PROP_CATALOG_ID,
+    GLUE_CATALOG_PROP_URI, GLUE_CATALOG_PROP_WAREHOUSE,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -73,6 +73,7 @@ impl GlueCatalog {
     }
 
     /// Create a rest catalog, which get initialized lazily with no schema populated.
+    #[allow(unused)]
     pub async fn new_without_schema(
         mut config: GlueCatalogConfig,
         accessor_config: AccessorConfig,
@@ -151,12 +152,8 @@ impl Catalog for GlueCatalog {
         namespace_ident: &NamespaceIdent,
         creation: TableCreation,
     ) -> IcebergResult<Table> {
-        println!("before create table");
-
         let old_table = self.catalog.create_table(namespace_ident, creation).await?;
         let old_metadata = old_table.metadata();
-
-        println!("after create table");
 
         // Craft a new schema with a new schema id, which has to be different from the existing one.
         let old_schema = self.iceberg_schema.as_ref().unwrap().clone();
@@ -181,12 +178,7 @@ impl Catalog for GlueCatalog {
         }
         .take_as_table_commit();
 
-        println!("before update table");
-
         let updated_table = self.catalog.update_table(new_commit).await?;
-
-        println!("after create table");
-
         Ok(updated_table)
     }
 

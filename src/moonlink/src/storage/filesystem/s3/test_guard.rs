@@ -2,7 +2,7 @@
 use crate::storage::filesystem::s3::s3_test_utils;
 
 pub(crate) struct TestGuard {
-    /// Bucket name.n
+    /// Bucket name.
     bucket: String,
 }
 
