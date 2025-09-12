@@ -20,6 +20,7 @@ pub(super) mod parquet_stats_utils;
 pub(super) mod parquet_utils;
 pub(super) mod puffin_utils;
 pub(super) mod puffin_writer_proxy;
+mod table_update_proxy;
 
 #[cfg(feature = "catalog-glue")]
 pub(super) mod glue_catalog;

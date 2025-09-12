@@ -7,10 +7,9 @@ use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::{
     CatalogAccess, PuffinBlobType, PuffinWrite, SchemaUpdate,
 };
-use crate::storage::iceberg::puffin_writer_proxy::{
-    get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
-};
+use crate::storage::iceberg::puffin_writer_proxy::get_puffin_metadata_and_close;
 use crate::storage::iceberg::table_commit_proxy::TableCommitProxy;
+use crate::storage::iceberg::table_update_proxy::TableUpdateProxy;
 
 use futures::future::join_all;
 use std::cell::RefCell;
@@ -76,15 +75,8 @@ pub struct FileCatalog {
     iceberg_schema: Option<IcebergSchema>,
     /// Used for atomic write to commit transaction.
     etag: Mutex<RefCell<Option<String>>>,
-    /// Used to record puffin blob metadata in one transaction, and cleaned up after transaction commits.
-    ///
-    /// Maps from "puffin filepath" to "puffin blob metadata".
-    deletion_vector_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
-    file_index_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
-    /// A vector of "puffin filepath"s.
-    puffin_blobs_to_remove: HashSet<String>,
-    /// A set of data files to remove, along with their corresponding deletion vectors and file indices.
-    data_files_to_remove: HashSet<String>,
+    /// Buffered table updates, which will be reflect to iceberg snapshot at transaction commit.
+    table_update_proxy: TableUpdateProxy,
 }
 
 impl FileCatalog {
@@ -101,10 +93,7 @@ impl FileCatalog {
             warehouse_location,
             iceberg_schema: Some(iceberg_schema),
             etag: Mutex::new(RefCell::new(None)),
-            deletion_vector_blobs_to_add: HashMap::new(),
-            file_index_blobs_to_add: HashMap::new(),
-            puffin_blobs_to_remove: HashSet::new(),
-            data_files_to_remove: HashSet::new(),
+            table_update_proxy: TableUpdateProxy::default(),
         })
     }
 
@@ -118,10 +107,7 @@ impl FileCatalog {
             warehouse_location,
             iceberg_schema: None,
             etag: Mutex::new(RefCell::new(None)),
-            deletion_vector_blobs_to_add: HashMap::new(),
-            file_index_blobs_to_add: HashMap::new(),
-            puffin_blobs_to_remove: HashSet::new(),
-            data_files_to_remove: HashSet::new(),
+            table_update_proxy: TableUpdateProxy::default(),
         })
     }
 
@@ -139,10 +125,7 @@ impl FileCatalog {
             iceberg_schema: Some(iceberg_schema),
             etag: Mutex::new(RefCell::new(None)),
             warehouse_location: String::new(),
-            deletion_vector_blobs_to_add: HashMap::new(),
-            file_index_blobs_to_add: HashMap::new(),
-            puffin_blobs_to_remove: HashSet::new(),
-            data_files_to_remove: HashSet::new(),
+            table_update_proxy: TableUpdateProxy::default(),
         })
     }
 
@@ -258,32 +241,25 @@ impl PuffinWrite for FileCatalog {
         puffin_blob_type: PuffinBlobType,
     ) -> IcebergResult<()> {
         let puffin_metadata = get_puffin_metadata_and_close(puffin_writer).await?;
-        match &puffin_blob_type {
-            PuffinBlobType::DeletionVector => self
-                .deletion_vector_blobs_to_add
-                .insert(puffin_filepath, puffin_metadata),
-            PuffinBlobType::FileIndex => self
-                .file_index_blobs_to_add
-                .insert(puffin_filepath, puffin_metadata),
-        };
+        self.table_update_proxy.record_puffin_metadata(
+            puffin_filepath,
+            puffin_metadata,
+            puffin_blob_type,
+        );
         Ok(())
     }
 
     fn set_data_files_to_remove(&mut self, data_files: HashSet<String>) {
-        assert!(self.data_files_to_remove.is_empty());
-        self.data_files_to_remove = data_files;
+        self.table_update_proxy.set_data_files_to_remove(data_files);
     }
 
     fn set_index_puffin_files_to_remove(&mut self, puffin_filepaths: HashSet<String>) {
-        assert!(self.puffin_blobs_to_remove.is_empty());
-        self.puffin_blobs_to_remove = puffin_filepaths;
+        self.table_update_proxy
+            .set_index_puffin_files_to_remove(puffin_filepaths);
     }
 
     fn clear_puffin_metadata(&mut self) {
-        self.deletion_vector_blobs_to_add.clear();
-        self.file_index_blobs_to_add.clear();
-        self.puffin_blobs_to_remove.clear();
-        self.data_files_to_remove.clear();
+        self.table_update_proxy.clear();
     }
 }
 
@@ -654,10 +630,10 @@ impl Catalog for FileCatalog {
         append_puffin_metadata_and_rewrite(
             &metadata,
             &self.file_io,
-            &self.deletion_vector_blobs_to_add,
-            &self.file_index_blobs_to_add,
-            &self.data_files_to_remove,
-            &self.puffin_blobs_to_remove,
+            &self.table_update_proxy.deletion_vector_blobs_to_add,
+            &self.table_update_proxy.file_index_blobs_to_add,
+            &self.table_update_proxy.data_files_to_remove,
+            &self.table_update_proxy.puffin_blobs_to_remove,
         )
         .await?;
 

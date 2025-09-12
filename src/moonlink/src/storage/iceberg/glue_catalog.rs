@@ -1,16 +1,14 @@
 use super::moonlink_catalog::{CatalogAccess, PuffinBlobType, PuffinWrite, SchemaUpdate};
-use super::puffin_writer_proxy::{
-    append_puffin_metadata_and_rewrite, get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
-};
+use super::puffin_writer_proxy::get_puffin_metadata_and_close;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
-use crate::storage::iceberg::catalog_utils::{reflect_table_updates, validate_table_requirements};
+use crate::storage::iceberg::catalog_utils::{create_table_impl, update_table_impl};
 use crate::storage::iceberg::iceberg_table_config::GlueCatalogConfig;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::table_commit_proxy::TableCommitProxy;
+use crate::storage::iceberg::table_update_proxy::TableUpdateProxy;
 use async_trait::async_trait;
 use iceberg::io::FileIO;
 use iceberg::puffin::PuffinWriter;
-use iceberg::spec::TableMetadataBuilder;
 use iceberg::spec::{Schema as IcebergSchema, TableMetadata};
 use iceberg::table::Table;
 use iceberg::CatalogBuilder;
@@ -31,15 +29,8 @@ pub struct GlueCatalog {
     warehouse_location: String,
     /// Used to overwrite iceberg metadata at table creation.
     iceberg_schema: Option<IcebergSchema>,
-    /// Used to record puffin blob metadata in one transaction, and cleaned up after transaction commits.
-    ///
-    /// Maps from "puffin filepath" to "puffin blob metadata".
-    deletion_vector_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
-    file_index_blobs_to_add: HashMap<String, Vec<PuffinBlobMetadataProxy>>,
-    /// A vector of "puffin filepath"s.
-    puffin_blobs_to_remove: HashSet<String>,
-    /// A set of data files to remove, along with their corresponding deletion vectors and file indices.
-    data_files_to_remove: HashSet<String>,
+    /// Buffered table updates, which will be reflect to iceberg snapshot at transaction commit.
+    table_update_proxy: TableUpdateProxy,
 }
 
 impl GlueCatalog {
@@ -65,10 +56,7 @@ impl GlueCatalog {
             file_io,
             warehouse_location,
             iceberg_schema: Some(iceberg_schema),
-            deletion_vector_blobs_to_add: HashMap::new(),
-            file_index_blobs_to_add: HashMap::new(),
-            puffin_blobs_to_remove: HashSet::new(),
-            data_files_to_remove: HashSet::new(),
+            table_update_proxy: TableUpdateProxy::default(),
         })
     }
 
@@ -94,10 +82,7 @@ impl GlueCatalog {
             file_io,
             warehouse_location,
             iceberg_schema: None,
-            deletion_vector_blobs_to_add: HashMap::new(),
-            file_index_blobs_to_add: HashMap::new(),
-            puffin_blobs_to_remove: HashSet::new(),
-            data_files_to_remove: HashSet::new(),
+            table_update_proxy: TableUpdateProxy::default(),
         })
     }
 }
@@ -152,34 +137,10 @@ impl Catalog for GlueCatalog {
         namespace_ident: &NamespaceIdent,
         creation: TableCreation,
     ) -> IcebergResult<Table> {
-        let old_table = self.catalog.create_table(namespace_ident, creation).await?;
-        let old_metadata = old_table.metadata();
-
-        // Craft a new schema with a new schema id, which has to be different from the existing one.
-        let old_schema = self.iceberg_schema.as_ref().unwrap().clone();
-        let new_schema_id = old_schema.schema_id() + 1;
-        let mut new_schema_builder = old_schema.into_builder();
-        new_schema_builder = new_schema_builder.with_schema_id(new_schema_id);
-        let new_schema = new_schema_builder.build()?;
-
-        // On table creation, iceberg-rust normalize field id, which breaks the mapping between mooncake table arrow schema and iceberg schema.
-        // Intentionally perform a schema evolution to reflect desired schema.
-        let mut builder = TableMetadataBuilder::new_from_metadata(
-            old_metadata.clone(),
-            /*current_file_location=*/ None,
-        );
-        builder = builder.add_current_schema(new_schema)?;
-        let build_result = builder.build()?;
-        let normalized_updates = build_result.changes;
-        let new_commit = TableCommitProxy {
-            ident: old_table.identifier().clone(),
-            requirements: Vec::new(),
-            updates: normalized_updates,
-        }
-        .take_as_table_commit();
-
-        let updated_table = self.catalog.update_table(new_commit).await?;
-        Ok(updated_table)
+        let iceberg_schema = self.iceberg_schema.as_ref().unwrap().clone();
+        let table =
+            create_table_impl(&self.catalog, namespace_ident, creation, iceberg_schema).await?;
+        Ok(table)
     }
 
     async fn load_table(&self, table_ident: &TableIdent) -> IcebergResult<Table> {
@@ -198,46 +159,15 @@ impl Catalog for GlueCatalog {
         todo!("rename table is not supported");
     }
 
-    /// Transaction commit:
-    /// - sdk write metadata file and manifest file
-    /// - catalog check requirement
-    /// - catalog craft request body
-    /// - catalog commit
-    async fn update_table(&self, mut commit: TableCommit) -> IcebergResult<Table> {
-        let table = self.load_table(commit.identifier()).await?;
-        let metadata = table.metadata();
-        let requirements = commit.take_requirements();
-        validate_table_requirements(requirements.clone(), metadata)?;
-
-        let builder = TableMetadataBuilder::new_from_metadata(metadata.clone(), None);
-        let updates = commit.take_updates();
-        let builder = reflect_table_updates(builder, updates)?;
-        let build_result = builder.build()?;
-
-        // Rewrite manifest list/entries to append puffin metadata and handle removals before commit
-        append_puffin_metadata_and_rewrite(
-            &build_result.metadata,
+    async fn update_table(&self, commit: TableCommit) -> IcebergResult<Table> {
+        let updated_table = update_table_impl(
+            &self.catalog,
             &self.file_io,
-            &self.deletion_vector_blobs_to_add,
-            &self.file_index_blobs_to_add,
-            &self.data_files_to_remove,
-            &self.puffin_blobs_to_remove,
+            &self.table_update_proxy,
+            commit,
         )
         .await?;
-
-        let normalized_updates = build_result.changes;
-
-        // Repackage normalized updates and original requirements into a TableCommit
-        // and delegate to the underlying REST catalog implementation.
-        let new_commit = TableCommitProxy {
-            ident: commit.identifier().clone(),
-            requirements,
-            updates: normalized_updates,
-        }
-        .take_as_table_commit();
-
-        let table = self.catalog.update_table(new_commit).await?;
-        Ok(table)
+        Ok(updated_table)
     }
 
     async fn register_table(
@@ -258,32 +188,25 @@ impl PuffinWrite for GlueCatalog {
         puffin_blob_type: PuffinBlobType,
     ) -> IcebergResult<()> {
         let puffin_metadata = get_puffin_metadata_and_close(puffin_writer).await?;
-        match &puffin_blob_type {
-            PuffinBlobType::DeletionVector => self
-                .deletion_vector_blobs_to_add
-                .insert(puffin_filepath, puffin_metadata),
-            PuffinBlobType::FileIndex => self
-                .file_index_blobs_to_add
-                .insert(puffin_filepath, puffin_metadata),
-        };
+        self.table_update_proxy.record_puffin_metadata(
+            puffin_filepath,
+            puffin_metadata,
+            puffin_blob_type,
+        );
         Ok(())
     }
 
     fn set_data_files_to_remove(&mut self, data_files: HashSet<String>) {
-        assert!(self.data_files_to_remove.is_empty());
-        self.data_files_to_remove = data_files;
+        self.table_update_proxy.set_data_files_to_remove(data_files);
     }
 
     fn set_index_puffin_files_to_remove(&mut self, puffin_filepaths: HashSet<String>) {
-        assert!(self.puffin_blobs_to_remove.is_empty());
-        self.puffin_blobs_to_remove = puffin_filepaths;
+        self.table_update_proxy
+            .set_index_puffin_files_to_remove(puffin_filepaths);
     }
 
     fn clear_puffin_metadata(&mut self) {
-        self.deletion_vector_blobs_to_add.clear();
-        self.file_index_blobs_to_add.clear();
-        self.puffin_blobs_to_remove.clear();
-        self.data_files_to_remove.clear();
+        self.table_update_proxy.clear();
     }
 }
 
