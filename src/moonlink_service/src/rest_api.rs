@@ -850,7 +850,7 @@ async fn set_avro_schema(
         .kafka_schema_id_cache
         .read()
         .await
-        .get(&payload.table)
+        .get(&src_table_name)
         .is_some_and(|id| *id == payload.schema_id)
     {
         return Ok(Json(SetAvroSchemaResponse {
@@ -885,7 +885,7 @@ async fn set_avro_schema(
                 .kafka_schema_id_cache
                 .write()
                 .await
-                .insert(payload.table.clone(), payload.schema_id);
+                .insert(src_table_name.clone(), payload.schema_id);
             Ok(Json(SetAvroSchemaResponse {
                 database: payload.database,
                 table: payload.table,

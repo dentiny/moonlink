@@ -346,7 +346,6 @@ impl ReplicationConnection {
                 // Set Avro schema on the REST connection
                 conn.set_avro_schema(src_table_name, avro_schema).await?;
 
-                debug!("Avro schema set for REST table");
                 Ok(())
             }
             SourceType::Postgres(_) => {

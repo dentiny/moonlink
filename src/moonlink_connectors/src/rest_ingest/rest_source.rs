@@ -93,7 +93,7 @@ impl RestSource {
         // Update rest source states.
         if self
             .table_schemas
-            .insert(src_table_name.clone(), (schema, None))
+            .insert(src_table_name.clone(), (schema, /*avro_schema=*/ None))
             .is_some()
         {
             return Err(RestSourceError::DuplicateTable(src_table_name).into());
@@ -276,26 +276,6 @@ impl RestSource {
 
     /// Process an event request, which is operated on a row.
     fn process_row_request(&self, request: &RowEventRequest) -> Result<Vec<RestEvent>> {
-        {
-            let opt_schema = self.table_schemas.get(&request.src_table_name);
-            if opt_schema.is_none() {
-                println!(
-                    "table schema keys = {:?}, request src table name {}",
-                    self.table_schemas.keys(),
-                    request.src_table_name,
-                );
-            }
-
-            let opt_src_table_id = self.src_table_name_to_src_id.get(&request.src_table_name);
-            if opt_src_table_id.is_none() {
-                println!(
-                    "src table names to src id = {:?}, request src table name {}",
-                    self.src_table_name_to_src_id.keys(),
-                    request.src_table_name,
-                );
-            }
-        }
-
         let schema = self
             .table_schemas
             .get(&request.src_table_name)
