@@ -24,7 +24,7 @@ pub use storage::{
     MooncakeTable, MooncakeTableConfig, MoonlinkSecretType, MoonlinkTableConfig,
     MoonlinkTableSecret, ObjectStorageCache, ObjectStorageCacheConfig, PersistentWalMetadata,
     SnapshotReadOutput, StorageConfig, TableEventManager, TableManager, TableSnapshotStatus,
-    TableStatusReader, WalConfig, WalManager, WalTransactionState,
+    TableStatusReader, WalConfig, WalManager, WalTransactionState, AwsSecurityConfig, CloudSecurityConfig,
 };
 pub use table_handler::TableHandler;
 pub use table_handler_timer::TableHandlerTimer;

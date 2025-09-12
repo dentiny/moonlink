@@ -10,6 +10,20 @@ use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "storage-gcs", feature = "storage-s3"))]
 use url::Url;
 
+
+/// Table config entry to persist.
+#[derive(Clone, Debug)]
+pub(crate) struct TableConfigEntry {
+    /// Serialized json format for [`MoonlinkTableConfigForPersistence`].
+    pub(crate) serialized_moonlink_table_config: serde_json::Value,
+    /// Cloud vendor secret.
+    pub(crate) cloud_vendor_secret: Option<MoonlinkTableSecret>,
+    /// Iceberg data access secret.
+    pub(crate) iceberg_data_access_secret: Option<MoonlinkTableSecret>,
+    /// WAL secret.
+    pub(crate) wal_secret: Option<MoonlinkTableSecret>,
+}
+
 /// Struct for iceberg table config.
 /// Notice it's a subset of [`IcebergTableConfig`] since we want to keep things persisted minimum.
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -143,15 +157,12 @@ impl MoonlinkTableConfigForPersistence {
 /// TODO(hjiang): Handle namespace better.
 /// Returns:
 /// - serialized json value of the persisted config
+/// - cloud secret config
 /// - iceberg secret entry
 /// - wal secret entry
 pub(crate) fn parse_moonlink_table_config(
     moonlink_table_config: MoonlinkTableConfig,
-) -> Result<(
-    serde_json::Value,
-    Option<MoonlinkTableSecret>,
-    Option<MoonlinkTableSecret>,
-)> {
+) -> Result<TableConfigEntry> {
     // Serialize mooncake table config.
     let iceberg_config = moonlink_table_config.iceberg_table_config;
     let wal_config = moonlink_table_config.wal_table_config;
@@ -180,6 +191,11 @@ pub(crate) fn parse_moonlink_table_config(
     let config_json = serde_json::to_value(&persisted)?;
 
     // Extract table secret entry.
+    let cloud_secret_config = if let Some(cloud_secret_config) = iceberg_config.metadata_accessor_config.get_cloud_secret_config() {
+        cloud_secret_config.extract_security_metadata_entry()
+    } else {
+        None
+    };
     let iceberg_secret_entry = iceberg_config
         .metadata_accessor_config
         .get_file_catalog_accessor_config()
@@ -189,7 +205,13 @@ pub(crate) fn parse_moonlink_table_config(
         .get_accessor_config()
         .extract_security_metadata_entry();
 
-    Ok((config_json, iceberg_secret_entry, wal_secret_entry))
+    let table_config_entry = TableConfigEntry {
+        serialized_moonlink_table_config: config_json,
+        cloud_vendor_secret: cloud_secret_config,
+        iceberg_data_access_secret: iceberg_secret_entry,
+        wal_secret: wal_secret_entry,
+    };
+    Ok(table_config_entry)
 }
 
 /// Recover filesystem config from persisted config and secret.
