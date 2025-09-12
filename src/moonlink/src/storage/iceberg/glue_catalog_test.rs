@@ -25,7 +25,7 @@ const TEST_GLUE_ENDPOINT: &str = "http://moto-glue.local:5000";
 
 /// Test util function to get glue catalog name.
 fn get_random_glue_catalog_name() -> String {
-    format!("glue-catalog-{}", uuid::Uuid::new_v4().to_string())
+    format!("glue-catalog-{}", uuid::Uuid::new_v4())
 }
 
 /// Test util function to get a random string.
