@@ -42,18 +42,30 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 t.src_table_name,
                 t.src_table_uri,
                 t.config,
-                s_ice.storage_provider  AS iceberg_storage_provider,
+
+                -- Iceberg storage secrets
+                s_ice.provider          AS iceberg_storage_provider,
                 s_ice.key_id            AS iceberg_key_id,
                 s_ice.secret            AS iceberg_secret,
                 s_ice.endpoint          AS iceberg_endpoint,
                 s_ice.region            AS iceberg_region,
                 s_ice.project           AS iceberg_project,
-                s_wal.storage_provider  AS wal_storage_provider,
+
+                -- WAL storage secrets
+                s_wal.provider          AS wal_storage_provider,
                 s_wal.key_id            AS wal_key_id,
                 s_wal.secret            AS wal_secret,
                 s_wal.endpoint          AS wal_endpoint,
                 s_wal.region            AS wal_region,
-                s_wal.project           AS wal_project
+                s_wal.project           AS wal_project,
+
+                -- Cloud secrets
+                s_cloud.provider        AS cloud_provider,
+                s_cloud.key_id          AS cloud_key_id,
+                s_cloud.secret          AS cloud_secret,
+                s_cloud.endpoint        AS cloud_endpoint,
+                s_cloud.region          AS cloud_region,
+                s_cloud.project         AS cloud_project
             FROM tables t
             LEFT JOIN secrets s_ice
                 ON t."database" = s_ice."database"
@@ -63,6 +75,10 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 ON t."database" = s_wal."database"
                 AND t."table" = s_wal."table"
                 AND s_wal.usage_type = 'wal'
+            LEFT JOIN secrets s_cloud
+                ON t."database" = s_cloud."database"
+                AND t."table" = s_cloud."table"
+                AND s_cloud.usage_type = 'cloud'
             "#,
         )
         .fetch_all(&sqlite_conn.pool)
@@ -87,6 +103,7 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                     region: row.get("iceberg_region"),
                     project: row.get("iceberg_project"),
                 });
+
             let wal_storage_provider: Option<String> = row.get("wal_storage_provider");
             let wal_secret_entry: Option<MoonlinkTableSecret> =
                 wal_storage_provider.map(|t| MoonlinkTableSecret {
@@ -97,11 +114,23 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                     region: row.get("wal_region"),
                     project: row.get("wal_project"),
                 });
+            
+            let cloud_provider: Option<String> = row.get("cloud_provider");
+            let cloud_secret_entry: Option<MoonlinkTableSecret> = 
+                cloud_provider.map(|t| MoonlinkTableSecret {
+                    secret_type: MoonlinkTableSecret::convert_secret_type(&t),
+                    key_id: row.get("cloud_key_id"),
+                    secret: row.get("cloud_secret"),
+                    endpoint: row.get("cloud_endpoint"),
+                    region: row.get("cloud_region"),
+                    project: row.get("cloud_project"),
+                });
 
             let moonlink_table_config = config_utils::deserialize_moonlink_table_config(
                 json_value,
                 iceberg_secret_entry,
                 wal_secret_entry,
+                cloud_secret_entry,
                 &database,
                 &table,
             )?;
@@ -126,9 +155,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         src_table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
-        let (serialized_config, iceberg_secret, wal_secret) =
-            config_utils::parse_moonlink_table_config(moonlink_table_config)?;
-        let serialized_config = serde_json::to_string(&serialized_config)?;
+        let table_config_entry = config_utils::parse_moonlink_table_config(moonlink_table_config)?;
+        let serialized_config = serde_json::to_string(&table_config_entry.serialized_config)?;
 
         // Create metadata tables if it doesn't exist.
         let sqlite_conn = SqliteConnWrapper::new(&self.database_uri).await?;
@@ -173,12 +201,14 @@ impl MetadataStoreTrait for SqliteMetadataStore {
             )));
         }
 
-        // Insert iceberg secret if present
-        if let Some(secret) = iceberg_secret {
+        // TODO(hjiang): Extract into a function.
+        //
+        // Insert iceberg secret if present.
+        if let Some(secret) = table_config_entry.iceberg_data_access_secret {
             let rows_affected = sqlx::query(
                 r#"
-                INSERT INTO secrets ("database", "table", usage_type, storage_provider, key_id, secret, endpoint, region, project)
-                VALUES (?, ?, 'iceberg', ?, ?, ?, ?, ?, ?);
+                INSERT INTO secrets ("database", "table", usage_type, provider, key_id, secret, endpoint, region, project)
+                VALUES (?, ?, 'iceberg_storage', ?, ?, ?, ?, ?, ?);
                 "#,
             )
             .bind(database)
@@ -199,12 +229,40 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 )));
             }
         }
-        // Insert wal secret if present
-        if let Some(secret) = wal_secret {
+
+        // Insert wal secret if present.
+        if let Some(secret) = table_config_entry.wal_secret {
             let rows_affected = sqlx::query(
                 r#"
-                INSERT INTO secrets ("database", "table", usage_type, storage_provider, key_id, secret, endpoint, region, project)
-                VALUES (?, ?, 'wal', ?, ?, ?, ?, ?, ?);
+                INSERT INTO secrets ("database", "table", usage_type, provider, key_id, secret, endpoint, region, project)
+                VALUES (?, ?, 'wal_storage', ?, ?, ?, ?, ?, ?);
+                "#,
+            )
+            .bind(database)
+            .bind(table)
+            .bind(secret.get_secret_type())
+            .bind(secret.key_id)
+            .bind(secret.secret)
+            .bind(secret.endpoint)
+            .bind(secret.region)
+            .bind(secret.project)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            if rows_affected != 1 {
+                return Err(Error::SqliteRowCountError(ErrorStruct::new(
+                    format!("expected 1 row affected, but got {rows_affected}"),
+                    ErrorStatus::Permanent,
+                )));
+            }
+        }
+
+        // Insert cloud secret config if present.
+        if let Some(secret) = table_config_entry.cloud_vendor_secret {
+            let rows_affected = sqlx::query(
+                r#"
+                INSERT INTO secrets ("database", "table", usage_type, provider, key_id, secret, endpoint, region, project)
+                VALUES (?, ?, 'cloud', ?, ?, ?, ?, ?, ?);
                 "#,
             )
             .bind(database)

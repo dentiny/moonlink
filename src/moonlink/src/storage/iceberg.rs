@@ -21,6 +21,7 @@ pub(super) mod parquet_utils;
 pub(super) mod puffin_utils;
 pub(super) mod puffin_writer_proxy;
 mod table_update_proxy;
+pub mod cloud_security_config;
 
 #[cfg(feature = "catalog-glue")]
 pub(super) mod glue_catalog;
@@ -43,9 +44,6 @@ mod s3_test_utils;
 #[cfg(feature = "storage-gcs")]
 #[cfg(test)]
 mod gcs_test_utils;
-
-#[cfg(feature = "catalog-glue")]
-mod aws_security_config;
 
 #[cfg(test)]
 mod tests;
