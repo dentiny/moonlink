@@ -29,6 +29,11 @@ pub use filesystem::storage_config::StorageConfig;
 pub use iceberg::base_iceberg_snapshot_fetcher::BaseIcebergSnapshotFetcher;
 pub use iceberg::cloud_security_config::{AwsSecurityConfig, CloudSecurityConfig};
 pub use iceberg::iceberg_snapshot_fetcher::IcebergSnapshotFetcher;
+pub use iceberg::iceberg_table_config::FileCatalogConfig as IcebergFileCatalogConfig;
+#[cfg(feature = "catalog-glue")]
+pub use iceberg::iceberg_table_config::GlueCatalogConfig as IcebergGlueCatalogConfig;
+#[cfg(feature = "catalog-rest")]
+pub use iceberg::iceberg_table_config::RestCatalogConfig as IcebergRestCatalogConfig;
 pub use iceberg::iceberg_table_config::{IcebergCatalogConfig, IcebergTableConfig};
 pub use iceberg::iceberg_table_manager::IcebergTableManager;
 pub use iceberg::table_manager::TableManager;
