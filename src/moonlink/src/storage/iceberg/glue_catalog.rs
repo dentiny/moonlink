@@ -41,35 +41,24 @@ fn extract_glue_config_properties(
     storage_config: &StorageConfig,
 ) -> HashMap<String, String> {
     let s3_region = storage_config.get_region().unwrap();
+    let aws_security_config = glue_config
+        .cloud_secret_config
+        .get_aws_security_config()
+        .unwrap();
 
     let mut config_props = HashMap::from([
         // AWS configs.
         (
             AWS_ACCESS_KEY_ID.to_string(),
-            glue_config
-                .cloud_secret_config
-                .get_aws_security_config()
-                .unwrap()
-                .access_key_id
-                .clone(),
+            aws_security_config.access_key_id.clone(),
         ),
         (
             AWS_SECRET_ACCESS_KEY.to_string(),
-            glue_config
-                .cloud_secret_config
-                .get_aws_security_config()
-                .unwrap()
-                .security_access_key
-                .clone(),
+            aws_security_config.security_access_key.clone(),
         ),
         (
             AWS_REGION_NAME.to_string(),
-            glue_config
-                .cloud_secret_config
-                .get_aws_security_config()
-                .unwrap()
-                .region
-                .clone(),
+            aws_security_config.region.clone(),
         ),
         // Glue configs.
         (GLUE_CATALOG_PROP_URI.to_string(), glue_config.uri.clone()),
