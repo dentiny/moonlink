@@ -105,7 +105,7 @@ async fn import_one_file_index(
         let remote_index_block = iceberg_io_utils::upload_index_file(
             iceberg_table,
             cur_index_block.index_file.file_path(),
-            &*filesystem_accessor,
+            filesystem_accessor,
         )
         .await?;
         local_index_file_to_remote.insert(
@@ -532,7 +532,7 @@ impl IcebergTableManager {
             stream::iter(file_indices_to_import_clone.into_iter())
                 .map(move |mooncake_file_index: MooncakeFileIndex| {
                     let iceberg_table = iceberg_table;
-                    let puffin_filepath = get_unique_hash_index_v1_filepath(&iceberg_table);
+                    let puffin_filepath = get_unique_hash_index_v1_filepath(iceberg_table);
                     let filesystem_accessor = filesystem_accessor;
                     let local_data_file_to_remote_clone = local_data_file_to_remote_clone.clone();
 
@@ -547,7 +547,7 @@ impl IcebergTableManager {
                         .await
                     }
                 })
-                .buffered(DEFAULT_FILE_INDEX_IMPORT_CONCURRENCY)
+                .buffer_unordered(DEFAULT_FILE_INDEX_IMPORT_CONCURRENCY)
                 .try_collect()
                 .await?;
 
