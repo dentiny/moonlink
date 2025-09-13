@@ -1,6 +1,5 @@
+use crate::storage::iceberg::cloud_security_config::CloudSecurityConfig;
 use crate::{storage::filesystem::accessor_config::AccessorConfig, StorageConfig};
-#[cfg(feature = "catalog-glue")]
-use crate::{storage::iceberg::aws_security_config::AwsSecurityConfig, CloudSecurityConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
