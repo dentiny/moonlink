@@ -9,6 +9,7 @@ use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::{
     CatalogAccess, PuffinBlobType, PuffinWrite, SchemaUpdate,
 };
+use crate::storage::iceberg::puffin_writer_proxy::PuffinBlobMetadataProxy;
 use crate::storage::iceberg::table_commit_proxy::TableCommitProxy;
 use crate::storage::iceberg::table_update_proxy::TableUpdateProxy;
 
@@ -235,6 +236,18 @@ impl FileCatalog {
 
 #[async_trait]
 impl PuffinWrite for FileCatalog {
+    fn record_puffin_metadata(
+        &mut self,
+        puffin_filepath: String,
+        puffin_metadata: Vec<PuffinBlobMetadataProxy>,
+        puffin_blob_type: PuffinBlobType,
+    ) {
+        self.table_update_proxy.record_puffin_metadata(
+            puffin_filepath,
+            puffin_metadata,
+            puffin_blob_type,
+        );
+    }
     async fn record_puffin_metadata_and_close(
         &mut self,
         puffin_filepath: String,
