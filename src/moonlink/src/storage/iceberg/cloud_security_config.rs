@@ -30,7 +30,6 @@ impl std::fmt::Debug for AwsSecurityConfig {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum CloudSecurityConfig {
-    #[cfg(feature = "storage-s3")]
     Aws(AwsSecurityConfig),
 }
 

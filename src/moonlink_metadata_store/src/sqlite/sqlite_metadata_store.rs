@@ -156,8 +156,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         if let Some(secret) = wal_secret {
             let rows_affected = sqlx::query(
                 r#"
-                INSERT INTO secrets ("database", "table", usage_type, provider, key_id, secret, endpoint, region, project)
-                VALUES (?, ?, 'wal_storage', ?, ?, ?, ?, ?, ?);
+                INSERT INTO secrets ("database", "table", usage_type, storage_provider, key_id, secret, endpoint, region, project)
+                VALUES (?, ?, 'wal', ?, ?, ?, ?, ?, ?);
                 "#,
             )
             .bind(database)

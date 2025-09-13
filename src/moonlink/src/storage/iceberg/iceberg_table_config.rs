@@ -1,3 +1,4 @@
+#[cfg(feature = "catalog-glue")]
 use crate::storage::iceberg::cloud_security_config::CloudSecurityConfig;
 use crate::{storage::filesystem::accessor_config::AccessorConfig, StorageConfig};
 use serde::{Deserialize, Serialize};
