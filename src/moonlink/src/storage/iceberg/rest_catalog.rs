@@ -5,6 +5,7 @@ use crate::storage::iceberg::catalog_utils::{
 };
 use crate::storage::iceberg::iceberg_table_config::RestCatalogConfig;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
+use crate::storage::iceberg::puffin_writer_proxy::PuffinBlobMetadataProxy;
 use crate::storage::iceberg::table_commit_proxy::TableCommitProxy;
 use crate::storage::iceberg::table_update_proxy::TableUpdateProxy;
 use async_trait::async_trait;
