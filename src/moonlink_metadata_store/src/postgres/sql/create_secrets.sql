@@ -6,7 +6,7 @@ CREATE TABLE secrets (
     "database" TEXT,         -- Column store database name.
     "table" TEXT,            -- Column store table name.
     usage_type TEXT CHECK (usage_type IN ('wal')),
-    storage_provider TEXT CHECK (storage_provider IN ('s3', 'gcs')),  -- One of ('s3', 'gcs')
+    storage_provider TEXT CHECK (storage_provider IN ('s3', 'gcs')),
     key_id TEXT,
     secret TEXT,
     project TEXT,          -- (optional)

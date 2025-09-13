@@ -27,6 +27,7 @@ pub use filesystem::accessor_config::{
 };
 pub use filesystem::storage_config::StorageConfig;
 pub use iceberg::base_iceberg_snapshot_fetcher::BaseIcebergSnapshotFetcher;
+pub use iceberg::cloud_security_config::{AwsSecurityConfig, CloudSecurityConfig};
 pub use iceberg::iceberg_snapshot_fetcher::IcebergSnapshotFetcher;
 pub use iceberg::iceberg_table_config::{IcebergCatalogConfig, IcebergTableConfig};
 pub use iceberg::iceberg_table_manager::IcebergTableManager;
@@ -37,7 +38,6 @@ pub use mooncake_table::table_event_manager::TableEventManager;
 pub use mooncake_table::table_secret::{
     SecretEntry as MoonlinkTableSecret, SecretType as MoonlinkSecretType,
 };
-pub use iceberg::cloud_security_config::{CloudSecurityConfig, AwsSecurityConfig};
 pub use mooncake_table::table_status::TableSnapshotStatus;
 pub use mooncake_table::table_status_reader::TableStatusReader;
 pub use mooncake_table::MooncakeTable;

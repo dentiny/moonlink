@@ -41,17 +41,15 @@ impl CloudSecurityConfig {
     pub fn extract_security_metadata_entry(&self) -> Option<MoonlinkTableSecret> {
         match self {
             #[cfg(feature = "storage-s3")]
-            CloudSecurityConfig::Aws(aws_security_config) => {
-                Some(MoonlinkTableSecret {
-                    secret_type: crate::MoonlinkSecretType::S3,
-                    key_id: aws_security_config.access_key_id.clone(),
-                    secret: aws_security_config.security_access_key.clone(),
-                    project: None,
-                    endpoint: None,
-                    region: None,
-                })
-            }
-            _ => None
+            CloudSecurityConfig::Aws(aws_security_config) => Some(MoonlinkTableSecret {
+                secret_type: crate::MoonlinkSecretType::S3,
+                key_id: aws_security_config.access_key_id.clone(),
+                secret: aws_security_config.security_access_key.clone(),
+                project: None,
+                endpoint: None,
+                region: None,
+            }),
+            _ => None,
         }
     }
 }

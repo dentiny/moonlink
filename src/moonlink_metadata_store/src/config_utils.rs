@@ -131,12 +131,10 @@ impl MoonlinkTableConfigForPersistence {
 /// TODO(hjiang): Handle namespace better.
 /// Returns:
 /// - serialized json value of the persisted config
-/// - cloud secret config
-/// - iceberg secret entry
 /// - wal secret entry
 pub(crate) fn parse_moonlink_table_config(
     moonlink_table_config: MoonlinkTableConfig,
-) -> Result<TableConfigEntry> {
+) -> Result<(serde_json::Value, Option<MoonlinkTableSecret>)> {
     // Serialize mooncake table config.
     let iceberg_table_config = moonlink_table_config.iceberg_table_config;
     let wal_config = moonlink_table_config.wal_table_config;
@@ -229,7 +227,6 @@ fn reconstruct_storage_config_from_root(
 pub(crate) fn deserialize_moonlink_table_config(
     serialized_config: serde_json::Value,
     wal_secret_entry: Option<MoonlinkTableSecret>,
-    cloud_secret_entry: Option<MoonlinkTableSecret>,
     database: &str,
     table: &str,
 ) -> Result<MoonlinkTableConfig> {

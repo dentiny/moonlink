@@ -1,5 +1,6 @@
 pub mod base_iceberg_snapshot_fetcher;
 pub(super) mod catalog_utils;
+pub mod cloud_security_config;
 mod data_file_manifest_manager;
 pub(super) mod deletion_vector;
 mod deletion_vector_manifest_manager;
@@ -21,7 +22,6 @@ pub(super) mod parquet_utils;
 pub(super) mod puffin_utils;
 pub(super) mod puffin_writer_proxy;
 mod table_update_proxy;
-pub mod cloud_security_config;
 
 #[cfg(feature = "catalog-glue")]
 pub(super) mod glue_catalog;

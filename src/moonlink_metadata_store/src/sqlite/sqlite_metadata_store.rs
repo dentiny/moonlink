@@ -47,7 +47,7 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 s_wal.secret            AS wal_secret,
                 s_wal.endpoint          AS wal_endpoint,
                 s_wal.region            AS wal_region,
-                s_wal.project           AS wal_project,
+                s_wal.project           AS wal_project
             FROM tables t
             LEFT JOIN secrets s_wal
                 ON t."database" = s_wal."database"
@@ -77,22 +77,10 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                     region: row.get("wal_region"),
                     project: row.get("wal_project"),
                 });
-            
-            let cloud_provider: Option<String> = row.get("cloud_provider");
-            let cloud_secret_entry: Option<MoonlinkTableSecret> = 
-                cloud_provider.map(|t| MoonlinkTableSecret {
-                    secret_type: MoonlinkTableSecret::convert_secret_type(&t),
-                    key_id: row.get("cloud_key_id"),
-                    secret: row.get("cloud_secret"),
-                    endpoint: row.get("cloud_endpoint"),
-                    region: row.get("cloud_region"),
-                    project: row.get("cloud_project"),
-                });
 
             let moonlink_table_config = config_utils::deserialize_moonlink_table_config(
                 json_value,
                 wal_secret_entry,
-                cloud_secret_entry,
                 &database,
                 &table,
             )?;
@@ -170,33 +158,6 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 r#"
                 INSERT INTO secrets ("database", "table", usage_type, provider, key_id, secret, endpoint, region, project)
                 VALUES (?, ?, 'wal_storage', ?, ?, ?, ?, ?, ?);
-                "#,
-            )
-            .bind(database)
-            .bind(table)
-            .bind(secret.get_secret_type())
-            .bind(secret.key_id)
-            .bind(secret.secret)
-            .bind(secret.endpoint)
-            .bind(secret.region)
-            .bind(secret.project)
-            .execute(&mut *tx)
-            .await?
-            .rows_affected();
-            if rows_affected != 1 {
-                return Err(Error::SqliteRowCountError(ErrorStruct::new(
-                    format!("expected 1 row affected, but got {rows_affected}"),
-                    ErrorStatus::Permanent,
-                )));
-            }
-        }
-
-        // Insert cloud secret config if present.
-        if let Some(secret) = table_config_entry.cloud_vendor_secret {
-            let rows_affected = sqlx::query(
-                r#"
-                INSERT INTO secrets ("database", "table", usage_type, provider, key_id, secret, endpoint, region, project)
-                VALUES (?, ?, 'cloud', ?, ?, ?, ?, ?, ?);
                 "#,
             )
             .bind(database)
