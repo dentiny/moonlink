@@ -6,11 +6,12 @@ use crate::storage::iceberg::deletion_vector::{
     MOONCAKE_DELETION_VECTOR_NUM_ROWS,
 };
 use crate::storage::iceberg::iceberg_table_manager::*;
-use crate::storage::iceberg::index::FileIndexBlob;
+use crate::storage::iceberg::index::{FileIndex, FileIndexBlob};
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::PuffinBlobType;
 use crate::storage::iceberg::puffin_utils;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
+use crate::storage::iceberg::puffin_writer_proxy::{get_puffin_metadata_and_close, PuffinBlobMetadataProxy};
 use crate::storage::iceberg::schema_utils;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::index::FileIndex as MooncakeFileIndex;
@@ -38,6 +39,8 @@ use iceberg::{Error as IcebergError, Result as IcebergResult};
 
 /// Default concurrency of iceberg data file upload.
 const DEFAULT_DATA_FILE_UPLOAD_CONCURRENCY: usize = 128;
+/// Default concurency for iceberg file indices import.
+const DEFAULT_FILE_INDEX_IMPORT_CONCURRENCY: usize = 128;
 
 /// Results for importing data files into iceberg table.
 pub struct DataFileImportResult {
@@ -63,6 +66,18 @@ struct DeletionVectorWriteResult {
 struct DeletionVectorsSyncResult {
     puffin_deletion_blobs: HashMap<FileId, PuffinBlobRef>,
     evicted_files_to_delete: Vec<String>,
+}
+
+/// Import result for single file index.
+struct SingleFileIndexImportResult {
+    /// Maps from local index block file to remote filepath.
+    local_index_file_to_remote: HashMap<String, String>,
+    /// File index.
+    file_index: MooncakeFileIndex,
+    /// Puffin metadata.
+    puffin_metadata: Vec<PuffinBlobMetadataProxy>,
+    /// Puffin filepath.
+    puffin_filepath: String,
 }
 
 impl IcebergTableManager {
@@ -438,6 +453,51 @@ impl IcebergTableManager {
         new_file_index
     }
 
+    /// Import one single mooncake file index.
+    async fn import_one_file_index(
+        &mut self,
+        mooncake_file_index: &MooncakeFileIndex,
+        local_data_file_to_remote: &HashMap<String, String>,
+    ) -> IcebergResult<SingleFileIndexImportResult> {
+        // Create one puffin file (with one puffin blob inside of it) for each mooncake file index.
+        let puffin_filepath = self.get_unique_hash_index_v1_filepath();
+        let mut puffin_writer = puffin_utils::create_puffin_writer(
+            self.iceberg_table.as_ref().unwrap().file_io(),
+            &puffin_filepath,
+        )
+        .await?;
+
+        // Upload new index file to iceberg table.
+        for cur_index_block in mooncake_file_index.index_blocks.iter() {
+            let remote_index_block = iceberg_io_utils::upload_index_file(
+                self.iceberg_table.as_ref().unwrap(),
+                cur_index_block.index_file.file_path(),
+                self.filesystem_accessor.as_ref(),
+            )
+            .await?;
+            local_index_file_to_remote.insert(
+                cur_index_block.index_file.file_path().to_string(),
+                remote_index_block,
+            );
+        }
+
+        // Persist the puffin file and record in file catalog.
+        let file_index_blob = FileIndexBlob::new(
+            mooncake_file_index,
+            &local_index_file_to_remote,
+            local_data_file_to_remote,
+        );
+        let puffin_blob = file_index_blob.as_blob()?;
+        puffin_writer
+            .add(puffin_blob, iceberg::puffin::CompressionCodec::None)
+            .await?;
+        let puffin_metadata = get_puffin_metadata_and_close(puffin_writer).await?;
+
+        Ok(SingleFileIndexImportResult {
+
+        })
+    }
+
     /// Process file indices to import.
     /// One mooncake file index correspond to one puffin file, with one blob inside of it.
     ///
@@ -453,6 +513,26 @@ impl IcebergTableManager {
         // After cache design, we should be able to provide a "handle" abstraction, which could be either local or remote.
         // The hash map here is merely a workaround to pass remote path to iceberg file index structure.
         let mut local_index_file_to_remote = HashMap::new();
+
+
+struct SingleFileIndexImportResult {
+    /// Maps from local index block file to remote filepath.
+    local_index_file_to_remote: HashMap<String, String>,
+    /// File index.
+    file_index: FileIndex,
+    /// Puffin metadata.
+    puffin_metadata: Vec<PuffinBlobMetadataProxy>,
+    /// Puffin filepath.
+    puffin_filepath: String,
+}
+
+    let file_index_import_results: Vec<SingleFileIndexImportResult> = stream::iter(file_indices_to_import.iter())
+        .map(|mooncake_file_index: &MooncakeFileIndex| {
+
+        })
+        .buffered(DEFAULT_FILE_INDEX_IMPORT_CONCURRENCY)
+        .try_collect()
+        .await?;
 
         for cur_file_index in file_indices_to_import.iter() {
             // Create one puffin file (with one puffin blob inside of it) for each mooncake file index.
