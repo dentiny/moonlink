@@ -37,6 +37,7 @@ pub use mooncake_table::table_event_manager::TableEventManager;
 pub use mooncake_table::table_secret::{
     SecretEntry as MoonlinkTableSecret, SecretType as MoonlinkSecretType,
 };
+pub use iceberg::cloud_security_config::{CloudSecurityConfig, AwsSecurityConfig};
 pub use mooncake_table::table_status::TableSnapshotStatus;
 pub use mooncake_table::table_status_reader::TableStatusReader;
 pub use mooncake_table::MooncakeTable;

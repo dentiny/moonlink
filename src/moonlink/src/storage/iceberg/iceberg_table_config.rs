@@ -1,5 +1,5 @@
 #[cfg(feature = "catalog-glue")]
-use crate::storage::iceberg::aws_security_config::AwsSecurityConfig;
+use crate::{storage::iceberg::aws_security_config::AwsSecurityConfig, CloudSecurityConfig};
 use crate::{storage::filesystem::accessor_config::AccessorConfig, StorageConfig};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -33,15 +33,15 @@ pub struct RestCatalogConfig {
     pub props: HashMap<String, String>,
 }
 
+#[cfg(feature = "catalog-glue")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GlueCatalogConfig {
     /// ========================
     /// AWS security configs.
     /// ========================
     ///
-    #[cfg(feature = "catalog-glue")]
-    #[serde(rename = "aws_security_config")]
-    pub aws_security_config: AwsSecurityConfig,
+    #[serde(rename = "cloud_secret_config")]
+    pub cloud_secret_config: CloudSecurityConfig,
 
     /// ========================
     /// Glue properties
@@ -111,6 +111,16 @@ impl IcebergCatalogConfig {
             IcebergCatalogConfig::File { accessor_config } => Some(accessor_config.clone()),
             #[cfg(any(feature = "catalog-rest", feature = "catalog-glue"))]
             _ => None,
+        }
+    }
+
+    pub fn get_cloud_secret_config(&self) -> Option<CloudSecurityConfig> {
+        match self {
+            #[cfg(feature = "catalog-glue")]
+            IcebergCatalogConfig::Glue { glue_catalog_config } => {
+                Some(glue_catalog_config.cloud_secret_config.clone())
+            }
+            _ => None
         }
     }
 

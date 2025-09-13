@@ -42,13 +42,13 @@ impl MetadataStoreTrait for SqliteMetadataStore {
                 t.src_table_name,
                 t.src_table_uri,
                 t.config,
-                s_ice.storage_provider  AS iceberg_storage_provider,
+                s_ice.provider          AS iceberg_storage_provider,
                 s_ice.key_id            AS iceberg_key_id,
                 s_ice.secret            AS iceberg_secret,
                 s_ice.endpoint          AS iceberg_endpoint,
                 s_ice.region            AS iceberg_region,
                 s_ice.project           AS iceberg_project,
-                s_wal.storage_provider  AS wal_storage_provider,
+                s_wal.provider          AS wal_storage_provider,
                 s_wal.key_id            AS wal_key_id,
                 s_wal.secret            AS wal_secret,
                 s_wal.endpoint          AS wal_endpoint,
@@ -126,9 +126,8 @@ impl MetadataStoreTrait for SqliteMetadataStore {
         src_table_uri: &str,
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
-        let (serialized_config, iceberg_secret, wal_secret) =
-            config_utils::parse_moonlink_table_config(moonlink_table_config)?;
-        let serialized_config = serde_json::to_string(&serialized_config)?;
+        let table_config_entry = config_utils::parse_moonlink_table_config(moonlink_table_config)?;
+        let serialized_config = serde_json::to_string(&table_config_entry.serialized_config)?;
 
         // Create metadata tables if it doesn't exist.
         let sqlite_conn = SqliteConnWrapper::new(&self.database_uri).await?;
