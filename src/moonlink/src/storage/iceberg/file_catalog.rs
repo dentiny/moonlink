@@ -2,12 +2,13 @@ use super::puffin_writer_proxy::append_puffin_metadata_and_rewrite;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
-use crate::storage::iceberg::catalog_utils::{reflect_table_updates, validate_table_requirements};
+use crate::storage::iceberg::catalog_utils::{
+    close_puffin_writer_and_record_metadata, reflect_table_updates, validate_table_requirements,
+};
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::moonlink_catalog::{
     CatalogAccess, PuffinBlobType, PuffinWrite, SchemaUpdate,
 };
-use crate::storage::iceberg::puffin_writer_proxy::get_puffin_metadata_and_close;
 use crate::storage::iceberg::table_commit_proxy::TableCommitProxy;
 use crate::storage::iceberg::table_update_proxy::TableUpdateProxy;
 
@@ -240,12 +241,13 @@ impl PuffinWrite for FileCatalog {
         puffin_writer: PuffinWriter,
         puffin_blob_type: PuffinBlobType,
     ) -> IcebergResult<()> {
-        let puffin_metadata = get_puffin_metadata_and_close(puffin_writer).await?;
-        self.table_update_proxy.record_puffin_metadata(
+        close_puffin_writer_and_record_metadata(
             puffin_filepath,
-            puffin_metadata,
+            puffin_writer,
             puffin_blob_type,
-        );
+            &mut self.table_update_proxy,
+        )
+        .await?;
         Ok(())
     }
 

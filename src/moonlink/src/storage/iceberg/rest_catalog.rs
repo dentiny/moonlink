@@ -1,7 +1,8 @@
 use super::moonlink_catalog::{CatalogAccess, PuffinBlobType, PuffinWrite, SchemaUpdate};
-use super::puffin_writer_proxy::get_puffin_metadata_and_close;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
-use crate::storage::iceberg::catalog_utils::{create_table_impl, update_table_impl};
+use crate::storage::iceberg::catalog_utils::{
+    close_puffin_writer_and_record_metadata, create_table_impl, update_table_impl,
+};
 use crate::storage::iceberg::iceberg_table_config::RestCatalogConfig;
 use crate::storage::iceberg::io_utils as iceberg_io_utils;
 use crate::storage::iceberg::table_commit_proxy::TableCommitProxy;
@@ -185,12 +186,13 @@ impl PuffinWrite for RestCatalog {
         puffin_writer: PuffinWriter,
         puffin_blob_type: PuffinBlobType,
     ) -> IcebergResult<()> {
-        let puffin_metadata = get_puffin_metadata_and_close(puffin_writer).await?;
-        self.table_update_proxy.record_puffin_metadata(
+        close_puffin_writer_and_record_metadata(
             puffin_filepath,
-            puffin_metadata,
+            puffin_writer,
             puffin_blob_type,
-        );
+            &mut self.table_update_proxy,
+        )
+        .await?;
         Ok(())
     }
 
