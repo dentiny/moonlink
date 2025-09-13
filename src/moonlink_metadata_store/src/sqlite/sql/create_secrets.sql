@@ -3,8 +3,8 @@ CREATE TABLE secrets (
     id SERIAL PRIMARY KEY,      -- Unique row identifier
     "database" TEXT,            -- column store database name
     "table" TEXT,               -- column store table name
-    usage_type TEXT CHECK (usage_type IN ('cloud', 'iceberg_storage', 'wal_storage')),
-    provider TEXT CHECK (provider IN ('aws', 's3', 'gcs')),
+    usage_type TEXT CHECK (usage_type IN ('wal')),
+    storage_provider TEXT CHECK (storage_provider IN ('s3', 'gcs')),
     key_id TEXT,
     secret TEXT,
     project TEXT,          -- (optional)  

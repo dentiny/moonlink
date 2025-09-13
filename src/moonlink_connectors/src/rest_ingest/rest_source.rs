@@ -1,3 +1,4 @@
+use crate::rest_ingest::avro_converter::{AvroToMoonlinkRowConverter, AvroToMoonlinkRowError};
 use crate::rest_ingest::event_request::{
     EventRequest, FileEventOperation, FileEventRequest, FlushRequest, IngestRequestPayload,
     RowEventOperation, RowEventRequest, SnapshotRequest,
@@ -5,6 +6,8 @@ use crate::rest_ingest::event_request::{
 use crate::rest_ingest::json_converter::{JsonToMoonlinkRowConverter, JsonToMoonlinkRowError};
 use crate::rest_ingest::rest_event::RestEvent;
 use crate::Result;
+use apache_avro::from_avro_datum;
+use apache_avro::schema::Schema as AvroSchema;
 use arrow_schema::Schema;
 use bytes::Bytes;
 use moonlink::row::MoonlinkRow;
@@ -18,6 +21,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::Mutex;
+use tracing::debug;
 
 pub type SrcTableId = u32;
 
@@ -25,6 +29,10 @@ pub type SrcTableId = u32;
 pub enum RestSourceError {
     #[error("json conversion error: {0}")]
     JsonConversion(#[from] JsonToMoonlinkRowError),
+    #[error("avro conversion error: {0}")]
+    AvroConversion(#[from] AvroToMoonlinkRowError),
+    #[error("avro parsing error: {0}")]
+    AvroError(#[from] Box<apache_avro::Error>),
     #[error("unknown table: {0}")]
     UnknownTable(String),
     #[error("invalid operation for table: {0}")]
@@ -40,7 +48,7 @@ pub enum RestSourceError {
 }
 
 pub struct RestSource {
-    table_schemas: HashMap<String, Arc<Schema>>,
+    table_schemas: HashMap<String, (Arc<Schema>, Option<AvroSchema>)>,
     src_table_name_to_src_id: HashMap<String, SrcTableId>,
     lsn_generator: Arc<AtomicU64>,
 }
@@ -70,6 +78,10 @@ impl RestSource {
         schema: Arc<Schema>,
         persist_lsn: Option<u64>,
     ) -> Result<()> {
+        debug!(
+            "adding table {}, src_table_id {}",
+            src_table_name, src_table_id
+        );
         // Update LSN at recovery.
         if let Some(persist_lsn) = persist_lsn {
             let old_lsn = self.lsn_generator.load(Ordering::SeqCst);
@@ -81,7 +93,7 @@ impl RestSource {
         // Update rest source states.
         if self
             .table_schemas
-            .insert(src_table_name.clone(), schema)
+            .insert(src_table_name.clone(), (schema, /*avro_schema=*/ None))
             .is_some()
         {
             return Err(RestSourceError::DuplicateTable(src_table_name).into());
@@ -92,6 +104,42 @@ impl RestSource {
             .insert(src_table_name, src_table_id)
             .is_none());
         Ok(())
+    }
+
+    /// Set Avro schema for an existing table
+    pub fn set_avro_schema(
+        &mut self,
+        src_table_name: String,
+        avro_schema: AvroSchema,
+    ) -> Result<()> {
+        // Find the existing table
+        debug!("setting Avro schema for table {}", src_table_name);
+        if let Some((arrow_schema, _)) = self.table_schemas.get(&src_table_name) {
+            let arrow_schema = arrow_schema.clone();
+            // TODO: schema evolution
+            // for now, we just assert they are compatible
+            // Assert that the Avro schema is compatible with the existing Arrow schema
+            let avro_derived_arrow_schema =
+                crate::rest_ingest::avro_converter::convert_avro_to_arrow_schema(&avro_schema)
+                    .expect("Failed to convert Avro schema to Arrow schema");
+
+            assert_eq!(
+                arrow_schema.as_ref(), &avro_derived_arrow_schema,
+                "Arrow schema and Avro-derived schema must be exactly equal. Schema evolution not yet supported."
+            );
+
+            debug!(
+                "Avro schema is compatible with existing Arrow schema for table {}",
+                src_table_name
+            );
+
+            // Update the table schema with the Avro schema
+            self.table_schemas
+                .insert(src_table_name, (arrow_schema, Some(avro_schema)));
+            Ok(())
+        } else {
+            Err(RestSourceError::UnknownTable(src_table_name).into())
+        }
     }
 
     pub fn remove_table(&mut self, src_table_name: &str) -> Result<()> {
@@ -241,7 +289,8 @@ impl RestSource {
         // Decode based on payload type
         let row = match &request.payload {
             IngestRequestPayload::Json(value) => {
-                let converter = JsonToMoonlinkRowConverter::new(schema.clone());
+                let (arrow_schema, _) = schema;
+                let converter = JsonToMoonlinkRowConverter::new(arrow_schema.clone());
                 converter.convert(value)?
             }
             IngestRequestPayload::Protobuf(bytes) => {
@@ -249,6 +298,27 @@ impl RestSource {
                     prost::Message::decode(bytes.as_slice())
                         .map_err(RestSourceError::ProtobufDecoding)?;
                 moonlink::row::proto_to_moonlink_row(p)?
+            }
+            IngestRequestPayload::Avro(bytes) => {
+                // Get the Avro schema for this table
+                let (_, avro_schema_opt) = schema;
+                let avro_schema = avro_schema_opt.as_ref().ok_or_else(|| {
+                    RestSourceError::InvalidOperation(format!(
+                        "Table {} does not have an Avro schema configured",
+                        request.src_table_name
+                    ))
+                })?;
+
+                let avro_value = {
+                    // Decode a single datum - assumes single record per message
+                    // On the kafka side we are already stripping any magic bytes and schema headers
+                    let mut cursor = std::io::Cursor::new(bytes.as_slice());
+                    from_avro_datum(avro_schema, &mut cursor, None)
+                        .map_err(|e| RestSourceError::AvroError(Box::new(e)))?
+                };
+
+                AvroToMoonlinkRowConverter::convert(&avro_value)
+                    .map_err(RestSourceError::AvroConversion)?
             }
         };
 

@@ -1,3 +1,4 @@
+use apache_avro::Schema as AvroSchema;
 use arrow_ipc::writer::StreamWriter;
 use axum::{
     error_handling::HandleErrorLayer,
@@ -13,12 +14,15 @@ use moonlink_backend::{
     EventRequest, FileEventOperation, FileEventRequest, FlushRequest, IngestRequestPayload,
     RowEventOperation, RowEventRequest, SnapshotRequest, REST_API_URI,
 };
+use moonlink_connectors::rest_ingest::avro_converter::convert_avro_to_arrow_schema;
 use moonlink_connectors::rest_ingest::schema_util::{build_arrow_schema, FieldSchema};
 use moonlink_error::ErrorStatus;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Arc;
 use std::time::SystemTime;
+use tokio::sync::RwLock;
 use tokio::sync::{mpsc, oneshot};
 use tower::timeout::TimeoutLayer;
 use tower::ServiceBuilder;
@@ -33,11 +37,16 @@ const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs
 pub struct ApiState {
     /// Reference to the backend for table operations
     pub backend: Arc<moonlink_backend::MoonlinkBackend>,
+    /// Maps from source table name to schema id.
+    pub kafka_schema_id_cache: Arc<RwLock<HashMap<String, u64>>>,
 }
 
 impl ApiState {
     pub fn new(backend: Arc<moonlink_backend::MoonlinkBackend>) -> Self {
-        Self { backend }
+        Self {
+            backend,
+            kafka_schema_id_cache: Arc::new(RwLock::new(HashMap::new())),
+        }
     }
 }
 
@@ -80,7 +89,8 @@ pub struct GetTableSchemaResponse {
 pub struct CreateTableRequest {
     pub database: String,
     pub table: String,
-    pub schema: Vec<FieldSchema>,
+    pub schema: Option<Vec<FieldSchema>>,
+    pub avro_schema: Option<String>,
     pub table_config: TableConfig,
 }
 
@@ -90,6 +100,27 @@ pub struct CreateTableResponse {
     pub database: String,
     pub table: String,
     pub lsn: u64,
+}
+
+/// ====================
+/// Create kafka schema
+/// ====================
+///
+/// Request structure for kafka schema creation.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetAvroSchemaRequest {
+    pub database: String,
+    pub table: String,
+    pub kafka_schema: String,
+    pub schema_id: u64,
+}
+
+/// Response structure for kafka schema creation.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SetAvroSchemaResponse {
+    pub database: String,
+    pub table: String,
+    pub schema_id: u64,
 }
 
 /// ====================
@@ -293,6 +324,8 @@ pub fn create_router(state: ApiState) -> Router {
         .route("/schema/{database}/{table}", get(fetch_schema))
         .route("/ingest/{table}", post(ingest_data_json))
         .route("/ingestpb/{table}", post(ingest_data_protobuf))
+        .route("/kafka/{table}/schema", post(set_avro_schema))
+        .route("/kafka/{table}/ingest", post(ingest_data_kafka))
         .route("/upload/{table}", post(upload_files))
         .route("/tables/{table}/optimize", post(optimize_table))
         .route("/tables/{table}/snapshot", post(create_snapshot))
@@ -330,18 +363,57 @@ async fn create_table(
         src_table_name, payload
     );
 
-    let arrow_schema = match build_arrow_schema(&payload.schema) {
-        Ok(s) => s,
-        Err(e) => {
+    let mut parsed_avro_schema: Option<AvroSchema> = None;
+    let arrow_schema = if let Some(ref schema) = payload.schema {
+        match build_arrow_schema(schema) {
+            Ok(s) => s,
+            Err(e) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        message: format!(
+                            "Invalid schema on table {} creation {:?}: {}",
+                            src_table_name, payload.schema, e
+                        ),
+                    }),
+                ));
+            }
+        }
+    } else {
+        if payload.avro_schema.is_none() {
             return Err((
                 StatusCode::BAD_REQUEST,
                 Json(ErrorResponse {
                     message: format!(
-                        "Invalid schema on table {} creation {:?}: {}",
-                        src_table_name, payload.schema, e
+                        "No schema or avro schema provided on table {src_table_name} creation",
                     ),
                 }),
             ));
+        }
+        let avro_schema = payload.avro_schema.clone().unwrap();
+        parsed_avro_schema = Some(AvroSchema::parse_str(&avro_schema).map_err(|e| {
+            (
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    message: format!(
+                        "Invalid avro schema JSON on table {src_table_name} creation: {e}"
+                    ),
+                }),
+            )
+        })?);
+        match convert_avro_to_arrow_schema(parsed_avro_schema.as_ref().unwrap()) {
+            Ok(s) => s,
+            Err(e) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(ErrorResponse {
+                        message: format!(
+                            "Invalid avro schema on table {} creation {:?}: {}",
+                            src_table_name, payload.avro_schema, e
+                        ),
+                    }),
+                ));
+            }
         }
     };
 
@@ -376,6 +448,27 @@ async fn create_table(
                 "Successfully created table '{}' with ID {}:{}",
                 src_table_name, payload.database, payload.table,
             );
+            if let Some(avro_schema) = parsed_avro_schema {
+                state
+                    .backend
+                    .set_avro_schema(src_table_name.clone(), avro_schema)
+                    .await
+                    .map_err(|e| {
+                        (
+                            get_backend_error_status_code(&e),
+                            Json(ErrorResponse {
+                                message: format!(
+                                    "Failed to set avro schema for table {src_table_name}: {e}"
+                                ),
+                            }),
+                        )
+                    })?;
+                state
+                    .kafka_schema_id_cache
+                    .write()
+                    .await
+                    .insert(src_table_name.clone(), 0 /*placeholder*/);
+            }
             Ok(Json(CreateTableResponse {
                 database: payload.database.clone(),
                 table: payload.table.clone(),
@@ -744,6 +837,71 @@ async fn flush_table(
     }
 }
 
+async fn set_avro_schema(
+    Path(src_table_name): Path<String>,
+    State(state): State<ApiState>,
+    Json(payload): Json<SetAvroSchemaRequest>,
+) -> Result<Json<SetAvroSchemaResponse>, (StatusCode, Json<ErrorResponse>)> {
+    info!(
+        "Received Kafka schema creation request for '{}': {:?}",
+        src_table_name, payload
+    );
+
+    if state
+        .kafka_schema_id_cache
+        .read()
+        .await
+        .get(&src_table_name)
+        .is_some_and(|id| *id == payload.schema_id)
+    {
+        return Ok(Json(SetAvroSchemaResponse {
+            database: payload.database,
+            table: payload.table,
+            schema_id: payload.schema_id,
+        }));
+    }
+    // Parse the Avro schema
+    let avro_schema = match apache_avro::Schema::parse_str(&payload.kafka_schema) {
+        Ok(schema) => schema,
+        Err(e) => {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                Json(ErrorResponse {
+                    message: format!(
+                        "Invalid Avro schema for table {src_table_name} schema creation: {e}"
+                    ),
+                }),
+            ));
+        }
+    };
+
+    // Set Avro schema on the existing table
+    match state
+        .backend
+        .set_avro_schema(src_table_name.clone(), avro_schema)
+        .await
+    {
+        Ok(()) => {
+            state
+                .kafka_schema_id_cache
+                .write()
+                .await
+                .insert(src_table_name.clone(), payload.schema_id);
+            Ok(Json(SetAvroSchemaResponse {
+                database: payload.database,
+                table: payload.table,
+                schema_id: payload.schema_id,
+            }))
+        }
+        Err(e) => Err((
+            get_backend_error_status_code(&e),
+            Json(ErrorResponse {
+                message: format!("Failed to set Avro schema for table {src_table_name}: {e}"),
+            }),
+        )),
+    }
+}
+
 #[derive(Debug)]
 struct IngestRequestInternal {
     operation: String,
@@ -854,6 +1012,31 @@ async fn ingest_data_impl(
         operation: payload.operation,
         lsn,
     }))
+}
+
+async fn ingest_data_kafka(
+    Path(src_table_name): Path<String>,
+    State(state): State<ApiState>,
+    body: axum::body::Bytes,
+) -> Result<Json<IngestResponse>, (StatusCode, Json<ErrorResponse>)> {
+    debug!(
+        "Received Kafka Avro data ingestion request for table '{}', data size: {} bytes",
+        src_table_name,
+        body.len()
+    );
+
+    // For now, we'll assume all Kafka ingestions are "insert" operations and async mode
+    // In a real scenario, you might want to include operation and mode in headers or query params
+    ingest_data_impl(
+        src_table_name,
+        state,
+        IngestRequestInternal {
+            operation: "insert".to_string(),
+            data: IngestRequestPayload::Avro(body.to_vec()),
+            request_mode: RequestMode::Sync,
+        },
+    )
+    .await
 }
 
 /// Start the REST API server

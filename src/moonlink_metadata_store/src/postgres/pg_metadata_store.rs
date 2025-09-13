@@ -75,16 +75,7 @@ impl MetadataStoreTrait for PgMetadataStore {
             let src_table_name: String = row.get("src_table_name");
             let src_table_uri: String = row.get("src_table_uri");
             let serialized_config: serde_json::Value = row.get("config");
-            let iceberg_storage_provider: Option<String> = row.get("iceberg_storage_provider");
-            let iceberg_secret: Option<MoonlinkTableSecret> =
-                iceberg_storage_provider.map(|t| MoonlinkTableSecret {
-                    secret_type: MoonlinkTableSecret::convert_secret_type(&t),
-                    key_id: row.get("iceberg_key_id"),
-                    secret: row.get("iceberg_secret"),
-                    endpoint: row.get("iceberg_endpoint"),
-                    region: row.get("iceberg_region"),
-                    project: row.get("iceberg_project"),
-                });
+
             let wal_storage_provider: Option<String> = row.get("wal_storage_provider");
             let wal_secret: Option<MoonlinkTableSecret> =
                 wal_storage_provider.map(|t| MoonlinkTableSecret {
@@ -97,7 +88,6 @@ impl MetadataStoreTrait for PgMetadataStore {
                 });
             let moonlink_table_config = config_utils::deserialize_moonlink_table_config(
                 serialized_config,
-                iceberg_secret,
                 wal_secret,
                 &database,
                 &table,
@@ -125,7 +115,7 @@ impl MetadataStoreTrait for PgMetadataStore {
         moonlink_table_config: MoonlinkTableConfig,
     ) -> Result<()> {
         let pg_client = PgClientWrapper::new(&self.uri).await?;
-        let (serialized_config, iceberg_secret, wal_secret) =
+        let (serialized_config, wal_secret) =
             config_utils::parse_moonlink_table_config(moonlink_table_config)?;
 
         // Create metadata table if not exist.
@@ -170,32 +160,6 @@ impl MetadataStoreTrait for PgMetadataStore {
             )));
         }
 
-        // Persist table secrets.
-        if let Some(table_secret) = iceberg_secret {
-            let rows_affected = pg_client
-                .postgres_client
-                .execute(
-                    r#"INSERT INTO secrets ("database", "table", usage_type, storage_provider, key_id, secret, endpoint, region, project)
-                    VALUES ($1, $2, 'iceberg', $3, $4, $5, $6, $7, $8)"#,
-                    &[
-                        &database,
-                        &table,
-                        &table_secret.get_secret_type(),
-                        &table_secret.key_id,
-                        &table_secret.secret,
-                        &table_secret.endpoint.as_deref(),
-                        &table_secret.region.as_deref(),
-                        &table_secret.project.as_deref(),
-                    ],
-                )
-                .await?;
-            if rows_affected != 1 {
-                return Err(Error::PostgresRowCountError(ErrorStruct::new(
-                    format!("expected 1 row affected, but got {rows_affected}"),
-                    ErrorStatus::Permanent,
-                )));
-            }
-        }
         if let Some(table_secret) = wal_secret {
             let rows_affected = pg_client
                 .postgres_client
