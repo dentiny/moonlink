@@ -1,5 +1,6 @@
 use crate::storage::cache::object_storage::base_cache::InlineEvictedFiles;
 use crate::storage::compaction::table_compaction::RemappedRecordLocation;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::iceberg::deletion_vector::DeletionVector;
 use crate::storage::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
@@ -29,10 +30,9 @@ use crate::storage::storage_utils::{
     create_data_file, get_unique_file_id_for_flush, FileId, MooncakeDataFileRef, RecordLocation,
     TableId, TableUniqueFileId,
 };
-use crate::{BaseFileSystemAccess, Result};
+use crate::Result;
 
 use futures::{stream, StreamExt, TryStreamExt};
-use iceberg::io::FileIO;
 use iceberg::table::Table;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -91,19 +91,19 @@ async fn import_one_file_index(
     puffin_filepath: String,
     mooncake_file_index: &MooncakeFileIndex,
     local_data_file_to_remote: &HashMap<String, String>,
-    file_io: FileIO,
-    iceberg_table: Table,
-    filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+    iceberg_table: &Table,
+    filesystem_accessor: &dyn BaseFileSystemAccess,
 ) -> IcebergResult<SingleFileIndexImportResult> {
     let mut local_index_file_to_remote = HashMap::new();
 
     // Create one puffin file (with one puffin blob inside of it) for each mooncake file index.
-    let mut puffin_writer = puffin_utils::create_puffin_writer(&file_io, &puffin_filepath).await?;
+    let mut puffin_writer =
+        puffin_utils::create_puffin_writer(iceberg_table.file_io(), &puffin_filepath).await?;
 
     // Upload new index file to iceberg table.
     for cur_index_block in mooncake_file_index.index_blocks.iter() {
         let remote_index_block = iceberg_io_utils::upload_index_file(
-            &iceberg_table,
+            iceberg_table,
             cur_index_block.index_file.file_path(),
             &*filesystem_accessor,
         )
@@ -523,19 +523,17 @@ impl IcebergTableManager {
         // The hash map here is merely a workaround to pass remote path to iceberg file index structure.
         let mut local_index_file_to_remote = HashMap::new();
 
-        let iceberg_table = self.iceberg_table.as_ref().unwrap().clone();
-        let filesystem_accessor = self.filesystem_accessor.clone();
-        let file_io = self.iceberg_table.as_ref().unwrap().file_io().clone();
+        let iceberg_table = self.iceberg_table.as_ref().unwrap();
+        let filesystem_accessor = &*self.filesystem_accessor;
         let local_data_file_to_remote_clone = Arc::new(local_data_file_to_remote.clone());
         let file_indices_to_import_clone = file_indices_to_import.to_vec();
 
         let file_index_import_results: Vec<SingleFileIndexImportResult> =
             stream::iter(file_indices_to_import_clone.into_iter())
                 .map(move |mooncake_file_index: MooncakeFileIndex| {
-                    let iceberg_table = iceberg_table.clone();
-                    let filesystem_accessor = filesystem_accessor.clone();
-                    let file_io = file_io.clone();
+                    let iceberg_table = iceberg_table;
                     let puffin_filepath = get_unique_hash_index_v1_filepath(&iceberg_table);
+                    let filesystem_accessor = filesystem_accessor;
                     let local_data_file_to_remote_clone = local_data_file_to_remote_clone.clone();
 
                     async move {
@@ -543,7 +541,6 @@ impl IcebergTableManager {
                             puffin_filepath,
                             &mooncake_file_index,
                             &local_data_file_to_remote_clone,
-                            file_io,
                             iceberg_table,
                             filesystem_accessor,
                         )

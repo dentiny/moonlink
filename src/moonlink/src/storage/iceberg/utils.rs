@@ -139,6 +139,7 @@ pub(crate) async fn get_table_if_exists<C: MoonlinkCatalog + ?Sized>(
     Ok(Some(table))
 }
 
+/// Get a unique remote index filepath.
 pub(crate) fn get_unique_hash_index_v1_filepath(iceberg_table: &IcebergTable) -> String {
     let location_generator =
         DefaultLocationGenerator::new(iceberg_table.metadata().clone()).unwrap();
