@@ -3763,3 +3763,129 @@ async fn test_ordered_completed_streaming_flush() {
     let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
     test_ordered_completed_streaming_flush_impl(iceberg_table_config).await;
 }
+
+/// ================================
+/// Test iceberg snapshot creation with partial completed flush before streaming commit
+/// ================================
+///
+/// Testing scenario and event stream:
+/// - a non-streaming transaction finishes
+/// - start streaming txn, async flush, finish
+/// - async flush, not finished
+/// - commit transaction
+/// - create mooncake and iceberg snapshot
+async fn test_partial_completed_streaming_flush_impl(iceberg_table_config: IcebergTableConfig) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
+    let mooncake_table_metadata =
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+    let object_storage_cache = create_test_object_storage_cache(&cache_temp_dir);
+
+    // Create mooncake table and table event notification receiver.
+    let (mut table, mut notify_rx) = create_mooncake_table_and_notify(
+        mooncake_table_metadata.clone(),
+        iceberg_table_config.clone(),
+        object_storage_cache.clone(),
+    )
+    .await;
+
+    // Perform a non-streaming append, commit and flush.
+    let row1 = MoonlinkRow::new(vec![
+        RowValue::Int32(1),
+        RowValue::ByteArray("Alice".as_bytes().to_vec()),
+        RowValue::Int32(10),
+    ]);
+    table.append(row1.clone()).unwrap();
+    table.commit(/*lsn=*/ 1);
+    flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 1)
+        .await
+        .unwrap();
+
+    // Perform a streaming append and block wait its completion, but not apply.
+    let row2 = MoonlinkRow::new(vec![
+        RowValue::Int32(2),
+        RowValue::ByteArray("Bob".as_bytes().to_vec()),
+        RowValue::Int32(20),
+    ]);
+    table
+        .append_in_stream_batch(row2.clone(), /*xact_id=*/ 2)
+        .unwrap();
+    table
+        .flush_stream(
+            /*xact_id=*/ 2,
+            /*lsn=*/ None,
+            /*event_id=*/ uuid::Uuid::new_v4(),
+        )
+        .unwrap();
+    // Block wait its completion but and apply it to snapshot buffer.
+    let disk_slices = get_flush_results(&mut notify_rx, /*expected_flushes=*/ 1).await;
+    let disk_slice = disk_slices.into_values().next().unwrap();
+    assert!(disk_slice.lsn().is_none());
+    // Apply the first arriving flush result.
+    table.apply_stream_flush_result(
+        /*xact_id=*/ 2,
+        disk_slice,
+        /*flush_event_id=*/ uuid::Uuid::new_v4(),
+    );
+
+    // Commit streaming transaction, which internally flushes but not wait its completion.
+    let row3 = MoonlinkRow::new(vec![
+        RowValue::Int32(3),
+        RowValue::ByteArray("Cat".as_bytes().to_vec()),
+        RowValue::Int32(30),
+    ]);
+    table
+        .append_in_stream_batch(row3.clone(), /*xact_id=*/ 2)
+        .unwrap();
+    table
+        .commit_transaction_stream(
+            /*xact_id=*/ 2,
+            /*lsn=*/ 2,
+            /*event_id=*/ uuid::Uuid::new_v4(),
+        )
+        .unwrap();
+    // Block wait its completion but not apply it to snapshot buffer.
+    let _ = get_flush_results(&mut notify_rx, /*expected_flushes=*/ 1).await;
+
+    // Create mooncake and iceberg snapshot.
+    create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
+
+    // Validate iceberg snapshot content.
+    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
+    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
+        mooncake_table_metadata.clone(),
+        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
+        filesystem_accessor.clone(),
+        iceberg_table_config.clone(),
+    )
+    .await
+    .unwrap();
+    let (_, snapshot) = iceberg_table_manager_for_recovery
+        .load_snapshot_from_table()
+        .await
+        .unwrap();
+    let data_files = snapshot
+        .disk_files
+        .iter()
+        .map(|f| f.0.file_path.clone())
+        .collect::<Vec<_>>();
+    // Now partially flushed transaction data files are in mooncake snapshot, we don't create new iceberg snapshot for now.
+    verify_files_and_deletions(
+        data_files.as_slice(),
+        /*puffin_file_paths=*/ &[],
+        /*position_deletes=*/ Vec::new(),
+        /*deletion_vectors=*/ Vec::new(),
+        /*expected_ids=*/ &[],
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn test_partial_completed_streaming_flush() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+    test_partial_completed_streaming_flush_impl(iceberg_table_config).await;
+}

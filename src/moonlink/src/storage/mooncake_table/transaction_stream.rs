@@ -648,6 +648,11 @@ impl MooncakeTable {
             deletion.lsn = lsn - 1;
         }
 
+        // Set largest flush LSN.
+        if !stream_state.flushed_files.is_empty() {
+            self.next_snapshot_task.try_set_largest_flush_lsn(lsn);
+        }
+
         let commit = TransactionStreamCommit {
             xact_id,
             commit_lsn: lsn,
