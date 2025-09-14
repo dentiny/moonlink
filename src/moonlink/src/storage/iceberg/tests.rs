@@ -45,7 +45,6 @@ use crate::storage::storage_utils;
 use crate::storage::storage_utils::create_data_file;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
-use crate::storage::verify_files_and_deletions;
 use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
 use crate::storage::MooncakeTable;
 use crate::DataCompactionConfig;
@@ -3474,30 +3473,10 @@ async fn test_async_flush_for_streaming_partial_finish_impl(
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Validate iceberg snapshot content.
-    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
-    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
-        filesystem_accessor.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await
-    .unwrap();
-    let (_, snapshot) = iceberg_table_manager_for_recovery
-        .load_snapshot_from_table()
-        .await
-        .unwrap();
-    let data_files = snapshot
-        .disk_files
-        .iter()
-        .map(|f| f.0.file_path.clone())
-        .collect::<Vec<_>>();
-    // Now partially flushed transaction data files are in mooncake snapshot, we don't create new iceberg snapshot for now.
-    verify_files_and_deletions(
-        data_files.as_slice(),
-        /*puffin_file_paths=*/ &[],
-        /*position_deletes=*/ Vec::new(),
-        /*deletion_vectors=*/ Vec::new(),
+    verify_iceberg_content(
+        iceberg_table_config,
+        mooncake_table_metadata,
+        &cache_temp_dir,
         /*expected_ids=*/ &[],
     )
     .await;
@@ -3601,30 +3580,10 @@ async fn test_reversed_order_of_completed_streaming_flush_impl(
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Validate iceberg snapshot content.
-    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
-    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
-        filesystem_accessor.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await
-    .unwrap();
-    let (_, snapshot) = iceberg_table_manager_for_recovery
-        .load_snapshot_from_table()
-        .await
-        .unwrap();
-    let data_files = snapshot
-        .disk_files
-        .iter()
-        .map(|f| f.0.file_path.clone())
-        .collect::<Vec<_>>();
-    // Now partially flushed transaction data files are in mooncake snapshot, we don't create new iceberg snapshot for now.
-    verify_files_and_deletions(
-        data_files.as_slice(),
-        /*puffin_file_paths=*/ &[],
-        /*position_deletes=*/ Vec::new(),
-        /*deletion_vectors=*/ Vec::new(),
+    verify_iceberg_content(
+        iceberg_table_config,
+        mooncake_table_metadata,
+        &cache_temp_dir,
         /*expected_ids=*/ &[],
     )
     .await;
@@ -3728,30 +3687,10 @@ async fn test_ordered_completed_streaming_flush_impl(iceberg_table_config: Icebe
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Validate iceberg snapshot content.
-    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
-    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
-        filesystem_accessor.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await
-    .unwrap();
-    let (_, snapshot) = iceberg_table_manager_for_recovery
-        .load_snapshot_from_table()
-        .await
-        .unwrap();
-    let data_files = snapshot
-        .disk_files
-        .iter()
-        .map(|f| f.0.file_path.clone())
-        .collect::<Vec<_>>();
-    // Now partially flushed transaction data files are in mooncake snapshot, we don't create new iceberg snapshot for now.
-    verify_files_and_deletions(
-        data_files.as_slice(),
-        /*puffin_file_paths=*/ &[],
-        /*position_deletes=*/ Vec::new(),
-        /*deletion_vectors=*/ Vec::new(),
+    verify_iceberg_content(
+        iceberg_table_config,
+        mooncake_table_metadata,
+        &cache_temp_dir,
         /*expected_ids=*/ &[1, 2],
     )
     .await;
@@ -3854,30 +3793,10 @@ async fn test_partial_completed_streaming_flush_impl(iceberg_table_config: Icebe
     create_mooncake_and_persist_for_test(&mut table, &mut notify_rx).await;
 
     // Validate iceberg snapshot content.
-    let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);
-    let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
-        mooncake_table_metadata.clone(),
-        create_test_object_storage_cache(&cache_temp_dir), // Use separate cache for each table.
-        filesystem_accessor.clone(),
-        iceberg_table_config.clone(),
-    )
-    .await
-    .unwrap();
-    let (_, snapshot) = iceberg_table_manager_for_recovery
-        .load_snapshot_from_table()
-        .await
-        .unwrap();
-    let data_files = snapshot
-        .disk_files
-        .iter()
-        .map(|f| f.0.file_path.clone())
-        .collect::<Vec<_>>();
-    // Now partially flushed transaction data files are in mooncake snapshot, we don't create new iceberg snapshot for now.
-    verify_files_and_deletions(
-        data_files.as_slice(),
-        /*puffin_file_paths=*/ &[],
-        /*position_deletes=*/ Vec::new(),
-        /*deletion_vectors=*/ Vec::new(),
+    verify_iceberg_content(
+        iceberg_table_config,
+        mooncake_table_metadata,
+        &cache_temp_dir,
         /*expected_ids=*/ &[],
     )
     .await;
