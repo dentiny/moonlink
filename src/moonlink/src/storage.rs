@@ -2,7 +2,7 @@ pub(crate) mod async_bitwriter;
 pub(crate) mod cache;
 pub(crate) mod compaction;
 pub(crate) mod filesystem;
-mod iceberg;
+pub(crate) mod iceberg;
 pub(crate) mod index;
 pub(crate) mod io_utils;
 pub(crate) mod mooncake_table;
