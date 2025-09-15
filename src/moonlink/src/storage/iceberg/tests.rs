@@ -10,6 +10,7 @@ use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
 use crate::storage::filesystem::s3::s3_test_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
+use crate::storage::iceberg::data_file_manifest_manager::DEFAULT_MAX_MANIFEST_ENTRY_COUNT;
 use crate::storage::iceberg::file_catalog::METADATA_DIRECTORY;
 use crate::storage::iceberg::file_catalog::VERSION_HINT_FILENAME;
 use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
@@ -54,6 +55,7 @@ use crate::ObjectStorageCacheConfig;
 use crate::TableEvent;
 use crate::WalConfig;
 use crate::WalManager;
+use futures::{stream, StreamExt};
 
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -315,6 +317,130 @@ async fn test_skip_iceberg_snapshot() {
     let (_, iceberg_snapshot_payload, _, _, _) =
         sync_mooncake_snapshot(&mut table, &mut notify_rx).await;
     assert!(iceberg_snapshot_payload.is_none());
+}
+
+/// ================================
+/// Test iceberg snapshot store/load with large number of manifest entries
+/// ================================
+///
+/// Testing scenario: write a large number of manifest entries to the manifest file and check pagination.
+async fn test_manifest_entries_write_with_pagination_impl(
+    iceberg_table_config: IcebergTableConfig,
+) {
+    // Local filesystem to store write-through cache.
+    let table_temp_dir = tempdir().unwrap();
+    let mooncake_table_metadata =
+        create_test_table_metadata(table_temp_dir.path().to_str().unwrap().to_string());
+
+    // Local filesystem to store read-through cache.
+    let cache_temp_dir = tempdir().unwrap();
+
+    let mut iceberg_table_manager = IcebergTableManager::new(
+        mooncake_table_metadata.clone(),
+        create_test_object_storage_cache(&cache_temp_dir), // Use separate object storage cache.
+        create_test_filesystem_accessor(&iceberg_table_config),
+        iceberg_table_config.clone(),
+    )
+    .await
+    .unwrap();
+
+    let mut data_files_to_import = vec![];
+    let tasks = (0..=(DEFAULT_MAX_MANIFEST_ENTRY_COUNT + 1)).map(|file_id| {
+        let parquet_path = table_temp_dir
+            .path()
+            .join(format!("data-{file_id}.parquet"));
+        async move {
+            let arrow_schema = create_test_arrow_schema();
+            let batch = RecordBatch::try_new(
+                arrow_schema.clone(),
+                vec![
+                    Arc::new(Int32Array::from(vec![1, 2, 3])),
+                    Arc::new(StringArray::from(vec!["a", "b", "c"])),
+                    Arc::new(Int32Array::from(vec![10, 20, 30])),
+                ],
+            )
+            .unwrap();
+            let data_file =
+                create_data_file(file_id as u64, parquet_path.to_str().unwrap().to_string());
+            write_arrow_record_batch_to_local(data_file.file_path(), arrow_schema, &batch).await;
+            data_file
+        }
+    });
+    let results: Vec<MooncakeDataFileRef> =
+        stream::iter(tasks).buffer_unordered(1024).collect().await;
+    data_files_to_import.extend(results);
+
+    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
+        flush_lsn: 0,
+        new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
+        import_payload: IcebergSnapshotImportPayload {
+            data_files: data_files_to_import.clone(),
+            new_deletion_vector: HashMap::new(),
+            file_indices: vec![],
+        },
+        index_merge_payload: IcebergSnapshotIndexMergePayload {
+            new_file_indices_to_import: vec![],
+            old_file_indices_to_remove: vec![],
+        },
+        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+            new_data_files_to_import: vec![],
+            old_data_files_to_remove: vec![],
+            new_file_indices_to_import: vec![],
+            old_file_indices_to_remove: vec![],
+            data_file_records_remap: HashMap::new(),
+        },
+    };
+
+    let persistence_file_params = PersistenceFileParams {
+        table_auto_incr_ids: 0..((DEFAULT_MAX_MANIFEST_ENTRY_COUNT + 1) as u32),
+    };
+    iceberg_table_manager
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .await
+        .unwrap();
+
+    // Remove one data manifest entries.
+    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
+        flush_lsn: 0,
+        new_table_schema: None,
+        committed_deletion_logs: HashSet::new(),
+        import_payload: IcebergSnapshotImportPayload {
+            data_files: vec![],
+            new_deletion_vector: HashMap::new(),
+            file_indices: vec![],
+        },
+        index_merge_payload: IcebergSnapshotIndexMergePayload {
+            new_file_indices_to_import: vec![],
+            old_file_indices_to_remove: vec![],
+        },
+        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+            new_data_files_to_import: vec![],
+            old_data_files_to_remove: vec![data_files_to_import[0].clone()],
+            new_file_indices_to_import: vec![],
+            old_file_indices_to_remove: vec![],
+            data_file_records_remap: HashMap::new(),
+        },
+    };
+    let persistence_file_params = PersistenceFileParams {
+        table_auto_incr_ids: 0..(DEFAULT_MAX_MANIFEST_ENTRY_COUNT + 1) as u32, // unused
+    };
+    iceberg_table_manager
+        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn test_manifest_entries_write_with_pagination() {
+    // Local filesystem for iceberg.
+    let iceberg_temp_dir = tempdir().unwrap();
+    let iceberg_table_config = get_iceberg_table_config(&iceberg_temp_dir);
+
+    // Common testing logic.
+    test_manifest_entries_write_with_pagination_impl(iceberg_table_config).await;
 }
 
 /// ================================
