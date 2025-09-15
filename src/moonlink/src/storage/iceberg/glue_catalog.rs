@@ -15,6 +15,7 @@ use iceberg::puffin::PuffinWriter;
 use iceberg::spec::{Schema as IcebergSchema, TableMetadata};
 use iceberg::table::Table;
 use iceberg::CatalogBuilder;
+use iceberg::Error as IcebergError;
 use iceberg::Result as IcebergResult;
 use iceberg::{Catalog, Namespace, NamespaceIdent, TableCommit, TableCreation, TableIdent};
 use iceberg_catalog_glue::{
@@ -38,10 +39,18 @@ pub struct GlueCatalog {
 }
 
 /// Util function to get config properties from iceberg table config.
+/// If not S3 storage config, return error.
 fn extract_glue_config_properties(
     glue_config: &GlueCatalogConfig,
     storage_config: &StorageConfig,
-) -> HashMap<String, String> {
+) -> IcebergResult<HashMap<String, String>> {
+    if !matches!(storage_config, StorageConfig::S3 { .. }) {
+        return Err(IcebergError::new(
+            iceberg::ErrorKind::Unexpected,
+            format!("Glue catalog expects S3 storage config, but gets {storage_config:?}"),
+        ));
+    }
+
     let s3_region = storage_config.get_region().unwrap();
     let aws_security_config = glue_config
         .cloud_secret_config
@@ -92,7 +101,7 @@ fn extract_glue_config_properties(
     };
     config_props.insert(S3_ENDPOINT.to_string(), s3_endpoint);
 
-    config_props
+    Ok(config_props)
 }
 
 impl GlueCatalog {
@@ -103,7 +112,7 @@ impl GlueCatalog {
         iceberg_schema: IcebergSchema,
     ) -> IcebergResult<Self> {
         let config_props =
-            extract_glue_config_properties(&glue_config, &accessor_config.storage_config);
+            extract_glue_config_properties(&glue_config, &accessor_config.storage_config)?;
         let warehouse_location = accessor_config.get_root_path();
         let builder = IcebergGlueCatalogBuilder::default();
         let catalog = builder.load(glue_config.name, config_props).await?;
@@ -124,7 +133,7 @@ impl GlueCatalog {
         accessor_config: AccessorConfig,
     ) -> IcebergResult<Self> {
         let config_props =
-            extract_glue_config_properties(&glue_config, &accessor_config.storage_config);
+            extract_glue_config_properties(&glue_config, &accessor_config.storage_config)?;
         let warehouse_location = accessor_config.get_root_path();
         let builder = IcebergGlueCatalogBuilder::default();
         let catalog = builder.load(glue_config.name, config_props).await?;
