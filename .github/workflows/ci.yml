@@ -737,6 +737,16 @@ jobs:
     name: Moonlink Service Integration Tests
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        include:
+          - name: integration
+            timeout: 10
+            command: RUST_BACKTRACE=1 cargo test --package moonlink_service --lib --features standalone-test -- --nocapture
+          - name: stress
+            timeout: 25
+            command: RUST_BACKTRACE=1 cargo test stress_test --release --package moonlink_service --lib --features standalone-test,stress-test -- --nocapture
+
     steps:
       - uses: actions/checkout@v5
 
@@ -790,18 +800,9 @@ jobs:
           echo "ERROR: nginx failed to start."
           exit 1
 
-      - name: Run moonlink_service integration tests
-        timeout-minutes: 10
+      - name: Run ${{ matrix.name }} tests
+        timeout-minutes: ${{ matrix.timeout }}
         env:
           MOONLINK_BACKEND_DIR: ${{ github.workspace }}/.shared-nginx
           NGINX_ADDR: http://nginx.local:80
-        run: |
-          RUST_BACKTRACE=1 cargo test --package moonlink_service --lib --features standalone-test -- --nocapture
-
-      - name: Run moonlink_service stress test
-        timeout-minutes: 25
-        env:
-          MOONLINK_BACKEND_DIR: ${{ github.workspace }}/.shared-nginx
-          NGINX_ADDR: http://nginx.local:80
-        run: |
-          RUST_BACKTRACE=1 cargo test stress_test --release --package moonlink_service --lib --features standalone-test,stress-test -- --nocapture
+        run: ${{ matrix.command }}
