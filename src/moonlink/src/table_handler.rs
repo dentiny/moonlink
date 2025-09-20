@@ -261,9 +261,6 @@ impl TableHandler {
                         let persisted_table_lsn = table_handler_state
                             .get_persisted_table_lsn(last_iceberg_snapshot_lsn, replication_lsn);
 
-
-                        println!("last iceberg lsn = {:?}, persisted table lsn = {}, requested lsn = {}", last_iceberg_snapshot_lsn, persisted_table_lsn, requested_lsn);
-
                         if persisted_table_lsn >= requested_lsn {
                             table_handler_state.notify_persisted_table_lsn(persisted_table_lsn);
                             continue;
@@ -392,9 +389,6 @@ impl TableHandler {
                         if table_handler_state.has_pending_force_snapshot_request()
                             && !table_handler_state.iceberg_snapshot_ongoing
                         {
-
-                            println!("has pending force, no iceberg ongoing");
-
                             // flush if needed
                             if let Some(commit_lsn) = table_handler_state.table_consistent_view_lsn
                             {
@@ -404,8 +398,6 @@ impl TableHandler {
                                     let event_id = uuid::Uuid::new_v4();
                                     table.flush(commit_lsn, event_id).unwrap();
                                     table_handler_state.last_unflushed_commit_lsn = None;
-
-                                    println!("really issue flush for {}", commit_lsn);
                                 }
                             }
 
@@ -620,9 +612,6 @@ impl TableHandler {
                         table_handler_state.iceberg_snapshot_ongoing = false;
                         match iceberg_snapshot_result {
                             Ok(snapshot_res) => {
-
-                                println!("completed iceberg snapshot lsn = {}", snapshot_res.flush_lsn);
-
                                 // Record iceberg snapshot completion.
                                 // Notice: operation completion record should be the first thing to do on event notification, and contains all information.
                                 table.record_iceberg_snapshot_completion(&snapshot_res);

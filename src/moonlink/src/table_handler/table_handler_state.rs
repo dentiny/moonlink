@@ -256,12 +256,16 @@ impl TableHandlerState {
         replication_lsn: u64,
     ) -> u64 {
         // Case-1: there're no activities in the current table, replication LSN indicates current status.
-        if iceberg_snapshot_lsn.is_none() && self.table_consistent_view_lsn.is_none() && self.latest_commit_lsn.is_none() {
+        if iceberg_snapshot_lsn.is_none()
+            && self.table_consistent_view_lsn.is_none()
+            && self.latest_commit_lsn.is_none()
+        {
             return replication_lsn;
         }
 
         // Case-2: if there're no updates since last iceberg snapshot, replication LSN indicates persisted table LSN.
-        if iceberg_snapshot_lsn == self.table_consistent_view_lsn && iceberg_snapshot_lsn.is_some() {
+        if iceberg_snapshot_lsn == self.table_consistent_view_lsn && iceberg_snapshot_lsn.is_some()
+        {
             // Notice: replication LSN comes from replication events, so if all events have been processed (i.e., a clean recovery case), replication LSN is 0.
             return std::cmp::max(replication_lsn, iceberg_snapshot_lsn.unwrap());
         }

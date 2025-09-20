@@ -43,13 +43,13 @@ fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
     ])
 }
 
-/// Events randomly selected for chaos test.
+/// Events randomly selected for profile test.
 #[derive(Debug)]
-struct ChaosEvent {
+struct ProfileEvent {
     table_events: Vec<TableEvent>,
 }
 
-impl ChaosEvent {
+impl ProfileEvent {
     fn create_table_events(table_events: Vec<TableEvent>) -> Self {
         Self { table_events }
     }
@@ -71,7 +71,7 @@ enum TxnState {
     InNonStreaming,
 }
 
-struct ChaosState {
+struct ProfileState {
     /// Used to generate random events, with current timestamp as random seed.
     rng: StdRng,
     /// Whether to enable delete operations.
@@ -96,7 +96,7 @@ struct ChaosState {
     last_txn_is_committed: bool,
 }
 
-impl ChaosState {
+impl ProfileState {
     fn new(random_seed: u64, append_only: bool, upsert_delete_if_exists: bool) -> Self {
         let rng = StdRng::seed_from_u64(random_seed);
         Self {
@@ -140,7 +140,7 @@ impl ChaosState {
     }
 
     fn commit_transaction(&mut self, lsn: u64) {
-        // Set chaos test states.
+        // Set profile test states.
         assert_ne!(self.txn_state, TxnState::Empty);
         self.txn_state = TxnState::Empty;
         self.last_commit_lsn = Some(lsn);
@@ -217,7 +217,7 @@ impl ChaosState {
         row
     }
 
-    fn generate_random_events(&mut self) -> ChaosEvent {
+    fn generate_random_events(&mut self) -> ProfileEvent {
         let mut choices = vec![];
 
         if self.txn_state == TxnState::Empty {
@@ -237,20 +237,20 @@ impl ChaosState {
             EventKind::BeginNonStreamingTxn => {
                 self.begin_non_streaming_txn();
                 let row = self.get_next_row_to_append();
-                ChaosEvent::create_table_events(vec![TableEvent::Append {
+                ProfileEvent::create_table_events(vec![TableEvent::Append {
                     row,
                     xact_id: None,
                     lsn: self.get_and_update_cur_lsn(),
                     is_recovery: false,
                 }])
             }
-            EventKind::Append => ChaosEvent::create_table_events(vec![TableEvent::Append {
+            EventKind::Append => ProfileEvent::create_table_events(vec![TableEvent::Append {
                 row: self.get_next_row_to_append(),
                 xact_id: None,
                 lsn: self.get_and_update_cur_lsn(),
                 is_recovery: false,
             }]),
-            EventKind::Delete => ChaosEvent::create_table_events(vec![TableEvent::Delete {
+            EventKind::Delete => ProfileEvent::create_table_events(vec![TableEvent::Delete {
                 row: self.get_random_row_to_delete(),
                 xact_id: None,
                 lsn: self.get_and_update_cur_lsn(),
@@ -260,7 +260,7 @@ impl ChaosState {
             EventKind::EndNoFlush => {
                 let lsn = self.get_and_update_cur_lsn();
                 self.commit_transaction(lsn);
-                ChaosEvent::create_table_events(vec![TableEvent::Commit {
+                ProfileEvent::create_table_events(vec![TableEvent::Commit {
                     lsn,
                     xact_id: None,
                     is_recovery: false,
@@ -485,14 +485,14 @@ fn create_test_table_metadata_for_profile(
     })
 }
 
-async fn chaos_test_impl(env: TestEnvironment) {
+async fn profile_test_impl(env: TestEnvironment) {
     let test_env_config = env.test_env_config.clone();
     let event_sender = env.event_sender.clone();
     let mut table_event_manager = env.table_event_manager;
     let last_visibility_lsn_tx = env.last_visibility_lsn_tx;
     let replication_lsn_tx = env.replication_lsn_tx.clone();
 
-    let mut state = ChaosState::new(
+    let mut state = ProfileState::new(
         env.seed,
         test_env_config.special_table_option == SpecialTableOption::AppendOnly,
         test_env_config.special_table_option == SpecialTableOption::UpsertDeleteIfExists,
@@ -502,6 +502,7 @@ async fn chaos_test_impl(env: TestEnvironment) {
         let cur_events = state.generate_random_events();
         table_events.extend(cur_events.table_events);
 
+        // Print out event generation progress periodically.
         if (cur_event_count + 1) % 500 == 0 {
             println!("{} events generated", cur_event_count);
         }
@@ -511,11 +512,9 @@ async fn chaos_test_impl(env: TestEnvironment) {
     let guard = pprof::ProfilerGuard::new(100).unwrap();
     let task = tokio::spawn(async move {
         let mut ingested_event_count = 0;
-        let mut latest_commit_lsn = 0;
         while let Some(cur_event) = table_events.pop_front() {
             // For commit events, need to set up corresponding replication and commit LSN.
             if let TableEvent::Commit { lsn, .. } = cur_event {
-                latest_commit_lsn = lsn;
                 replication_lsn_tx.send(lsn).unwrap();
                 last_visibility_lsn_tx
                     .send(VisibilityLsn {
@@ -523,18 +522,21 @@ async fn chaos_test_impl(env: TestEnvironment) {
                         replication_lsn: lsn,
                     })
                     .unwrap();
-            }
-            event_sender.send(cur_event).await.unwrap();
+                event_sender.send(cur_event).await.unwrap();
 
-            // Force snapshot every interval.
-            ingested_event_count += 1;
-            if ingested_event_count % 500 == 0 {
-                println!("before force");
-                let rx = table_event_manager.initiate_snapshot(latest_commit_lsn).await;
-                TableEventManager::synchronize_force_snapshot_request(rx, latest_commit_lsn)
-                    .await
-                    .unwrap();
-                println!("Force snapshot at LSN {}", latest_commit_lsn);
+                ingested_event_count += 1;
+                if ingested_event_count > 500 {
+                    let rx = table_event_manager.initiate_snapshot(lsn).await;
+                    TableEventManager::synchronize_force_snapshot_request(rx, lsn)
+                        .await
+                        .unwrap();
+                    ingested_event_count = 0;
+                }
+            }
+            // Handle non-commit table events.
+            else {
+                event_sender.send(cur_event).await.unwrap();
+                ingested_event_count += 1;
             }
         }
 
@@ -548,7 +550,7 @@ async fn chaos_test_impl(env: TestEnvironment) {
     // Await the task directly and handle its result.
     let task_result = task.await;
 
-    // Print out events in order if chaos test fails.
+    // Print out events in order if profile test fails.
     if let Err(e) = task_result {
         // Propagate the panic to fail the test.
         if let Ok(panic) = e.try_into_panic() {
@@ -562,7 +564,7 @@ async fn chaos_test_impl(env: TestEnvironment) {
     }
 }
 
-/// Chaos test with data compaction enabled by default.
+/// Profile test with data compaction enabled by default.
 pub async fn test_normal_profile_on_local_fs() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
@@ -575,5 +577,5 @@ pub async fn test_normal_profile_on_local_fs() {
         },
     };
     let env = TestEnvironment::new(test_env_config).await;
-    chaos_test_impl(env).await;
+    profile_test_impl(env).await;
 }

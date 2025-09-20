@@ -684,8 +684,6 @@ impl MooncakeTable {
 
     /// Set iceberg snapshot flush LSN, called after a snapshot operation.
     pub(crate) fn set_iceberg_snapshot_res(&mut self, iceberg_snapshot_res: IcebergSnapshotResult) {
-        println!("set iceberg snapshot res");
-
         assert!(
             self.background_task_status_for_validation
                 .iceberg_snapshot_ongoing
