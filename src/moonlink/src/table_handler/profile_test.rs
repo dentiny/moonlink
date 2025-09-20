@@ -2,31 +2,30 @@ use crate::event_sync::create_table_event_syncer;
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::table_event_manager::TableEventManager;
 use crate::storage::mooncake_table::TableMetadata;
+use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::TableId;
+use crate::storage::MooncakeTable;
 use crate::table_handler::{TableEvent, TableHandler};
 use crate::table_handler_timer::create_table_handler_timers;
 use crate::union_read::ReadStateManager;
-use crate::storage::MooncakeTable;
-use crate::{BaseFileSystemAccess, CacheTrait, DataCompactionConfig, DiskSliceWriterConfig, FileIndexMergeConfig, FileSystemAccessor, VisibilityLsn, WalConfig, WalManager};
-use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
+use crate::{
+    BaseFileSystemAccess, CacheTrait, DataCompactionConfig, DiskSliceWriterConfig,
+    FileIndexMergeConfig, FileSystemAccessor, VisibilityLsn, WalConfig, WalManager,
+};
 use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig, StorageConfig};
 
+use arrow::datatypes::Schema as ArrowSchema;
+use arrow::datatypes::{DataType, Field};
+use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tempfile::{tempdir, TempDir};
-use tokio::io::AsyncWriteExt;
-use pprof::criterion::{Output, PProfProfiler};
-use arrow::datatypes::Schema as ArrowSchema;
-use rand::prelude::*;
 use tokio::sync::mpsc;
-use arrow::datatypes::{DataType, Field};
 use tokio::sync::watch;
 
-/// To avoid excessive and continuous table maintenance operations, set an interval between each invocation for each non table update operation.
-const NON_UPDATE_COMMAND_INTERVAL_LSN: u64 = 5;
 /// WAL ID used for testing.
 const WAL_TEST_TABLE_ID: &str = "1";
 /// Iceberg test namespace and table name.
@@ -52,22 +51,8 @@ struct ChaosEvent {
 
 impl ChaosEvent {
     fn create_table_events(table_events: Vec<TableEvent>) -> Self {
-        Self {
-            table_events,
-        }
+        Self { table_events }
     }
-}
-
-#[derive(Default)]
-struct NonTableUpdateCmdCall {
-    /// LSN (value of [`cur_lsn`]) for the last read snapshot invocation.
-    read_snapshot_lsn: u64,
-    /// LSN (value of [`cur_lsn`]) for the last force snapshot invocation.
-    force_snapshot_lsn: u64,
-    /// LSN (value of [`cur_lsn`]) for the last force index merge invocation.
-    force_index_merge_lsn: u64,
-    /// LSN (value of [`cur_lsn`]) for the last force data compaction invocation.
-    force_data_compaction_lsn: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -87,16 +72,12 @@ enum TxnState {
 }
 
 struct ChaosState {
-    /// Random seed used to generate random events.
-    random_seed: u64,
     /// Used to generate random events, with current timestamp as random seed.
     rng: StdRng,
     /// Whether to enable delete operations.
     append_only: bool,
     /// Whether to test upsert / delete if exists.
     is_upsert_table: bool,
-    /// Non table update operation invocation status.
-    non_table_update_cmd_call: NonTableUpdateCmdCall,
     /// Used to generate rows to insert.
     next_id: i32,
     /// Inserted rows in committed transactions.
@@ -109,8 +90,6 @@ struct ChaosState {
     txn_state: TxnState,
     /// LSN to use for the next operation, including update operations and commits.
     cur_lsn: u64,
-    /// Txn id used for streaming transaction.
-    cur_xact_id: u32,
     /// Last commit LSN.
     last_commit_lsn: Option<u64>,
     /// Whether the last finished transaction committed successfully, or not.
@@ -118,25 +97,18 @@ struct ChaosState {
 }
 
 impl ChaosState {
-    fn new(
-        random_seed: u64,
-        append_only: bool,
-        upsert_delete_if_exists: bool,
-    ) -> Self {
+    fn new(random_seed: u64, append_only: bool, upsert_delete_if_exists: bool) -> Self {
         let rng = StdRng::seed_from_u64(random_seed);
         Self {
-            random_seed,
             rng,
             append_only,
             is_upsert_table: upsert_delete_if_exists,
-            non_table_update_cmd_call: NonTableUpdateCmdCall::default(),
             txn_state: TxnState::Empty,
             next_id: 0,
             committed_inserted_rows: VecDeque::new(),
             uncommitted_inserted_rows: VecDeque::new(),
             deleted_committed_row_ids: HashSet::new(),
             cur_lsn: 0,
-            cur_xact_id: 0,
             last_commit_lsn: None,
             last_txn_is_committed: false,
         }
@@ -177,9 +149,8 @@ impl ChaosState {
         // Set table states.
         self.committed_inserted_rows
             .extend(self.uncommitted_inserted_rows.drain(..));
-        self.committed_inserted_rows.retain(|(id, _)| {
-            !self.deleted_committed_row_ids.contains(id)
-        });
+        self.committed_inserted_rows
+            .retain(|(id, _)| !self.deleted_committed_row_ids.contains(id));
 
         self.clear_cur_transaction_buffered_rows();
     }
@@ -190,23 +161,6 @@ impl ChaosState {
             .push_back((self.next_id, row.clone()));
         self.next_id += 1;
         row
-    }
-
-    /// Return all [`id`] fields for the moonlink rows which haven't been deleted in the alphabetical order.
-    fn get_valid_ids(&self) -> Vec<i32> {
-        self.committed_inserted_rows
-            .iter()
-            .map(|(id, _)| *id)
-            .collect::<Vec<_>>()
-    }
-
-    /// Util function to decide whether the given id indicates a row that has been committed or not.
-    fn is_committed_row(&self, id: i32) -> bool {
-        // Uncommitted rows have much less records, so search on uncommitted records instead of committed ones.
-        !self
-            .uncommitted_inserted_rows
-            .iter()
-            .any(|(cur_id, _)| *cur_id == id)
     }
 
     fn can_append(&self) -> bool {
@@ -224,7 +178,6 @@ impl ChaosState {
             return false;
         }
 
-        let uncommitted_inserted_rows = self.uncommitted_inserted_rows.len();
         let committed_inserted_rows = self.committed_inserted_rows.len();
         let deleted_committed_rows = self.deleted_committed_row_ids.len();
 
@@ -239,28 +192,24 @@ impl ChaosState {
     /// Get a random row to delete.
     fn get_random_row_to_delete(&mut self) -> MoonlinkRow {
         // Delete if exists is only supported for non-streaming transaction.
-        if self.is_upsert_table
-            && self.rng.random_range(0..100) < 50
-        {
+        if self.is_upsert_table && self.rng.random_range(0..100) < 50 {
             // Delete a none existing row.
             let row = create_row(self.next_id, /*name=*/ "user", self.next_id % 5);
             self.next_id += 1;
             return row;
         }
 
-        let mut candidates: Vec<(i32, MoonlinkRow, bool /*committed*/)> = self
+        let candidates: Vec<(i32, MoonlinkRow)> = self
             .committed_inserted_rows
             .iter()
-            .filter(|(id, _)| {
-                !self.deleted_committed_row_ids.contains(id)
-            })
-            .map(|(id, row)| (*id, row.clone(), /*committed=*/ true))
+            .filter(|(id, _)| !self.deleted_committed_row_ids.contains(id))
+            .map(|(id, row)| (*id, row.clone()))
             .collect();
         assert!(!candidates.is_empty());
 
         // Randomly pick one row from the candidates.
         let random_idx = self.rng.random_range(0..candidates.len());
-        let (id, row, is_committed) = candidates[random_idx].clone();
+        let (id, row) = candidates[random_idx].clone();
 
         // Update deleted rows set.
         assert!(self.deleted_committed_row_ids.insert(id));
@@ -321,16 +270,6 @@ impl ChaosState {
     }
 }
 
-#[derive(Clone, Debug)]
-enum TableMaintenanceOption {
-    /// No table maintenance in background.
-    NoTableMaintenance,
-    /// Index merge is enabled by default: merge take place as long as there're at least two index files.
-    IndexMerge,
-    /// Data compaction is enabled by default: compaction take place as long as there're at least two data files.
-    DataCompaction,
-}
-
 #[derive(Clone, Debug, PartialEq)]
 enum SpecialTableOption {
     /// No special table option.
@@ -371,8 +310,7 @@ struct TestEnvironment {
 
 impl TestEnvironment {
     async fn new(config: TestEnvConfig) -> Self {
-        let seed = 
-        SystemTime::now()
+        let seed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_nanos() as u64;
@@ -384,22 +322,22 @@ impl TestEnvironment {
         };
         let identity = IdentityProp::Keys(vec![0]);
         let mooncake_table_metadata = create_test_table_metadata_for_profile(
-                table_temp_dir.path().to_str().unwrap().to_string(),
-                disk_slice_write_config,
-                identity.clone(),
+            table_temp_dir.path().to_str().unwrap().to_string(),
+            disk_slice_write_config,
+            identity.clone(),
         );
 
         // Local filesystem to store read-through cache.
         let cache_temp_dir = tempdir().unwrap();
-        let object_storage_cache =
-            ObjectStorageCache::new(ObjectStorageCacheConfig::new(
-                /*max_bytes=*/ 1 << 30, // 1GiB
-                cache_temp_dir.path().to_str().unwrap().to_string(),
-                /*optimize_local_filesystem=*/ true,
-            ));
+        let object_storage_cache = ObjectStorageCache::new(ObjectStorageCacheConfig::new(
+            /*max_bytes=*/ 1 << 30, // 1GiB
+            cache_temp_dir.path().to_str().unwrap().to_string(),
+            /*optimize_local_filesystem=*/ true,
+        ));
 
         // Create mooncake table and table event notification receiver.
-        let iceberg_table_config = get_iceberg_table_config_with_storage_config(config.storage_config.clone());
+        let iceberg_table_config =
+            get_iceberg_table_config_with_storage_config(config.storage_config.clone());
         let table = create_mooncake_table(
             mooncake_table_metadata.clone(),
             iceberg_table_config.clone(),
@@ -510,7 +448,9 @@ async fn create_mooncake_table(
 fn create_test_filesystem_accessor(
     iceberg_table_config: &IcebergTableConfig,
 ) -> Arc<dyn BaseFileSystemAccess> {
-     Arc::new(FileSystemAccessor::new(iceberg_table_config.data_accessor_config.clone()))
+    Arc::new(FileSystemAccessor::new(
+        iceberg_table_config.data_accessor_config.clone(),
+    ))
 }
 
 fn create_test_table_metadata_for_profile(
@@ -525,15 +465,15 @@ fn create_test_table_metadata_for_profile(
     config.append_only = identity == IdentityProp::None;
     config.row_identity = identity;
     config.snapshot_deletion_record_count = 1000;
-    config.data_compaction_config = DataCompactionConfig { 
+    config.data_compaction_config = DataCompactionConfig {
         min_data_file_to_compact: 16,
-        max_data_file_to_compact: 32, 
+        max_data_file_to_compact: 32,
         data_file_final_size: 1 << 29, // 512MiB
         data_file_deletion_percentage: 50,
     };
-    config.file_index_config = FileIndexMergeConfig { 
+    config.file_index_config = FileIndexMergeConfig {
         min_file_indices_to_merge: 16,
-        max_file_indices_to_merge: 32, 
+        max_file_indices_to_merge: 32,
         index_block_final_size: 1 << 29, // 512MiB
     };
     Arc::new(MooncakeTableMetadata {
@@ -552,29 +492,49 @@ async fn chaos_test_impl(env: TestEnvironment) {
     let last_visibility_lsn_tx = env.last_visibility_lsn_tx;
     let replication_lsn_tx = env.replication_lsn_tx.clone();
 
+    let mut state = ChaosState::new(
+        env.seed,
+        test_env_config.special_table_option == SpecialTableOption::AppendOnly,
+        test_env_config.special_table_option == SpecialTableOption::UpsertDeleteIfExists,
+    );
+    let mut table_events = VecDeque::new();
+    for cur_event_count in 0..test_env_config.event_count {
+        let cur_events = state.generate_random_events();
+        table_events.extend(cur_events.table_events);
+
+        if (cur_event_count + 1) % 500 == 0 {
+            println!("{} events generated", cur_event_count);
+        }
+    }
+    println!("Random event generation over, start ingestion.");
+
+    let guard = pprof::ProfilerGuard::new(100).unwrap();
     let task = tokio::spawn(async move {
-        let mut state = ChaosState::new(
-            env.seed,
-            test_env_config.special_table_option == SpecialTableOption::AppendOnly,
-            test_env_config.special_table_option == SpecialTableOption::UpsertDeleteIfExists,
-        );
+        let mut ingested_event_count = 0;
+        let mut latest_commit_lsn = 0;
+        while let Some(cur_event) = table_events.pop_front() {
+            // For commit events, need to set up corresponding replication and commit LSN.
+            if let TableEvent::Commit { lsn, .. } = cur_event {
+                latest_commit_lsn = lsn;
+                replication_lsn_tx.send(lsn).unwrap();
+                last_visibility_lsn_tx
+                    .send(VisibilityLsn {
+                        commit_lsn: lsn,
+                        replication_lsn: lsn,
+                    })
+                    .unwrap();
+            }
+            event_sender.send(cur_event).await.unwrap();
 
-        for _ in 0..test_env_config.event_count {
-            let chaos_events = state.generate_random_events();
-
-            // Perform table update operations.
-            for cur_event in chaos_events.table_events.into_iter() {
-                // For commit events, need to set up corresponding replication and commit LSN.
-                if let TableEvent::Commit { lsn, .. } = cur_event {
-                    replication_lsn_tx.send(lsn).unwrap();
-                    last_visibility_lsn_tx
-                        .send(VisibilityLsn {
-                            commit_lsn: lsn,
-                            replication_lsn: lsn,
-                        })
-                        .unwrap();
-                }
-                event_sender.send(cur_event).await.unwrap();
+            // Force snapshot every interval.
+            ingested_event_count += 1;
+            if ingested_event_count % 500 == 0 {
+                println!("before force");
+                let rx = table_event_manager.initiate_snapshot(latest_commit_lsn).await;
+                TableEventManager::synchronize_force_snapshot_request(rx, latest_commit_lsn)
+                    .await
+                    .unwrap();
+                println!("Force snapshot at LSN {}", latest_commit_lsn);
             }
         }
 
@@ -595,38 +555,25 @@ async fn chaos_test_impl(env: TestEnvironment) {
             std::panic::resume_unwind(panic);
         }
     }
+
+    if let Ok(report) = guard.report().build() {
+        let file = std::fs::File::create("/tmp/test_normal_profile_on_local_fs.svg").unwrap();
+        report.flamegraph(file).unwrap();
+    }
 }
 
 /// Chaos test with data compaction enabled by default.
 pub async fn test_normal_profile_on_local_fs() {
-    println!("1");
-
-    let guard = pprof::ProfilerGuard::new(100).unwrap();
-
-    println!("2");
-
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
         special_table_option: SpecialTableOption::None,
-        event_count: 50000,
+        event_count: 30000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,
         },
     };
     let env = TestEnvironment::new(test_env_config).await;
-
-    println!("3");
-
     chaos_test_impl(env).await;
-
-    println!("4");
-
-    if let Ok(report) = guard.report().build() {
-        let file = std::fs::File::create("/tmp/test_normal_profile_on_local_fs.svg").unwrap();
-        report.flamegraph(file).unwrap();
-    }
-
-    println!("5");
 }
