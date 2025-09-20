@@ -504,7 +504,7 @@ async fn profile_test_impl(env: TestEnvironment) {
 
         // Print out event generation progress periodically.
         if (cur_event_count + 1) % 500 == 0 {
-            println!("{} events generated", cur_event_count);
+            println!("{cur_event_count} events generated");
         }
     }
     println!("Random event generation over, start ingestion.");

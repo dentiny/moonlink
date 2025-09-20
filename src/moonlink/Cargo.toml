@@ -4,6 +4,11 @@ version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 
+[[bin]]
+name = "profile_test"
+path = "src/bin/profile_test.rs"
+required-features = ["profile-test"]
+
 [features]
 default = ["storage-fs"]
 storage-all = ["storage-fs", "storage-s3", "storage-gcs"]
@@ -118,11 +123,6 @@ harness = false
 name = "bench_write"
 harness = false
 required-features = ["bench"]
-
-[[bin]]
-name = "profile_test"
-path = "src/bin/profile_test.rs"
-required-features = ["profile-test"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(profiling_enabled)'] }
