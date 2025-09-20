@@ -691,7 +691,18 @@ impl IcebergTableManager {
         )]);
 
         let mut txn = Transaction::new(self.iceberg_table.as_ref().unwrap());
-        let action = txn.fast_append();
+        let mut action = txn.fast_append();
+
+        // Duplicate files check is very expensive, disable for production usage.
+        #[cfg(not(any(test, debug_assertions)))]
+        {
+            action = action.with_check_duplicate(false);
+        }
+        #[cfg(any(test, debug_assertions))]
+        {
+            action = action.with_check_duplicate(true);
+        }
+
         // Only start append action when there're new data files.
         if !data_file_import_result.new_iceberg_data_files.is_empty() {
             let action = action.add_data_files(data_file_import_result.new_iceberg_data_files);
