@@ -1026,3 +1026,6 @@ mod chaos_replay;
 #[cfg(test)]
 #[cfg(feature = "chaos-test")]
 mod regression;
+
+#[cfg(feature = "profile-test")]
+pub mod profile_test;

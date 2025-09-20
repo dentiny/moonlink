@@ -43,3 +43,6 @@ pub use union_read::{decode_read_state_for_testing, decode_serialized_read_state
 pub use storage::GlobalIndex;
 #[cfg(feature = "bench")]
 pub use storage::GlobalIndexBuilder;
+
+#[cfg(feature = "profile-test")]
+pub use table_handler::profile_test::test_normal_profile_on_local_fs;
