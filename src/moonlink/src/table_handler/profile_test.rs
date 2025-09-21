@@ -16,6 +16,7 @@ use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig, St
 
 use arrow::datatypes::Schema as ArrowSchema;
 use arrow::datatypes::{DataType, Field};
+use function_name::named;
 use rand::prelude::*;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -282,6 +283,8 @@ enum SpecialTableOption {
 
 #[derive(Clone, Debug)]
 struct TestEnvConfig {
+    /// Test name, used to generate profile files.
+    test_name: String,
     /// Special table option.
     special_table_option: SpecialTableOption,
     /// Event count.
@@ -559,18 +562,39 @@ async fn profile_test_impl(env: TestEnvironment) {
     }
 
     if let Ok(report) = guard.report().build() {
-        let file = std::fs::File::create("/tmp/test_normal_profile_on_local_fs.svg").unwrap();
+        let file =
+            std::fs::File::create(format!("/tmp/{}.svg", env.test_env_config.test_name)).unwrap();
         report.flamegraph(file).unwrap();
     }
 }
 
 /// Profile test with data compaction enabled by default.
+#[named]
 pub async fn test_normal_profile_on_local_fs() {
     let iceberg_temp_dir = tempdir().unwrap();
     let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
     let test_env_config = TestEnvConfig {
+        test_name: function_name!().to_string(),
         special_table_option: SpecialTableOption::None,
-        event_count: 30000,
+        event_count: 50000,
+        storage_config: StorageConfig::FileSystem {
+            root_directory,
+            atomic_write_dir: None,
+        },
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    profile_test_impl(env).await;
+}
+
+/// Profile test for append-only table.
+#[named]
+pub async fn test_append_only_table_profile_on_local_fs() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
+    let test_env_config = TestEnvConfig {
+        test_name: function_name!().to_string(),
+        special_table_option: SpecialTableOption::AppendOnly,
+        event_count: 50000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,

@@ -40,7 +40,7 @@ catalog-glue = ["iceberg-catalog-glue"]
 bench = []
 
 chaos-test = ["function_name"]
-profile-test = ["pprof"]
+profile-test = ["pprof", "function_name"]
 
 [dependencies]
 ahash = "0.8"
