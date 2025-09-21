@@ -739,11 +739,14 @@ jobs:
 
     strategy:
       matrix:
+        type: [integration, stress]
         include:
-          - name: integration
+          - type: integration
+            name: REST server integration test
             timeout: 10
             command: RUST_BACKTRACE=1 cargo test --package moonlink_service --lib --features standalone-test -- --nocapture
-          - name: stress
+          - type: stress
+            name: REST server stress test
             timeout: 25
             command: RUST_BACKTRACE=1 cargo test stress_test --release --package moonlink_service --lib --features standalone-test,stress-test -- --nocapture
 
