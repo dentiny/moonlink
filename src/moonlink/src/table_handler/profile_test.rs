@@ -544,7 +544,7 @@ async fn profile_test_impl(env: TestEnvironment) {
         env.test_env_config.test_name,
         uuid::Uuid::new_v4()
     );
-    println!("Profile target file is {}", profile_target_file);
+    println!("Profile target file is {profile_target_file}");
     let guard = pprof::ProfilerGuard::new(PPROF_PROFILE_FREQ).unwrap();
 
     let task = tokio::spawn(async move {
