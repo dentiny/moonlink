@@ -10,7 +10,8 @@ use crate::table_handler_timer::create_table_handler_timers;
 use crate::union_read::ReadStateManager;
 use crate::{
     BaseFileSystemAccess, CacheTrait, DataCompactionConfig, DiskSliceWriterConfig,
-    FileIndexMergeConfig, FileSystemAccessor, VisibilityLsn, WalConfig, WalManager,
+    FileIndexMergeConfig, FileSystemAccessor, IcebergPersistenceConfig, VisibilityLsn, WalConfig,
+    WalManager,
 };
 use crate::{IcebergTableConfig, ObjectStorageCache, ObjectStorageCacheConfig, StorageConfig};
 
@@ -34,6 +35,8 @@ const ICEBERG_TEST_NAMESPACE: &str = "namespace";
 const ICEBERG_TEST_TABLE: &str = "test_table";
 /// Test constant for table id.
 const TEST_TABLE_ID: TableId = TableId(0);
+/// Pprof profiling frequency.
+const PPROF_PROFILE_FREQ: i32 = 99;
 
 /// Create a test moonlink row.
 fn create_row(id: i32, name: &str, age: i32) -> MoonlinkRow {
@@ -279,6 +282,8 @@ enum SpecialTableOption {
     UpsertDeleteIfExists,
     /// Append only.
     AppendOnly,
+    /// Disable iceberg snapshot.
+    NoIcebergSnapshot,
 }
 
 #[derive(Clone, Debug)]
@@ -324,8 +329,11 @@ impl TestEnvironment {
             chaos_config: None,
         };
         let identity = IdentityProp::Keys(vec![0]);
+        let iceberg_persistence_config =
+            create_iceberg_persistence_config(config.special_table_option.clone());
         let mooncake_table_metadata = create_test_table_metadata_for_profile(
             table_temp_dir.path().to_str().unwrap().to_string(),
+            iceberg_persistence_config,
             disk_slice_write_config,
             identity.clone(),
         );
@@ -456,8 +464,25 @@ fn create_test_filesystem_accessor(
     ))
 }
 
+fn create_iceberg_persistence_config(
+    special_table_option: SpecialTableOption,
+) -> IcebergPersistenceConfig {
+    if special_table_option == SpecialTableOption::NoIcebergSnapshot {
+        IcebergPersistenceConfig {
+            new_data_file_count: usize::MAX,
+            new_committed_deletion_log: usize::MAX,
+            new_compacted_data_file_count: usize::MAX,
+            old_compacted_data_file_count: usize::MAX,
+            old_merged_file_indices_count: usize::MAX,
+        }
+    } else {
+        IcebergPersistenceConfig::default()
+    }
+}
+
 fn create_test_table_metadata_for_profile(
     local_table_directory: String,
+    iceberg_persistence_config: IcebergPersistenceConfig,
     disk_slice_write_config: DiskSliceWriterConfig,
     identity: IdentityProp,
 ) -> Arc<MooncakeTableMetadata> {
@@ -465,6 +490,7 @@ fn create_test_table_metadata_for_profile(
     config.batch_size = 4096;
     config.mem_slice_size = config.batch_size * 8;
     config.disk_slice_writer_config = disk_slice_write_config;
+    config.persistence_config = iceberg_persistence_config;
     config.append_only = identity == IdentityProp::None;
     config.row_identity = identity;
     config.snapshot_deletion_record_count = 1000;
@@ -512,7 +538,15 @@ async fn profile_test_impl(env: TestEnvironment) {
     }
     println!("Random event generation over, start ingestion.");
 
-    let guard = pprof::ProfilerGuard::new(100).unwrap();
+    // Start collecting profile with pprof.
+    let profile_target_file = format!(
+        "/tmp/{}-{}.svg",
+        env.test_env_config.test_name,
+        uuid::Uuid::new_v4()
+    );
+    println!("Profile target file is {}", profile_target_file);
+    let guard = pprof::ProfilerGuard::new(PPROF_PROFILE_FREQ).unwrap();
+
     let task = tokio::spawn(async move {
         let mut ingested_event_count = 0;
         while let Some(cur_event) = table_events.pop_front() {
@@ -528,7 +562,9 @@ async fn profile_test_impl(env: TestEnvironment) {
                 event_sender.send(cur_event).await.unwrap();
 
                 ingested_event_count += 1;
-                if ingested_event_count > 500 {
+                if ingested_event_count > 500
+                    && test_env_config.special_table_option != SpecialTableOption::NoIcebergSnapshot
+                {
                     let rx = table_event_manager.initiate_snapshot(lsn).await;
                     TableEventManager::synchronize_force_snapshot_request(rx, lsn)
                         .await
@@ -562,8 +598,7 @@ async fn profile_test_impl(env: TestEnvironment) {
     }
 
     if let Ok(report) = guard.report().build() {
-        let file =
-            std::fs::File::create(format!("/tmp/{}.svg", env.test_env_config.test_name)).unwrap();
+        let file = std::fs::File::create(profile_target_file).unwrap();
         report.flamegraph(file).unwrap();
     }
 }
@@ -595,6 +630,25 @@ pub async fn test_append_only_table_profile_on_local_fs() {
         test_name: function_name!().to_string(),
         special_table_option: SpecialTableOption::AppendOnly,
         event_count: 50000,
+        storage_config: StorageConfig::FileSystem {
+            root_directory,
+            atomic_write_dir: None,
+        },
+    };
+    let env = TestEnvironment::new(test_env_config).await;
+    profile_test_impl(env).await;
+}
+
+/// Profile test for no iceberg persistence situation, which is meant to check ingestion and mooncake snapshot only profiling.
+/// Also useful to tune iceberg persistence configs.
+#[named]
+pub async fn test_no_iceberg_persistence_on_local_fs() {
+    let iceberg_temp_dir = tempdir().unwrap();
+    let root_directory = iceberg_temp_dir.path().to_str().unwrap().to_string();
+    let test_env_config = TestEnvConfig {
+        test_name: function_name!().to_string(),
+        special_table_option: SpecialTableOption::NoIcebergSnapshot,
+        event_count: 100000,
         storage_config: StorageConfig::FileSystem {
             root_directory,
             atomic_write_dir: None,

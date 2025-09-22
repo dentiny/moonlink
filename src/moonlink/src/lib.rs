@@ -46,5 +46,6 @@ pub use storage::GlobalIndexBuilder;
 
 #[cfg(feature = "profile-test")]
 pub use table_handler::profile_test::{
-    test_append_only_table_profile_on_local_fs, test_normal_profile_on_local_fs,
+    test_append_only_table_profile_on_local_fs, test_no_iceberg_persistence_on_local_fs,
+    test_normal_profile_on_local_fs,
 };
