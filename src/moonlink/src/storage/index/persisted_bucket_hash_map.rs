@@ -308,7 +308,7 @@ impl GlobalIndex {
         let mut ret = values
             .map(|value| (value, splitmix64(value)))
             .collect::<Vec<_>>();
-        ret.sort_by_key(|(_, hash)| *hash);
+        ret.sort_unstable_by_key(|(_, hash)| *hash);
         ret.dedup_by_key(|(_, hash)| *hash);
         ret
     }

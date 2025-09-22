@@ -1043,7 +1043,8 @@ impl SnapshotTableState {
             }
         });
         self.add_processed_deletion(already_processed, task.commit_lsn_baseline);
-        new_deletions.sort_by(|a, b| a.lookup_key.cmp(&b.lookup_key).then(a.lsn.cmp(&b.lsn)));
+        new_deletions
+            .sort_unstable_by(|a, b| a.lookup_key.cmp(&b.lookup_key).then(a.lsn.cmp(&b.lsn)));
         if new_deletions.is_empty() {
             return;
         }
@@ -1063,7 +1064,7 @@ impl SnapshotTableState {
             .indices
             .find_records(&new_deletions)
             .await;
-        index_lookup_result.sort_by_key(|(key, _)| *key);
+        index_lookup_result.sort_unstable_by_key(|(key, _)| *key);
         let mut i = 0;
         let mut j = 0;
         while i < new_deletions.len() {
