@@ -1651,7 +1651,7 @@ async fn test_discard_duplicate_writes() {
     let mooncake_table_config =
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "table_name".to_string(),
+        mooncake_table_id: "table_name".to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),

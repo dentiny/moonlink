@@ -81,8 +81,8 @@ use transaction_stream::{TransactionStreamOutput, TransactionStreamState};
 
 #[derive(Debug)]
 pub struct TableMetadata {
-    /// table name
-    pub(crate) name: String,
+    /// unique table id
+    pub(crate) mooncake_table_id: String,
     /// table id
     /// Notice it's transient, which means it's subject to change after recovery.
     pub(crate) table_id: u32,
@@ -115,7 +115,7 @@ impl TableMetadata {
         let new_schema =
             Schema::new_with_metadata(new_columns, previous_metadata.schema.metadata.clone());
         Self {
-            name: previous_metadata.name.clone(),
+            mooncake_table_id: previous_metadata.mooncake_table_id.clone(),
             table_id: previous_metadata.table_id,
             schema: Arc::new(new_schema),
             config: previous_metadata.config.clone(),
@@ -205,7 +205,7 @@ impl Snapshot {
         let mut directory = PathBuf::from(&self.metadata.config.temp_files_directory);
         directory.push(format!(
             "inmemory_{}_{}_{}.parquet",
-            self.metadata.name, self.metadata.table_id, self.snapshot_version
+            self.metadata.mooncake_table_id, self.metadata.table_id, self.snapshot_version
         ));
         directory
     }
@@ -510,7 +510,7 @@ impl MooncakeTable {
     #[allow(clippy::too_many_arguments)]
     pub async fn new(
         schema: Schema,
-        name: String,
+        mooncake_table_id: String,
         table_id: u32,
         base_path: PathBuf,
         iceberg_table_config: IcebergTableConfig,
@@ -520,7 +520,7 @@ impl MooncakeTable {
         table_filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     ) -> Result<Self> {
         let metadata = Arc::new(TableMetadata {
-            name,
+            mooncake_table_id,
             table_id,
             schema: Arc::new(schema.clone()),
             config: table_config.clone(),

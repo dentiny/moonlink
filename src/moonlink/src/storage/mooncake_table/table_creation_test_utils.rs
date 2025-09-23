@@ -210,7 +210,7 @@ pub(crate) fn create_test_table_metadata_with_config(
     mooncake_table_config: MooncakeTableConfig,
 ) -> Arc<MooncakeTableMetadata> {
     Arc::new(MooncakeTableMetadata {
-        name: ICEBERG_TEST_TABLE.to_string(),
+        mooncake_table_id: ICEBERG_TEST_TABLE.to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config,

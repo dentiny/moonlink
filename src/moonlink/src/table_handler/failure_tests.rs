@@ -26,7 +26,7 @@ async fn test_iceberg_snapshot_failure_mock_test() {
     let mooncake_table_config =
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "table_name".to_string(),
+        mooncake_table_id: "table_name".to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
@@ -97,7 +97,7 @@ async fn test_iceberg_drop_table_failure_mock_test() {
     let mooncake_table_config =
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "table_name".to_string(),
+        mooncake_table_id: "table_name".to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
@@ -160,7 +160,7 @@ async fn test_force_index_merge_with_failed_iceberg_persistence() {
     let mooncake_table_config =
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "table_name".to_string(),
+        mooncake_table_id: "table_name".to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
@@ -269,7 +269,7 @@ async fn test_force_data_compaction_with_failed_iceberg_persistence() {
     let mooncake_table_config =
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "table_name".to_string(),
+        mooncake_table_id: "table_name".to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),
@@ -379,7 +379,7 @@ async fn test_force_full_compaction_with_failed_iceberg_persistence() {
     let mooncake_table_config =
         MooncakeTableConfig::new(temp_dir.path().to_str().unwrap().to_string());
     let mooncake_table_metadata = Arc::new(MooncakeTableMetadata {
-        name: "table_name".to_string(),
+        mooncake_table_id: "table_name".to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config: mooncake_table_config.clone(),

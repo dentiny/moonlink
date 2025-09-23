@@ -262,7 +262,7 @@ async fn test_update_rows(#[case] identity: IdentityProp) -> Result<()> {
 async fn test_snapshot_initialization() -> Result<()> {
     let schema = create_test_arrow_schema();
     let metadata = Arc::new(TableMetadata {
-        name: "test_table".to_string(),
+        mooncake_table_id: "test_table".to_string(),
         table_id: 1,
         schema,
         config: MooncakeTableConfig::default(), // No temp files generated.
@@ -530,7 +530,7 @@ async fn test_table_recovery() {
 async fn test_snapshot_load_failure() {
     let temp_dir = TempDir::new().unwrap();
     let table_metadata = Arc::new(TableMetadata {
-        name: "test_table".to_string(),
+        mooncake_table_id: "test_table".to_string(),
         table_id: 1,
         schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(), // No temp files generated.
@@ -567,7 +567,7 @@ async fn test_snapshot_load_failure() {
 async fn test_snapshot_store_failure() {
     let temp_dir = TempDir::new().unwrap();
     let table_metadata = Arc::new(TableMetadata {
-        name: "test_table".to_string(),
+        mooncake_table_id: "test_table".to_string(),
         table_id: 1,
         schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(), // No temp files generated.
@@ -2394,7 +2394,7 @@ async fn test_disk_slice_write_failure() -> Result<()> {
 
     // Create table metadata with invalid path that will cause flush failure
     let table_metadata = Arc::new(TableMetadata {
-        name: "test_table".to_string(),
+        mooncake_table_id: "test_table".to_string(),
         table_id: 1,
         schema: create_test_arrow_schema(),
         config: MooncakeTableConfig::default(),
