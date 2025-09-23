@@ -50,6 +50,9 @@ fn get_metrics_table_name(moonlink_table_name: &str, metrics_type: &str) -> Stri
 
 /// Util function to get metrics table name from the request.
 fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> String {
+
+    println!("received request = {:?}", req);
+
     for rm in &req.resource_metrics {
         for sm in &rm.scope_metrics {
             for metric in &sm.metrics {
@@ -202,9 +205,15 @@ impl MetricsHandler {
     ) -> Result<ExportMetricsServiceResponse> {
         // TODO(hjiang): Currently only supports metrics from one single table.
         let mooncake_table_id = get_metrics_table_name_from_request(&request);
+
+        println!("mooncake table id = {}", mooncake_table_id);
+
         self.create_table_for_once(&mooncake_table_id).await?;
 
         let moonlink_row_pbs = otel_to_moonlink_pb::export_metrics_to_moonlink_rows(&request);
+
+        println!("row = {:?}", moonlink_row_pbs);
+
         for cur_row_pb in moonlink_row_pbs.into_iter() {
             self.insert_row(&mooncake_table_id, cur_row_pb).await;
         }
