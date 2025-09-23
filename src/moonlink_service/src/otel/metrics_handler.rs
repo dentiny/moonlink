@@ -14,7 +14,7 @@ use opentelemetry_proto::tonic::collector::metrics::v1::{
 };
 use serde_json::json;
 use tokio::sync::Mutex;
-use tracing::error;
+use tracing::{error, warn};
 
 /// Database which manages all moonlink internal metrics.
 const DATABASE: &str = "__reserved_moonlink_internal_metrics__";
@@ -43,27 +43,35 @@ fn anyvalue_as_str(v: &opentelemetry_proto::tonic::common::v1::AnyValue) -> Opti
     }
 }
 
-/// Util function to deterministically get table name.
-fn get_metrics_table_name(moonlink_table_name: &str, metrics_type: &str) -> String {
-    format!("{moonlink_table_name}.{metrics_type}")
-}
-
 /// Util function to get metrics table name from the request.
 fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> String {
-
-    println!("received request = {:?}", req);
-
+    let mut service_name = "unknown_service";
     for rm in &req.resource_metrics {
+        for attr in &rm.resource.as_ref().unwrap().attributes {
+            if attr.key == "service.name" {
+                if let Some(value) = &attr.value {
+                    if let Some(s) = anyvalue_as_str(value) {
+                        service_name = s;
+                    }
+                }
+            }
+        }
+
         for sm in &rm.scope_metrics {
             for metric in &sm.metrics {
+                let metric_name = &metric.name;
+
                 match &metric.data {
                     Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(g)) => {
                         for dp in &g.data_points {
                             for attr in &dp.attributes {
                                 if attr.key == MOONCAKE_TABLE_ID_KEY {
-                                    let attr_value = attr.value.as_ref().unwrap();
-                                    let mooncake_table_id = anyvalue_as_str(attr_value).unwrap();
-                                    return get_metrics_table_name(mooncake_table_id, "gauge");
+                                    let mooncake_table_id =
+                                        anyvalue_as_str(attr.value.as_ref().unwrap()).unwrap();
+                                    return format!(
+                                        "{}.{}.{}.{}",
+                                        service_name, mooncake_table_id, "gauge", metric_name,
+                                    );
                                 }
                             }
                         }
@@ -72,9 +80,12 @@ fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> Str
                         for dp in &s.data_points {
                             for attr in &dp.attributes {
                                 if attr.key == MOONCAKE_TABLE_ID_KEY {
-                                    let attr_value = attr.value.as_ref().unwrap();
-                                    let mooncake_table_id = anyvalue_as_str(attr_value).unwrap();
-                                    return get_metrics_table_name(mooncake_table_id, "sum");
+                                    let mooncake_table_id =
+                                        anyvalue_as_str(attr.value.as_ref().unwrap()).unwrap();
+                                    return format!(
+                                        "{}.{}.{}.{}",
+                                        service_name, mooncake_table_id, "sum", metric_name,
+                                    );
                                 }
                             }
                         }
@@ -83,9 +94,12 @@ fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> Str
                         for dp in &h.data_points {
                             for attr in &dp.attributes {
                                 if attr.key == MOONCAKE_TABLE_ID_KEY {
-                                    let attr_value = attr.value.as_ref().unwrap();
-                                    let mooncake_table_id = anyvalue_as_str(attr_value).unwrap();
-                                    return get_metrics_table_name(mooncake_table_id, "histogram");
+                                    let mooncake_table_id =
+                                        anyvalue_as_str(attr.value.as_ref().unwrap()).unwrap();
+                                    return format!(
+                                        "{}.{}.{}.{}",
+                                        service_name, mooncake_table_id, "histogram", metric_name,
+                                    );
                                 }
                             }
                         }
@@ -96,7 +110,8 @@ fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> Str
         }
     }
 
-    panic!("Cannot find mooncake table id from the data points");
+    warn!("Cannot find mooncake table id from the data points");
+    service_name.to_string()
 }
 
 impl MetricsHandler {
@@ -203,17 +218,9 @@ impl MetricsHandler {
         &self,
         request: ExportMetricsServiceRequest,
     ) -> Result<ExportMetricsServiceResponse> {
-        // TODO(hjiang): Currently only supports metrics from one single table.
         let mooncake_table_id = get_metrics_table_name_from_request(&request);
-
-        println!("mooncake table id = {}", mooncake_table_id);
-
         self.create_table_for_once(&mooncake_table_id).await?;
-
         let moonlink_row_pbs = otel_to_moonlink_pb::export_metrics_to_moonlink_rows(&request);
-
-        println!("row = {:?}", moonlink_row_pbs);
-
         for cur_row_pb in moonlink_row_pbs.into_iter() {
             self.insert_row(&mooncake_table_id, cur_row_pb).await;
         }
