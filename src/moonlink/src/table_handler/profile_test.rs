@@ -1,7 +1,6 @@
 use crate::event_sync::create_table_event_syncer;
 use crate::row::{IdentityProp, MoonlinkRow, RowValue};
 use crate::storage::mooncake_table::table_event_manager::TableEventManager;
-use crate::storage::mooncake_table::TableMetadata;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::TableId;
 use crate::storage::MooncakeTable;
@@ -312,7 +311,7 @@ struct TestEnvironment {
     wal_flush_lsn_rx: watch::Receiver<u64>,
     last_visibility_lsn_tx: watch::Sender<VisibilityLsn>,
     replication_lsn_tx: watch::Sender<u64>,
-    mooncake_table_metadata: Arc<TableMetadata>,
+    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
     iceberg_table_config: IcebergTableConfig,
 }
 
@@ -506,7 +505,7 @@ fn create_test_table_metadata_for_profile(
         index_block_final_size: 1 << 29, // 512MiB
     };
     Arc::new(MooncakeTableMetadata {
-        name: ICEBERG_TEST_TABLE.to_string(),
+        mooncake_table_id: ICEBERG_TEST_TABLE.to_string(),
         table_id: 0,
         schema: create_test_arrow_schema(),
         config,
