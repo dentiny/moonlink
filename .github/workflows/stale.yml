@@ -1,0 +1,24 @@
+name: "Mark and Close Stale PRs"
+
+on:
+  schedule:
+    - cron: "0 2 * * *" # runs every day at 2:00 UTC
+
+jobs:
+  stale:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run stale bot
+        uses: actions/stale@v9
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          days-before-stale: 14
+          days-before-close: 14
+          stale-pr-message: >
+            This PR has been inactive for 14 days and is now marked as stale.
+            If this is still being worked on, please comment to keep it open.
+          close-pr-message: >
+            This PR has been closed due to 28 days of inactivity.
+            Please reopen if you plan to continue working on it.
+          stale-pr-label: "stale"
+          exempt-pr-labels: "pinned,keep-open"
