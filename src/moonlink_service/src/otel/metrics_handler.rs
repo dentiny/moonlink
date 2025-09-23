@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 /// Handler to process metrics ingestion.
@@ -12,6 +12,7 @@ use moonlink_proto::moonlink as moonlink_pb;
 use opentelemetry_proto::tonic::collector::metrics::v1::{
     ExportMetricsServiceRequest, ExportMetricsServiceResponse,
 };
+use opentelemetry_proto::tonic::metrics::v1::{metric::Data, HistogramDataPoint, NumberDataPoint};
 use serde_json::json;
 use tokio::sync::Mutex;
 use tracing::{error, warn};
@@ -43,15 +44,62 @@ fn anyvalue_as_str(v: &opentelemetry_proto::tonic::common::v1::AnyValue) -> Opti
     }
 }
 
-/// Util function to get metrics table name from the request.
-fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> String {
+// A helper trait so we can unify NumberDataPoint and HistogramDataPoint.
+trait HasAttributes {
+    fn get_attributes(&self) -> &Vec<opentelemetry_proto::tonic::common::v1::KeyValue>;
+}
+impl HasAttributes for NumberDataPoint {
+    fn get_attributes(&self) -> &Vec<opentelemetry_proto::tonic::common::v1::KeyValue> {
+        &self.attributes
+    }
+}
+impl HasAttributes for HistogramDataPoint {
+    fn get_attributes(&self) -> &Vec<opentelemetry_proto::tonic::common::v1::KeyValue> {
+        &self.attributes
+    }
+}
+
+// Push data points into [`result`] map.
+fn handle_data_points<T>(
+    service_name: &str,
+    metric_name: &str,
+    kind: &str,
+    dps: &[T],
+    req: &ExportMetricsServiceRequest,
+    result: &mut HashMap<String, Vec<ExportMetricsServiceRequest>>,
+) where
+    T: HasAttributes,
+{
+    for dp in dps {
+        for attr in dp.get_attributes() {
+            if attr.key == MOONCAKE_TABLE_ID_KEY {
+                if let Some(value) = &attr.value {
+                    if let Some(mooncake_table_id) = anyvalue_as_str(value) {
+                        let key =
+                            format!("{service_name}.{mooncake_table_id}.{kind}.{metric_name}");
+                        result.entry(key).or_default().push(req.clone());
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Get metrics data points map, which maps from mooncake table id to otel export request.
+fn get_metrics_map_from_request(
+    req: &ExportMetricsServiceRequest,
+) -> HashMap<String, Vec<ExportMetricsServiceRequest>> {
+    let mut result: HashMap<String, Vec<ExportMetricsServiceRequest>> = HashMap::new();
+
     let mut service_name = "unknown_service";
     for rm in &req.resource_metrics {
-        for attr in &rm.resource.as_ref().unwrap().attributes {
-            if attr.key == "service.name" {
-                if let Some(value) = &attr.value {
-                    if let Some(s) = anyvalue_as_str(value) {
-                        service_name = s;
+        if let Some(resource) = &rm.resource {
+            for attr in &resource.attributes {
+                if attr.key == "service.name" {
+                    if let Some(value) = &attr.value {
+                        if let Some(s) = anyvalue_as_str(value) {
+                            service_name = s;
+                        }
                     }
                 }
             }
@@ -62,47 +110,35 @@ fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> Str
                 let metric_name = &metric.name;
 
                 match &metric.data {
-                    Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Gauge(g)) => {
-                        for dp in &g.data_points {
-                            for attr in &dp.attributes {
-                                if attr.key == MOONCAKE_TABLE_ID_KEY {
-                                    let mooncake_table_id =
-                                        anyvalue_as_str(attr.value.as_ref().unwrap()).unwrap();
-                                    return format!(
-                                        "{}.{}.{}.{}",
-                                        service_name, mooncake_table_id, "gauge", metric_name,
-                                    );
-                                }
-                            }
-                        }
+                    Some(Data::Gauge(g)) => {
+                        handle_data_points(
+                            service_name,
+                            metric_name,
+                            "gauge",
+                            &g.data_points,
+                            req,
+                            &mut result,
+                        );
                     }
-                    Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Sum(s)) => {
-                        for dp in &s.data_points {
-                            for attr in &dp.attributes {
-                                if attr.key == MOONCAKE_TABLE_ID_KEY {
-                                    let mooncake_table_id =
-                                        anyvalue_as_str(attr.value.as_ref().unwrap()).unwrap();
-                                    return format!(
-                                        "{}.{}.{}.{}",
-                                        service_name, mooncake_table_id, "sum", metric_name,
-                                    );
-                                }
-                            }
-                        }
+                    Some(Data::Sum(s)) => {
+                        handle_data_points(
+                            service_name,
+                            metric_name,
+                            "sum",
+                            &s.data_points,
+                            req,
+                            &mut result,
+                        );
                     }
-                    Some(opentelemetry_proto::tonic::metrics::v1::metric::Data::Histogram(h)) => {
-                        for dp in &h.data_points {
-                            for attr in &dp.attributes {
-                                if attr.key == MOONCAKE_TABLE_ID_KEY {
-                                    let mooncake_table_id =
-                                        anyvalue_as_str(attr.value.as_ref().unwrap()).unwrap();
-                                    return format!(
-                                        "{}.{}.{}.{}",
-                                        service_name, mooncake_table_id, "histogram", metric_name,
-                                    );
-                                }
-                            }
-                        }
+                    Some(Data::Histogram(h)) => {
+                        handle_data_points(
+                            service_name,
+                            metric_name,
+                            "histogram",
+                            &h.data_points,
+                            req,
+                            &mut result,
+                        );
                     }
                     _ => {}
                 }
@@ -110,8 +146,11 @@ fn get_metrics_table_name_from_request(req: &ExportMetricsServiceRequest) -> Str
         }
     }
 
-    warn!("Cannot find mooncake table id from the data points");
-    service_name.to_string()
+    if result.is_empty() {
+        warn!("Cannot find mooncake table id from the data points");
+    }
+
+    result
 }
 
 impl MetricsHandler {
@@ -218,11 +257,16 @@ impl MetricsHandler {
         &self,
         request: ExportMetricsServiceRequest,
     ) -> Result<ExportMetricsServiceResponse> {
-        let mooncake_table_id = get_metrics_table_name_from_request(&request);
-        self.create_table_for_once(&mooncake_table_id).await?;
-        let moonlink_row_pbs = otel_to_moonlink_pb::export_metrics_to_moonlink_rows(&request);
-        for cur_row_pb in moonlink_row_pbs.into_iter() {
-            self.insert_row(&mooncake_table_id, cur_row_pb).await;
+        let table_to_map = get_metrics_map_from_request(&request);
+        for (mooncake_table_id, export_requests) in table_to_map.into_iter() {
+            self.create_table_for_once(&mooncake_table_id).await?;
+            for cur_request in export_requests.into_iter() {
+                let moonlink_row_pbs =
+                    otel_to_moonlink_pb::export_metrics_to_moonlink_rows(&cur_request);
+                for cur_row_pb in moonlink_row_pbs.into_iter() {
+                    self.insert_row(&mooncake_table_id, cur_row_pb).await;
+                }
+            }
         }
         Ok(ExportMetricsServiceResponse::default())
     }
