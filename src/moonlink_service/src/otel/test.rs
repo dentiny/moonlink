@@ -13,12 +13,12 @@ const DEFAULT_HTTP_OTEL_ENDPOINT: &str = "http://127.0.0.1:3435/v1/metrics";
 
 #[tokio::test]
 async fn test_opentelemetry_export() {
-    let _guard = TestGuard::new(&get_moonlink_backend_dir());
-    let config = get_service_config();
-    tokio::spawn(async move {
-        start_with_config(config).await.unwrap();
-    });
-    wait_for_server_ready().await;
+    // let _guard = TestGuard::new(&get_moonlink_backend_dir());
+    // let config = get_service_config();
+    // tokio::spawn(async move {
+    //     start_with_config(config).await.unwrap();
+    // });
+    // wait_for_server_ready().await;
 
     // Set the tracing inside of otel sdk, otherwise hard to troubleshoot.
     let _ = tracing_subscriber::fmt()

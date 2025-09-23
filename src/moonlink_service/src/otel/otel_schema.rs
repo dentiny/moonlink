@@ -1,3 +1,4 @@
+use crate::otel::metric_type::MetricsType;
 use arrow_schema::{DataType, Field, Fields, Schema};
 use std::{collections::HashMap, sync::Arc};
 
@@ -264,12 +265,17 @@ fn histogram_point_fields(ids: &mut i32) -> Vec<Field> {
 
 /// Unified Arrow schema for Gauge / Sum / Histogram rows (one row per datapoint).
 #[allow(unused)]
-pub(crate) fn otlp_metrics_gsh_schema() -> Schema {
+pub(crate) fn otlp_metrics_gsh_schema(metric_type: &MetricsType) -> Schema {
     let mut ids = 0;
     let mut fields = Vec::new();
     fields.extend(common_metric_fields(&mut ids));
-    fields.extend(number_point_fields(&mut ids));
-    fields.extend(histogram_point_fields(&mut ids));
+
+    if *metric_type == MetricsType::Gauge || *metric_type == MetricsType::Sum {
+        fields.extend(number_point_fields(&mut ids));
+    } else {
+        fields.extend(histogram_point_fields(&mut ids));
+    }
+
     Schema::new(fields)
 }
 
@@ -292,7 +298,10 @@ mod tests {
     use tempfile::{tempdir, TempDir};
 
     /// Util function to create a mooncake table with otel schema.
-    async fn create_mooncake_otel_table(table_temp_dir: &TempDir) -> MooncakeTable {
+    async fn create_mooncake_otel_table(
+        table_temp_dir: &TempDir,
+        metric_type: &MetricsType,
+    ) -> MooncakeTable {
         let table_path = table_temp_dir.path().to_str().unwrap().to_string();
         let iceberg_table_config = IcebergTableConfig::default();
         let table_config = MooncakeTableConfig::new(table_path.clone());
@@ -318,7 +327,7 @@ mod tests {
         let table_filesystem_accessor = Arc::new(FileSystemAccessor::new(accessor_config));
 
         let table = MooncakeTable::new(
-            otlp_metrics_gsh_schema(),
+            otlp_metrics_gsh_schema(metric_type),
             /*name=*/ "table".to_string(),
             /*table_id=*/ 0,
             /*base_path=*/ std::path::PathBuf::from(table_path.clone()),
@@ -336,7 +345,7 @@ mod tests {
     #[tokio::test]
     async fn test_gauge_table_creation_ingestion() {
         let table_temp_dir = tempdir().unwrap();
-        let mut table = create_mooncake_otel_table(&table_temp_dir).await;
+        let mut table = create_mooncake_otel_table(&table_temp_dir, &MetricsType::Gauge).await;
 
         let dp = NumberDataPoint {
             attributes: vec![kv_str("dp_k", "dp_v")],
@@ -382,7 +391,7 @@ mod tests {
     #[tokio::test]
     async fn test_sum_table_creation_ingestion() {
         let table_temp_dir = tempdir().unwrap();
-        let mut table = create_mooncake_otel_table(&table_temp_dir).await;
+        let mut table = create_mooncake_otel_table(&table_temp_dir, &MetricsType::Sum).await;
 
         let arr_any = any_array(vec![
             AnyValue {
@@ -444,7 +453,7 @@ mod tests {
     #[tokio::test]
     async fn test_histogram_table_creation_ingestion() {
         let table_temp_dir = tempdir().unwrap();
-        let mut table = create_mooncake_otel_table(&table_temp_dir).await;
+        let mut table = create_mooncake_otel_table(&table_temp_dir, &MetricsType::Histogram).await;
 
         let dp1 = HistogramDataPoint {
             attributes: vec![kv_str("h", "a")],

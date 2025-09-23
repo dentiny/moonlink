@@ -1,3 +1,4 @@
+pub(crate) mod metric_type;
 mod metrics_handler;
 pub(crate) mod otel_schema;
 pub(crate) mod otel_state;
