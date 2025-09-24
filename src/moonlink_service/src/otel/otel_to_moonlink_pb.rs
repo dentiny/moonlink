@@ -544,7 +544,7 @@ mod tests {
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 1);
         let r = &rows[0].values;
-        assert_eq!(r.len(), 21, "number row should have 21 columns (0..=20)");
+        assert_eq!(r.len(), 22, "number row should have 22 columns");
 
         // Indices per new layout:
         // 0 kind, 1 res_attrs, 2 entity_refs, 3 res_drop, 4 res_schema_url,
@@ -655,7 +655,7 @@ mod tests {
         let rows = export_metrics_to_moonlink_rows(&req);
         assert_eq!(rows.len(), 1);
         let r = &rows[0].values;
-        assert_eq!(r.len(), 21);
+        assert_eq!(r.len(), 22);
 
         assert_eq!(as_bytes(&r[0]).unwrap(), b"sum".to_vec());
         assert!(as_array(&r[1]).unwrap().values.is_empty()); // resource attrs
