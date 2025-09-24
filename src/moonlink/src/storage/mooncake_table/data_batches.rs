@@ -183,9 +183,7 @@ impl ColumnStoreBuffer {
                     builder,
                     ColumnArrayBuilder::new(field.data_type(), self.max_rows_per_buffer),
                 );
-                let arr = finished.finish(field.data_type());
-                println!("field={} len={}", field.name(), arr.len());
-                Arc::new(arr) as ArrayRef
+                Arc::new(finished.finish(field.data_type())) as ArrayRef
             })
             .collect();
 

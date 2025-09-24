@@ -17,7 +17,7 @@ pub struct TableHandlerTimer {
 pub fn create_table_handler_timers() -> TableHandlerTimer {
     TableHandlerTimer {
         mooncake_snapshot_timer: Box::new(TokioTicker::new(Duration::from_millis(500))),
-        force_snapshot_timer: Box::new(TokioTicker::new(Duration::from_secs(15))),
+        force_snapshot_timer: Box::new(TokioTicker::new(Duration::from_secs(300))),
         wal_snapshot_timer: Box::new(TokioTicker::new(Duration::from_millis(500))),
     }
 }

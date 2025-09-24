@@ -243,8 +243,6 @@ impl MetricsHandler {
     ///
     /// For any errors encountered during ingestion, simply log and proceed.
     async fn insert_row(&self, mooncake_table_id: &str, row_pb: moonlink_pb::MoonlinkRow) {
-        println!("insert row into table {mooncake_table_id}");
-
         let mut buf = Vec::new();
         // Serialization doesn't expect failure.
         prost::Message::encode(&row_pb, &mut buf).unwrap();
@@ -274,8 +272,6 @@ impl MetricsHandler {
         &self,
         request: ExportMetricsServiceRequest,
     ) -> Result<ExportMetricsServiceResponse> {
-        println!("taking request = {request:?}");
-
         let wrapped_export_requests = get_export_requests(&request);
         for cur_wrapped_export_request in wrapped_export_requests.into_iter() {
             self.create_table_for_once(
