@@ -106,8 +106,7 @@ pub(crate) fn initialize_opentelemetry_meter_provider(target: String) -> Result<
         }
         bad_option => Err(Error::OtelInvalidOption(ErrorStruct::new(
             format!(
-                "Invalid otel target option {:?}, should be one of 'stdout' or 'otel'",
-                bad_option
+                "Invalid otel target option {bad_option:?}, should be one of 'stdout' or 'otel'"
             ),
             ErrorStatus::Permanent,
         ))),
