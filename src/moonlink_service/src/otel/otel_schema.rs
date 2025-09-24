@@ -270,9 +270,8 @@ pub(crate) fn otlp_metrics_gsh_schema(metric_type: &MetricsType) -> Schema {
     let mut fields = Vec::new();
     fields.extend(common_metric_fields(&mut ids));
 
-    if *metric_type == MetricsType::Gauge || *metric_type == MetricsType::Sum {
-        fields.extend(number_point_fields(&mut ids));
-    } else {
+    fields.extend(number_point_fields(&mut ids));
+    if *metric_type == MetricsType::Histogram {
         fields.extend(histogram_point_fields(&mut ids));
     }
 
