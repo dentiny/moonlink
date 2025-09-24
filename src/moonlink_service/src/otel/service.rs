@@ -17,7 +17,7 @@ use tokio::sync::oneshot;
 use tower::timeout::TimeoutLayer;
 use tower::{BoxError, ServiceBuilder};
 use tower_http::cors::{Any, CorsLayer};
-use tracing::error;
+use tracing::{error, info};
 
 /// Default timeout for otel API calls.
 const DEFAULT_REST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
@@ -59,6 +59,7 @@ pub async fn start_otel_service(
     let otel_state = OtelState::new(rest_port, moonlink_backend).await?;
     let app = create_otel_router(otel_state);
     let otel_addr = format!("0.0.0.0:{otel_port}");
+    info!("Starting otel API server on {}", otel_addr);
 
     let listener = tokio::net::TcpListener::bind(&otel_addr).await?;
     axum::serve(listener, app)

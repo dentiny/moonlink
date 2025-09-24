@@ -3,13 +3,13 @@ use std::collections::HashMap;
 use opentelemetry_proto::tonic::collector::metrics::v1::ExportMetricsServiceRequest;
 use opentelemetry_proto::tonic::common::v1::{any_value, AnyValue, EntityRef, KeyValue};
 use opentelemetry_proto::tonic::metrics::v1::{
-    number_data_point, Gauge, Histogram, HistogramDataPoint, Metric, NumberDataPoint, Sum,
+    exemplar, number_data_point, Exemplar, Gauge, Histogram, HistogramDataPoint, Metric,
+    NumberDataPoint, Sum,
 };
 
 use moonlink_pb::{Array, RowValue};
 use moonlink_proto::moonlink as moonlink_pb;
 
-#[allow(unused)]
 pub fn export_metrics_to_moonlink_rows(
     req: &ExportMetricsServiceRequest,
 ) -> Vec<moonlink_pb::MoonlinkRow> {
@@ -225,6 +225,48 @@ fn number_pair(dp: &NumberDataPoint) -> (RowValue, RowValue) {
     }
 }
 
+// Convert exemplars to moonlink value.
+fn exemplars_to_rowvalue_array(exemplars: &[Exemplar]) -> RowValue {
+    let mut out = Vec::with_capacity(exemplars.len());
+    for e in exemplars {
+        let mut fields = Vec::with_capacity(6);
+        fields.push(RowValue::int64(e.time_unix_nano as i64));
+
+        match e.value.as_ref() {
+            Some(exemplar::Value::AsInt(v)) => {
+                fields.push(RowValue::int64(*v));
+                fields.push(RowValue::null());
+            }
+            Some(exemplar::Value::AsDouble(v)) => {
+                fields.push(RowValue::null());
+                fields.push(RowValue::float64(*v));
+            }
+            _ => {
+                fields.push(RowValue::null());
+                fields.push(RowValue::null());
+            }
+        }
+
+        // Append trace_id / span_id.
+        fields.push(if e.trace_id.is_empty() {
+            RowValue::null()
+        } else {
+            RowValue::bytes(e.trace_id.clone())
+        });
+        fields.push(if e.span_id.is_empty() {
+            RowValue::null()
+        } else {
+            RowValue::bytes(e.span_id.clone())
+        });
+
+        // Append filtered attributes.
+        fields.push(kvs_to_rowvalue_array_anyvalue(&e.filtered_attributes));
+
+        out.push(make_struct(fields));
+    }
+    RowValue::array(Array { values: out })
+}
+
 /// Build a [`MoonlinkRow`] representing a single numeric metric data point (Gauge or Sum) from an OpenTelemetry [`NumberDataPoint`].
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::vec_init_then_push)]
@@ -288,6 +330,8 @@ fn number_point_row(
     values.push(RowValue::int32(temporality));
     // 20 is_monotonic
     values.push(RowValue::bool(is_monotonic));
+    // 21 exemplars
+    values.push(exemplars_to_rowvalue_array(&dp.exemplars));
 
     moonlink_pb::MoonlinkRow { values }
 }
@@ -507,7 +551,7 @@ mod tests {
         // 5 scope_name, 6 scope_version, 7 scope_attrs, 8 scope_drop, 9 scope_schema_url,
         // 10 metric_name, 11 metric_desc, 12 metric_unit,
         // 13 start, 14 time, 15 point_attrs, 16 point_drop,
-        // 17 number_int, 18 number_double, 19 temporality, 20 is_monotonic
+        // 17 number_int, 18 number_double, 19 temporality, 20 is_monotonic, 21 exemplars
         assert_eq!(as_bytes(&r[0]).unwrap(), b"gauge".to_vec());
 
         // resource attrs -> Array<Struct{key, any_struct}>
