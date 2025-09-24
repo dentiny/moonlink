@@ -92,6 +92,18 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
                 .unwrap();
             RowValue::Int64(a.value(row_idx))
         }
+        arrow_schema::DataType::Decimal128(_, _) => {
+            let a = arr
+                .as_any()
+                .downcast_ref::<arrow_array::Decimal128Array>()
+                .unwrap();
+            if a.is_null(row_idx) {
+                RowValue::Null
+            } else {
+                let v = a.value(row_idx);
+                RowValue::Decimal(v)
+            }
+        }
         _ => {
             panic!("Unimplemented type {:?}", arr.data_type());
         }
@@ -102,8 +114,8 @@ fn arrow_value_to_rowvalue(arr: &dyn Array, row_idx: usize) -> RowValue {
 mod tests {
     use super::*;
     use arrow::array::{
-        BinaryBuilder, BooleanBuilder, Date32Builder, FixedSizeBinaryBuilder, Float32Builder,
-        Float64Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
+        BinaryBuilder, BooleanBuilder, Date32Builder, Decimal128Builder, FixedSizeBinaryBuilder,
+        Float32Builder, Float64Builder, Int16Builder, Int32Builder, Int64Builder, StringBuilder,
         Time64MicrosecondBuilder, TimestampMicrosecondBuilder,
     };
     use arrow_array::ArrayRef;
@@ -160,6 +172,10 @@ mod tests {
         t64_us.append_value(1_234_567_i64);
         t64_us.append_null();
 
+        let mut dec128_b = Decimal128Builder::new();
+        dec128_b.append_value(12345);
+        dec128_b.append_null();
+
         let arrays: Vec<ArrayRef> = vec![
             Arc::new(i16_b.finish()),
             Arc::new(i32_b.finish()),
@@ -173,6 +189,7 @@ mod tests {
             Arc::new(fxb_b.finish()),
             Arc::new(ts_b.finish()),
             Arc::new(t64_us.finish()),
+            Arc::new(dec128_b.finish()),
         ];
 
         let schema = Schema::new(vec![
@@ -196,6 +213,7 @@ mod tests {
                 DataType::Time64(arrow::datatypes::TimeUnit::Microsecond),
                 true,
             ),
+            Field::new("dec128", DataType::Decimal128(38, 10), true),
         ]);
 
         let batch = RecordBatch::try_new(Arc::new(schema), arrays).unwrap();
@@ -218,6 +236,7 @@ mod tests {
                 RowValue::FixedLenByteArray([0xABu8; 16]),
                 RowValue::Int64(1_234_567_i64),
                 RowValue::Int64(1_234_567),
+                RowValue::Decimal(12345),
             ]
         );
 
