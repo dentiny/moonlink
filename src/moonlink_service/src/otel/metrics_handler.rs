@@ -83,11 +83,7 @@ fn handle_data_points<T>(
                 if let Some(value) = &attr.value {
                     if let Some(mooncake_table_id) = anyvalue_as_str(value) {
                         let target_mooncake_table_id = format!(
-                            "{}.{}.{}.{}",
-                            service_name,
-                            mooncake_table_id,
-                            metric_type.to_string(),
-                            metric_name
+                            "{service_name}.{mooncake_table_id}.{metric_type}.{metric_name}"
                         );
                         wrapped_export_requests.push(WrappedExportRequest {
                             target_mooncake_table_id,
@@ -247,7 +243,7 @@ impl MetricsHandler {
     ///
     /// For any errors encountered during ingestion, simply log and proceed.
     async fn insert_row(&self, mooncake_table_id: &str, row_pb: moonlink_pb::MoonlinkRow) {
-        println!("insert row into table {}", mooncake_table_id);
+        println!("insert row into table {mooncake_table_id}");
 
         let mut buf = Vec::new();
         // Serialization doesn't expect failure.
@@ -278,7 +274,7 @@ impl MetricsHandler {
         &self,
         request: ExportMetricsServiceRequest,
     ) -> Result<ExportMetricsServiceResponse> {
-        println!("taking request = {:?}", request);
+        println!("taking request = {request:?}");
 
         let wrapped_export_requests = get_export_requests(&request);
         for cur_wrapped_export_request in wrapped_export_requests.into_iter() {

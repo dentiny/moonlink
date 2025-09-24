@@ -11,6 +11,6 @@ impl std::fmt::Display for MetricsType {
             MetricsType::Gauge => "gauge",
             MetricsType::Sum => "sum",
         };
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }
