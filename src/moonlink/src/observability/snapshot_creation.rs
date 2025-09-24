@@ -7,7 +7,7 @@ pub(crate) struct SnapshotCreationStats {
 }
 
 impl SnapshotCreationStats {
-    pub fn new() -> Arc<Self> {
+    pub(crate) fn new() -> Arc<Self> {
         let meter = global::meter("snapshot_creation");
         Arc::new(SnapshotCreationStats {
             latency_hist: meter
@@ -18,7 +18,7 @@ impl SnapshotCreationStats {
         })
     }
 
-    pub fn update(&self, t: u64, mooncake_table_id: String) {
+    pub(crate) fn update(&self, t: u64, mooncake_table_id: String) {
         self.latency_hist.record(
             t,
             &[KeyValue::new(

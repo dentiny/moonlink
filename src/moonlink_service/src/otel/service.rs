@@ -80,10 +80,9 @@ pub async fn start_otel_service(
     Ok(())
 }
 
-/// Initialize exporter and reader for meter provider
-/// If this function is called after creating a meter with global::meter(), the previously created meter will still be bound to the old exporter.
-pub(crate) fn initialize_opentelemetry_meter_provider(endpoint: String) -> Result<()> {
-    let meter_provider = match endpoint.as_str() {
+/// Initialize exporter and reader for global meter provider, if called repeated, old provider will be overwritten.
+pub(crate) fn initialize_opentelemetry_meter_provider(target: String) -> Result<()> {
+    let meter_provider = match target.as_str() {
         "otel" => {
             let otel_exporter = opentelemetry_otlp::MetricExporter::builder()
                 .with_http()
@@ -105,8 +104,11 @@ pub(crate) fn initialize_opentelemetry_meter_provider(endpoint: String) -> Resul
 
             Ok(SdkMeterProvider::builder().with_reader(reader).build())
         }
-        _ => Err(Error::OtelInvalidOption(ErrorStruct::new(
-            "Invalid otel_endpoint option.".to_string(),
+        bad_option => Err(Error::OtelInvalidOption(ErrorStruct::new(
+            format!(
+                "Invalid otel target option {:?}, should be one of 'stdout' or 'otel'",
+                bad_option
+            ),
             ErrorStatus::Permanent,
         ))),
     }?;

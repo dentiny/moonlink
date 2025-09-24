@@ -47,7 +47,7 @@ struct Cli {
 
     /// Otel collector endpoint: "stdout", "otel", or None (default).
     #[arg(long)]
-    otel_export_endpoint: Option<String>,
+    otel_export_target: Option<String>,
 }
 
 #[tokio::main]
@@ -75,7 +75,7 @@ pub async fn main() -> Result<()> {
             Some(cli.otel_ingestion_port.unwrap_or(DEFAULT_OTEL_PORT))
         },
         log_directory: None,
-        otel_export_endpoint: cli.otel_export_endpoint,
+        otel_export_target: cli.otel_export_target,
     };
 
     start_with_config(config).await

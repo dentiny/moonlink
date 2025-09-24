@@ -42,8 +42,8 @@ pub struct ServiceConfig {
     pub tcp_port: Option<u16>,
     /// Log persistence directory.
     pub log_directory: Option<String>,
-    /// Otel export endpoint: "stdout", "otel", or None (default).
-    pub otel_export_endpoint: Option<String>,
+    /// Otel export target: "stdout", "otel", or None (default).
+    pub otel_export_target: Option<String>,
 }
 
 impl ServiceConfig {
@@ -84,8 +84,8 @@ pub async fn start_with_config(config: ServiceConfig) -> Result<()> {
     // Set logging config before service start.
     let _guard = logging::init_logging(config.log_directory.clone());
     // Set global meter provider config before service start.
-    if let Some(endpoint) = config.otel_export_endpoint.clone() {
-        initialize_opentelemetry_meter_provider(endpoint)?;
+    if let Some(target) = config.otel_export_target.clone() {
+        initialize_opentelemetry_meter_provider(target)?;
     }
 
     // Register HTTP endpoint for readiness probe.
