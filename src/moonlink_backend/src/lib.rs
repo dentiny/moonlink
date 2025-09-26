@@ -112,10 +112,10 @@ impl MoonlinkBackend {
         file_utils::recreate_directory(temp_files_dir.to_str().unwrap()).unwrap();
         file_utils::recreate_directory(read_cache_files_dir.to_str().unwrap()).unwrap();
 
-        let mut replication_manager = ReplicationManager::new(
-            base_path_str.to_string(),
-            file_utils::create_default_object_storage_cache(read_cache_files_dir),
-        );
+        let object_storage_cache =
+            file_utils::create_default_object_storage_cache(read_cache_files_dir)?;
+        let mut replication_manager =
+            ReplicationManager::new(base_path_str.to_string(), object_storage_cache);
 
         let backend_attributes = BackendAttributes {
             temp_files_dir: temp_files_dir.to_str().unwrap().to_string(),

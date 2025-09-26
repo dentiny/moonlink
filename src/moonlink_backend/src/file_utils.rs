@@ -1,7 +1,6 @@
-use crate::error::Result;
+use crate::error::{Error, Result};
 use moonlink::{ObjectStorageCache, ObjectStorageCacheConfig};
 
-use more_asserts as ma;
 use std::io::ErrorKind;
 
 /// Default local filesystem directory under the above base directory (which defaults to `PGDATA/pg_mooncake`) where all temporary files (used for union read) will be stored under.
@@ -41,17 +40,22 @@ fn get_cache_filesystem_size(path: &str) -> u64 {
 /// Precondition: cache directory has been created beforehand.
 pub(super) fn create_default_object_storage_cache(
     cache_directory_pathbuf: std::path::PathBuf,
-) -> ObjectStorageCache {
+) -> Result<ObjectStorageCache> {
     let cache_directory = cache_directory_pathbuf.to_str().unwrap().to_string();
     let filesystem_size = get_cache_filesystem_size(&cache_directory);
-    ma::assert_ge!(filesystem_size, MIN_DISK_SPACE_FOR_CACHE);
+    if filesystem_size < MIN_DISK_SPACE_FOR_CACHE {
+        return Err(Error::insufficient_disk_space(
+            /*requires=*/ MIN_DISK_SPACE_FOR_CACHE,
+            /*actual=*/ filesystem_size,
+        ));
+    }
 
     let cache_config = ObjectStorageCacheConfig {
         max_bytes: filesystem_size - MIN_DISK_SPACE_FOR_CACHE,
         cache_directory,
         optimize_local_filesystem: true,
     };
-    ObjectStorageCache::new(cache_config)
+    Ok(ObjectStorageCache::new(cache_config))
 }
 
 /// Util function to delete and re-create the given directory.

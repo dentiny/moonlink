@@ -49,6 +49,9 @@ pub enum Error {
 
     #[error("{0}")]
     InvalidConfig(ErrorStruct),
+
+    #[error("{0}")]
+    InsufficientDiskSpace(ErrorStruct),
 }
 
 pub type Result<T> = result::Result<T, Error>;
@@ -70,6 +73,14 @@ impl Error {
     pub fn io(message: String) -> Self {
         Self::Io(ErrorStruct::new(message, ErrorStatus::Permanent))
     }
+    #[track_caller]
+    pub fn insufficient_disk_space(required: u64, actual: u64) -> Self {
+        let message = format!(
+            "Moonlink backend requires min disk space {} bytes, but actually only has {} bytes.",
+            required, actual
+        );
+        Self::InsufficientDiskSpace(ErrorStruct::new(message, ErrorStatus::Permanent))
+    }
 
     pub fn get_status(&self) -> ErrorStatus {
         match self {
@@ -85,6 +96,7 @@ impl Error {
             Error::MpscChannelSendError(es) => es.status,
             Error::DataCorruptionError(es) => es.status,
             Error::InvalidConfig(es) => es.status,
+            Error::InsufficientDiskSpace(es) => es.status,
         }
     }
 }
