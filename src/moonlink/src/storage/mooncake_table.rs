@@ -1377,7 +1377,7 @@ impl MooncakeTable {
         self.background_task_status_for_validation
             .index_merge_ongoing = true;
 
-        // Record index merge event initiation.
+        // Record mooncake snapshot initiation.
         let table_event_id = file_indice_merge_payload.uuid;
         if let Some(event_replay_tx) = &self.event_replay_tx {
             let table_event = replay_events::create_index_merge_event_initiation(
