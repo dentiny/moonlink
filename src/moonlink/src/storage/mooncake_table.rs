@@ -1537,22 +1537,8 @@ impl MooncakeTable {
         snapshot_payload: IcebergSnapshotPayload,
         table_notify: Sender<TableEvent>,
         table_auto_incr_ids: std::ops::Range<u32>,
-        event_replay_tx: Option<mpsc::UnboundedSender<MooncakeTableEvent>>,
         table_event_id: uuid::Uuid,
     ) {
-        // Record index merge event initiation.
-        if let Some(event_replay_tx) = &event_replay_tx {
-            let table_event = replay_events::create_iceberg_snapshot_event_initiation(
-                table_event_id,
-                &snapshot_payload,
-            );
-            event_replay_tx
-                .send(MooncakeTableEvent::IcebergSnapshotInitiation(Box::new(
-                    table_event,
-                )))
-                .unwrap();
-        }
-
         // Perform iceberg snapshot operation.
         let flush_lsn = snapshot_payload.flush_lsn;
         let new_table_schema = snapshot_payload.new_table_schema.clone();
@@ -1694,13 +1680,26 @@ impl MooncakeTable {
         let table_auto_incr_ids = self.next_file_id..(self.next_file_id + new_file_ids_to_create);
         self.next_file_id += new_file_ids_to_create;
         let table_event_id = snapshot_payload.uuid;
+
+        // Record index merge event initiation.
+        if let Some(event_replay_tx) = &self.event_replay_tx {
+            let table_event = replay_events::create_iceberg_snapshot_event_initiation(
+                table_event_id,
+                &snapshot_payload,
+            );
+            event_replay_tx
+                .send(MooncakeTableEvent::IcebergSnapshotInitiation(Box::new(
+                    table_event,
+                )))
+                .unwrap();
+        }
+
         tokio::task::spawn(
             Self::persist_iceberg_snapshot_impl(
                 iceberg_table_manager,
                 snapshot_payload,
                 self.table_notify.as_ref().unwrap().clone(),
                 table_auto_incr_ids,
-                self.event_replay_tx.clone(),
                 table_event_id,
             )
             .instrument(info_span!("persist_iceberg_snapshot")),

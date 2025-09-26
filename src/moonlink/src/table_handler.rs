@@ -126,7 +126,7 @@ impl TableHandler {
         event_sync_sender: EventSyncSender,
         mut event_receiver: Receiver<TableEvent>,
         replication_lsn_rx: watch::Receiver<u64>,
-        event_replay_tx: Option<mpsc::UnboundedSender<TableEvent>>,
+        handler_event_replay_tx: Option<mpsc::UnboundedSender<TableEvent>>,
         mut table: MooncakeTable,
     ) {
         let iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
@@ -213,7 +213,7 @@ impl TableHandler {
             // Process events until the receiver is closed or a Shutdown event is received
             for event in buf.drain(..) {
                 // Record event if requested.
-                if let Some(replay_tx) = &event_replay_tx {
+                if let Some(replay_tx) = &handler_event_replay_tx {
                     replay_tx.send(event.clone()).unwrap();
                 }
                 match event {
