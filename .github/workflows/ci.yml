@@ -71,7 +71,7 @@ jobs:
             name: GCS feature test
             timeout-minutes: 10
             cmd: |
-              cargo test --lib --features=storage-gcs
+              RUST_BACKTRACE=1 cargo test --lib --features=storage-gcs
           - type: chaos
             name: GCS chaos test
             timeout-minutes: 10
@@ -140,12 +140,12 @@ jobs:
             name: S3 feature test
             timeout-minutes: 10
             cmd: |
-              cargo test --lib --features=storage-s3
+              RUST_BACKTRACE=1 cargo test --lib --features=storage-s3
           - type: chaos
             name: S3 chaos test
             timeout-minutes: 10
             cmd: |
-              cargo test storage::filesystem::accessor -p moonlink --features=chaos-test
+              RUST_BACKTRACE=1 cargo test storage::filesystem::accessor -p moonlink --features=chaos-test
               RUST_BACKTRACE=1 cargo test test_s3_chaos --features=chaos-test,storage-s3 -p moonlink -- --nocapture
     steps:
       - uses: actions/checkout@v5
@@ -219,7 +219,7 @@ jobs:
             name: glue catalog feature test
             timeout-minutes: 10
             cmd: |
-              cargo test -p moonlink --features=catalog-glue,storage-s3
+              RUST_BACKTRACE=1 cargo test -p moonlink --features=catalog-glue,storage-s3
     steps:
       - uses: actions/checkout@v5
 
@@ -303,7 +303,7 @@ jobs:
             name: rest catalog feature test
             timeout-minutes: 10
             cmd: |
-              cargo test --lib --features=catalog-rest
+              RUST_BACKTRACE=1 cargo test --lib --features=catalog-rest
     steps:
       - uses: actions/checkout@v5
 
@@ -721,16 +721,16 @@ jobs:
           MOONLINK_BACKEND_DIR: ${{ github.workspace }}/.shared-nginx
           NGINX_ADDR: http://nginx.local:80
         run: |
-          cargo test --package moonlink_connectors --lib --features connector-pg
-          cargo test --package moonlink_metadata_store --tests --features "metadata-all test-utils storage-s3 storage-gcs"
-          cargo test --package moonlink_service test_create_table_from_postgres_endpoint --features=standalone-test,postgres-integration -- --nocapture
+          RUST_BACKTRACE=1 cargo test --package moonlink_connectors --lib --features connector-pg
+          RUST_BACKTRACE=1 cargo test --package moonlink_metadata_store --tests --features "metadata-all test-utils storage-s3 storage-gcs"
+          RUST_BACKTRACE=1 cargo test --package moonlink_service test_create_table_from_postgres_endpoint --features=standalone-test,postgres-integration -- --nocapture
 
       - name: Run Backend integration tests
         timeout-minutes: 10
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
         run: |
-          cargo test --package moonlink_backend --test '*'
+          RUST_BACKTRACE=1 cargo test --package moonlink_backend --test '*'
 
   # ───────────── 16 · Moonlink Service Integration Tests ─────────────
   moonlink_service_tests:
