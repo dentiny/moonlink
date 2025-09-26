@@ -27,7 +27,8 @@ use super::iceberg::puffin_utils::PuffinBlobRef;
 use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
 use crate::error::Result;
-use crate::observability::SnapshotCreationStats;
+use crate::observability::latency_exporter::BaseLatencyExporter;
+use crate::observability::snapshot_creation::SnapshotCreationStats;
 use crate::row::{IdentityProp, MoonlinkRow};
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::compactor::{CompactionBuilder, CompactionFileParams};
@@ -71,7 +72,6 @@ pub(crate) use snapshot::SnapshotTableState;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Instant;
 use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
 #[cfg(test)]
 use tokio::sync::mpsc::Receiver;
@@ -572,6 +572,7 @@ impl MooncakeTable {
 
         let non_streaming_batch_id_counter = Arc::new(BatchIdCounter::new(false));
         let streaming_batch_id_counter = Arc::new(BatchIdCounter::new(true));
+        let mooncake_table_id = table_metadata.mooncake_table_id.clone();
 
         Ok(Self {
             mem_slice: MemSlice::new(
@@ -608,7 +609,7 @@ impl MooncakeTable {
             ongoing_flush_lsns: BTreeMap::new(),
             completed_unrecorded_flush_lsns: BTreeSet::new(),
             event_replay_tx: None,
-            snapshot_stats: SnapshotCreationStats::new(),
+            snapshot_stats: Arc::new(SnapshotCreationStats::new(mooncake_table_id)),
         })
     }
 
@@ -1082,15 +1083,12 @@ impl MooncakeTable {
 
         let table_notify = self.table_notify.as_ref().unwrap().clone();
         let snapshot_stats = self.snapshot_stats.clone();
-        let mooncake_table_id = self.metadata.mooncake_table_id.clone();
         // Create a detached task, whose completion will be notified separately.
         tokio::task::spawn(async move {
-            let start = Instant::now();
+            let _latency_guard = snapshot_stats.start();
             Self::create_snapshot_async(cur_snapshot, next_snapshot_task, opt, table_notify)
                 .instrument(info_span!("create_snapshot_async"))
                 .await;
-            let time = start.elapsed().as_millis() as u64;
-            snapshot_stats.update(time, mooncake_table_id);
         });
     }
 
