@@ -76,8 +76,7 @@ impl Error {
     #[track_caller]
     pub fn insufficient_disk_space(required: u64, actual: u64) -> Self {
         let message = format!(
-            "Moonlink backend requires min disk space {} bytes, but actually only has {} bytes.",
-            required, actual
+            "Moonlink backend requires min disk space {required} bytes, but actually only has {actual} bytes."
         );
         Self::InsufficientDiskSpace(ErrorStruct::new(message, ErrorStatus::Permanent))
     }
