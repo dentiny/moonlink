@@ -1,3 +1,4 @@
+#![cfg_attr(feature = "otel-integration", allow(dead_code))]
 use crate::rest_api::{FileUploadResponse, IngestResponse, ListTablesResponse};
 use crate::{ServiceConfig, READINESS_PROBE_PORT};
 use arrow::datatypes::Schema as ArrowSchema;
