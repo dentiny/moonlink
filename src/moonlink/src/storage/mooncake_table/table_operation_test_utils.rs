@@ -8,7 +8,7 @@ use crate::storage::io_utils;
 use crate::storage::mooncake_table::disk_slice::DiskSliceWriter;
 use crate::storage::mooncake_table::{
     AlterTableRequest, DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload,
-    FileIndiceMergeResult, IcebergSnapshotResult, PersistenceSnapshotPayload,
+    FileIndiceMergeResult, PersistenceSnapshotPayload, PersistenceSnapshotResult,
     TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::snapshot_options::SnapshotOption;
@@ -314,9 +314,9 @@ pub(crate) async fn sync_mooncake_snapshot(
 }
 pub(crate) async fn sync_iceberg_snapshot(
     receiver: &mut Receiver<TableEvent>,
-) -> IcebergSnapshotResult {
+) -> PersistenceSnapshotResult {
     let notification = receiver.recv().await.unwrap();
-    if let TableEvent::IcebergSnapshotResult {
+    if let TableEvent::PersistenceSnapshotResult {
         iceberg_snapshot_result,
     } = notification
     {
@@ -470,11 +470,11 @@ pub(crate) async fn create_iceberg_snapshot(
     table: &mut MooncakeTable,
     persistence_snapshot_payload: Option<PersistenceSnapshotPayload>,
     notify_rx: &mut Receiver<TableEvent>,
-) -> Result<IcebergSnapshotResult> {
+) -> Result<PersistenceSnapshotResult> {
     table.persist_iceberg_snapshot(persistence_snapshot_payload.unwrap());
     let notification = notify_rx.recv().await.unwrap();
     match notification {
-        TableEvent::IcebergSnapshotResult {
+        TableEvent::PersistenceSnapshotResult {
             iceberg_snapshot_result,
         } => iceberg_snapshot_result,
         _ => {

@@ -608,7 +608,7 @@ impl TableHandler {
                             }
                         }
                     }
-                    TableEvent::IcebergSnapshotResult {
+                    TableEvent::PersistenceSnapshotResult {
                         iceberg_snapshot_result,
                     } => {
                         table_handler_state.persistence_snapshot_ongoing = false;

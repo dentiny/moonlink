@@ -1,5 +1,5 @@
 use crate::storage::index::FileIndex;
-use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionResult;
+use crate::storage::mooncake_table::table_snapshot::PersistenceSnapshotDataCompactionResult;
 use crate::storage::mooncake_table::table_snapshot::{
     PersistenceSnapshotImportResult, PersistenceSnapshotIndexMergeResult,
 };
@@ -18,7 +18,7 @@ pub(crate) struct PersistedRecords {
     /// Index merge persistence result.
     pub(crate) index_merge_result: PersistenceSnapshotIndexMergeResult,
     /// Data compaction persistence result.
-    pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
+    pub(crate) data_compaction_result: PersistenceSnapshotDataCompactionResult,
 }
 
 impl PersistedRecords {

@@ -5,8 +5,8 @@ use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::FileIndiceMergePayload;
 use crate::storage::mooncake_table::FileIndiceMergeResult;
-use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::PersistenceSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotResult;
 use crate::storage::wal::WalPersistenceUpdateResult;
 use crate::Result;
 use crate::StorageConfig;
@@ -188,9 +188,9 @@ pub enum TableEvent {
         persistence_snapshot_payload: PersistenceSnapshotPayload,
     },
     /// Iceberg snapshot completes.
-    IcebergSnapshotResult {
+    PersistenceSnapshotResult {
         /// Result for iceberg snapshot.
-        iceberg_snapshot_result: Result<IcebergSnapshotResult>,
+        iceberg_snapshot_result: Result<PersistenceSnapshotResult>,
     },
     /// Index merge completes.
     IndexMergeResult {

@@ -10,7 +10,7 @@ use crate::storage::mooncake_table::DiskSliceWriter;
 use crate::storage::mooncake_table::MooncakeTable;
 use crate::storage::mooncake_table::TableMetadata;
 use crate::storage::mooncake_table::{
-    table_creation_test_utils::*, FileIndiceMergeResult, IcebergSnapshotResult,
+    table_creation_test_utils::*, FileIndiceMergeResult, PersistenceSnapshotResult,
 };
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::table_handler::chaos_table_metadata::ReplayTableMetadata;
@@ -44,7 +44,7 @@ struct CompletedMooncakeSnapshot {
 #[derive(Clone, Debug)]
 struct CompletedIcebergSnapshot {
     /// Result of iceberg snapshot.
-    iceberg_snapshot_result: IcebergSnapshotResult,
+    iceberg_snapshot_result: PersistenceSnapshotResult,
 }
 
 #[derive(Clone, Debug)]
@@ -351,7 +351,7 @@ pub(crate) async fn replay(replay_filepath: &str) {
                         .is_none());
                     event_notification.notify_waiters();
                 }
-                TableEvent::IcebergSnapshotResult {
+                TableEvent::PersistenceSnapshotResult {
                     iceberg_snapshot_result,
                 } => {
                     let iceberg_snapshot_result = iceberg_snapshot_result.unwrap();

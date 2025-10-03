@@ -30,8 +30,8 @@ use crate::storage::mooncake_table::test_utils_commons::ICEBERG_TEST_NAMESPACE;
 use crate::storage::mooncake_table::test_utils_commons::ICEBERG_TEST_TABLE;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::DataCompactionResult;
-use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::PersistenceSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotResult;
 use crate::storage::mooncake_table::{
     PersistenceSnapshotDataCompactionPayload, PersistenceSnapshotImportPayload,
     PersistenceSnapshotIndexMergePayload,
@@ -3442,7 +3442,7 @@ async fn test_persisted_deletion_record_remap() {
 
     // Block wait both operations to finish.
     let mut stored_data_compaction_result: Option<DataCompactionResult> = None;
-    let mut stored_iceberg_snapshot_result: Option<IcebergSnapshotResult> = None;
+    let mut stored_iceberg_snapshot_result: Option<PersistenceSnapshotResult> = None;
 
     for _ in 0..2 {
         let notification = notify_rx.recv().await.unwrap();
@@ -3452,7 +3452,7 @@ async fn test_persisted_deletion_record_remap() {
         {
             assert!(stored_data_compaction_result.is_none());
             stored_data_compaction_result = Some(data_compaction_result.unwrap());
-        } else if let TableEvent::IcebergSnapshotResult {
+        } else if let TableEvent::PersistenceSnapshotResult {
             iceberg_snapshot_result,
         } = notification
         {

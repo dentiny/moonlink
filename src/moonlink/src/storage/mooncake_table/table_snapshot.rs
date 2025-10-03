@@ -311,7 +311,7 @@ impl std::fmt::Debug for PersistenceSnapshotIndexMergeResult {
 
 /// Iceberg snapshot data file compaction result.
 #[derive(Clone, Default)]
-pub struct IcebergSnapshotDataCompactionResult {
+pub struct PersistenceSnapshotDataCompactionResult {
     /// New data files which are importedthe iceberg table.
     pub(crate) new_data_files_imported: Vec<MooncakeDataFileRef>,
     /// Old data files which are removed from the iceberg table.
@@ -324,7 +324,7 @@ pub struct IcebergSnapshotDataCompactionResult {
     pub(crate) data_file_records_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 
-impl IcebergSnapshotDataCompactionResult {
+impl PersistenceSnapshotDataCompactionResult {
     /// Return whether data compaction result is empty.
     pub fn is_empty(&self) -> bool {
         if self.old_data_files_removed.is_empty() {
@@ -340,9 +340,9 @@ impl IcebergSnapshotDataCompactionResult {
     }
 }
 
-impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
+impl std::fmt::Debug for PersistenceSnapshotDataCompactionResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotDataCompactionResult")
+        f.debug_struct("PersistenceSnapshotDataCompactionResult")
             .field(
                 "new data files imported count",
                 &self.new_data_files_imported.len(),
@@ -367,7 +367,7 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionResult {
     }
 }
 
-pub struct IcebergSnapshotResult {
+pub struct PersistenceSnapshotResult {
     /// Background event id.
     pub(crate) uuid: uuid::Uuid,
     /// Table manager is (1) not `Sync` safe; (2) only used at iceberg snapshot creation, so we `move` it around every snapshot.
@@ -383,14 +383,14 @@ pub struct IcebergSnapshotResult {
     /// Iceberg index merge result.
     pub(crate) index_merge_result: PersistenceSnapshotIndexMergeResult,
     /// Iceberg data file compaction result.
-    pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
+    pub(crate) data_compaction_result: PersistenceSnapshotDataCompactionResult,
     /// Evicted files to delete by object storage cache.
     pub(crate) evicted_files_to_delete: Vec<String>,
 }
 
-impl Clone for IcebergSnapshotResult {
+impl Clone for PersistenceSnapshotResult {
     fn clone(&self) -> Self {
-        IcebergSnapshotResult {
+        PersistenceSnapshotResult {
             uuid: self.uuid,
             table_manager: None,
             flush_lsn: self.flush_lsn,
@@ -404,7 +404,7 @@ impl Clone for IcebergSnapshotResult {
     }
 }
 
-impl IcebergSnapshotResult {
+impl PersistenceSnapshotResult {
     /// Return whether iceberg snapshot result contains table maintenance persistence result.
     pub fn contains_maintenance_result(&self) -> bool {
         if !self.index_merge_result.is_empty() {
@@ -417,9 +417,9 @@ impl IcebergSnapshotResult {
     }
 }
 
-impl std::fmt::Debug for IcebergSnapshotResult {
+impl std::fmt::Debug for PersistenceSnapshotResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotResult")
+        f.debug_struct("PersistenceSnapshotResult")
             .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .field(
