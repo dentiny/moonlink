@@ -33,8 +33,8 @@ use crate::storage::mooncake_table::DataCompactionResult;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
 use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::{
-    IcebergSnapshotDataCompactionPayload, IcebergSnapshotIndexMergePayload,
-    PersistenceSnapshotImportPayload,
+    PersistenceSnapshotDataCompactionPayload, PersistenceSnapshotImportPayload,
+    PersistenceSnapshotIndexMergePayload,
 };
 use crate::storage::mooncake_table_config::DiskSliceWriterConfig;
 use crate::storage::mooncake_table_config::IcebergPersistenceConfig;
@@ -380,11 +380,11 @@ async fn test_manifest_entries_write_with_pagination_impl(
             new_deletion_vector: HashMap::new(),
             file_indices: vec![],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
@@ -412,11 +412,11 @@ async fn test_manifest_entries_write_with_pagination_impl(
             new_deletion_vector: HashMap::new(),
             file_indices: vec![],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
             old_data_files_to_remove: vec![data_files_to_import[0].clone()],
             new_file_indices_to_import: vec![],
@@ -504,11 +504,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             new_deletion_vector: test_committed_deletion_log_1(data_file_1.clone()),
             file_indices: vec![file_index_1.clone()],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
@@ -558,11 +558,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             new_deletion_vector: test_committed_deletion_log_2(data_file_2.clone()),
             file_indices: vec![file_index_2.clone()],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
@@ -638,11 +638,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             new_deletion_vector: HashMap::new(),
             file_indices: vec![],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![merged_file_index.clone()],
             old_file_indices_to_remove: vec![file_index_1.clone(), file_index_2.clone()],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
             old_data_files_to_remove: vec![],
             new_file_indices_to_import: vec![],
@@ -723,11 +723,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             new_deletion_vector: HashMap::new(),
             file_indices: vec![],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![compacted_data_file.clone()],
             old_data_files_to_remove: vec![data_file_1.clone(), data_file_2.clone()],
             new_file_indices_to_import: vec![compacted_file_index.clone()],
@@ -797,11 +797,11 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
             new_deletion_vector: HashMap::new(),
             file_indices: vec![],
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload {
+        index_merge_payload: PersistenceSnapshotIndexMergePayload {
             new_file_indices_to_import: vec![],
             old_file_indices_to_remove: vec![],
         },
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload {
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: vec![],
             old_data_files_to_remove: vec![compacted_data_file.clone()],
             new_file_indices_to_import: vec![],
@@ -1089,8 +1089,8 @@ async fn test_recover_from_failed_snapshot_impl(iceberg_table_config: IcebergTab
             new_deletion_vector: HashMap::new(),
             file_indices: Vec::new(),
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),
+        index_merge_payload: PersistenceSnapshotIndexMergePayload::default(),
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload::default(),
     };
 
     let persistence_file_params = PersistenceFileParams {
@@ -2012,8 +2012,8 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
         new_table_schema: None,
         committed_deletion_logs: HashSet::new(),
         import_payload: PersistenceSnapshotImportPayload::default(),
-        index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),
+        index_merge_payload: PersistenceSnapshotIndexMergePayload::default(),
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload::default(),
     };
 
     let persistence_file_params = PersistenceFileParams {
@@ -2141,8 +2141,8 @@ async fn test_snapshot_creation_with_duplicate_filename_impl(
             new_deletion_vector: HashMap::new(),
             file_indices: Vec::new(),
         },
-        index_merge_payload: IcebergSnapshotIndexMergePayload::default(),
-        data_compaction_payload: IcebergSnapshotDataCompactionPayload::default(),
+        index_merge_payload: PersistenceSnapshotIndexMergePayload::default(),
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload::default(),
     };
 
     let persistence_file_params = PersistenceFileParams {

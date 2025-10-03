@@ -6,10 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::row::MoonlinkRow;
 use crate::storage::compaction::table_compaction::SingleFileToCompact;
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
-use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
+use crate::storage::mooncake_table::table_snapshot::PersistenceSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::{
-    DataCompactionPayload, FileIndiceMergePayload, IcebergSnapshotIndexMergePayload,
-    PersistenceSnapshotImportPayload, PersistenceSnapshotPayload,
+    DataCompactionPayload, FileIndiceMergePayload, PersistenceSnapshotImportPayload,
+    PersistenceSnapshotIndexMergePayload, PersistenceSnapshotPayload,
 };
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
@@ -109,7 +109,7 @@ pub struct IcebergImportEvent {
     pub file_indices: Vec<Vec<FileId>>,
 }
 
-/// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotIndexMergePayload`].
+/// For the ease of serde, replay event only stores necessary part of [`PersistenceSnapshotIndexMergePayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IcebergIndexMergeEvent {
     /// New file indices to import.
@@ -120,7 +120,7 @@ pub struct IcebergIndexMergeEvent {
     pub old_file_indices: Vec<Vec<FileId>>,
 }
 
-/// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotDataCompactionPayload`].
+/// For the ease of serde, replay event only stores necessary part of [`PersistenceSnapshotDataCompactionPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IcebergDataCompactionEvent {
     /// New data files to import.
@@ -336,7 +336,7 @@ pub fn get_persistence_snapshot_import_payload(
     }
 }
 pub fn get_iceberg_index_merge_payload(
-    payload: &IcebergSnapshotIndexMergePayload,
+    payload: &PersistenceSnapshotIndexMergePayload,
 ) -> IcebergIndexMergeEvent {
     IcebergIndexMergeEvent {
         new_file_indices: payload
@@ -364,7 +364,7 @@ pub fn get_iceberg_index_merge_payload(
     }
 }
 pub fn get_iceberg_data_compaction_payload(
-    payload: &IcebergSnapshotDataCompactionPayload,
+    payload: &PersistenceSnapshotDataCompactionPayload,
 ) -> IcebergDataCompactionEvent {
     IcebergDataCompactionEvent {
         new_data_files_to_import: payload

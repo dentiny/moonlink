@@ -19,7 +19,7 @@ use std::sync::Arc;
 ///
 /// Iceberg snapshot payload by write operations.
 #[derive(Clone, Default)]
-pub struct IcebergSnapshotImportPayload {
+pub struct PersistenceSnapshotImportPayload {
     /// New data files to introduce to the iceberg table.
     pub(crate) data_files: Vec<MooncakeDataFileRef>,
     /// Maps from data filepath to its latest deletion vector.
@@ -28,9 +28,9 @@ pub struct IcebergSnapshotImportPayload {
     pub(crate) file_indices: Vec<MooncakeFileIndex>,
 }
 
-impl std::fmt::Debug for IcebergSnapshotImportPayload {
+impl std::fmt::Debug for PersistenceSnapshotImportPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotImportPayload")
+        f.debug_struct("PersistenceSnapshotImportPayload")
             .field("data files count", &self.data_files.len())
             .field("new deletion vector count", &self.new_deletion_vector.len())
             .field("file indices count", &self.file_indices.len())
@@ -40,14 +40,14 @@ impl std::fmt::Debug for IcebergSnapshotImportPayload {
 
 /// Iceberg snapshot payload by index merge operations.
 #[derive(Clone, Default)]
-pub struct IcebergSnapshotIndexMergePayload {
+pub struct PersistenceSnapshotIndexMergePayload {
     /// New file indices to import to the iceberg table.
     pub(crate) new_file_indices_to_import: Vec<MooncakeFileIndex>,
     /// Merged file indices to remove from the iceberg table.
     pub(crate) old_file_indices_to_remove: Vec<MooncakeFileIndex>,
 }
 
-impl IcebergSnapshotIndexMergePayload {
+impl PersistenceSnapshotIndexMergePayload {
     /// Return whether the payload is empty.
     pub fn is_empty(&self) -> bool {
         if self.new_file_indices_to_import.is_empty() {
@@ -60,9 +60,9 @@ impl IcebergSnapshotIndexMergePayload {
     }
 }
 
-impl std::fmt::Debug for IcebergSnapshotIndexMergePayload {
+impl std::fmt::Debug for PersistenceSnapshotIndexMergePayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotIndexMergePayload")
+        f.debug_struct("PersistenceSnapshotIndexMergePayload")
             .field(
                 "new file indices to import count",
                 &self.new_file_indices_to_import.len(),
@@ -77,7 +77,7 @@ impl std::fmt::Debug for IcebergSnapshotIndexMergePayload {
 
 /// Iceberg snapshot payload by data file compaction operations.
 #[derive(Clone, Default)]
-pub struct IcebergSnapshotDataCompactionPayload {
+pub struct PersistenceSnapshotDataCompactionPayload {
     /// New data files to import to the iceberg table.
     pub(crate) new_data_files_to_import: Vec<MooncakeDataFileRef>,
     /// Old data files to remove from the iceberg table.
@@ -90,9 +90,9 @@ pub struct IcebergSnapshotDataCompactionPayload {
     pub(crate) data_file_records_remap: HashMap<RecordLocation, RemappedRecordLocation>,
 }
 
-impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
+impl std::fmt::Debug for PersistenceSnapshotDataCompactionPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotDataCompactionPayload")
+        f.debug_struct("PersistenceSnapshotDataCompactionPayload")
             .field(
                 "new data files to import count",
                 &self.new_data_files_to_import.len(),
@@ -117,7 +117,7 @@ impl std::fmt::Debug for IcebergSnapshotDataCompactionPayload {
     }
 }
 
-impl IcebergSnapshotDataCompactionPayload {
+impl PersistenceSnapshotDataCompactionPayload {
     /// Return whether data compaction payload is empty.
     pub fn is_empty(&self) -> bool {
         if self.old_data_files_to_remove.is_empty() {
@@ -143,11 +143,11 @@ pub struct PersistenceSnapshotPayload {
     /// New mooncake table schema.
     pub(crate) new_table_schema: Option<Arc<MooncakeTableMetadata>>,
     /// Payload by import operations.
-    pub(crate) import_payload: IcebergSnapshotImportPayload,
+    pub(crate) import_payload: PersistenceSnapshotImportPayload,
     /// Payload by index merge operations.
-    pub(crate) index_merge_payload: IcebergSnapshotIndexMergePayload,
+    pub(crate) index_merge_payload: PersistenceSnapshotIndexMergePayload,
     /// Payload by data file compaction operations.
-    pub(crate) data_compaction_payload: IcebergSnapshotDataCompactionPayload,
+    pub(crate) data_compaction_payload: PersistenceSnapshotDataCompactionPayload,
 }
 
 impl std::fmt::Debug for PersistenceSnapshotPayload {

@@ -48,12 +48,12 @@ use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
 use crate::storage::mooncake_table::snapshot::MooncakeSnapshotOutput;
 pub use crate::storage::mooncake_table::snapshot_read_output::ReadOutput as SnapshotReadOutput;
 #[cfg(test)]
-pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
+pub(crate) use crate::storage::mooncake_table::table_snapshot::PersistenceSnapshotDataCompactionPayload;
 pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     take_data_files_to_import, take_data_files_to_remove, take_file_indices_to_import,
     take_file_indices_to_remove, FileIndiceMergePayload, FileIndiceMergeResult,
-    IcebergSnapshotDataCompactionResult, IcebergSnapshotIndexMergePayload, IcebergSnapshotResult,
-    PersistenceSnapshotImportPayload, PersistenceSnapshotPayload,
+    IcebergSnapshotDataCompactionResult, IcebergSnapshotResult, PersistenceSnapshotImportPayload,
+    PersistenceSnapshotIndexMergePayload, PersistenceSnapshotPayload,
 };
 use crate::storage::mooncake_table_config::MooncakeTableConfig;
 use crate::storage::snapshot_options::MaintenanceOption;
