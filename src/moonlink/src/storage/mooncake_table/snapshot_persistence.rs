@@ -243,10 +243,10 @@ impl SnapshotTableState {
         // Get persisted data files and file indices.
         // TODO(hjiang): Revisit whether we need separate fields in snapshot task.
         let persisted_data_files = task
-            .iceberg_persisted_records
+            .persisted_records
             .get_data_files_to_reflect_persistence();
         let (index_blocks_to_remove, persisted_file_indices) = task
-            .iceberg_persisted_records
+            .persisted_records
             .get_file_indices_to_reflect_persistence();
 
         // Record data files number and file indices number for persistence reflection, which is not supposed to change.
@@ -268,10 +268,7 @@ impl SnapshotTableState {
         // Step-3: Handle persisted deletion vector.
         let cur_evicted_files = self
             .update_deletion_vector_to_persisted(
-                task.iceberg_persisted_records
-                    .import_result
-                    .puffin_blob_ref
-                    .clone(),
+                task.persisted_records.import_result.puffin_blob_ref.clone(),
             )
             .await;
         evicted_files_to_delete.extend(cur_evicted_files);

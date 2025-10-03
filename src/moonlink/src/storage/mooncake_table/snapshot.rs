@@ -256,7 +256,7 @@ impl SnapshotTableState {
     /// Prune committed deletion logs for the given persisted records.
     fn prune_committed_deletion_logs(&mut self, task: &SnapshotTask) {
         // No iceberg snapshot persisted between two mooncake snapshot.
-        if task.iceberg_persisted_records.flush_lsn.is_none() {
+        if task.persisted_records.flush_lsn.is_none() {
             return;
         }
 
@@ -486,7 +486,7 @@ impl SnapshotTableState {
         // Validate mooncake table operation invariants.
         self.validate_mooncake_table_invariants(&task, &opt);
         // Validate persistence results.
-        task.iceberg_persisted_records
+        task.persisted_records
             .validate_imported_files_remote(&self.iceberg_warehouse_location);
 
         // Calculate the expected disk files number after current snapshot update.

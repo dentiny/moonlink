@@ -3,8 +3,8 @@ mod batch_ingestion;
 pub mod data_batches;
 pub(crate) mod delete_vector;
 mod disk_slice;
-mod iceberg_persisted_records;
 mod mem_slice;
+mod persisted_records;
 mod persistence_buffer;
 pub(crate) mod replay;
 mod shared_array;
@@ -41,7 +41,7 @@ use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::mooncake_table::batch_id_counter::BatchIdCounter;
-use crate::storage::mooncake_table::iceberg_persisted_records::IcebergPersistedRecords;
+use crate::storage::mooncake_table::persisted_records::PersistedRecords;
 use crate::storage::mooncake_table::replay::replay_events;
 use crate::storage::mooncake_table::replay::replay_events::MooncakeTableEvent;
 use crate::storage::mooncake_table::shared_array::SharedRowBufferSnapshot;
@@ -282,7 +282,7 @@ pub struct SnapshotTask {
 
     /// ---- States have been recorded by mooncake snapshot, and persisted into iceberg table ----
     /// These persisted items will be reflected to mooncake snapshot in the next invocation of periodic mooncake snapshot operation.
-    iceberg_persisted_records: IcebergPersistedRecords,
+    persisted_records: PersistedRecords,
 
     /// Minimum LSN of ongoing flushes.
     min_ongoing_flush_lsn: u64,
@@ -313,8 +313,8 @@ impl SnapshotTask {
             // Data compaction related fields.
             compacting_data_files: HashSet::new(),
             data_compaction_result: DataCompactionResult::default(),
-            // Iceberg persistence result.
-            iceberg_persisted_records: IcebergPersistedRecords::default(),
+            // Persistence result.
+            persisted_records: PersistedRecords::default(),
             min_ongoing_flush_lsn: u64::MAX,
         }
     }
@@ -341,7 +341,7 @@ impl SnapshotTask {
         if !self.data_compaction_result.is_empty() {
             return false;
         }
-        if !self.iceberg_persisted_records.is_empty() {
+        if !self.persisted_records.is_empty() {
             return false;
         }
         true
@@ -359,9 +359,9 @@ impl SnapshotTask {
                 >= self.mooncake_table_config.snapshot_deletion_record_count()
             // If iceberg snapshot is already performed, update mooncake snapshot accordingly.
             // On local filesystem, potentially we could double storage as soon as possible.
-            || !self.iceberg_persisted_records.import_result.is_empty()
-            || !self.iceberg_persisted_records.index_merge_result.is_empty()
-            || !self.iceberg_persisted_records.data_compaction_result.is_empty()
+            || !self.persisted_records.import_result.is_empty()
+            || !self.persisted_records.index_merge_result.is_empty()
+            || !self.persisted_records.data_compaction_result.is_empty()
     }
 
     /// Get newly created data files, including both batch write ones and stream write ones.
@@ -720,36 +720,34 @@ impl MooncakeTable {
 
         assert!(self
             .next_snapshot_task
-            .iceberg_persisted_records
+            .persisted_records
             .flush_lsn
             .is_none());
-        self.next_snapshot_task.iceberg_persisted_records.flush_lsn = Some(flush_lsn);
+        self.next_snapshot_task.persisted_records.flush_lsn = Some(flush_lsn);
 
         assert!(self
             .next_snapshot_task
-            .iceberg_persisted_records
+            .persisted_records
             .import_result
             .is_empty());
-        self.next_snapshot_task
-            .iceberg_persisted_records
-            .import_result = iceberg_snapshot_res.import_result;
+        self.next_snapshot_task.persisted_records.import_result =
+            iceberg_snapshot_res.import_result;
 
         assert!(self
             .next_snapshot_task
-            .iceberg_persisted_records
+            .persisted_records
             .index_merge_result
             .is_empty());
-        self.next_snapshot_task
-            .iceberg_persisted_records
-            .index_merge_result = iceberg_snapshot_res.index_merge_result;
+        self.next_snapshot_task.persisted_records.index_merge_result =
+            iceberg_snapshot_res.index_merge_result;
 
         assert!(self
             .next_snapshot_task
-            .iceberg_persisted_records
+            .persisted_records
             .data_compaction_result
             .is_empty());
         self.next_snapshot_task
-            .iceberg_persisted_records
+            .persisted_records
             .data_compaction_result = iceberg_snapshot_res.data_compaction_result;
     }
 

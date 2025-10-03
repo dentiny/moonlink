@@ -8,10 +8,10 @@ use crate::storage::storage_utils::MooncakeDataFileRef;
 
 use std::collections::HashSet;
 
-/// Record iceberg persisted records, used to sync to mooncake snapshot.
+/// Record persisted records, used to sync to mooncake snapshot.
 #[derive(Debug, Default)]
-pub(crate) struct IcebergPersistedRecords {
-    /// Flush LSN for iceberg snapshot.
+pub(crate) struct PersistedRecords {
+    /// Flush LSN for snapshot.
     pub(crate) flush_lsn: Option<u64>,
     /// New data file, puffin file and file indices result.
     pub(crate) import_result: IcebergSnapshotImportResult,
@@ -21,7 +21,7 @@ pub(crate) struct IcebergPersistedRecords {
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
 }
 
-impl IcebergPersistedRecords {
+impl PersistedRecords {
     /// Return whether persistence result is empty.
     #[allow(dead_code)]
     pub fn is_empty(&self) -> bool {
@@ -53,7 +53,7 @@ impl IcebergPersistedRecords {
     ///
     /// Notice, we don't need to reflect file indices persistence for index merge and data compaction, since file indices are always cached on-disk, thus mooncake snapshot only access local cache files.
     ///
-    /// TODO(hjiang): It's actually better not to assume certain cache implementation, and only apply what iceberg table manager returns.
+    /// TODO(hjiang): It's actually better not to assume certain cache implementation, and only apply what table manager returns.
     pub fn get_file_indices_to_reflect_persistence(&self) -> (HashSet<FileId>, Vec<FileIndex>) {
         let mut persisted_file_indices = vec![];
         persisted_file_indices.extend(self.import_result.new_file_indices.iter().cloned());

@@ -181,17 +181,14 @@ impl UnpersistedRecords {
     ///
     /// Update unpersisted data files from successful iceberg snapshot operation.
     fn prune_persisted_data_files(&mut self, task: &SnapshotTask) {
-        let persisted_new_data_files = &task.iceberg_persisted_records.import_result.new_data_files;
+        let persisted_new_data_files = &task.persisted_records.import_result.new_data_files;
         ma::assert_ge!(self.new_data_files.len(), persisted_new_data_files.len());
         self.new_data_files.drain(0..persisted_new_data_files.len());
     }
 
     /// Update unpersisted file indices from successful iceberg snapshot operation.
     fn prune_persisted_file_indices(&mut self, task: &SnapshotTask) {
-        let persisted_new_file_indices = &task
-            .iceberg_persisted_records
-            .import_result
-            .new_file_indices;
+        let persisted_new_file_indices = &task.persisted_records.import_result.new_file_indices;
         ma::assert_ge!(
             self.new_file_indices.len(),
             persisted_new_file_indices.len()
@@ -202,7 +199,7 @@ impl UnpersistedRecords {
 
     fn prune_persisted_merged_indices(&mut self, task: &SnapshotTask) {
         let old_merged_file_indices = &task
-            .iceberg_persisted_records
+            .persisted_records
             .index_merge_result
             .old_file_indices_removed;
         ma::assert_ge!(
@@ -213,7 +210,7 @@ impl UnpersistedRecords {
             .drain(0..old_merged_file_indices.len());
 
         let new_merged_file_indices = &task
-            .iceberg_persisted_records
+            .persisted_records
             .index_merge_result
             .new_file_indices_imported;
         ma::assert_ge!(
@@ -225,7 +222,7 @@ impl UnpersistedRecords {
     }
 
     fn prune_persisted_compacted_data(&mut self, task: &SnapshotTask) {
-        let persisted_compaction_res = &task.iceberg_persisted_records.data_compaction_result;
+        let persisted_compaction_res = &task.persisted_records.data_compaction_result;
 
         ma::assert_ge!(
             self.compacted_data_files_to_add.len(),
