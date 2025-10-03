@@ -663,7 +663,11 @@ fn compute_confirmed_wal_flush_lsn(
             .get(table_id)
             .map(|rx| *rx.borrow())
             .unwrap_or(0);
-        let effective_lsn = if wal_lsn > 0 { wal_lsn } else { persistence_lsn };
+        let effective_lsn = if wal_lsn > 0 {
+            wal_lsn
+        } else {
+            persistence_lsn
+        };
         confirmed_lsn = Some(match confirmed_lsn {
             Some(v) => v.min(effective_lsn),
             None => effective_lsn,

@@ -413,7 +413,7 @@ impl TableHandler {
                                 if let SpecialTableState::AlterTable { .. } =
                                     table_handler_state.special_table_state
                                 {
-                                    table.force_empty_iceberg_payload();
+                                    table.force_empty_persistence_payload();
                                 }
                                 assert!(table.try_create_mooncake_snapshot(
                                     table_handler_state.get_mooncake_snapshot_option(
@@ -797,7 +797,7 @@ impl TableHandler {
                             if rows_persisted == 0
                                 && table_handler_state.has_pending_force_snapshot_request()
                             {
-                                table.force_empty_iceberg_payload();
+                                table.force_empty_persistence_payload();
                             }
                         }
                         Some(Err(e)) => {

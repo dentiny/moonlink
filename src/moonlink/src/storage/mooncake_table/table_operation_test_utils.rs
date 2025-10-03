@@ -653,7 +653,7 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
     table: &mut MooncakeTable,
     notify_rx: &mut Receiver<TableEvent>,
 ) -> Arc<MooncakeTableMetadata> {
-    table.force_empty_iceberg_payload();
+    table.force_empty_persistence_payload();
     // Create a mooncake and iceberg snapshot to reflect both data files and schema changes.
     let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_files_to_delete) =
         create_mooncake_snapshot_for_test(table, notify_rx).await;

@@ -265,7 +265,7 @@ pub struct SnapshotTask {
     new_streaming_xact: Vec<TransactionStreamOutput>,
 
     /// Schema change, or force snapshot.
-    force_empty_iceberg_payload: bool,
+    force_empty_persistence_payload: bool,
 
     /// Committed deletion records, which have been persisted into iceberg, and should be pruned from mooncake snapshot.
     committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
@@ -305,7 +305,7 @@ impl SnapshotTask {
             new_largest_flush_lsn: None,
             new_commit_point: None,
             new_streaming_xact: Vec::new(),
-            force_empty_iceberg_payload: false,
+            force_empty_persistence_payload: false,
             // Committed deletion logs which have been persisted, and should be pruned from mooncake snapshot.
             committed_deletion_logs: HashSet::new(),
             // Index merge related fields.
@@ -350,7 +350,7 @@ impl SnapshotTask {
     pub fn should_create_snapshot(&self) -> bool {
         // If mooncake has new transaction commits.
         (self.commit_lsn_baseline > 0 && self.commit_lsn_baseline != self.prev_commit_lsn_baseline)
-            || self.force_empty_iceberg_payload
+            || self.force_empty_persistence_payload
         // If mooncake table has completed streaming transactions.
             || !self.new_streaming_xact.is_empty()
         // If mooncake table accumulated large enough writes.
@@ -1103,8 +1103,8 @@ impl MooncakeTable {
     }
 
     /// Mark next iceberg snapshot as force, even if the payload is empty.
-    pub(crate) fn force_empty_iceberg_payload(&mut self) {
-        self.next_snapshot_task.force_empty_iceberg_payload = true;
+    pub(crate) fn force_empty_persistence_payload(&mut self) {
+        self.next_snapshot_task.force_empty_persistence_payload = true;
     }
 
     pub(crate) fn notify_snapshot_reader(&self, lsn: u64) {

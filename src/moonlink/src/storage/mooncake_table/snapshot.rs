@@ -589,7 +589,7 @@ impl SnapshotTableState {
         let flush_by_new_files_or_maintenance = self
             .unpersisted_records
             .if_persist_by_new_files_or_maintenance(opt.force_create);
-        let force_empty_iceberg_payload = task.force_empty_iceberg_payload;
+        let force_empty_persistence_payload = task.force_empty_persistence_payload;
 
         // Decide whether to perform a data compaction.
         let data_compaction_payload = self.get_payload_to_compact(&opt.data_compaction_option);
@@ -612,7 +612,7 @@ impl SnapshotTableState {
         let flush_lsn = self.current_snapshot.flush_lsn.unwrap_or(0);
         let largest_flush_lsn = self.current_snapshot.largest_flush_lsn.unwrap_or(0);
         if opt.iceberg_snapshot_option != IcebergSnapshotOption::Skip
-            && (force_empty_iceberg_payload || flush_by_table_write)
+            && (force_empty_persistence_payload || flush_by_table_write)
             && flush_lsn < task.min_ongoing_flush_lsn
             && flush_lsn == largest_flush_lsn
         {
@@ -624,7 +624,7 @@ impl SnapshotTableState {
             // Only create iceberg snapshot when there's something to import.
             if !committed_deletion_logs.new_deletions_to_persist.is_empty()
                 || flush_by_new_files_or_maintenance
-                || force_empty_iceberg_payload
+                || force_empty_persistence_payload
             {
                 iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
                     &opt.iceberg_snapshot_option,
