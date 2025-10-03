@@ -44,7 +44,7 @@ struct CompletedMooncakeSnapshot {
 #[derive(Clone, Debug)]
 struct CompletedIcebergSnapshot {
     /// Result of iceberg snapshot.
-    iceberg_snapshot_result: PersistenceSnapshotResult,
+    persistence_snapshot_result: PersistenceSnapshotResult,
 }
 
 #[derive(Clone, Debug)]
@@ -352,15 +352,15 @@ pub(crate) async fn replay(replay_filepath: &str) {
                     event_notification.notify_waiters();
                 }
                 TableEvent::PersistenceSnapshotResult {
-                    iceberg_snapshot_result,
+                    persistence_snapshot_result,
                 } => {
-                    let iceberg_snapshot_result = iceberg_snapshot_result.unwrap();
+                    let persistence_snapshot_result = persistence_snapshot_result.unwrap();
                     let mut guard = completed_iceberg_snapshots_clone.lock().await;
                     assert!(guard
                         .insert(
-                            iceberg_snapshot_result.uuid,
+                            persistence_snapshot_result.uuid,
                             CompletedIcebergSnapshot {
-                                iceberg_snapshot_result
+                                persistence_snapshot_result
                             }
                         )
                         .is_none());
@@ -615,14 +615,14 @@ pub(crate) async fn replay(replay_filepath: &str) {
                         guard.remove(&snapshot_completion_event.uuid)
                     };
                     if let Some(completed_iceberg_snapshot) = completed_iceberg_snapshot_event {
-                        let iceberg_snapshot_result =
-                            completed_iceberg_snapshot.iceberg_snapshot_result;
+                        let persistence_snapshot_result =
+                            completed_iceberg_snapshot.persistence_snapshot_result;
                         io_utils::delete_local_files(
-                            &iceberg_snapshot_result.evicted_files_to_delete,
+                            &persistence_snapshot_result.evicted_files_to_delete,
                         )
                         .await
                         .unwrap();
-                        table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+                        table.set_persistence_snapshot_res(persistence_snapshot_result);
                         break;
                     }
                     // Otherwise block until the corresponding flush event completes.

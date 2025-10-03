@@ -2455,9 +2455,9 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
     let (_, _, _, _, _) = create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the first mooncake snapshot.
-    let iceberg_snapshot_result =
+    let persistence_snapshot_result =
         create_iceberg_snapshot(&mut table, persistence_snapshot_payload, &mut notify_rx).await;
-    table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+    table.set_persistence_snapshot_res(persistence_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
@@ -2515,9 +2515,9 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the mooncake snapshot.
-    let iceberg_snapshot_result =
+    let persistence_snapshot_result =
         create_iceberg_snapshot(&mut table, persistence_snapshot_payload, &mut notify_rx).await;
-    table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+    table.set_persistence_snapshot_res(persistence_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
     let mut iceberg_table_manager_for_recovery = IcebergTableManager::new(
@@ -3442,7 +3442,7 @@ async fn test_persisted_deletion_record_remap() {
 
     // Block wait both operations to finish.
     let mut stored_data_compaction_result: Option<DataCompactionResult> = None;
-    let mut stored_iceberg_snapshot_result: Option<PersistenceSnapshotResult> = None;
+    let mut stored_persistence_snapshot_result: Option<PersistenceSnapshotResult> = None;
 
     for _ in 0..2 {
         let notification = notify_rx.recv().await.unwrap();
@@ -3453,11 +3453,11 @@ async fn test_persisted_deletion_record_remap() {
             assert!(stored_data_compaction_result.is_none());
             stored_data_compaction_result = Some(data_compaction_result.unwrap());
         } else if let TableEvent::PersistenceSnapshotResult {
-            iceberg_snapshot_result,
+            persistence_snapshot_result,
         } = notification
         {
-            assert!(stored_iceberg_snapshot_result.is_none());
-            stored_iceberg_snapshot_result = Some(iceberg_snapshot_result.unwrap());
+            assert!(stored_persistence_snapshot_result.is_none());
+            stored_persistence_snapshot_result = Some(persistence_snapshot_result.unwrap());
         } else {
             panic!(
                 "Expect either iceberg snapshot result and data compaction result but get {notification:?}"
@@ -3465,10 +3465,10 @@ async fn test_persisted_deletion_record_remap() {
         }
     }
     assert!(stored_data_compaction_result.is_some());
-    assert!(stored_iceberg_snapshot_result.is_some());
+    assert!(stored_persistence_snapshot_result.is_some());
 
     // Reflect iceberg snapshot result to mooncake snapshot.
-    table.set_iceberg_snapshot_res(stored_iceberg_snapshot_result.unwrap());
+    table.set_persistence_snapshot_res(stored_persistence_snapshot_result.unwrap());
 
     // Create mooncake snapshot and sync.
     create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
@@ -3482,11 +3482,11 @@ async fn test_persisted_deletion_record_remap() {
     assert!(iceberg_payload.is_some());
 
     // Create iceberg snapshot and sync.
-    let iceberg_snapshot_result =
+    let persistence_snapshot_result =
         create_iceberg_snapshot(&mut table, iceberg_payload, &mut notify_rx)
             .await
             .unwrap();
-    table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+    table.set_persistence_snapshot_res(persistence_snapshot_result);
 
     // Validate iceberg snapshot content.
     let filesystem_accessor = create_test_filesystem_accessor(&iceberg_table_config);

@@ -190,7 +190,7 @@ pub enum TableEvent {
     /// Iceberg snapshot completes.
     PersistenceSnapshotResult {
         /// Result for iceberg snapshot.
-        iceberg_snapshot_result: Result<PersistenceSnapshotResult>,
+        persistence_snapshot_result: Result<PersistenceSnapshotResult>,
     },
     /// Index merge completes.
     IndexMergeResult {

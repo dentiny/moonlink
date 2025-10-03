@@ -96,7 +96,7 @@ pub(crate) struct TableHandlerState {
     // - snapshot ongoing = true, result consumed = true: iceberg snapshot is ongoing
     // - snapshot ongoing = false, result consumed = false: iceberg snapshot completes, but wait for mooncake snapshot to consume the result
     //
-    pub(crate) iceberg_snapshot_result_consumed: bool,
+    pub(crate) persistence_snapshot_result_consumed: bool,
     pub(crate) persistence_snapshot_ongoing: bool,
     // Whether there's an ongoing mooncake snapshot operation.
     pub(crate) mooncake_snapshot_ongoing: bool,
@@ -139,7 +139,7 @@ impl TableHandlerState {
         persistence_snapshot_lsn: Option<u64>,
     ) -> Self {
         Self {
-            iceberg_snapshot_result_consumed: true,
+            persistence_snapshot_result_consumed: true,
             persistence_snapshot_ongoing: false,
             mooncake_snapshot_ongoing: false,
             initial_persistence_lsn,
@@ -423,10 +423,10 @@ impl TableHandlerState {
     pub(crate) fn can_initiate_iceberg_snapshot(
         flush_lsn: u64,
         min_ongoing_flush_lsn: u64,
-        iceberg_snapshot_result_consumed: bool,
+        persistence_snapshot_result_consumed: bool,
         persistence_snapshot_ongoing: bool,
     ) -> bool {
-        iceberg_snapshot_result_consumed
+        persistence_snapshot_result_consumed
             && !persistence_snapshot_ongoing
             && flush_lsn < min_ongoing_flush_lsn
     }
@@ -435,11 +435,11 @@ impl TableHandlerState {
         // Validate iceberg snapshot state before mooncake snapshot creation.
         //
         // Assertion on impossible state.
-        assert!(!self.persistence_snapshot_ongoing || self.iceberg_snapshot_result_consumed);
+        assert!(!self.persistence_snapshot_ongoing || self.persistence_snapshot_result_consumed);
 
         // If there's pending iceberg snapshot result unconsumed, the following mooncake snapshot will properly handle it.
-        if !self.iceberg_snapshot_result_consumed {
-            self.iceberg_snapshot_result_consumed = true;
+        if !self.persistence_snapshot_result_consumed {
+            self.persistence_snapshot_result_consumed = true;
             self.persistence_snapshot_ongoing = false;
         }
     }

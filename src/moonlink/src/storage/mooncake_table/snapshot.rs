@@ -80,10 +80,10 @@ pub(crate) struct SnapshotTableState {
     /// Table notifier.
     pub(super) table_notify: Option<Sender<TableEvent>>,
 
-    /// ---- Items not persisted to iceberg snapshot ----
+    /// ---- Items not persisted to table snapshot ----
     ///
-    /// Iceberg snapshot is created in an async style, which means it doesn't correspond 1-1 to mooncake snapshot, so we need to ensure idempotency for iceberg snapshot payload.
-    /// The following fields record unpersisted content, which will be placed in iceberg payload everytime.
+    /// Table snapshot is created in an async style, which means it doesn't correspond 1-1 to mooncake snapshot, so we need to ensure idempotency for table snapshot payload.
+    /// The following fields record unpersisted content, which will be placed in table payload everytime.
     pub(super) unpersisted_records: UnpersistedRecords,
 
     /// Batch ID counter for non-streaming operations
@@ -96,7 +96,7 @@ pub struct MooncakeSnapshotOutput {
     pub(crate) uuid: uuid::Uuid,
     /// Committed LSN for mooncake snapshot.
     pub(crate) commit_lsn: u64,
-    /// Iceberg snapshot payload.
+    /// Persistence snapshot payload.
     pub(crate) persistence_snapshot_payload: Option<PersistenceSnapshotPayload>,
     /// File indice merge payload.
     pub(crate) file_indices_merge_payload: IndexMergeMaintenanceStatus,
@@ -133,7 +133,7 @@ impl std::fmt::Debug for MooncakeSnapshotOutput {
 
 /// Committed deletion record to persist.
 pub(super) struct CommittedDeletionToPersist {
-    /// Commit deletion log included in the current iceberg persistence operation, which is used to prune snapshot deletion record after persistence finished.
+    /// Commit deletion log included in the current table persistence operation, which is used to prune snapshot deletion record after persistence finished.
     pub(super) committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
     /// Maps from data file to its changed deletion vector (which only contains newly deleted rows).
     pub(super) new_deletions_to_persist: HashMap<MooncakeDataFileRef, BatchDeletionVector>,

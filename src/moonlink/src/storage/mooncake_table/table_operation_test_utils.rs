@@ -317,10 +317,10 @@ pub(crate) async fn sync_iceberg_snapshot(
 ) -> PersistenceSnapshotResult {
     let notification = receiver.recv().await.unwrap();
     if let TableEvent::PersistenceSnapshotResult {
-        iceberg_snapshot_result,
+        persistence_snapshot_result,
     } = notification
     {
-        iceberg_snapshot_result.unwrap()
+        persistence_snapshot_result.unwrap()
     } else {
         panic!("Expected iceberg completion snapshot notification, but get {notification:?}.");
     }
@@ -391,8 +391,8 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
     // Create iceberg snapshot if possible.
     if let Some(persistence_snapshot_payload) = persistence_snapshot_payload {
         table.persist_iceberg_snapshot(persistence_snapshot_payload);
-        let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
-        table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+        let persistence_snapshot_result = sync_iceberg_snapshot(receiver).await;
+        table.set_persistence_snapshot_res(persistence_snapshot_result);
     }
 
     // Decrement reference count for pinned files.
@@ -420,8 +420,8 @@ pub(crate) async fn create_iceberg_snapshot_and_reflect_to_mooncake_snapshot(
     Vec<String>,
 ) {
     table.persist_iceberg_snapshot(persistence_snapshot_payload);
-    let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
-    table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+    let persistence_snapshot_result = sync_iceberg_snapshot(receiver).await;
+    table.set_persistence_snapshot_res(persistence_snapshot_result);
     create_mooncake_snapshot_for_test(table, receiver).await
 }
 
@@ -450,8 +450,8 @@ pub(crate) async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
 
     let persistence_snapshot_payload = persistence_snapshot_payload.unwrap();
     table.persist_iceberg_snapshot(persistence_snapshot_payload);
-    let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
-    table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+    let persistence_snapshot_result = sync_iceberg_snapshot(receiver).await;
+    table.set_persistence_snapshot_res(persistence_snapshot_result);
 
     // Create mooncake snapshot after buffering iceberg snapshot result, to make sure mooncake snapshot is at a consistent state.
     assert!(table.try_create_mooncake_snapshot(SnapshotOption {
@@ -475,8 +475,8 @@ pub(crate) async fn create_iceberg_snapshot(
     let notification = notify_rx.recv().await.unwrap();
     match notification {
         TableEvent::PersistenceSnapshotResult {
-            iceberg_snapshot_result,
-        } => iceberg_snapshot_result,
+            persistence_snapshot_result,
+        } => persistence_snapshot_result,
         _ => {
             panic!(
                 "Expects to receive iceberg snapshot completion notification, but receives others."
@@ -520,8 +520,8 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
 
     if let Some(persistence_snapshot_payload) = persistence_snapshot_payload {
         table.persist_iceberg_snapshot(persistence_snapshot_payload);
-        let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
-        table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+        let persistence_snapshot_result = sync_iceberg_snapshot(receiver).await;
+        table.set_persistence_snapshot_res(persistence_snapshot_result);
     }
 
     // Get data compaction payload.
@@ -589,8 +589,8 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
 
     if let Some(persistence_snapshot_payload) = persistence_snapshot_payload {
         table.persist_iceberg_snapshot(persistence_snapshot_payload);
-        let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
-        table.set_iceberg_snapshot_res(iceberg_snapshot_result);
+        let persistence_snapshot_result = sync_iceberg_snapshot(receiver).await;
+        table.set_persistence_snapshot_res(persistence_snapshot_result);
     }
 
     // Perform index merge.
@@ -690,9 +690,9 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
         };
         let new_table_metadata = table.alter_table(alter_table_request);
         persistence_snapshot_payload.new_table_schema = Some(new_table_metadata.clone());
-        let iceberg_snapshot_result =
+        let persistence_snapshot_result =
             create_iceberg_snapshot(table, Some(persistence_snapshot_payload), notify_rx).await;
-        table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
+        table.set_persistence_snapshot_res(persistence_snapshot_result.unwrap());
         new_table_metadata
     } else {
         panic!("Iceberg snapshot payload is not set");

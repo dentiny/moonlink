@@ -507,7 +507,7 @@ impl TableHandler {
                         if TableHandlerState::can_initiate_iceberg_snapshot(
                             mooncake_snapshot_result.commit_lsn,
                             min_pending_flush_lsn,
-                            table_handler_state.iceberg_snapshot_result_consumed,
+                            table_handler_state.persistence_snapshot_result_consumed,
                             table_handler_state.persistence_snapshot_ongoing,
                         ) {
                             if let Some(persistence_snapshot_payload) =
@@ -609,10 +609,10 @@ impl TableHandler {
                         }
                     }
                     TableEvent::PersistenceSnapshotResult {
-                        iceberg_snapshot_result,
+                        persistence_snapshot_result,
                     } => {
                         table_handler_state.persistence_snapshot_ongoing = false;
-                        match iceberg_snapshot_result {
+                        match persistence_snapshot_result {
                             Ok(snapshot_res) => {
                                 // Record iceberg snapshot completion.
                                 // Notice: operation completion record should be the first thing to do on event notification, and contains all information.
@@ -642,8 +642,8 @@ impl TableHandler {
                                     .flush_lsn_tx
                                     .send(iceberg_flush_lsn)
                                     .unwrap();
-                                table.set_iceberg_snapshot_res(snapshot_res);
-                                table_handler_state.iceberg_snapshot_result_consumed = false;
+                                table.set_persistence_snapshot_res(snapshot_res);
+                                table_handler_state.persistence_snapshot_result_consumed = false;
 
                                 // Notify all waiters with LSN satisfied.
                                 let replication_lsn = *replication_lsn_rx.borrow();

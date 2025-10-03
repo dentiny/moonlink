@@ -632,13 +632,13 @@ async fn test_snapshot_store_failure() {
         tokio::fs::remove_file(&cur_file).await.unwrap();
     }
 
-    let iceberg_snapshot_result = create_iceberg_snapshot(
+    let persistence_snapshot_result = create_iceberg_snapshot(
         &mut table,
         persistence_snapshot_payload,
         &mut event_completion_rx,
     )
     .await;
-    assert!(iceberg_snapshot_result.is_err());
+    assert!(persistence_snapshot_result.is_err());
 }
 
 #[tokio::test]
@@ -1803,7 +1803,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
         let can_initiate = TableHandlerState::can_initiate_iceberg_snapshot(
             payload.flush_lsn,
             min_pending,
-            true,  // iceberg_snapshot_result_consumed
+            true,  // persistence_snapshot_result_consumed
             false, // persistence_snapshot_ongoing
         );
 
