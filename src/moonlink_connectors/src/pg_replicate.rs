@@ -659,11 +659,11 @@ fn compute_confirmed_wal_flush_lsn(
     let mut confirmed_lsn: Option<u64> = None;
     for (table_id, wal_rx) in wal_flush_lsn_rxs.iter() {
         let wal_lsn = *wal_rx.borrow();
-        let iceberg_lsn = flush_lsn_rxs
+        let persistence_lsn = flush_lsn_rxs
             .get(table_id)
             .map(|rx| *rx.borrow())
             .unwrap_or(0);
-        let effective_lsn = if wal_lsn > 0 { wal_lsn } else { iceberg_lsn };
+        let effective_lsn = if wal_lsn > 0 { wal_lsn } else { persistence_lsn };
         confirmed_lsn = Some(match confirmed_lsn {
             Some(v) => v.min(effective_lsn),
             None => effective_lsn,
