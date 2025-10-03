@@ -1,7 +1,7 @@
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionResult;
 use crate::storage::mooncake_table::table_snapshot::{
-    IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult,
+    PersistenceSnapshotImportResult, PersistenceSnapshotIndexMergeResult,
 };
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
@@ -14,9 +14,9 @@ pub(crate) struct PersistedRecords {
     /// Flush LSN for snapshot.
     pub(crate) flush_lsn: Option<u64>,
     /// New data file, puffin file and file indices result.
-    pub(crate) import_result: IcebergSnapshotImportResult,
+    pub(crate) import_result: PersistenceSnapshotImportResult,
     /// Index merge persistence result.
-    pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
+    pub(crate) index_merge_result: PersistenceSnapshotIndexMergeResult,
     /// Data compaction persistence result.
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
 }

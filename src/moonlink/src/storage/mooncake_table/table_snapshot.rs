@@ -244,7 +244,7 @@ impl IcebergSnapshotPayload {
 ///
 /// Iceberg snapshot import result.
 #[derive(Clone, Default)]
-pub struct IcebergSnapshotImportResult {
+pub struct PersistenceSnapshotImportResult {
     /// Persisted data files.
     pub(crate) new_data_files: Vec<MooncakeDataFileRef>,
     /// Persisted puffin blob reference.
@@ -253,7 +253,7 @@ pub struct IcebergSnapshotImportResult {
     pub(crate) new_file_indices: Vec<MooncakeFileIndex>,
 }
 
-impl IcebergSnapshotImportResult {
+impl PersistenceSnapshotImportResult {
     /// Return whether import result is empty.
     pub fn is_empty(&self) -> bool {
         self.new_data_files.is_empty()
@@ -262,9 +262,9 @@ impl IcebergSnapshotImportResult {
     }
 }
 
-impl std::fmt::Debug for IcebergSnapshotImportResult {
+impl std::fmt::Debug for PersistenceSnapshotImportResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotImportResult")
+        f.debug_struct("PersistenceSnapshotImportResult")
             .field("new data file count", &self.new_data_files.len())
             .field("new file indices count", &self.new_file_indices.len())
             .field("puffin blob ref count", &self.puffin_blob_ref.len())
@@ -274,14 +274,14 @@ impl std::fmt::Debug for IcebergSnapshotImportResult {
 
 /// Iceberg snapshot index merge result.
 #[derive(Clone, Default)]
-pub struct IcebergSnapshotIndexMergeResult {
+pub struct PersistenceSnapshotIndexMergeResult {
     /// New file indices which are imported the iceberg table.
     pub(crate) new_file_indices_imported: Vec<MooncakeFileIndex>,
     /// Merged file indices which are removed from the iceberg table.
     pub(crate) old_file_indices_removed: Vec<MooncakeFileIndex>,
 }
 
-impl IcebergSnapshotIndexMergeResult {
+impl PersistenceSnapshotIndexMergeResult {
     /// Return whether index merge result is empty.
     pub fn is_empty(&self) -> bool {
         if self.new_file_indices_imported.is_empty() {
@@ -294,9 +294,9 @@ impl IcebergSnapshotIndexMergeResult {
     }
 }
 
-impl std::fmt::Debug for IcebergSnapshotIndexMergeResult {
+impl std::fmt::Debug for PersistenceSnapshotIndexMergeResult {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotIndexMergeResult")
+        f.debug_struct("PersistenceSnapshotIndexMergeResult")
             .field(
                 "new file indices imported count",
                 &self.new_file_indices_imported.len(),
@@ -379,9 +379,9 @@ pub struct IcebergSnapshotResult {
     /// Committed deletion logs included in the current iceberg snapshot persistence operation, which is used to prune after persistence completion.
     pub(crate) committed_deletion_logs: HashSet<(FileId, usize /*row idx*/)>,
     /// Iceberg import result.
-    pub(crate) import_result: IcebergSnapshotImportResult,
+    pub(crate) import_result: PersistenceSnapshotImportResult,
     /// Iceberg index merge result.
-    pub(crate) index_merge_result: IcebergSnapshotIndexMergeResult,
+    pub(crate) index_merge_result: PersistenceSnapshotIndexMergeResult,
     /// Iceberg data file compaction result.
     pub(crate) data_compaction_result: IcebergSnapshotDataCompactionResult,
     /// Evicted files to delete by object storage cache.

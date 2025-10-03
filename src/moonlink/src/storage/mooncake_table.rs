@@ -72,7 +72,7 @@ pub(crate) use snapshot::SnapshotTableState;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
-use table_snapshot::{IcebergSnapshotImportResult, IcebergSnapshotIndexMergeResult};
+use table_snapshot::{PersistenceSnapshotImportResult, PersistenceSnapshotIndexMergeResult};
 #[cfg(test)]
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::{self, Sender};
@@ -1623,7 +1623,7 @@ impl MooncakeTable {
             flush_lsn,
             new_table_schema,
             committed_deletion_logs,
-            import_result: IcebergSnapshotImportResult {
+            import_result: PersistenceSnapshotImportResult {
                 new_data_files: iceberg_persistence_res.remote_data_files
                     [0..new_data_files_cutoff_index_1]
                     .to_vec(),
@@ -1632,7 +1632,7 @@ impl MooncakeTable {
                     [0..new_file_indices_cutoff_index_1]
                     .to_vec(),
             },
-            index_merge_result: IcebergSnapshotIndexMergeResult {
+            index_merge_result: PersistenceSnapshotIndexMergeResult {
                 new_file_indices_imported: iceberg_persistence_res.remote_file_indices
                     [new_file_indices_cutoff_index_1..new_file_indices_cutoff_index_2]
                     .to_vec(),
@@ -1719,7 +1719,7 @@ mod mooncake_tests {
             flush_lsn: 1,
             new_table_schema: None,
             committed_deletion_logs: HashSet::new(),
-            import_result: IcebergSnapshotImportResult {
+            import_result: PersistenceSnapshotImportResult {
                 new_data_files: vec![create_data_file(
                     /*file_id=*/ 0,
                     "file_path".to_string(),
@@ -1727,7 +1727,7 @@ mod mooncake_tests {
                 puffin_blob_ref: HashMap::new(),
                 new_file_indices: vec![],
             },
-            index_merge_result: IcebergSnapshotIndexMergeResult::default(),
+            index_merge_result: PersistenceSnapshotIndexMergeResult::default(),
             data_compaction_result: IcebergSnapshotDataCompactionResult::default(),
             evicted_files_to_delete: Vec::new(),
         };
@@ -1745,7 +1745,7 @@ mod mooncake_tests {
 
         // Only data compaction result.
         let mut res_copy = iceberg_snapshot_result.clone();
-        res_copy.import_result = IcebergSnapshotImportResult::default();
+        res_copy.import_result = PersistenceSnapshotImportResult::default();
         res_copy.data_compaction_result = IcebergSnapshotDataCompactionResult {
             old_data_files_removed: vec![create_data_file(
                 /*file_id=*/ 0,
