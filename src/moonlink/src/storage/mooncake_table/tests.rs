@@ -1804,7 +1804,7 @@ async fn test_iceberg_snapshot_blocked_by_ongoing_flushes() -> Result<()> {
             payload.flush_lsn,
             min_pending,
             true,  // iceberg_snapshot_result_consumed
-            false, // iceberg_snapshot_ongoing
+            false, // persistence_snapshot_ongoing
         );
 
         assert!(!can_initiate,

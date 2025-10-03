@@ -389,7 +389,7 @@ impl TableHandler {
                         }
 
                         if table_handler_state.has_pending_force_snapshot_request()
-                            && !table_handler_state.iceberg_snapshot_ongoing
+                            && !table_handler_state.persistence_snapshot_ongoing
                         {
                             // flush if needed
                             if let Some(commit_lsn) = table_handler_state.table_consistent_view_lsn
@@ -445,7 +445,7 @@ impl TableHandler {
                             table_handler_state.table_maintenance_process_status =
                                 MaintenanceProcessStatus::InPersist;
                         }
-                        table_handler_state.iceberg_snapshot_ongoing = true;
+                        table_handler_state.persistence_snapshot_ongoing = true;
                         if table_handler_state
                             .should_complete_alter_table(iceberg_snapshot_payload.flush_lsn)
                         {
@@ -508,7 +508,7 @@ impl TableHandler {
                             mooncake_snapshot_result.commit_lsn,
                             min_pending_flush_lsn,
                             table_handler_state.iceberg_snapshot_result_consumed,
-                            table_handler_state.iceberg_snapshot_ongoing,
+                            table_handler_state.persistence_snapshot_ongoing,
                         ) {
                             if let Some(iceberg_snapshot_payload) =
                                 mooncake_snapshot_result.iceberg_snapshot_payload
@@ -611,7 +611,7 @@ impl TableHandler {
                     TableEvent::IcebergSnapshotResult {
                         iceberg_snapshot_result,
                     } => {
-                        table_handler_state.iceberg_snapshot_ongoing = false;
+                        table_handler_state.persistence_snapshot_ongoing = false;
                         match iceberg_snapshot_result {
                             Ok(snapshot_res) => {
                                 // Record iceberg snapshot completion.

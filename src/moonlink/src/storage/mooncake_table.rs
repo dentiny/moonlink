@@ -424,7 +424,7 @@ impl SnapshotTask {
 #[derive(Clone, Debug, Default)]
 struct BackgroundTaskStatus {
     mooncake_snapshot_ongoing: bool,
-    iceberg_snapshot_ongoing: bool,
+    persistence_snapshot_ongoing: bool,
     index_merge_ongoing: bool,
     data_compaction_ongoing: bool,
 }
@@ -693,10 +693,10 @@ impl MooncakeTable {
     pub(crate) fn set_iceberg_snapshot_res(&mut self, iceberg_snapshot_res: IcebergSnapshotResult) {
         assert!(
             self.background_task_status_for_validation
-                .iceberg_snapshot_ongoing
+                .persistence_snapshot_ongoing
         );
         self.background_task_status_for_validation
-            .iceberg_snapshot_ongoing = false;
+            .persistence_snapshot_ongoing = false;
 
         // ---- Update mooncake table fields ----
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
@@ -1668,10 +1668,10 @@ impl MooncakeTable {
         assert!(
             !self
                 .background_task_status_for_validation
-                .iceberg_snapshot_ongoing
+                .persistence_snapshot_ongoing
         );
         self.background_task_status_for_validation
-            .iceberg_snapshot_ongoing = true;
+            .persistence_snapshot_ongoing = true;
 
         // Create a detached task, whose completion will be notified separately.
         let new_file_ids_to_create = snapshot_payload.get_new_file_ids_num();
