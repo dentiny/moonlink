@@ -573,7 +573,7 @@ impl PostgresConnection {
                 table_resources.event_sender.clone(),
                 table_resources.wal_persistence_metadata.clone(),
                 table_resources.wal_file_accessor.clone(),
-                table_resources.last_iceberg_snapshot_lsn,
+                table_resources.last_persistence_snapshot_lsn,
             )
             .await?;
             debug!(

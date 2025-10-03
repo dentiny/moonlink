@@ -256,10 +256,12 @@ impl TableHandler {
 
                         // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.
                         let requested_lsn = requested_lsn.unwrap();
-                        let last_iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
+                        let last_persistence_snapshot_lsn = table.get_iceberg_snapshot_lsn();
                         let replication_lsn = *replication_lsn_rx.borrow();
-                        let persisted_table_lsn = table_handler_state
-                            .get_persisted_table_lsn(last_iceberg_snapshot_lsn, replication_lsn);
+                        let persisted_table_lsn = table_handler_state.get_persisted_table_lsn(
+                            last_persistence_snapshot_lsn,
+                            replication_lsn,
+                        );
 
                         if persisted_table_lsn >= requested_lsn {
                             table_handler_state.notify_persisted_table_lsn(persisted_table_lsn);

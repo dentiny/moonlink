@@ -522,7 +522,7 @@ async fn test_table_recovery() {
     )
     .await
     .unwrap();
-    assert_eq!(recovered_table.last_iceberg_snapshot_lsn.unwrap(), 100);
+    assert_eq!(recovered_table.last_persistence_snapshot_lsn.unwrap(), 100);
 }
 
 /// ---- Mock unit test ----

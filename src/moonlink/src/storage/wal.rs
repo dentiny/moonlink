@@ -1223,10 +1223,10 @@ impl WalManager {
     /// Assumes that there is no last iceberg snapshot lsn if the option is None.
     fn event_already_captured_in_iceberg_snapshot(
         lsn: u64,
-        last_iceberg_snapshot_lsn: Option<u64>,
+        last_persistence_snapshot_lsn: Option<u64>,
     ) -> bool {
-        if let Some(last_iceberg_snapshot_lsn) = last_iceberg_snapshot_lsn {
-            lsn <= last_iceberg_snapshot_lsn
+        if let Some(last_persistence_snapshot_lsn) = last_persistence_snapshot_lsn {
+            lsn <= last_persistence_snapshot_lsn
         } else {
             false
         }
@@ -1239,7 +1239,7 @@ impl WalManager {
         event: &TableEvent,
         xact_map: &HashMap<u32, WalTransactionState>,
         highest_committed_lsn: u64,
-        last_iceberg_snapshot_lsn: Option<u64>,
+        last_persistence_snapshot_lsn: Option<u64>,
     ) -> bool {
         match event {
             // for everything, check if already in iceberg snapshot
@@ -1254,7 +1254,7 @@ impl WalManager {
                             // transaction was already committed, we should reapply it if it is NOT captured in the iceberg snapshot
                             !WalManager::event_already_captured_in_iceberg_snapshot(
                                 *completion_lsn,
-                                last_iceberg_snapshot_lsn,
+                                last_persistence_snapshot_lsn,
                             )
                         }
                         Some(WalTransactionState::Open { .. }) => {
@@ -1267,7 +1267,7 @@ impl WalManager {
                             if let TableEvent::Commit { lsn, .. } = event {
                                 assert!(WalManager::event_already_captured_in_iceberg_snapshot(
                                     *lsn,
-                                    last_iceberg_snapshot_lsn,
+                                    last_persistence_snapshot_lsn,
                                 ), "an untracked streaming xact should be captured in the iceberg snapshot, but it was not");
                             }
                             false
@@ -1275,8 +1275,9 @@ impl WalManager {
                     }
                 } else {
                     // Main xact - if it is <= the iceberg snapshot lsn, it is already captured in the iceberg snapshot
-                    let already_captured_in_iceberg_snapshot = last_iceberg_snapshot_lsn.is_some()
-                        && *lsn <= last_iceberg_snapshot_lsn.unwrap();
+                    let already_captured_in_iceberg_snapshot = last_persistence_snapshot_lsn
+                        .is_some()
+                        && *lsn <= last_persistence_snapshot_lsn.unwrap();
                     // in the main xact, if the lsn is <= the lsn of the highest commit, it means the transaction has committed
                     let is_completed_transaction = *lsn <= highest_committed_lsn;
                     !already_captured_in_iceberg_snapshot && is_completed_transaction
@@ -1297,7 +1298,7 @@ impl WalManager {
         event_sender_clone: Sender<TableEvent>,
         persistent_wal_metadata: Option<PersistentWalMetadata>,
         wal_file_accessor: Arc<dyn BaseFileSystemAccess>,
-        last_iceberg_snapshot_lsn: Option<u64>,
+        last_persistence_snapshot_lsn: Option<u64>,
     ) -> Result<()> {
         if persistent_wal_metadata.is_none() {
             return Ok(());
@@ -1323,7 +1324,7 @@ impl WalManager {
                     &table_event,
                     &active_xacts,
                     persistent_wal_metadata.get_highest_completion_lsn(),
-                    last_iceberg_snapshot_lsn,
+                    last_persistence_snapshot_lsn,
                 ) {
                     table_event.set_is_recovery(true);
                     event_sender_clone

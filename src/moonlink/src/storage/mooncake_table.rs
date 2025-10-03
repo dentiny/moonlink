@@ -481,7 +481,7 @@ pub struct MooncakeTable {
     /// monotonically increasing.
     last_flush_lsn: Option<u64>,
     /// LSN of the latest iceberg snapshot.
-    last_iceberg_snapshot_lsn: Option<u64>,
+    last_persistence_snapshot_lsn: Option<u64>,
 
     /// Table notifier, which is used to sent multiple types of event completion information.
     table_notify: Option<Sender<TableEvent>>,
@@ -561,12 +561,12 @@ impl MooncakeTable {
         table_metadata.validate();
         let (table_snapshot_watch_sender, table_snapshot_watch_receiver) = watch::channel(u64::MAX);
         let (next_file_id, current_snapshot) = table_manager.load_snapshot_from_table().await?;
-        let last_iceberg_snapshot_lsn = current_snapshot.flush_lsn;
-        if let Some(last_iceberg_snapshot_lsn) = last_iceberg_snapshot_lsn {
+        let last_persistence_snapshot_lsn = current_snapshot.flush_lsn;
+        if let Some(last_persistence_snapshot_lsn) = last_persistence_snapshot_lsn {
             // We should NOT send the wal_highest_completion_lsn, because those events are not applied at this point yet.
             // They will replayed through the event stream, and re-applied to the table.
             table_snapshot_watch_sender
-                .send(last_iceberg_snapshot_lsn)
+                .send(last_persistence_snapshot_lsn)
                 .unwrap();
         }
 
@@ -603,7 +603,7 @@ impl MooncakeTable {
             streaming_batch_id_counter,
             iceberg_table_manager: Some(table_manager),
             last_flush_lsn: None,
-            last_iceberg_snapshot_lsn,
+            last_persistence_snapshot_lsn,
             table_notify: None,
             wal_manager,
             ongoing_flush_lsns: BTreeMap::new(),
@@ -701,10 +701,10 @@ impl MooncakeTable {
         // ---- Update mooncake table fields ----
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
         Self::assert_flush_lsn_on_iceberg_snapshot_res(
-            self.last_iceberg_snapshot_lsn,
+            self.last_persistence_snapshot_lsn,
             &iceberg_snapshot_res,
         );
-        self.last_iceberg_snapshot_lsn = Some(flush_lsn);
+        self.last_persistence_snapshot_lsn = Some(flush_lsn);
 
         if let Some(new_table_schema) = iceberg_snapshot_res.new_table_schema {
             assert!(Arc::ptr_eq(&self.metadata, &new_table_schema));
@@ -842,7 +842,7 @@ impl MooncakeTable {
 
     /// Get iceberg snapshot flush LSN.
     pub fn get_iceberg_snapshot_lsn(&self) -> Option<u64> {
-        self.last_iceberg_snapshot_lsn
+        self.last_persistence_snapshot_lsn
     }
 
     pub(crate) fn get_state_for_reader(

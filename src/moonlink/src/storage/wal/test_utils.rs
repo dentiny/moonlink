@@ -26,9 +26,10 @@ impl WalManager {
     /// and then call handle_completed_wal_persistence_update to update the wal.
     pub async fn do_wal_persistence_update_for_test(
         &mut self,
-        last_iceberg_snapshot_lsn: Option<u64>,
+        last_persistence_snapshot_lsn: Option<u64>,
     ) -> Result<()> {
-        let prepare_persistent_update = self.prepare_persistent_update(last_iceberg_snapshot_lsn);
+        let prepare_persistent_update =
+            self.prepare_persistent_update(last_persistence_snapshot_lsn);
 
         let (event_sender, mut event_receiver) = tokio::sync::mpsc::channel::<TableEvent>(100);
 
