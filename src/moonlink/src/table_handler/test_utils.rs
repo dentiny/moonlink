@@ -489,13 +489,13 @@ impl TestEnvironment {
     pub async fn check_wal_metadata_invariants(
         &self,
         metadata: &PersistentWalMetadata,
-        iceberg_snapshot_lsn: Option<u64>,
+        persistence_snapshot_lsn: Option<u64>,
         should_contain_xact_ids: Vec<u32>,
         should_not_contain_xact_ids: Vec<u32>,
     ) {
         assert_eq!(
-            metadata.get_iceberg_snapshot_lsn(),
-            iceberg_snapshot_lsn,
+            metadata.get_persistence_snapshot_lsn(),
+            persistence_snapshot_lsn,
             "iceberg snapshot lsn should be the same"
         );
 
@@ -513,7 +513,7 @@ impl TestEnvironment {
             if let WalTransactionState::Commit { completion_lsn, .. }
             | WalTransactionState::Abort { completion_lsn, .. } = xact_state
             {
-                if let Some(lsn) = iceberg_snapshot_lsn {
+                if let Some(lsn) = persistence_snapshot_lsn {
                     ma::assert_gt!(
                         *completion_lsn,
                         lsn,
@@ -534,7 +534,7 @@ impl TestEnvironment {
             if let WalTransactionState::Commit { completion_lsn, .. }
             | WalTransactionState::Abort { completion_lsn, .. } = xact
             {
-                if let Some(lsn) = iceberg_snapshot_lsn {
+                if let Some(lsn) = persistence_snapshot_lsn {
                     ma::assert_gt!(
                         *completion_lsn,
                         lsn,

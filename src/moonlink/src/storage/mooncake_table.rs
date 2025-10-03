@@ -841,7 +841,7 @@ impl MooncakeTable {
     }
 
     /// Get iceberg snapshot flush LSN.
-    pub fn get_iceberg_snapshot_lsn(&self) -> Option<u64> {
+    pub fn get_persistence_snapshot_lsn(&self) -> Option<u64> {
         self.last_persistence_snapshot_lsn
     }
 
@@ -1136,11 +1136,11 @@ impl MooncakeTable {
     /// * uuid: WAL persistence event unique id.
     #[must_use]
     pub(crate) fn do_wal_persistence_update(&mut self, uuid: uuid::Uuid) -> bool {
-        let latest_iceberg_snapshot_lsn = self.get_iceberg_snapshot_lsn();
+        let latest_persistence_snapshot_lsn = self.get_persistence_snapshot_lsn();
 
         let wal_persistence_update_result = self
             .wal_manager
-            .prepare_persistent_update(latest_iceberg_snapshot_lsn);
+            .prepare_persistent_update(latest_persistence_snapshot_lsn);
 
         if wal_persistence_update_result.should_do_persistence() {
             let event_sender_clone = self.table_notify.as_ref().unwrap().clone();

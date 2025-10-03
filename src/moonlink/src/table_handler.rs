@@ -129,29 +129,29 @@ impl TableHandler {
         handler_event_replay_tx: Option<mpsc::UnboundedSender<TableEvent>>,
         mut table: MooncakeTable,
     ) {
-        let iceberg_snapshot_lsn = table.get_iceberg_snapshot_lsn();
+        let persistence_snapshot_lsn = table.get_persistence_snapshot_lsn();
         // Here we indicate that highest completion lsn of 0 indicates that we have not seen any completed WAL events yet.
         let wal_highest_completion_lsn = table.get_wal_highest_completion_lsn();
         let wal_curr_file_number = table.get_wal_curr_file_number();
 
         let initial_persistence_lsn = if wal_curr_file_number > 0 {
-            if let Some(iceberg_snapshot_lsn) = iceberg_snapshot_lsn {
+            if let Some(persistence_snapshot_lsn) = persistence_snapshot_lsn {
                 Some(std::cmp::max(
-                    iceberg_snapshot_lsn,
+                    persistence_snapshot_lsn,
                     wal_highest_completion_lsn,
                 ))
             } else {
                 Some(wal_highest_completion_lsn)
             }
         } else {
-            iceberg_snapshot_lsn
+            persistence_snapshot_lsn
         };
 
         let mut table_handler_state = TableHandlerState::new(
             event_sync_sender.table_maintenance_completion_tx.clone(),
             event_sync_sender.force_snapshot_completion_tx.clone(),
             initial_persistence_lsn,
-            iceberg_snapshot_lsn,
+            persistence_snapshot_lsn,
         );
 
         // Used to clean up mooncake table status, and send completion notification.
@@ -256,7 +256,7 @@ impl TableHandler {
 
                         // Fast-path: if iceberg snapshot requirement is already satisfied, notify directly.
                         let requested_lsn = requested_lsn.unwrap();
-                        let last_persistence_snapshot_lsn = table.get_iceberg_snapshot_lsn();
+                        let last_persistence_snapshot_lsn = table.get_persistence_snapshot_lsn();
                         let replication_lsn = *replication_lsn_rx.borrow();
                         let persisted_table_lsn = table_handler_state.get_persisted_table_lsn(
                             last_persistence_snapshot_lsn,

@@ -154,14 +154,14 @@ pub async fn build_table_components(
     )
     .await?;
 
-    let last_persistence_snapshot_lsn = table.get_iceberg_snapshot_lsn();
+    let last_persistence_snapshot_lsn = table.get_persistence_snapshot_lsn();
 
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
     // Make a receiver first before possible mark operation, otherwise all receiver initializes with 0.
     let replication_lsn_tx = replication_state.subscribe();
-    if let Some(iceberg_snapshot_lsn) = last_persistence_snapshot_lsn {
-        commit_lsn_tx.send(iceberg_snapshot_lsn).unwrap();
-        replication_state.mark(iceberg_snapshot_lsn);
+    if let Some(persistence_snapshot_lsn) = last_persistence_snapshot_lsn {
+        commit_lsn_tx.send(persistence_snapshot_lsn).unwrap();
+        replication_state.mark(persistence_snapshot_lsn);
     }
 
     let read_state_manager = ReadStateManager::new(
