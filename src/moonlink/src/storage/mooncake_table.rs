@@ -673,7 +673,7 @@ impl MooncakeTable {
 
     /// Assert flush LSN doesn't regress.
     /// There're several cases for equal flush LSN, for example, force snapshot, table maintenance, etc.
-    fn assert_flush_lsn_on_iceberg_snapshot_res(
+    fn assert_flush_lsn_on_persistence_snapshot_res(
         persistence_lsn: Option<u64>,
         iceberg_snapshot_res: &PersistenceSnapshotResult,
     ) {
@@ -703,7 +703,7 @@ impl MooncakeTable {
 
         // ---- Update mooncake table fields ----
         let flush_lsn = iceberg_snapshot_res.flush_lsn;
-        Self::assert_flush_lsn_on_iceberg_snapshot_res(
+        Self::assert_flush_lsn_on_persistence_snapshot_res(
             self.last_persistence_snapshot_lsn,
             &iceberg_snapshot_res,
         );
@@ -1738,14 +1738,14 @@ mod mooncake_tests {
             evicted_files_to_delete: Vec::new(),
         };
         // Valid snapshot result.
-        MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(
+        MooncakeTable::assert_flush_lsn_on_persistence_snapshot_res(
             /*persistence_lsn=*/ None,
             &iceberg_snapshot_result,
         );
         // Invalid snapshot result.
         let res_copy = iceberg_snapshot_result.clone();
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(Some(2), &res_copy);
+            MooncakeTable::assert_flush_lsn_on_persistence_snapshot_res(Some(2), &res_copy);
         }));
         assert!(result.is_err());
 
@@ -1760,13 +1760,13 @@ mod mooncake_tests {
             ..Default::default()
         };
         // Valid snapshot result.
-        MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(
+        MooncakeTable::assert_flush_lsn_on_persistence_snapshot_res(
             /*persistence_lsn=*/ Some(1),
             &res_copy,
         );
         // Invalid snapshot result.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(Some(2), &res_copy);
+            MooncakeTable::assert_flush_lsn_on_persistence_snapshot_res(Some(2), &res_copy);
         }));
         assert!(result.is_err());
 
@@ -1780,7 +1780,7 @@ mod mooncake_tests {
             ..Default::default()
         };
         // Valid snapshot result.
-        MooncakeTable::assert_flush_lsn_on_iceberg_snapshot_res(
+        MooncakeTable::assert_flush_lsn_on_persistence_snapshot_res(
             /*persistence_lsn=*/ Some(1),
             &res_copy,
         );
