@@ -11,7 +11,7 @@ use crate::storage::iceberg::table_manager::{
 use crate::storage::iceberg::utils;
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
-use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::FileId;
@@ -194,7 +194,7 @@ impl TableManager for IcebergTableManager {
 
     async fn sync_snapshot(
         &mut self,
-        mut snapshot_payload: IcebergSnapshotPayload,
+        mut snapshot_payload: PersistenceSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> Result<PersistenceResult> {
         // Persist data files, deletion vectors, and file indices.

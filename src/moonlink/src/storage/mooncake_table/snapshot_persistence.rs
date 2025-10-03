@@ -3,7 +3,7 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::snapshot::CommittedDeletionToPersist;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
-use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::SnapshotTask;
 use crate::storage::mooncake_table::{
     IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload,
@@ -28,13 +28,13 @@ impl SnapshotTableState {
         self.committed_deletion_log.len() >= deletion_record_snapshot_threshold
     }
 
-    pub(super) fn get_iceberg_snapshot_payload(
+    pub(super) fn get_persistence_snapshot_payload(
         &self,
         opt: &IcebergSnapshotOption,
         flush_lsn: u64,
         committed_deletion_to_persist: CommittedDeletionToPersist,
-    ) -> IcebergSnapshotPayload {
-        IcebergSnapshotPayload {
+    ) -> PersistenceSnapshotPayload {
+        PersistenceSnapshotPayload {
             uuid: opt.get_event_id().unwrap(),
             flush_lsn,
             new_table_schema: None,

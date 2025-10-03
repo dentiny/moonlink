@@ -234,10 +234,10 @@ pub(crate) async fn replay(replay_filepath: &str) {
 
     // Pending background tasks to issue.
     // Maps from event id to payload.
-    let pending_iceberg_snapshot_payloads = Arc::new(Mutex::new(HashMap::new()));
+    let pending_persistence_snapshot_payloads = Arc::new(Mutex::new(HashMap::new()));
     let pending_index_merge_payloads = Arc::new(Mutex::new(HashMap::new()));
     let pending_data_compaction_payloads = Arc::new(Mutex::new(HashMap::new()));
-    let pending_iceberg_snapshot_payloads_clone = pending_iceberg_snapshot_payloads.clone();
+    let pending_persistence_snapshot_payloads_clone = pending_persistence_snapshot_payloads.clone();
     let pending_index_merge_payloads_clone = pending_index_merge_payloads.clone();
     let pending_data_compaction_payloads_clone = pending_data_compaction_payloads.clone();
     // TODO(hjiang): For data compaction payloads, if compaction is not taken for this particular payload, we need to decrement reference counts for all pinned files.
@@ -309,15 +309,15 @@ pub(crate) async fn replay(replay_filepath: &str) {
                     };
 
                     // Fill in background tasks payload to fill in.
-                    if let Some(iceberg_snapshot_payload) = &completed_mooncake_snapshot
+                    if let Some(persistence_snapshot_payload) = &completed_mooncake_snapshot
                         .mooncake_snapshot_result
-                        .iceberg_snapshot_payload
+                        .persistence_snapshot_payload
                     {
-                        let mut guard = pending_iceberg_snapshot_payloads.lock().await;
+                        let mut guard = pending_persistence_snapshot_payloads.lock().await;
                         assert!(guard
                             .insert(
-                                iceberg_snapshot_payload.uuid,
-                                iceberg_snapshot_payload.clone()
+                                persistence_snapshot_payload.uuid,
+                                persistence_snapshot_payload.clone()
                             )
                             .is_none());
                     }
@@ -602,7 +602,7 @@ pub(crate) async fn replay(replay_filepath: &str) {
             MooncakeTableEvent::IcebergSnapshotInitiation(snapshot_initiation_event) => {
                 assert!(ongoing_iceberg_snapshot_id.insert(snapshot_initiation_event.uuid));
                 let payload = {
-                    let mut guard = pending_iceberg_snapshot_payloads_clone.lock().await;
+                    let mut guard = pending_persistence_snapshot_payloads_clone.lock().await;
                     guard.remove(&snapshot_initiation_event.uuid).unwrap()
                 };
                 table.persist_iceberg_snapshot(payload);

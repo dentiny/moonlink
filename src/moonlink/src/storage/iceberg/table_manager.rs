@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
-use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
@@ -51,7 +51,7 @@ pub trait TableManager: Send {
     #[allow(async_fn_in_trait)]
     async fn sync_snapshot(
         &mut self,
-        snapshot_payload: IcebergSnapshotPayload,
+        snapshot_payload: PersistenceSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> Result<PersistenceResult>;
 

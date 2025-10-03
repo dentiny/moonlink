@@ -30,8 +30,8 @@ use crate::storage::mooncake_table::test_utils_commons::ICEBERG_TEST_NAMESPACE;
 use crate::storage::mooncake_table::test_utils_commons::ICEBERG_TEST_TABLE;
 use crate::storage::mooncake_table::validation_test_utils::*;
 use crate::storage::mooncake_table::DataCompactionResult;
-use crate::storage::mooncake_table::IcebergSnapshotPayload;
 use crate::storage::mooncake_table::IcebergSnapshotResult;
+use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::{
     IcebergSnapshotDataCompactionPayload, IcebergSnapshotImportPayload,
     IcebergSnapshotIndexMergePayload,
@@ -314,9 +314,9 @@ async fn test_skip_iceberg_snapshot() {
         index_merge_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
         data_compaction_option: MaintenanceOption::BestEffort(uuid::Uuid::new_v4()),
     }));
-    let (_, iceberg_snapshot_payload, _, _, _) =
+    let (_, persistence_snapshot_payload, _, _, _) =
         sync_mooncake_snapshot(&mut table, &mut notify_rx).await;
-    assert!(iceberg_snapshot_payload.is_none());
+    assert!(persistence_snapshot_payload.is_none());
 }
 
 /// ================================
@@ -370,7 +370,7 @@ async fn test_manifest_entries_write_with_pagination_impl(
         stream::iter(tasks).buffer_unordered(1024).collect().await;
     data_files_to_import.extend(results);
 
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         new_table_schema: None,
@@ -397,12 +397,12 @@ async fn test_manifest_entries_write_with_pagination_impl(
         table_auto_incr_ids: 0..((DEFAULT_MAX_MANIFEST_ENTRY_COUNT + 1) as u32),
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
     // Remove one data manifest entries.
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         new_table_schema: None,
@@ -428,7 +428,7 @@ async fn test_manifest_entries_write_with_pagination_impl(
         table_auto_incr_ids: 0..(DEFAULT_MAX_MANIFEST_ENTRY_COUNT + 1) as u32, // unused
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 }
@@ -494,7 +494,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_1).await;
     let file_index_1 = create_file_index(vec![data_file_1.clone()]);
 
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         new_table_schema: None,
@@ -521,7 +521,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         table_auto_incr_ids: 1..2,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -548,7 +548,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     write_arrow_record_batch_to_local(parquet_path.as_path(), arrow_schema.clone(), &batch_2).await;
     let file_index_2 = create_file_index(vec![data_file_2.clone()]);
 
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         new_table_schema: None,
@@ -575,7 +575,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         table_auto_incr_ids: 3..4,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -628,7 +628,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     //
     // Write third snapshot to iceberg table, with file indices to add and remove.
     let merged_file_index = create_file_index(remote_data_files.clone());
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 2,
         new_table_schema: None,
@@ -654,7 +654,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         table_auto_incr_ids: 4..5,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
     assert_eq!(iceberg_table_manager.persisted_file_indices.len(), 1);
@@ -713,7 +713,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // ==============
     //
     // Attempt a fourth snapshot persistence, which goes after data file compaction.
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 3,
         new_table_schema: None,
@@ -739,7 +739,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         table_auto_incr_ids: 6..7,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -787,7 +787,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
     // ==============
     //
     // Remove all existing data files and file indices.
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 4,
         new_table_schema: None,
@@ -813,7 +813,7 @@ async fn test_store_and_load_snapshot_impl(iceberg_table_config: IcebergTableCon
         table_auto_incr_ids: 7..8,
     };
     iceberg_table_manager
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -1079,7 +1079,7 @@ async fn test_recover_from_failed_snapshot_impl(iceberg_table_config: IcebergTab
     )
     .await
     .unwrap();
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         new_table_schema: None,
@@ -1097,7 +1097,7 @@ async fn test_recover_from_failed_snapshot_impl(iceberg_table_config: IcebergTab
         table_auto_incr_ids: 0..1,
     };
     iceberg_table_manager_for_persistence
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -1638,14 +1638,14 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
         .unwrap();
 
     // Attempt data compaction and flush to iceberg table.
-    let (_, iceberg_snapshot_payload, _, _, _) =
+    let (_, persistence_snapshot_payload, _, _, _) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Persist iceberg snapshot and reflect to mooncake snapshot.
-    let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
+    let persistence_snapshot_payload = persistence_snapshot_payload.unwrap();
     let (_, _, _, data_compaction_payload, _) =
         create_iceberg_snapshot_and_reflect_to_mooncake_snapshot(
-            iceberg_snapshot_payload,
+            persistence_snapshot_payload,
             &mut table,
             &mut notify_rx,
         )
@@ -1676,11 +1676,11 @@ async fn test_delayed_compaction_impl(iceberg_table_config: IcebergTableConfig) 
     table.set_data_compaction_res(data_compaction_result);
 
     // Persist iceberg snapshot and reflect to mooncake snapshot.
-    let (_, iceberg_snapshot_payload, _, _, _) =
+    let (_, persistence_snapshot_payload, _, _, _) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
-    let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
+    let persistence_snapshot_payload = persistence_snapshot_payload.unwrap();
     create_iceberg_snapshot_and_reflect_to_mooncake_snapshot(
-        iceberg_snapshot_payload,
+        persistence_snapshot_payload,
         &mut table,
         &mut notify_rx,
     )
@@ -2006,7 +2006,7 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
     )
     .await
     .unwrap();
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 0,
         new_table_schema: None,
@@ -2020,7 +2020,7 @@ async fn test_empty_content_snapshot_creation_impl(iceberg_table_config: Iceberg
         table_auto_incr_ids: 0..1,
     };
     iceberg_table_manager_for_persistence
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -2131,7 +2131,7 @@ async fn test_snapshot_creation_with_duplicate_filename_impl(
     )
     .await
     .unwrap();
-    let iceberg_snapshot_payload = IcebergSnapshotPayload {
+    let persistence_snapshot_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn: 1,
         new_table_schema: None,
@@ -2149,7 +2149,7 @@ async fn test_snapshot_creation_with_duplicate_filename_impl(
         table_auto_incr_ids: 0..1,
     };
     iceberg_table_manager_for_persistence
-        .sync_snapshot(iceberg_snapshot_payload, persistence_file_params)
+        .sync_snapshot(persistence_snapshot_payload, persistence_file_params)
         .await
         .unwrap();
 
@@ -2441,7 +2441,7 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 10)
         .await
         .unwrap();
-    let (_, iceberg_snapshot_payload, _, _, _) =
+    let (_, persistence_snapshot_payload, _, _, _) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Operation group 2: Append new rows and create mooncake snapshot.
@@ -2456,7 +2456,7 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
 
     // Create iceberg snapshot for the first mooncake snapshot.
     let iceberg_snapshot_result =
-        create_iceberg_snapshot(&mut table, iceberg_snapshot_payload, &mut notify_rx).await;
+        create_iceberg_snapshot(&mut table, persistence_snapshot_payload, &mut notify_rx).await;
     table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.
@@ -2511,12 +2511,12 @@ async fn test_async_iceberg_snapshot_impl(iceberg_table_config: IcebergTableConf
     flush_table_and_sync(&mut table, &mut notify_rx, /*lsn=*/ 40)
         .await
         .unwrap();
-    let (_, iceberg_snapshot_payload, _, _, _) =
+    let (_, persistence_snapshot_payload, _, _, _) =
         create_mooncake_snapshot_for_test(&mut table, &mut notify_rx).await;
 
     // Create iceberg snapshot for the mooncake snapshot.
     let iceberg_snapshot_result =
-        create_iceberg_snapshot(&mut table, iceberg_snapshot_payload, &mut notify_rx).await;
+        create_iceberg_snapshot(&mut table, persistence_snapshot_payload, &mut notify_rx).await;
     table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
 
     // Load and check iceberg snapshot.

@@ -1,7 +1,7 @@
 use super::data_batches::InMemoryBatch;
 use super::delete_vector::BatchDeletionVector;
 use super::{
-    DiskFileEntry, IcebergSnapshotPayload, Snapshot, SnapshotTask,
+    DiskFileEntry, PersistenceSnapshotPayload, Snapshot, SnapshotTask,
     TableMetadata as MooncakeTableMetadata,
 };
 use crate::error::Result;
@@ -97,7 +97,7 @@ pub struct MooncakeSnapshotOutput {
     /// Committed LSN for mooncake snapshot.
     pub(crate) commit_lsn: u64,
     /// Iceberg snapshot payload.
-    pub(crate) iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
+    pub(crate) persistence_snapshot_payload: Option<PersistenceSnapshotPayload>,
     /// File indice merge payload.
     pub(crate) file_indices_merge_payload: IndexMergeMaintenanceStatus,
     /// Data compaction payload.
@@ -113,7 +113,10 @@ impl std::fmt::Debug for MooncakeSnapshotOutput {
         f.debug_struct("MooncakeSnapshotOutput")
             .field("uuid", &self.uuid)
             .field("commit", &self.commit_lsn)
-            .field("iceberg_snapshot_payload", &self.iceberg_snapshot_payload)
+            .field(
+                "persistence_snapshot_payload",
+                &self.persistence_snapshot_payload,
+            )
             .field(
                 "file_indices_merge_payload",
                 &self.file_indices_merge_payload,
@@ -584,7 +587,7 @@ impl SnapshotTableState {
         // or (2) accumulated unflushed deletion vector exceeds threshold
         // or (3) there're unpersisted table maintenance results
         // or (4) there's pending table schema update
-        let mut iceberg_snapshot_payload: Option<IcebergSnapshotPayload> = None;
+        let mut persistence_snapshot_payload: Option<PersistenceSnapshotPayload> = None;
         let flush_by_deletion = self.create_iceberg_snapshot_by_committed_logs(opt.force_create);
         let flush_by_new_files_or_maintenance = self
             .unpersisted_records
@@ -626,7 +629,7 @@ impl SnapshotTableState {
                 || flush_by_new_files_or_maintenance
                 || force_empty_persistence_payload
             {
-                iceberg_snapshot_payload = Some(self.get_iceberg_snapshot_payload(
+                persistence_snapshot_payload = Some(self.get_persistence_snapshot_payload(
                     &opt.iceberg_snapshot_option,
                     flush_lsn,
                     committed_deletion_logs,
@@ -650,7 +653,7 @@ impl SnapshotTableState {
         MooncakeSnapshotOutput {
             uuid: opt.uuid,
             commit_lsn: self.current_snapshot.snapshot_version,
-            iceberg_snapshot_payload,
+            persistence_snapshot_payload,
             data_compaction_payload,
             file_indices_merge_payload,
             evicted_data_files_to_delete,

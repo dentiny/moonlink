@@ -435,10 +435,10 @@ impl TableHandler {
                             );
                     }
                     TableEvent::RegularIcebergSnapshot {
-                        mut iceberg_snapshot_payload,
+                        mut persistence_snapshot_payload,
                     } => {
                         // Update table maintenance status.
-                        if iceberg_snapshot_payload.contains_table_maintenance_payload()
+                        if persistence_snapshot_payload.contains_table_maintenance_payload()
                             && table_handler_state.table_maintenance_process_status
                                 == MaintenanceProcessStatus::ReadyToPersist
                         {
@@ -447,7 +447,7 @@ impl TableHandler {
                         }
                         table_handler_state.persistence_snapshot_ongoing = true;
                         if table_handler_state
-                            .should_complete_alter_table(iceberg_snapshot_payload.flush_lsn)
+                            .should_complete_alter_table(persistence_snapshot_payload.flush_lsn)
                         {
                             if let SpecialTableState::AlterTable {
                                 ref mut alter_table_request,
@@ -456,7 +456,7 @@ impl TableHandler {
                             {
                                 let new_table_metadata =
                                     table.alter_table(alter_table_request.take().unwrap());
-                                iceberg_snapshot_payload.new_table_schema =
+                                persistence_snapshot_payload.new_table_schema =
                                     Some(new_table_metadata);
                             } else {
                                 unreachable!("alter table request is not set");
@@ -465,7 +465,7 @@ impl TableHandler {
                             Self::process_blocked_events(&mut table, &mut table_handler_state)
                                 .await;
                         }
-                        table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+                        table.persist_iceberg_snapshot(persistence_snapshot_payload);
                     }
                     TableEvent::MooncakeTableSnapshotResult {
                         mooncake_snapshot_result,
@@ -510,12 +510,12 @@ impl TableHandler {
                             table_handler_state.iceberg_snapshot_result_consumed,
                             table_handler_state.persistence_snapshot_ongoing,
                         ) {
-                            if let Some(iceberg_snapshot_payload) =
-                                mooncake_snapshot_result.iceberg_snapshot_payload
+                            if let Some(persistence_snapshot_payload) =
+                                mooncake_snapshot_result.persistence_snapshot_payload
                             {
                                 table_handler_event_sender
                                     .send(TableEvent::RegularIcebergSnapshot {
-                                        iceberg_snapshot_payload,
+                                        persistence_snapshot_payload,
                                     })
                                     .await
                                     .unwrap();

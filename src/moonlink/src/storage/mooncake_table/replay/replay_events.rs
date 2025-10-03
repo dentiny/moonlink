@@ -9,7 +9,7 @@ use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, FileIndiceMergePayload, IcebergSnapshotImportPayload,
-    IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload,
+    IcebergSnapshotIndexMergePayload, PersistenceSnapshotPayload,
 };
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
@@ -135,7 +135,7 @@ pub struct IcebergDataCompactionEvent {
     pub old_file_indices_to_remove: Vec<Vec<FileId>>,
 }
 
-/// For the ease of serde, replay event only stores necessary part of [`IcebergSnapshotPayload`].
+/// For the ease of serde, replay event only stores necessary part of [`PersistenceSnapshotPayload`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct IcebergSnapshotEventInitiation {
     /// Event id.
@@ -403,7 +403,7 @@ pub fn get_iceberg_data_compaction_payload(
 }
 pub fn create_iceberg_snapshot_event_initiation(
     uuid: uuid::Uuid,
-    payload: &IcebergSnapshotPayload,
+    payload: &PersistenceSnapshotPayload,
 ) -> IcebergSnapshotEventInitiation {
     IcebergSnapshotEventInitiation {
         uuid,

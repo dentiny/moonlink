@@ -22,7 +22,7 @@ use crate::storage::iceberg::utils::get_unique_hash_index_v1_filepath;
 use crate::storage::index::FileIndex as MooncakeFileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::take_data_files_to_remove;
-use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::{
     take_data_files_to_import, take_file_indices_to_import, take_file_indices_to_remove,
 };
@@ -722,7 +722,7 @@ impl IcebergTableManager {
 
     pub(crate) async fn sync_snapshot_impl(
         &mut self,
-        mut snapshot_payload: IcebergSnapshotPayload,
+        mut snapshot_payload: PersistenceSnapshotPayload,
         file_params: PersistenceFileParams,
     ) -> Result<PersistenceResult> {
         // Start recording overall snapshot synchronization latency.

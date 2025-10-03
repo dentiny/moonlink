@@ -8,7 +8,7 @@ use crate::storage::io_utils;
 use crate::storage::mooncake_table::disk_slice::DiskSliceWriter;
 use crate::storage::mooncake_table::{
     AlterTableRequest, DataCompactionPayload, DataCompactionResult, FileIndiceMergePayload,
-    FileIndiceMergeResult, IcebergSnapshotPayload, IcebergSnapshotResult,
+    FileIndiceMergeResult, IcebergSnapshotResult, PersistenceSnapshotPayload,
     TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::snapshot_options::SnapshotOption;
@@ -290,7 +290,7 @@ pub(crate) async fn sync_mooncake_snapshot(
     receiver: &mut Receiver<TableEvent>,
 ) -> (
     u64,
-    Option<IcebergSnapshotPayload>,
+    Option<PersistenceSnapshotPayload>,
     IndexMergeMaintenanceStatus,
     DataCompactionMaintenanceStatus,
     Vec<String>,
@@ -303,7 +303,7 @@ pub(crate) async fn sync_mooncake_snapshot(
     {
         (
             mooncake_snapshot_result.commit_lsn,
-            mooncake_snapshot_result.iceberg_snapshot_payload,
+            mooncake_snapshot_result.persistence_snapshot_payload,
             mooncake_snapshot_result.file_indices_merge_payload,
             mooncake_snapshot_result.data_compaction_payload,
             mooncake_snapshot_result.evicted_data_files_to_delete,
@@ -357,7 +357,7 @@ pub(crate) async fn create_mooncake_snapshot_for_test(
     receiver: &mut Receiver<TableEvent>,
 ) -> (
     u64,
-    Option<IcebergSnapshotPayload>,
+    Option<PersistenceSnapshotPayload>,
     IndexMergeMaintenanceStatus,
     DataCompactionMaintenanceStatus,
     Vec<String>,
@@ -380,12 +380,17 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
     receiver: &mut Receiver<TableEvent>,
 ) {
     // Create mooncake snapshot and block wait completion.
-    let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_data_files_to_delete) =
-        create_mooncake_snapshot_for_test(table, receiver).await;
+    let (
+        _,
+        persistence_snapshot_payload,
+        _,
+        data_compaction_payload,
+        mut evicted_data_files_to_delete,
+    ) = create_mooncake_snapshot_for_test(table, receiver).await;
 
     // Create iceberg snapshot if possible.
-    if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
-        table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+    if let Some(persistence_snapshot_payload) = persistence_snapshot_payload {
+        table.persist_iceberg_snapshot(persistence_snapshot_payload);
         let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
         table.set_iceberg_snapshot_res(iceberg_snapshot_result);
     }
@@ -404,17 +409,17 @@ pub(crate) async fn create_mooncake_and_persist_for_test(
 
 /// Test util function, which persist iceberg snapshot and reflect the change to mooncake snapshot.
 pub(crate) async fn create_iceberg_snapshot_and_reflect_to_mooncake_snapshot(
-    iceberg_snapshot_payload: IcebergSnapshotPayload,
+    persistence_snapshot_payload: PersistenceSnapshotPayload,
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
 ) -> (
     u64,
-    Option<IcebergSnapshotPayload>,
+    Option<PersistenceSnapshotPayload>,
     IndexMergeMaintenanceStatus,
     DataCompactionMaintenanceStatus,
     Vec<String>,
 ) {
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+    table.persist_iceberg_snapshot(persistence_snapshot_payload);
     let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
     table.set_iceberg_snapshot_res(iceberg_snapshot_result);
     create_mooncake_snapshot_for_test(table, receiver).await
@@ -425,8 +430,13 @@ pub(crate) async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
     table: &mut MooncakeTable,
     receiver: &mut Receiver<TableEvent>,
 ) {
-    let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(table, receiver).await;
+    let (
+        _,
+        persistence_snapshot_payload,
+        _,
+        data_compaction_payload,
+        mut evicted_data_files_to_delete,
+    ) = sync_mooncake_snapshot(table, receiver).await;
 
     // Unpin reference count made for compaction.
     if let Some(payload) = data_compaction_payload.take_payload() {
@@ -438,8 +448,8 @@ pub(crate) async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
         .await
         .unwrap();
 
-    let iceberg_snapshot_payload = iceberg_snapshot_payload.unwrap();
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+    let persistence_snapshot_payload = persistence_snapshot_payload.unwrap();
+    table.persist_iceberg_snapshot(persistence_snapshot_payload);
     let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
     table.set_iceberg_snapshot_res(iceberg_snapshot_result);
 
@@ -458,10 +468,10 @@ pub(crate) async fn sync_mooncake_snapshot_and_create_new_by_iceberg_payload(
 /// Test util function to perform an iceberg snapshot, block wait its completion and gets its result.
 pub(crate) async fn create_iceberg_snapshot(
     table: &mut MooncakeTable,
-    iceberg_snapshot_payload: Option<IcebergSnapshotPayload>,
+    persistence_snapshot_payload: Option<PersistenceSnapshotPayload>,
     notify_rx: &mut Receiver<TableEvent>,
 ) -> Result<IcebergSnapshotResult> {
-    table.persist_iceberg_snapshot(iceberg_snapshot_payload.unwrap());
+    table.persist_iceberg_snapshot(persistence_snapshot_payload.unwrap());
     let notification = notify_rx.recv().await.unwrap();
     match notification {
         TableEvent::IcebergSnapshotResult {
@@ -501,29 +511,29 @@ pub(crate) async fn create_mooncake_and_persist_for_data_compaction_for_test(
     assert!(table.try_create_mooncake_snapshot(force_snapshot_option.clone()));
 
     // Create iceberg snapshot.
-    let (_, iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
+    let (_, persistence_snapshot_payload, _, _, evicted_data_files_to_delete) =
         sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
         .unwrap();
 
-    if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
-        table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+    if let Some(persistence_snapshot_payload) = persistence_snapshot_payload {
+        table.persist_iceberg_snapshot(persistence_snapshot_payload);
         let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
         table.set_iceberg_snapshot_res(iceberg_snapshot_result);
     }
 
     // Get data compaction payload.
     assert!(table.try_create_mooncake_snapshot(force_snapshot_option.clone()));
-    let (_, iceberg_snapshot_payload, _, data_compaction_payload, evicted_data_files_to_delete) =
+    let (_, persistence_snapshot_payload, _, data_compaction_payload, evicted_data_files_to_delete) =
         sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
         .unwrap();
 
-    assert!(iceberg_snapshot_payload.is_none());
+    assert!(persistence_snapshot_payload.is_none());
     let data_compaction_payload = data_compaction_payload.take_payload().unwrap();
 
     // Perform and block wait data compaction.
@@ -570,29 +580,34 @@ pub(crate) async fn create_mooncake_and_iceberg_snapshot_for_index_merge_for_tes
     assert!(table.try_create_mooncake_snapshot(force_snapshot_option.clone()));
 
     // Create iceberg snapshot.
-    let (_, iceberg_snapshot_payload, _, _, evicted_data_files_to_delete) =
+    let (_, persistence_snapshot_payload, _, _, evicted_data_files_to_delete) =
         sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
         .unwrap();
 
-    if let Some(iceberg_snapshot_payload) = iceberg_snapshot_payload {
-        table.persist_iceberg_snapshot(iceberg_snapshot_payload);
+    if let Some(persistence_snapshot_payload) = persistence_snapshot_payload {
+        table.persist_iceberg_snapshot(persistence_snapshot_payload);
         let iceberg_snapshot_result = sync_iceberg_snapshot(receiver).await;
         table.set_iceberg_snapshot_res(iceberg_snapshot_result);
     }
 
     // Perform index merge.
     assert!(table.try_create_mooncake_snapshot(force_snapshot_option.clone()));
-    let (_, iceberg_snapshot_payload, file_indice_merge_payload, _, evicted_data_files_to_delete) =
-        sync_mooncake_snapshot(table, receiver).await;
+    let (
+        _,
+        persistence_snapshot_payload,
+        file_indice_merge_payload,
+        _,
+        evicted_data_files_to_delete,
+    ) = sync_mooncake_snapshot(table, receiver).await;
     // Delete evicted object storage cache entries immediately to make sure later accesses all happen on persisted files.
     io_utils::delete_local_files(&evicted_data_files_to_delete)
         .await
         .unwrap();
 
-    assert!(iceberg_snapshot_payload.is_none());
+    assert!(persistence_snapshot_payload.is_none());
     let file_indice_merge_payload = file_indice_merge_payload.take_payload().unwrap();
 
     table.perform_index_merge(file_indice_merge_payload);
@@ -655,7 +670,7 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
 ) -> Arc<MooncakeTableMetadata> {
     table.force_empty_persistence_payload();
     // Create a mooncake and iceberg snapshot to reflect both data files and schema changes.
-    let (_, iceberg_snapshot_payload, _, data_compaction_payload, mut evicted_files_to_delete) =
+    let (_, persistence_snapshot_payload, _, data_compaction_payload, mut evicted_files_to_delete) =
         create_mooncake_snapshot_for_test(table, notify_rx).await;
 
     // Unpin previously pinned files.
@@ -668,15 +683,15 @@ pub(crate) async fn alter_table_and_persist_to_iceberg(
         .await
         .unwrap();
 
-    if let Some(mut iceberg_snapshot_payload) = iceberg_snapshot_payload {
+    if let Some(mut persistence_snapshot_payload) = persistence_snapshot_payload {
         let alter_table_request = AlterTableRequest {
             new_columns: vec![],
             dropped_columns: vec!["age".to_string()],
         };
         let new_table_metadata = table.alter_table(alter_table_request);
-        iceberg_snapshot_payload.new_table_schema = Some(new_table_metadata.clone());
+        persistence_snapshot_payload.new_table_schema = Some(new_table_metadata.clone());
         let iceberg_snapshot_result =
-            create_iceberg_snapshot(table, Some(iceberg_snapshot_payload), notify_rx).await;
+            create_iceberg_snapshot(table, Some(persistence_snapshot_payload), notify_rx).await;
         table.set_iceberg_snapshot_res(iceberg_snapshot_result.unwrap());
         new_table_metadata
     } else {

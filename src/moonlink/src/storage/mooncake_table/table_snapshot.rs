@@ -133,7 +133,7 @@ impl IcebergSnapshotDataCompactionPayload {
 }
 
 #[derive(Clone)]
-pub struct IcebergSnapshotPayload {
+pub struct PersistenceSnapshotPayload {
     /// Background event id.
     pub(crate) uuid: uuid::Uuid,
     /// Flush LSN.
@@ -150,9 +150,9 @@ pub struct IcebergSnapshotPayload {
     pub(crate) data_compaction_payload: IcebergSnapshotDataCompactionPayload,
 }
 
-impl std::fmt::Debug for IcebergSnapshotPayload {
+impl std::fmt::Debug for PersistenceSnapshotPayload {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("IcebergSnapshotPayload")
+        f.debug_struct("PersistenceSnapshotPayload")
             .field("uuid", &self.uuid)
             .field("flush_lsn", &self.flush_lsn)
             .field(
@@ -166,7 +166,7 @@ impl std::fmt::Debug for IcebergSnapshotPayload {
     }
 }
 
-impl IcebergSnapshotPayload {
+impl PersistenceSnapshotPayload {
     /// Get the number of new files created in iceberg table.
     pub fn get_new_file_ids_num(&self) -> u32 {
         // Only deletion vector puffin blobs create files with new file ids.
@@ -491,7 +491,7 @@ impl std::fmt::Debug for FileIndiceMergeResult {
 
 /// Util functions to take all data files to import.
 pub fn take_data_files_to_import(
-    snapshot_payload: &mut IcebergSnapshotPayload,
+    snapshot_payload: &mut PersistenceSnapshotPayload,
 ) -> Vec<MooncakeDataFileRef> {
     let mut new_data_files = std::mem::take(&mut snapshot_payload.import_payload.data_files);
     new_data_files.extend(std::mem::take(
@@ -504,7 +504,7 @@ pub fn take_data_files_to_import(
 
 /// Util functions to take all data files to remove.
 pub fn take_data_files_to_remove(
-    snapshot_payload: &mut IcebergSnapshotPayload,
+    snapshot_payload: &mut PersistenceSnapshotPayload,
 ) -> Vec<MooncakeDataFileRef> {
     std::mem::take(
         &mut snapshot_payload
@@ -515,7 +515,7 @@ pub fn take_data_files_to_remove(
 
 /// Util functions to take all file indices to import.
 pub fn take_file_indices_to_import(
-    snapshot_payload: &mut IcebergSnapshotPayload,
+    snapshot_payload: &mut PersistenceSnapshotPayload,
 ) -> Vec<MooncakeFileIndex> {
     let mut new_file_indices = std::mem::take(&mut snapshot_payload.import_payload.file_indices);
     new_file_indices.extend(std::mem::take(
@@ -533,7 +533,7 @@ pub fn take_file_indices_to_import(
 
 /// Util function to take all file indices to remove.
 pub fn take_file_indices_to_remove(
-    snapshot_payload: &mut IcebergSnapshotPayload,
+    snapshot_payload: &mut PersistenceSnapshotPayload,
 ) -> Vec<MooncakeFileIndex> {
     let mut old_file_indices = std::mem::take(
         &mut snapshot_payload

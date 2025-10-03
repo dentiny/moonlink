@@ -53,7 +53,7 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     take_data_files_to_import, take_data_files_to_remove, take_file_indices_to_import,
     take_file_indices_to_remove, FileIndiceMergePayload, FileIndiceMergeResult,
     IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
-    IcebergSnapshotIndexMergePayload, IcebergSnapshotPayload, IcebergSnapshotResult,
+    IcebergSnapshotIndexMergePayload, IcebergSnapshotResult, PersistenceSnapshotPayload,
 };
 use crate::storage::mooncake_table_config::MooncakeTableConfig;
 use crate::storage::snapshot_options::MaintenanceOption;
@@ -1532,7 +1532,7 @@ impl MooncakeTable {
     /// Persist an iceberg snapshot.
     async fn persist_iceberg_snapshot_impl(
         mut iceberg_table_manager: Box<dyn TableManager>,
-        snapshot_payload: IcebergSnapshotPayload,
+        snapshot_payload: PersistenceSnapshotPayload,
         table_notify: Sender<TableEvent>,
         table_auto_incr_ids: std::ops::Range<u32>,
         table_event_id: uuid::Uuid,
@@ -1662,7 +1662,10 @@ impl MooncakeTable {
     }
 
     /// Create an iceberg snapshot.
-    pub(crate) fn persist_iceberg_snapshot(&mut self, snapshot_payload: IcebergSnapshotPayload) {
+    pub(crate) fn persist_iceberg_snapshot(
+        &mut self,
+        snapshot_payload: PersistenceSnapshotPayload,
+    ) {
         // Check invariant: there's at most one ongoing iceberg snapshot.
         let iceberg_table_manager = self.iceberg_table_manager.take().unwrap();
         assert!(

@@ -1,7 +1,7 @@
 use super::test_utils::*;
 use crate::storage::filesystem::accessor::filesystem_accessor::FileSystemAccessor;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
-use crate::storage::mooncake_table::IcebergSnapshotPayload;
+use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::mooncake_table_config::MooncakeTableConfig;
@@ -188,7 +188,7 @@ async fn test_force_index_merge_with_failed_iceberg_persistence() {
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
-        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+        .returning(|snapshot_payload: PersistenceSnapshotPayload, _| {
             Box::pin(async move {
                 let mock_persistence_result = PersistenceResult {
                     remote_data_files: snapshot_payload.import_payload.data_files.clone(),
@@ -202,7 +202,7 @@ async fn test_force_index_merge_with_failed_iceberg_persistence() {
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
-        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+        .returning(|snapshot_payload: PersistenceSnapshotPayload, _| {
             Box::pin(async move {
                 let mock_persistence_result = PersistenceResult {
                     remote_data_files: snapshot_payload.import_payload.data_files.clone(),
@@ -297,7 +297,7 @@ async fn test_force_data_compaction_with_failed_iceberg_persistence() {
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
-        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+        .returning(|snapshot_payload: PersistenceSnapshotPayload, _| {
             Box::pin(async move {
                 let mock_persistence_result = PersistenceResult {
                     remote_data_files: snapshot_payload.import_payload.data_files.clone(),
@@ -311,7 +311,7 @@ async fn test_force_data_compaction_with_failed_iceberg_persistence() {
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
-        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+        .returning(|snapshot_payload: PersistenceSnapshotPayload, _| {
             Box::pin(async move {
                 let mock_persistence_result = PersistenceResult {
                     remote_data_files: snapshot_payload.import_payload.data_files.clone(),
@@ -407,7 +407,7 @@ async fn test_force_full_compaction_with_failed_iceberg_persistence() {
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
-        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+        .returning(|snapshot_payload: PersistenceSnapshotPayload, _| {
             Box::pin(async move {
                 let mock_persistence_result = PersistenceResult {
                     remote_data_files: snapshot_payload.import_payload.data_files.clone(),
@@ -421,7 +421,7 @@ async fn test_force_full_compaction_with_failed_iceberg_persistence() {
     mock_table_manager
         .expect_sync_snapshot()
         .times(1)
-        .returning(|snapshot_payload: IcebergSnapshotPayload, _| {
+        .returning(|snapshot_payload: PersistenceSnapshotPayload, _| {
             Box::pin(async move {
                 let mock_persistence_result = PersistenceResult {
                     remote_data_files: snapshot_payload.import_payload.data_files.clone(),
