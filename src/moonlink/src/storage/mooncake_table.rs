@@ -52,8 +52,8 @@ pub(crate) use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDa
 pub(crate) use crate::storage::mooncake_table::table_snapshot::{
     take_data_files_to_import, take_data_files_to_remove, take_file_indices_to_import,
     take_file_indices_to_remove, FileIndiceMergePayload, FileIndiceMergeResult,
-    IcebergSnapshotDataCompactionResult, IcebergSnapshotImportPayload,
-    IcebergSnapshotIndexMergePayload, IcebergSnapshotResult, PersistenceSnapshotPayload,
+    IcebergSnapshotDataCompactionResult, IcebergSnapshotIndexMergePayload, IcebergSnapshotResult,
+    PersistenceSnapshotImportPayload, PersistenceSnapshotPayload,
 };
 use crate::storage::mooncake_table_config::MooncakeTableConfig;
 use crate::storage::snapshot_options::MaintenanceOption;

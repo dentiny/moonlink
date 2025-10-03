@@ -6,7 +6,7 @@ use crate::storage::mooncake_table::table_snapshot::IcebergSnapshotDataCompactio
 use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::SnapshotTask;
 use crate::storage::mooncake_table::{
-    IcebergSnapshotImportPayload, IcebergSnapshotIndexMergePayload,
+    IcebergSnapshotIndexMergePayload, PersistenceSnapshotImportPayload,
 };
 use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::storage_utils::FileId;
@@ -39,7 +39,7 @@ impl SnapshotTableState {
             flush_lsn,
             new_table_schema: None,
             committed_deletion_logs: committed_deletion_to_persist.committed_deletion_logs,
-            import_payload: IcebergSnapshotImportPayload {
+            import_payload: PersistenceSnapshotImportPayload {
                 data_files: self.unpersisted_records.get_unpersisted_data_files(),
                 new_deletion_vector: committed_deletion_to_persist.new_deletions_to_persist,
                 file_indices: self.unpersisted_records.get_unpersisted_file_indices(),
