@@ -3,6 +3,7 @@ use crate::row::IdentityProp;
 /// This module contains table creation tests utils.
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
+use crate::storage::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
@@ -39,6 +40,21 @@ impl MooncakeTable {
     #[cfg(test)]
     pub(crate) fn set_persistence_snapshot_lsn(&mut self, lsn: u64) {
         self.last_persistence_snapshot_lsn = Some(lsn);
+    }
+}
+
+/// Test util function to get delta table config for local filesystem.
+pub(crate) fn get_delta_table_config(temp_dir: &TempDir) -> DeltalakeTableConfig {
+    let root_directory = temp_dir.path().to_str().unwrap().to_string();
+    let storage_config = StorageConfig::FileSystem {
+        root_directory: root_directory.clone(),
+        atomic_write_dir: None,
+    };
+    let accessor_config = AccessorConfig::new_with_storage_config(storage_config);
+    DeltalakeTableConfig {
+        table_name: DELTA_TEST_TABLE.to_string(),
+        location: root_directory,
+        data_accessor_config: accessor_config,
     }
 }
 

@@ -1,16 +1,14 @@
-use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
-use deltalake::operations::create::CreateBuilder;
-use deltalake::DeltaTable;
-
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use deltalake::DeltaTable;
+
 use crate::error::Result;
-use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::deltalake::utils;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
 use crate::storage::iceberg::table_manager::PersistenceResult;
+use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::{
     PersistenceSnapshotPayload, TableMetadata as MooncakeTableMetadata,
 };
@@ -24,6 +22,7 @@ pub(crate) struct DataFileEntry {
 }
 
 // TODO(hjiang): Use the same table manager interface as iceberg one.
+#[allow(unused)]
 #[derive(Debug)]
 pub struct DeltalakeTableManager {
     /// Mooncake table metadata.
@@ -72,7 +71,7 @@ impl DeltalakeTableManager {
         Ok(())
     }
 
-    async fn sync_snapshot(
+    pub async fn sync_snapshot(
         &mut self,
         snapshot_payload: PersistenceSnapshotPayload,
         file_params: PersistenceFileParams,
@@ -83,7 +82,7 @@ impl DeltalakeTableManager {
         Ok(persistence_result)
     }
 
-    async fn load_snapshot_from_table(&mut self) -> Result<(u32, MooncakeSnapshot)> {
+    pub async fn load_snapshot_from_table(&mut self) -> Result<(u32, MooncakeSnapshot)> {
         let snapshot = self.load_snapshot_from_table_impl().await?;
         Ok(snapshot)
     }
