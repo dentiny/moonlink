@@ -1,4 +1,5 @@
 use arrow::error::ArrowError;
+use deltalake::DeltaTableError;
 use iceberg::Error as IcebergError;
 use moonlink_error::io_error_utils::get_io_error_status;
 use moonlink_error::{ErrorStatus, ErrorStruct};
@@ -27,6 +28,9 @@ pub enum Error {
 
     #[error("{0}")]
     IcebergError(ErrorStruct),
+
+    #[error("{0}")]
+    DeltaLakeError(ErrorStruct),
 
     #[error("{0}")]
     OpenDal(ErrorStruct),
@@ -105,6 +109,15 @@ impl From<IcebergError> for Error {
         Error::IcebergError(
             ErrorStruct::new("Iceberg error".to_string(), status).with_source(source),
         )
+    }
+}
+
+impl From<DeltaTableError> for Error {
+    #[track_caller]
+    fn from(source: DeltaTableError) -> Self {
+        let status = ErrorStatus::Permanent;
+
+        Error::Json(ErrorStruct::new("Delta table error".to_string(), status).with_source(source))
     }
 }
 
@@ -194,6 +207,7 @@ impl Error {
             | Error::Parquet(err)
             | Error::WatchChannelRecvError(err)
             | Error::IcebergError(err)
+            | Error::DeltaLakeError(err)
             | Error::OpenDal(err)
             | Error::JoinError(err)
             | Error::PbToMoonlinkRowError(err)

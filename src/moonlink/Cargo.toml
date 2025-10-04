@@ -57,6 +57,7 @@ bitstream-io = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 crc32fast = { workspace = true }
+deltalake = { workspace = true }
 fastbloom = { workspace = true }
 function_name = { version = "0.3", optional = true }
 futures = { workspace = true }

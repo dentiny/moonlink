@@ -32,7 +32,7 @@ use uuid::Uuid;
 /// TODO(hjiang): store snapshot property in snapshot summary, instead of table property.
 ///
 /// Key for iceberg snapshot property, to record flush lsn.
-pub(super) const MOONCAKE_TABLE_FLUSH_LSN: &str = "moonlink.table-flush-lsn";
+pub(crate) const MOONCAKE_TABLE_FLUSH_LSN: &str = "moonlink.table-flush-lsn";
 
 #[derive(Clone, Debug)]
 pub(crate) struct DataFileEntry {

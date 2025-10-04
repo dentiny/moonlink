@@ -248,7 +248,7 @@ fn parquet_to_data_file_builder(
 // ================================
 //
 // Get parquet metadata and file size for the given local parquet file.
-async fn get_parquet_metadata(
+pub(crate) async fn get_parquet_metadata(
     local_parquet_file: &str,
 ) -> IcebergResult<(ParquetMetaData, usize /*file size*/)> {
     let file_io = FileIOBuilder::new_fs_io().build().unwrap();

@@ -1,6 +1,8 @@
+// TODO(hjiang): make both iceberg and deltalake a features.
 pub(crate) mod async_bitwriter;
 pub(crate) mod cache;
 pub(crate) mod compaction;
+pub(crate) mod deltalake;
 pub(crate) mod filesystem;
 pub(crate) mod iceberg;
 pub(crate) mod index;
