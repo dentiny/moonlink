@@ -13,6 +13,7 @@ use crate::Result;
 /// - If the table doesn't exist → create a new one using the Arrow schema.
 /// - If it already exists → load and return.
 /// - This mirrors the Iceberg `get_or_create_iceberg_table` pattern.
+#[allow(unused)]
 pub(crate) async fn get_or_create_deltalake_table(
     mooncake_table_metadata: Arc<MooncakeTableMetadata>,
     _object_storage_cache: Arc<dyn CacheTrait>,
@@ -40,6 +41,7 @@ pub(crate) async fn get_or_create_deltalake_table(
     }
 }
 
+#[allow(unused)]
 pub(crate) async fn get_deltalake_table_if_exists(
     config: &DeltalakeTableConfig,
 ) -> Result<Option<DeltaTable>> {

@@ -12,6 +12,7 @@ use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::{create_data_file, Result};
 
 impl DeltalakeTableManager {
+    #[allow(unused)]
     fn load_data_files(
         adds: Vec<Add>,
         next_file_id: &mut i32,
@@ -33,6 +34,7 @@ impl DeltalakeTableManager {
         disk_files
     }
 
+    #[allow(unused)]
     async fn get_flush_lsn(table: &DeltaTable) -> Result<u64> {
         let commit_infos = table.history(/*limit=*/ Some(1)).await?;
         let latest_commit = commit_infos.last().unwrap();
@@ -41,6 +43,7 @@ impl DeltalakeTableManager {
         Ok(flush_lsn)
     }
 
+    #[allow(unused)]
     pub(crate) async fn load_snapshot_from_table_impl(
         &mut self,
     ) -> Result<(u32, MooncakeSnapshot)> {

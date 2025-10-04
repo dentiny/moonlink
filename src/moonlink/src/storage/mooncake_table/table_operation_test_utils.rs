@@ -58,7 +58,7 @@ pub(crate) async fn create_local_parquet_file(tempdir: &TempDir) -> String {
     )
     .unwrap();
 
-    write_parquet_file(&file_path.as_path(), &[record_batch]).await;
+    write_parquet_file(file_path.as_path(), &[record_batch]).await;
     file_path.to_str().unwrap().to_string()
 }
 

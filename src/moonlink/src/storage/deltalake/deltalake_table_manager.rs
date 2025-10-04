@@ -49,6 +49,7 @@ pub struct DeltalakeTableManager {
 }
 
 impl DeltalakeTableManager {
+    #[allow(unused)]
     pub async fn new(
         mooncake_table_metadata: Arc<MooncakeTableMetadata>,
         object_storage_cache: Arc<dyn CacheTrait>,
@@ -66,12 +67,14 @@ impl DeltalakeTableManager {
         })
     }
 
+    #[allow(unused)]
     pub(crate) async fn initialize_table_if_exists(&mut self) -> Result<()> {
         assert!(self.table.is_none());
         self.table = utils::get_deltalake_table_if_exists(&self.config).await?;
         Ok(())
     }
 
+    #[allow(unused)]
     pub async fn sync_snapshot(
         &mut self,
         snapshot_payload: PersistenceSnapshotPayload,
@@ -83,6 +86,7 @@ impl DeltalakeTableManager {
         Ok(persistence_result)
     }
 
+    #[allow(unused)]
     pub async fn load_snapshot_from_table(&mut self) -> Result<(u32, MooncakeSnapshot)> {
         let snapshot = self.load_snapshot_from_table_impl().await?;
         Ok(snapshot)

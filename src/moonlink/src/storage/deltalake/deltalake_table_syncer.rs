@@ -16,6 +16,7 @@ use crate::storage::iceberg::table_manager::PersistenceResult;
 use crate::storage::mooncake_table::{take_data_files_to_import, PersistenceSnapshotPayload};
 
 impl DeltalakeTableManager {
+    #[allow(unused)]
     pub(crate) async fn sync_snapshot_impl(
         &mut self,
         mut snapshot_payload: PersistenceSnapshotPayload,
@@ -37,9 +38,9 @@ impl DeltalakeTableManager {
         // Upload new data files under the given location.
         for cur_local_data_file in new_data_files.into_iter() {
             let (_parquet_metadata, file_size) =
-                parquet_utils::get_parquet_metadata(&cur_local_data_file.file_path()).await?;
+                parquet_utils::get_parquet_metadata(cur_local_data_file.file_path()).await?;
             let remote_filepath = upload_data_file_to_delta(
-                &self.table.as_ref().unwrap(),
+                self.table.as_ref().unwrap(),
                 &cur_local_data_file.file_path,
                 &*self.filesystem_accessor,
             )
@@ -91,6 +92,6 @@ impl DeltalakeTableManager {
             puffin_blob_ref: HashMap::new(),
             evicted_files_to_delete: Vec::new(),
         };
-        return Ok(persistence_result);
+        Ok(persistence_result)
     }
 }
