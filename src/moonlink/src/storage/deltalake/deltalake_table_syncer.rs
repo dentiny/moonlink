@@ -9,7 +9,6 @@ use crate::create_data_file;
 use crate::error::Result;
 use crate::storage::deltalake::deltalake_table_manager::*;
 use crate::storage::deltalake::io_utils::upload_data_file_to_delta;
-use crate::storage::iceberg::deletion_vector::MOONCAKE_DELETION_VECTOR_NUM_ROWS;
 use crate::storage::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::iceberg::parquet_utils;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
@@ -31,7 +30,7 @@ impl DeltalakeTableManager {
             let (_parquet_metadata, file_size) =
                 parquet_utils::get_parquet_metadata(&cur_local_data_file.file_path()).await?;
             let remote_filepath = upload_data_file_to_delta(
-                &self.table,
+                &self.table.as_ref().unwrap(),
                 &cur_local_data_file.file_path,
                 &*self.filesystem_accessor,
             )
@@ -71,8 +70,8 @@ impl DeltalakeTableManager {
             .with_actions(delta_actions)
             .with_app_metadata(app_metadata)
             .build(
-                Some(self.table.snapshot()?),
-                self.table.log_store().clone(),
+                Some(self.table.as_ref().unwrap().snapshot()?),
+                self.table.as_ref().unwrap().log_store().clone(),
                 write_op,
             )
             .await?;

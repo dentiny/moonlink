@@ -1,0 +1,56 @@
+use arrow::datatypes::Schema as ArrowSchema;
+use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
+use deltalake::{
+    kernel::Schema as DeltaSchema, open_table, operations::create::CreateBuilder,
+    protocol::SaveMode, DeltaOps, DeltaTable,
+};
+use std::sync::Arc;
+
+use crate::storage::deltalake::deltalake_table_config::DeltalakeTableConfig;
+use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
+use crate::storage::mooncake_table::{
+    PersistenceSnapshotPayload, TableMetadata as MooncakeTableMetadata,
+};
+use crate::CacheTrait;
+use crate::Result;
+
+/// Get or create a Delta table at the given location.
+///
+/// - If the table doesn't exist → create a new one using the Arrow schema.
+/// - If it already exists → load and return.
+/// - This mirrors the Iceberg `get_or_create_iceberg_table` pattern.
+pub(crate) async fn get_or_create_deltalake_table(
+    mooncake_table_metadata: Arc<MooncakeTableMetadata>,
+    object_storage_cache: Arc<dyn CacheTrait>,
+    filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+    config: DeltalakeTableConfig,
+) -> Result<DeltaTable> {
+    match open_table(config.location.clone()).await {
+        Ok(existing_table) => Ok(existing_table),
+        Err(_) => {
+            let arrow_schema = mooncake_table_metadata.schema.as_ref();
+            let delta_schema_struct = deltalake::kernel::Schema::try_from_arrow(arrow_schema)?;
+            let delta_schema_fields = delta_schema_struct
+                .fields
+                .iter()
+                .map(|(_, cur_field)| cur_field.clone())
+                .collect::<Vec<_>>();
+
+            let table = CreateBuilder::new()
+                .with_location(config.location.clone())
+                .with_columns(delta_schema_fields)
+                .with_save_mode(deltalake::protocol::SaveMode::ErrorIfExists)
+                .await?;
+            Ok(table)
+        }
+    }
+}
+
+pub(crate) async fn get_deltalake_table_if_exists(
+    config: &DeltalakeTableConfig,
+) -> Result<Option<DeltaTable>> {
+    match open_table(config.location.clone()).await {
+        Ok(table) => Ok(Some(table)),
+        Err(_) => Ok(None),
+    }
+}
