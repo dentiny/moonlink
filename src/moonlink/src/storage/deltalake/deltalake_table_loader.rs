@@ -4,6 +4,7 @@ use deltalake::kernel::Add;
 use deltalake::DeltaTable;
 
 use crate::storage::deltalake::deltalake_table_manager::DeltalakeTableManager;
+use crate::storage::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::{DiskFileEntry, Snapshot as MooncakeSnapshot};
@@ -35,8 +36,9 @@ impl DeltalakeTableManager {
     async fn get_flush_lsn(table: &DeltaTable) -> Result<u64> {
         let commit_infos = table.history(/*limit=*/ Some(1)).await?;
         let latest_commit = commit_infos.last().unwrap();
-        println!("lastest commit = {:?}", latest_commit);
-        Ok(1)
+        let flush_lsn_json = latest_commit.info.get(MOONCAKE_TABLE_FLUSH_LSN).unwrap();
+        let flush_lsn = flush_lsn_json.as_u64().unwrap();
+        Ok(flush_lsn)
     }
 
     pub(crate) async fn load_snapshot_from_table_impl(

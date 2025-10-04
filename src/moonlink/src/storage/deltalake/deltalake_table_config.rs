@@ -1,4 +1,4 @@
-use crate::{storage::filesystem::accessor_config::AccessorConfig, StorageConfig};
+use crate::storage::filesystem::accessor_config::AccessorConfig;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

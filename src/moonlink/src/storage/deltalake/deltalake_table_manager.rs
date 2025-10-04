@@ -15,6 +15,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::storage_utils::FileId;
 use crate::{BaseFileSystemAccess, CacheTrait};
 
+#[allow(unused)]
 #[derive(Clone, Debug)]
 pub(crate) struct DataFileEntry {
     /// Remote filepath.

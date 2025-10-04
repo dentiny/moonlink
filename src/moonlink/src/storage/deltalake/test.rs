@@ -10,8 +10,7 @@ use crate::storage::mooncake_table::table_creation_test_utils::{
 use crate::storage::mooncake_table::table_operation_test_utils::create_local_parquet_file;
 use crate::storage::mooncake_table::{
     PersistenceSnapshotDataCompactionPayload, PersistenceSnapshotImportPayload,
-    PersistenceSnapshotIndexMergePayload, PersistenceSnapshotPayload, Snapshot as MooncakeSnapshot,
-    TableMetadata as MooncakeTableMetadata,
+    PersistenceSnapshotIndexMergePayload, PersistenceSnapshotPayload,
 };
 use crate::{create_data_file, FileSystemAccessor, ObjectStorageCache};
 

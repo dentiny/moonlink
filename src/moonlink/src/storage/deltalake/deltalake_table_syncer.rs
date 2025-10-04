@@ -7,8 +7,8 @@ use serde_json::Value;
 
 use crate::create_data_file;
 use crate::error::Result;
-use crate::storage::deltalake::deltalake_table_manager::*;
 use crate::storage::deltalake::io_utils::upload_data_file_to_delta;
+use crate::storage::deltalake::{deltalake_table_manager::*, utils};
 use crate::storage::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::iceberg::parquet_utils;
 use crate::storage::iceberg::table_manager::PersistenceFileParams;
@@ -21,6 +21,15 @@ impl DeltalakeTableManager {
         mut snapshot_payload: PersistenceSnapshotPayload,
         _file_params: PersistenceFileParams,
     ) -> Result<PersistenceResult> {
+        let table = utils::get_or_create_deltalake_table(
+            self.mooncake_table_metadata.clone(),
+            self.object_storage_cache.clone(),
+            self.filesystem_accessor.clone(),
+            self.config.clone(),
+        )
+        .await?;
+        self.table = Some(table);
+
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
         let mut new_remote_data_files = Vec::new();
         let mut delta_actions = Vec::new();

@@ -1,16 +1,10 @@
-use arrow::datatypes::Schema as ArrowSchema;
 use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
-use deltalake::{
-    kernel::Schema as DeltaSchema, open_table, operations::create::CreateBuilder,
-    protocol::SaveMode, DeltaOps, DeltaTable,
-};
+use deltalake::{open_table, operations::create::CreateBuilder, DeltaTable};
 use std::sync::Arc;
 
 use crate::storage::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::mooncake_table::{
-    PersistenceSnapshotPayload, TableMetadata as MooncakeTableMetadata,
-};
+use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::CacheTrait;
 use crate::Result;
 
@@ -21,8 +15,8 @@ use crate::Result;
 /// - This mirrors the Iceberg `get_or_create_iceberg_table` pattern.
 pub(crate) async fn get_or_create_deltalake_table(
     mooncake_table_metadata: Arc<MooncakeTableMetadata>,
-    object_storage_cache: Arc<dyn CacheTrait>,
-    filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
+    _object_storage_cache: Arc<dyn CacheTrait>,
+    _filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     config: DeltalakeTableConfig,
 ) -> Result<DeltaTable> {
     match open_table(config.location.clone()).await {
