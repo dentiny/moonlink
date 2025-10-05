@@ -1,12 +1,12 @@
 use super::*;
 use crate::row::{IdentityProp, RowValue};
 use crate::storage::filesystem::accessor_config::AccessorConfig;
-use crate::storage::iceberg::deletion_vector::DeletionVector as IcebergDeletionVector;
-use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
-use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::snapshot_read_output::DataFileForRead;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::mooncake_table::table_operation_test_utils::*;
+use crate::storage::table::iceberg::deletion_vector::DeletionVector as IcebergDeletionVector;
+use crate::storage::table::iceberg::iceberg_table_config::IcebergTableConfig;
+use crate::storage::table::iceberg::puffin_utils;
 use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
 use crate::storage::wal::WalManager;
 use crate::{StorageConfig, WalConfig};

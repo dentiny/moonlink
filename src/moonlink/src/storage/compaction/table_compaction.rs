@@ -1,10 +1,10 @@
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RecordLocation;
 use crate::storage::storage_utils::TableUniqueFileId;
+use crate::storage::table::iceberg::puffin_utils::PuffinBlobRef;
 use crate::CacheTrait;
 use crate::NonEvictableHandle;
 

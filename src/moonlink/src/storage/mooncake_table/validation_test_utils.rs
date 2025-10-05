@@ -1,8 +1,5 @@
 use crate::row::MoonlinkRow;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-/// This module contains testing utils for validation.
-use crate::storage::iceberg::deletion_vector::DeletionVector;
-use crate::storage::iceberg::puffin_utils;
 use crate::storage::mooncake_table::table_creation_test_utils::create_test_filesystem_accessor;
 use crate::storage::mooncake_table::table_creation_test_utils::create_test_object_storage_cache;
 use crate::storage::mooncake_table::test_utils::*;
@@ -13,6 +10,9 @@ use crate::storage::mooncake_table::TableMetadata;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::RawDeletionRecord;
 use crate::storage::storage_utils::RecordLocation;
+/// This module contains testing utils for validation.
+use crate::storage::table::iceberg::deletion_vector::DeletionVector;
+use crate::storage::table::iceberg::puffin_utils;
 use crate::IcebergTableConfig;
 use crate::IcebergTableManager;
 use crate::ObjectStorageCache;

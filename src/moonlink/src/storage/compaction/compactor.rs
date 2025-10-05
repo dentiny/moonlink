@@ -15,7 +15,6 @@ use crate::storage::compaction::table_compaction::{
     CompactedDataEntry, DataCompactionPayload, DataCompactionResult, RemappedRecordLocation,
     SingleFileToCompact,
 };
-use crate::storage::iceberg::puffin_utils;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -23,6 +22,7 @@ use crate::storage::storage_utils::{
     get_random_file_name_in_dir, get_unique_file_id_for_flush, MooncakeDataFileRef,
 };
 use crate::storage::storage_utils::{FileId, RecordLocation};
+use crate::storage::table::iceberg::puffin_utils;
 use crate::storage::{parquet_utils, storage_utils};
 use crate::{create_data_file, Result};
 

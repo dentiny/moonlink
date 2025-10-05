@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::row::MoonlinkRow;
 use crate::storage::compaction::table_compaction::SingleFileToCompact;
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::mooncake_table::table_snapshot::PersistenceSnapshotDataCompactionPayload;
 use crate::storage::mooncake_table::{
     DataCompactionPayload, FileIndiceMergePayload, PersistenceSnapshotImportPayload,
@@ -14,6 +13,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::storage_utils::{FileId, RecordLocation, TableUniqueFileId};
+use crate::storage::table::iceberg::puffin_utils::PuffinBlobRef;
 use crate::NonEvictableHandle;
 
 /// =====================

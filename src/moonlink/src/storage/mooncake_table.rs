@@ -23,7 +23,6 @@ pub mod table_status;
 pub mod table_status_reader;
 mod transaction_stream;
 
-use super::iceberg::puffin_utils::PuffinBlobRef;
 use super::index::{FileIndex, MemIndex, MooncakeIndex};
 use super::storage_utils::{MooncakeDataFileRef, RawDeletionRecord, RecordLocation};
 use crate::error::Result;
@@ -36,9 +35,6 @@ pub(crate) use crate::storage::compaction::table_compaction::{
     DataCompactionPayload, DataCompactionResult,
 };
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
-use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
-use crate::storage::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndexBuilder;
 use crate::storage::mooncake_table::batch_id_counter::BatchIdCounter;
 use crate::storage::mooncake_table::persisted_records::PersistedRecords;
@@ -59,6 +55,10 @@ use crate::storage::mooncake_table_config::MooncakeTableConfig;
 use crate::storage::snapshot_options::MaintenanceOption;
 use crate::storage::snapshot_options::SnapshotOption;
 use crate::storage::storage_utils::{FileId, TableId};
+use crate::storage::table::iceberg::iceberg_table_config::IcebergTableConfig;
+use crate::storage::table::iceberg::iceberg_table_manager::IcebergTableManager;
+use crate::storage::table::iceberg::puffin_utils::PuffinBlobRef;
+use crate::storage::table::iceberg::table_manager::{PersistenceFileParams, TableManager};
 use crate::storage::wal::{WalManager, WalPersistenceUpdateResult};
 use crate::table_notify::TableEvent;
 use crate::NonEvictableHandle;

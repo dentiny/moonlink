@@ -1,5 +1,4 @@
 use crate::create_data_file;
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::FileIndex;
 use crate::storage::mooncake_table::snapshot::CommittedDeletionToPersist;
 use crate::storage::mooncake_table::table_snapshot::PersistenceSnapshotDataCompactionPayload;
@@ -11,6 +10,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::snapshot_options::IcebergSnapshotOption;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::table::iceberg::puffin_utils::PuffinBlobRef;
 /// This file stores snapshot persistence related features.
 use crate::storage::SnapshotTableState;
 use std::collections::{HashMap, HashSet};

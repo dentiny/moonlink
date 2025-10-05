@@ -1,5 +1,4 @@
 use crate::storage::compaction::table_compaction::RemappedRecordLocation;
-use crate::storage::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::index::persisted_bucket_hash_map::GlobalIndex;
 /// Items needed for iceberg snapshot.
 use crate::storage::index::FileIndex as MooncakeFileIndex;
@@ -8,6 +7,7 @@ use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::FileId;
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::storage_utils::RecordLocation;
+use crate::storage::table::iceberg::puffin_utils::PuffinBlobRef;
 use crate::storage::TableManager;
 
 use std::collections::{HashMap, HashSet};

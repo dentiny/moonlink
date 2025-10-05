@@ -6,14 +6,6 @@ use parquet::arrow::AsyncArrowWriter;
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::table_compaction::{CompactedDataEntry, RemappedRecordLocation};
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
-use crate::storage::iceberg::deletion_vector::DeletionVector;
-use crate::storage::iceberg::deletion_vector::{
-    DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
-    MOONCAKE_DELETION_VECTOR_NUM_ROWS,
-};
-use crate::storage::iceberg::puffin_utils;
-use crate::storage::iceberg::puffin_writer_proxy;
-use crate::storage::iceberg::test_utils::load_arrow_batch;
 use crate::storage::index::persisted_bucket_hash_map::{
     test_get_hashes_for_index, GlobalIndexBuilder,
 };
@@ -22,6 +14,14 @@ use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::table_creation_test_utils::*;
 use crate::storage::storage_utils::{FileId, TableUniqueFileId};
 use crate::storage::storage_utils::{MooncakeDataFileRef, RecordLocation};
+use crate::storage::table::iceberg::deletion_vector::DeletionVector;
+use crate::storage::table::iceberg::deletion_vector::{
+    DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
+    MOONCAKE_DELETION_VECTOR_NUM_ROWS,
+};
+use crate::storage::table::iceberg::puffin_utils;
+use crate::storage::table::iceberg::puffin_writer_proxy;
+use crate::storage::table::iceberg::test_utils::load_arrow_batch;
 use crate::storage::PuffinBlobRef;
 use crate::ObjectStorageCache;
 

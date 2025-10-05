@@ -3,7 +3,6 @@ use crate::row::IdentityProp;
 /// This module contains table creation tests utils.
 use crate::storage::cache::object_storage::base_cache::CacheTrait;
 use crate::storage::compaction::compaction_config::DataCompactionConfig;
-use crate::storage::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::filesystem::accessor_config::AccessorConfig;
@@ -11,13 +10,14 @@ use crate::storage::filesystem::accessor_config::AccessorConfig;
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::s3_test_utils;
-use crate::storage::iceberg::iceberg_table_config::IcebergTableConfig;
-use crate::storage::iceberg::iceberg_table_manager::IcebergTableManager;
 #[cfg(feature = "chaos-test")]
 use crate::storage::index::index_merge_config::FileIndexMergeConfig;
 use crate::storage::mooncake_table::test_utils_commons::*;
 use crate::storage::mooncake_table::{MooncakeTableConfig, TableMetadata as MooncakeTableMetadata};
 use crate::storage::mooncake_table_config::IcebergPersistenceConfig;
+use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConfig;
+use crate::storage::table::iceberg::iceberg_table_config::IcebergTableConfig;
+use crate::storage::table::iceberg::iceberg_table_manager::IcebergTableManager;
 use crate::storage::wal::test_utils::WAL_TEST_TABLE_ID;
 use crate::storage::wal::WalManager;
 use crate::storage::MooncakeTable;
