@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use deltalake::DeltaTable;
 
 use crate::error::Result;
@@ -11,6 +12,7 @@ use crate::storage::mooncake_table::{
 use crate::storage::storage_utils::FileId;
 use crate::storage::table::common::table_manager::PersistenceFileParams;
 use crate::storage::table::common::table_manager::PersistenceResult;
+use crate::storage::table::common::table_manager::TableManager;
 use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::table::deltalake::utils;
 use crate::{BaseFileSystemAccess, CacheTrait};
@@ -22,7 +24,6 @@ pub(crate) struct DataFileEntry {
     pub(crate) remote_filepath: String,
 }
 
-// TODO(hjiang): Use the same table manager interface as iceberg one.
 #[allow(unused)]
 #[derive(Debug)]
 pub struct DeltalakeTableManager {
@@ -73,9 +74,17 @@ impl DeltalakeTableManager {
         self.table = utils::get_deltalake_table_if_exists(&self.config).await?;
         Ok(())
     }
+}
+
+#[async_trait]
+impl TableManager for DeltalakeTableManager {
+    #[allow(unused)]
+    fn get_warehouse_location(&self) -> String {
+        self.config.location.clone()
+    }
 
     #[allow(unused)]
-    pub async fn sync_snapshot(
+    async fn sync_snapshot(
         &mut self,
         snapshot_payload: PersistenceSnapshotPayload,
         file_params: PersistenceFileParams,
@@ -87,8 +96,13 @@ impl DeltalakeTableManager {
     }
 
     #[allow(unused)]
-    pub async fn load_snapshot_from_table(&mut self) -> Result<(u32, MooncakeSnapshot)> {
+    async fn load_snapshot_from_table(&mut self) -> Result<(u32, MooncakeSnapshot)> {
         let snapshot = self.load_snapshot_from_table_impl().await?;
         Ok(snapshot)
+    }
+
+    #[allow(unused)]
+    async fn drop_table(&mut self) -> Result<()> {
+        todo!("Drop table unimplemented!")
     }
 }
