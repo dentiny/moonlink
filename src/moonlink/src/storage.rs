@@ -40,6 +40,7 @@ pub(crate) use mooncake_table::SnapshotTableState;
 pub use mooncake_table_config::DiskSliceWriterConfig;
 pub use mooncake_table_config::IcebergPersistenceConfig;
 pub use mooncake_table_config::MooncakeTableConfig;
+pub use table::common::table_manager::TableManager;
 pub use table::iceberg::base_iceberg_snapshot_fetcher::BaseIcebergSnapshotFetcher;
 pub use table::iceberg::cloud_security_config::{AwsSecurityConfig, CloudSecurityConfig};
 pub use table::iceberg::iceberg_snapshot_fetcher::IcebergSnapshotFetcher;
@@ -50,7 +51,6 @@ pub use table::iceberg::iceberg_table_config::GlueCatalogConfig as IcebergGlueCa
 pub use table::iceberg::iceberg_table_config::RestCatalogConfig as IcebergRestCatalogConfig;
 pub use table::iceberg::iceberg_table_config::{IcebergCatalogConfig, IcebergTableConfig};
 pub use table::iceberg::iceberg_table_manager::IcebergTableManager;
-pub use table::iceberg::table_manager::TableManager;
 pub use wal::{PersistentWalMetadata, WalConfig, WalManager, WalTransactionState};
 
 pub use filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
@@ -58,11 +58,11 @@ pub use filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 #[cfg(test)]
 pub(crate) use mooncake_table::test_utils::*;
 #[cfg(test)]
+pub(crate) use table::common::table_manager::MockTableManager;
+#[cfg(test)]
+pub(crate) use table::common::table_manager::PersistenceResult;
+#[cfg(test)]
 pub(crate) use table::iceberg::puffin_utils::*;
-#[cfg(test)]
-pub(crate) use table::iceberg::table_manager::MockTableManager;
-#[cfg(test)]
-pub(crate) use table::iceberg::table_manager::PersistenceResult;
 
 #[cfg(feature = "bench")]
 pub use index::persisted_bucket_hash_map::GlobalIndex;

@@ -7,8 +7,8 @@ use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
 use crate::storage::mooncake_table::{DiskFileEntry, Snapshot as MooncakeSnapshot};
 use crate::storage::storage_utils::MooncakeDataFileRef;
+use crate::storage::table::common::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::table::deltalake::deltalake_table_manager::DeltalakeTableManager;
-use crate::storage::table::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::{create_data_file, Result};
 
 impl DeltalakeTableManager {

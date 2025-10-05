@@ -9,11 +9,11 @@ use crate::storage::mooncake_table::PersistenceSnapshotPayload;
 use crate::storage::mooncake_table::Snapshot as MooncakeSnapshot;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::storage_utils::FileId;
-use crate::storage::table::iceberg::catalog_utils;
-use crate::storage::table::iceberg::moonlink_catalog::MoonlinkCatalog;
-use crate::storage::table::iceberg::table_manager::{
+use crate::storage::table::common::table_manager::{
     PersistenceFileParams, PersistenceResult, TableManager,
 };
+use crate::storage::table::iceberg::catalog_utils;
+use crate::storage::table::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::table::iceberg::utils;
 use crate::IcebergTableConfig;
 use crate::Result;
@@ -185,7 +185,6 @@ impl IcebergTableManager {
     }
 }
 
-/// TODO(hjiang): Parallelize all IO operations.
 #[async_trait]
 impl TableManager for IcebergTableManager {
     fn get_warehouse_location(&self) -> String {

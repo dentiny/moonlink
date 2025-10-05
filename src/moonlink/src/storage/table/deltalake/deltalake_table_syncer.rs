@@ -8,13 +8,13 @@ use serde_json::Value;
 use crate::create_data_file;
 use crate::error::Result;
 use crate::storage::mooncake_table::{take_data_files_to_import, PersistenceSnapshotPayload};
+use crate::storage::table::common::table_manager::PersistenceFileParams;
+use crate::storage::table::common::table_manager::PersistenceResult;
+use crate::storage::table::common::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::table::deltalake::io_utils::upload_data_file_to_delta;
 use crate::storage::table::deltalake::parquet_utils::collect_parquet_stats;
 use crate::storage::table::deltalake::{deltalake_table_manager::*, utils};
-use crate::storage::table::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::table::iceberg::parquet_utils;
-use crate::storage::table::iceberg::table_manager::PersistenceFileParams;
-use crate::storage::table::iceberg::table_manager::PersistenceResult;
 
 impl DeltalakeTableManager {
     #[allow(unused)]

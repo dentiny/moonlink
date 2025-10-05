@@ -33,7 +33,7 @@ use crate::storage::mooncake_table::Snapshot;
 use crate::storage::storage_utils::{
     FileId, MooncakeDataFileRef, ProcessedDeletionRecord, RawDeletionRecord, RecordLocation,
 };
-use crate::storage::table::iceberg::table_manager::TableManager;
+use crate::storage::table::common::table_manager::TableManager;
 use crate::storage::table::iceberg::test_utils::*;
 use crate::storage::MooncakeTable;
 use crate::{FileSystemAccessor, TableEvent};

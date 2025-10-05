@@ -32,7 +32,6 @@ pub(crate) mod rest_catalog;
 mod schema_utils;
 mod snapshot_utils;
 mod table_commit_proxy;
-pub(crate) mod table_manager;
 pub(crate) mod table_property;
 pub(crate) mod utils;
 pub(crate) mod validation;

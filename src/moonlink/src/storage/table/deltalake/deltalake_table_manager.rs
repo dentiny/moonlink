@@ -9,10 +9,10 @@ use crate::storage::mooncake_table::{
     PersistenceSnapshotPayload, TableMetadata as MooncakeTableMetadata,
 };
 use crate::storage::storage_utils::FileId;
+use crate::storage::table::common::table_manager::PersistenceFileParams;
+use crate::storage::table::common::table_manager::PersistenceResult;
 use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::table::deltalake::utils;
-use crate::storage::table::iceberg::table_manager::PersistenceFileParams;
-use crate::storage::table::iceberg::table_manager::PersistenceResult;
 use crate::{BaseFileSystemAccess, CacheTrait};
 
 #[allow(unused)]

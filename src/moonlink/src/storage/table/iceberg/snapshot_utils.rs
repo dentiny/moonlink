@@ -1,6 +1,6 @@
 use iceberg::spec::TableMetadata;
 
-use crate::storage::table::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
+use crate::storage::table::common::MOONCAKE_TABLE_FLUSH_LSN;
 use iceberg::Result as IcebergResult;
 
 /// This file contains util functions on iceberg snapshot.

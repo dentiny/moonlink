@@ -14,6 +14,7 @@ use crate::storage::storage_utils::{
     create_data_file, get_unique_file_id_for_flush, FileId, MooncakeDataFileRef, RecordLocation,
     TableId, TableUniqueFileId,
 };
+use crate::storage::table::common::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::table::iceberg::deletion_vector::DeletionVector;
 use crate::storage::table::iceberg::deletion_vector::{
     DELETION_VECTOR_CADINALITY, DELETION_VECTOR_REFERENCED_DATA_FILE,
@@ -29,7 +30,6 @@ use crate::storage::table::iceberg::puffin_writer_proxy::{
     get_puffin_metadata_and_close, PuffinBlobMetadataProxy,
 };
 use crate::storage::table::iceberg::schema_utils;
-use crate::storage::table::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::table::iceberg::utils::get_unique_hash_index_v1_filepath;
 use crate::Result;
 

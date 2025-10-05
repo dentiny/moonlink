@@ -10,8 +10,8 @@ use crate::storage::mooncake_table::{
     PersistenceSnapshotDataCompactionPayload, PersistenceSnapshotImportPayload,
     PersistenceSnapshotIndexMergePayload, PersistenceSnapshotPayload,
 };
+use crate::storage::table::common::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::table::deltalake::deltalake_table_manager::DeltalakeTableManager;
-use crate::storage::table::iceberg::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::{create_data_file, FileSystemAccessor, ObjectStorageCache};
 
 #[tokio::test]

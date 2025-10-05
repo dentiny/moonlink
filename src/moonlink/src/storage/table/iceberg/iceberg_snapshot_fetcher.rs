@@ -1,7 +1,7 @@
+use crate::storage::table::common::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::table::iceberg::base_iceberg_snapshot_fetcher::BaseIcebergSnapshotFetcher;
 use crate::storage::table::iceberg::catalog_utils;
 use crate::storage::table::iceberg::iceberg_table_config::IcebergTableConfig;
-use crate::storage::table::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::table::iceberg::moonlink_catalog::MoonlinkCatalog;
 use crate::storage::table::iceberg::utils;
 use crate::Result;
