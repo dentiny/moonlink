@@ -8,6 +8,7 @@ use serde_json::Value;
 use crate::create_data_file;
 use crate::error::Result;
 use crate::storage::deltalake::io_utils::upload_data_file_to_delta;
+use crate::storage::deltalake::parquet_utils::collect_parquet_stats;
 use crate::storage::deltalake::{deltalake_table_manager::*, utils};
 use crate::storage::iceberg::iceberg_table_manager::MOONCAKE_TABLE_FLUSH_LSN;
 use crate::storage::iceberg::parquet_utils;
@@ -37,8 +38,10 @@ impl DeltalakeTableManager {
 
         // Upload new data files under the given location.
         for cur_local_data_file in new_data_files.into_iter() {
-            let (_parquet_metadata, file_size) =
+            let (parquet_metadata, file_size) =
                 parquet_utils::get_parquet_metadata(cur_local_data_file.file_path()).await?;
+            let file_stats = collect_parquet_stats(&parquet_metadata)?;
+
             let remote_filepath = upload_data_file_to_delta(
                 self.table.as_ref().unwrap(),
                 &cur_local_data_file.file_path,
@@ -60,7 +63,8 @@ impl DeltalakeTableManager {
                 path: remote_filepath.clone(),
                 size: file_size as i64,
                 data_change: true,
-                ..Default::default() // TODO(hjiang): Add additional stats, like min/max, row count, etc.
+                stats: Some(serde_json::to_string(&file_stats).unwrap()),
+                ..Default::default()
             };
             delta_actions.push(Action::Add(add_action));
         }
