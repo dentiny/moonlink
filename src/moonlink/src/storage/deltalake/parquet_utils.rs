@@ -42,7 +42,7 @@ pub(crate) fn collect_parquet_stats(parquet_metadata: &ParquetMetaData) -> Resul
     let mut max_values = HashMap::new();
 
     for rg in parquet_metadata.row_groups() {
-        num_records += rg.num_rows() as i64;
+        num_records += rg.num_rows();
 
         for col in rg.columns() {
             if let Some(stats) = col.statistics() {
