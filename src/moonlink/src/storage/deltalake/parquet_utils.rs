@@ -1,15 +1,13 @@
-use parquet::arrow::async_reader::ParquetRecordBatchStreamBuilder;
 use parquet::basic::Type as PhysicalType;
 use parquet::file::metadata::ParquetMetaData;
 use serde_json::Value;
 
 use crate::storage::deltalake::stats::Stats;
-use crate::storage::iceberg::parquet_utils;
 use crate::Result;
 
 use std::collections::HashMap;
 
-/// Decode a Parquet min/max byte slice into a serde_json::Value.
+/// Decode a Parquet min/max byte slice into a json serialized value.
 fn decode_parquet_value(phys_type: PhysicalType, bytes: &[u8]) -> Value {
     match phys_type {
         PhysicalType::BOOLEAN => Value::Bool(bytes[0] != 0),
@@ -71,4 +69,55 @@ pub(crate) fn collect_parquet_stats(parquet_metadata: &ParquetMetaData) -> Resul
         max_values: Some(max_values),
         null_count: Some(null_counts),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::storage::{
+        iceberg::parquet_utils,
+        mooncake_table::table_operation_test_utils::create_local_parquet_file,
+    };
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn test_collect_parquet_stats() {
+        let temp_dir = TempDir::new().unwrap();
+        let filepath = create_local_parquet_file(&temp_dir).await;
+        let (parquet_metadata, _) = parquet_utils::get_parquet_metadata(&filepath)
+            .await
+            .unwrap();
+        let delta_stats = collect_parquet_stats(&parquet_metadata).unwrap();
+
+        // Check basic stats.
+        assert_eq!(delta_stats.num_records, 3);
+        assert!(delta_stats.tight_bounds);
+
+        // Check null counts.
+        let actual_null_values = delta_stats.null_count.as_ref().unwrap();
+        let expected_null_values = HashMap::from([
+            ("id".to_string(), 0),
+            ("name".to_string(), 1),
+            ("age".to_string(), 0),
+        ]);
+        assert_eq!(*actual_null_values, expected_null_values);
+
+        // Check min values.
+        let actual_min_values = delta_stats.min_values.as_ref().unwrap();
+        let expected_min_values = HashMap::from([
+            ("id".to_string(), serde_json::json!(1)),
+            ("name".to_string(), serde_json::json!("Alice")),
+            ("age".to_string(), serde_json::json!(10)),
+        ]);
+        assert_eq!(*actual_min_values, expected_min_values);
+
+        // Check max values.
+        let actual_max_values = delta_stats.max_values.as_ref().unwrap();
+        let expected_max_values = HashMap::from([
+            ("id".to_string(), serde_json::json!(3)),
+            ("name".to_string(), serde_json::json!("Bob")),
+            ("age".to_string(), serde_json::json!(30)),
+        ]);
+        assert_eq!(*actual_max_values, expected_max_values);
+    }
 }
