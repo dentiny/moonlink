@@ -103,6 +103,16 @@ impl TableManager for DeltalakeTableManager {
 
     #[allow(unused)]
     async fn drop_table(&mut self) -> Result<()> {
-        todo!("Drop table unimplemented!")
+        let warehouse = self.get_warehouse_location();
+        self.filesystem_accessor
+            .remove_directory(&warehouse)
+            .await?;
+
+        // Unset all data members.
+        self.table = None;
+        self.snapshot_loaded = false;
+        self.persisted_data_files.clear();
+
+        Ok(())
     }
 }

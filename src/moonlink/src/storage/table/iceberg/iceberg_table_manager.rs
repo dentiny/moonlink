@@ -224,6 +224,13 @@ impl TableManager for IcebergTableManager {
             self.config.table_name.clone(),
         );
         self.catalog.drop_table(&table_ident).await?;
+
+        // Unset all data members.
+        self.snapshot_loaded = false;
+        self.persisted_data_files.clear();
+        self.persisted_file_indices.clear();
+        self.remote_data_file_to_file_id.clear();
+
         Ok(())
     }
 }
