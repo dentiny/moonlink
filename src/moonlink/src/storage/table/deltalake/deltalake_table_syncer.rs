@@ -18,6 +18,8 @@ use crate::storage::table::deltalake::parquet_utils::collect_parquet_stats;
 use crate::storage::table::deltalake::{deltalake_table_manager::*, utils};
 use crate::storage::table::iceberg::parquet_utils;
 
+/// Max retry attempts count.
+const DEFAULT_MAX_RETRY_COUNT: usize = 5;
 /// Default data file upload concurrency.
 const DEFAULT_DATA_FILE_UPLOAD_CONCURRENCY: usize = 128;
 
@@ -118,6 +120,7 @@ impl DeltalakeTableManager {
         CommitBuilder::default()
             .with_actions(delta_actions)
             .with_app_metadata(app_metadata)
+            .with_max_retries(DEFAULT_MAX_RETRY_COUNT)
             .build(
                 Some(self.table.as_ref().unwrap().snapshot()?),
                 self.table.as_ref().unwrap().log_store().clone(),
