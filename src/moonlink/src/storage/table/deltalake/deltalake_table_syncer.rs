@@ -3,11 +3,13 @@ use std::collections::HashMap;
 use deltalake::kernel::transaction::CommitBuilder;
 use deltalake::kernel::{Action, Add};
 use deltalake::protocol::DeltaOperation;
+use futures::{stream, StreamExt, TryStreamExt};
 use serde_json::Value;
 
 use crate::create_data_file;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::storage::mooncake_table::{take_data_files_to_import, PersistenceSnapshotPayload};
+use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::table::common::table_manager::PersistenceFileParams;
 use crate::storage::table::common::table_manager::PersistenceResult;
 use crate::storage::table::common::MOONCAKE_TABLE_FLUSH_LSN;
@@ -15,6 +17,14 @@ use crate::storage::table::deltalake::io_utils::upload_data_file_to_delta;
 use crate::storage::table::deltalake::parquet_utils::collect_parquet_stats;
 use crate::storage::table::deltalake::{deltalake_table_manager::*, utils};
 use crate::storage::table::iceberg::parquet_utils;
+
+/// Default data file upload concurrency.
+const DEFAULT_DATA_FILE_UPLOAD_CONCURRENCY: usize = 128;
+
+struct UploadedDataFile {
+    remote_data_file: MooncakeDataFileRef,
+    add_action: Action,
+}
 
 impl DeltalakeTableManager {
     #[allow(unused)]
@@ -30,43 +40,68 @@ impl DeltalakeTableManager {
             self.config.clone(),
         )
         .await?;
-        self.table = Some(table);
+        self.table = Some(table.clone());
+        let filesystem_accessor = self.filesystem_accessor.clone();
 
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
+        let uploaded_files = stream::iter(new_data_files.into_iter())
+            .map(|cur_local_data_file| {
+                let table = table.clone();
+                let fs_accessor = filesystem_accessor.clone();
+
+                async move {
+                    let (parquet_metadata, file_size) =
+                        parquet_utils::get_parquet_metadata(cur_local_data_file.file_path())
+                            .await?;
+                    let file_stats = collect_parquet_stats(&parquet_metadata)?;
+
+                    let remote_filepath = upload_data_file_to_delta(
+                        &table,
+                        &cur_local_data_file.file_path,
+                        &*fs_accessor,
+                    )
+                    .await?;
+
+                    let data_file =
+                        create_data_file(cur_local_data_file.file_id().0, remote_filepath.clone());
+
+                    let add_action = Add {
+                        path: remote_filepath.clone(),
+                        size: file_size as i64,
+                        data_change: true,
+                        stats: Some(serde_json::to_string(&file_stats).unwrap()),
+                        ..Default::default()
+                    };
+
+                    Ok::<UploadedDataFile, Error>(UploadedDataFile {
+                        remote_data_file: create_data_file(
+                            cur_local_data_file.file_id().0,
+                            remote_filepath,
+                        ),
+                        add_action: Action::Add(add_action),
+                    })
+                }
+            })
+            .buffer_unordered(DEFAULT_DATA_FILE_UPLOAD_CONCURRENCY)
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        // Aggregate results.
         let mut new_remote_data_files = Vec::new();
         let mut delta_actions = Vec::new();
 
-        // Upload new data files under the given location.
-        for cur_local_data_file in new_data_files.into_iter() {
-            let (parquet_metadata, file_size) =
-                parquet_utils::get_parquet_metadata(cur_local_data_file.file_path()).await?;
-            let file_stats = collect_parquet_stats(&parquet_metadata)?;
-
-            let remote_filepath = upload_data_file_to_delta(
-                self.table.as_ref().unwrap(),
-                &cur_local_data_file.file_path,
-                &*self.filesystem_accessor,
-            )
-            .await?;
-            new_remote_data_files.push(create_data_file(
-                cur_local_data_file.file_id().0,
-                remote_filepath.clone(),
-            ));
-            let data_file_entry = DataFileEntry {
-                remote_filepath: remote_filepath.clone(),
-            };
+        for cur_file in uploaded_files {
             assert!(self
                 .persisted_data_files
-                .insert(cur_local_data_file.file_id(), data_file_entry)
+                .insert(
+                    cur_file.remote_data_file.file_id,
+                    DataFileEntry {
+                        remote_filepath: cur_file.remote_data_file.file_path.clone(),
+                    }
+                )
                 .is_none());
-            let add_action = Add {
-                path: remote_filepath.clone(),
-                size: file_size as i64,
-                data_change: true,
-                stats: Some(serde_json::to_string(&file_stats).unwrap()),
-                ..Default::default()
-            };
-            delta_actions.push(Action::Add(add_action));
+            new_remote_data_files.push(cur_file.remote_data_file.clone());
+            delta_actions.push(cur_file.add_action);
         }
 
         // Record remote filepath to delta table.
@@ -75,11 +110,11 @@ impl DeltalakeTableManager {
             partition_by: None,
             predicate: None,
         };
-        // TODO(hjiang): Add retry attempts.
         let app_metadata = HashMap::<String, Value>::from([(
             MOONCAKE_TABLE_FLUSH_LSN.to_string(),
             serde_json::from_str(&snapshot_payload.flush_lsn.to_string()).unwrap(),
         )]);
+
         CommitBuilder::default()
             .with_actions(delta_actions)
             .with_app_metadata(app_metadata)
@@ -90,12 +125,11 @@ impl DeltalakeTableManager {
             )
             .await?;
 
-        let persistence_result = PersistenceResult {
+        Ok(PersistenceResult {
             remote_data_files: new_remote_data_files,
             remote_file_indices: Vec::new(),
             puffin_blob_ref: HashMap::new(),
             evicted_files_to_delete: Vec::new(),
-        };
-        Ok(persistence_result)
+        })
     }
 }
