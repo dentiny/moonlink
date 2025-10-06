@@ -55,6 +55,10 @@ impl Error {
     pub fn pb_conversion_error(message: String) -> Self {
         Self::PbToMoonlinkRowError(ErrorStruct::new(message, ErrorStatus::Permanent))
     }
+    #[track_caller]
+    pub fn delta_generic_error(message: String) -> Self {
+        Self::DeltaLakeError(ErrorStruct::new(message, ErrorStatus::Permanent))
+    }
 }
 
 impl From<OtelExporterBuildError> for Error {

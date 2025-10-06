@@ -17,8 +17,6 @@ use crate::{create_data_file, FileSystemAccessor, ObjectStorageCache};
 
 #[tokio::test]
 async fn test_basic_store_and_load() {
-    const TEST_FLUSH_LSN: u64 = 10;
-
     let temp_dir = TempDir::new().unwrap();
     let table_path = temp_dir.path().to_str().unwrap().to_string();
     let mooncake_table_metadata = create_test_table_metadata(table_path.clone());
@@ -34,18 +32,23 @@ async fn test_basic_store_and_load() {
     .await
     .unwrap();
 
+    // ==============================
+    // Operation-1: simply sync
+    // ==============================
+    //
     // Perform persistence operation.
+    let flush_lsn = 10;
     let filepath_1 = create_local_parquet_file(&temp_dir).await;
     let filepath_2 = create_local_parquet_file(&temp_dir).await;
     let persistence_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
-        flush_lsn: TEST_FLUSH_LSN,
+        flush_lsn,
         committed_deletion_logs: HashSet::new(),
         new_table_schema: None,
         import_payload: PersistenceSnapshotImportPayload {
             data_files: vec![
-                create_data_file(/*file_id=*/ 0, filepath_1),
-                create_data_file(/*file_id=*/ 1, filepath_2),
+                create_data_file(/*file_id=*/ 0, filepath_1.clone()),
+                create_data_file(/*file_id=*/ 1, filepath_2.clone()),
             ],
             new_deletion_vector: HashMap::new(),
             file_indices: Vec::new(),
@@ -81,7 +84,60 @@ async fn test_basic_store_and_load() {
     // Validate loaded mooncake snapshot.
     assert_eq!(next_file_id, 2);
     assert_eq!(snapshot.disk_files.len(), 2);
-    assert_eq!(snapshot.flush_lsn.unwrap(), TEST_FLUSH_LSN);
+    assert_eq!(snapshot.flush_lsn.unwrap(), flush_lsn);
+
+    // ==============================
+    // Operation-2: simply remove
+    // ==============================
+    //
+    let flush_lsn = 20;
+    let persistence_payload = PersistenceSnapshotPayload {
+        uuid: uuid::Uuid::new_v4(),
+        flush_lsn,
+        committed_deletion_logs: HashSet::new(),
+        new_table_schema: None,
+        import_payload: PersistenceSnapshotImportPayload::default(),
+        index_merge_payload: PersistenceSnapshotIndexMergePayload::default(),
+        data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
+            new_data_files_to_import: Vec::new(),
+            old_data_files_to_remove: vec![create_data_file(
+                /*file_id=*/ 0,
+                filepath_1.clone(),
+            )],
+            new_file_indices_to_import: Vec::new(),
+            old_file_indices_to_remove: Vec::new(),
+            data_file_records_remap: HashMap::new(),
+        },
+    };
+
+    let persist_result: PersistenceResult = delta_table_manager
+        .sync_snapshot(
+            persistence_payload,
+            PersistenceFileParams {
+                table_auto_incr_ids: 2..4,
+            },
+        )
+        .await
+        .unwrap();
+
+    // Check persistence result.
+    assert_eq!(persist_result.remote_data_files.len(), 0);
+
+    // Load latest snapshot from delta table.
+    let mut reload_mgr = DeltalakeTableManager::new(
+        mooncake_table_metadata.clone(),
+        Arc::new(ObjectStorageCache::default_for_test(&temp_dir)), // Use independent object storage cache.
+        filesystem_accessor.clone(),
+        delta_table_config.clone(),
+    )
+    .await
+    .unwrap();
+    let (next_file_id, snapshot) = reload_mgr.load_snapshot_from_table().await.unwrap();
+
+    // Validate loaded mooncake snapshot.
+    assert_eq!(next_file_id, 1);
+    assert_eq!(snapshot.disk_files.len(), 1);
+    assert_eq!(snapshot.flush_lsn.unwrap(), flush_lsn);
 
     // Drop table and check.
     delta_table_manager.drop_table().await.unwrap();

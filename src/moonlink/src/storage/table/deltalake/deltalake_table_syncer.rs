@@ -1,14 +1,17 @@
 use std::collections::HashMap;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use deltalake::kernel::transaction::CommitBuilder;
-use deltalake::kernel::{Action, Add};
+use deltalake::kernel::{Action, Add, Remove};
 use deltalake::protocol::DeltaOperation;
 use futures::{stream, StreamExt, TryStreamExt};
 use serde_json::Value;
 
 use crate::create_data_file;
 use crate::error::{Error, Result};
-use crate::storage::mooncake_table::{take_data_files_to_import, PersistenceSnapshotPayload};
+use crate::storage::mooncake_table::{
+    take_data_files_to_import, take_data_files_to_remove, PersistenceSnapshotPayload,
+};
 use crate::storage::storage_utils::MooncakeDataFileRef;
 use crate::storage::table::common::table_manager::PersistenceFileParams;
 use crate::storage::table::common::table_manager::PersistenceResult;
@@ -29,6 +32,36 @@ struct UploadedDataFile {
 }
 
 impl DeltalakeTableManager {
+    // Validate data files to add don't belong to iceberg snapshot.
+    fn validate_new_data_files(&self, new_data_files: &[MooncakeDataFileRef]) -> Result<()> {
+        for cur_data_file in new_data_files.iter() {
+            if self
+                .persisted_data_files
+                .contains_key(&cur_data_file.file_id())
+            {
+                return Err(Error::delta_generic_error(format!(
+                    "Data file to add {cur_data_file:?} already persisted in iceberg."
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    // Validate data files to remove don't belong to iceberg snapshot.
+    fn validate_old_data_files(&self, old_data_files: &[MooncakeDataFileRef]) -> Result<()> {
+        for cur_data_file in old_data_files.iter() {
+            if !self
+                .persisted_data_files
+                .contains_key(&cur_data_file.file_id())
+            {
+                return Err(Error::delta_generic_error(format!(
+                    "Data file to remove {cur_data_file:?} is not persisted in iceberg."
+                )));
+            }
+        }
+        Ok(())
+    }
+
     #[allow(unused)]
     pub(crate) async fn sync_snapshot_impl(
         &mut self,
@@ -46,6 +79,12 @@ impl DeltalakeTableManager {
         let filesystem_accessor = self.filesystem_accessor.clone();
 
         let new_data_files = take_data_files_to_import(&mut snapshot_payload);
+        let old_data_files = take_data_files_to_remove(&mut snapshot_payload);
+
+        // Validate data files to add and remove are valid.
+        self.validate_new_data_files(&new_data_files)?;
+        self.validate_old_data_files(&old_data_files)?;
+
         let uploaded_files = stream::iter(new_data_files.into_iter())
             .map(|cur_local_data_file| {
                 let table = table.clone();
@@ -92,6 +131,7 @@ impl DeltalakeTableManager {
         let mut new_remote_data_files = Vec::new();
         let mut delta_actions = Vec::new();
 
+        // Reflect add actions.
         for cur_file in uploaded_files {
             assert!(self
                 .persisted_data_files
@@ -104,6 +144,21 @@ impl DeltalakeTableManager {
                 .is_none());
             new_remote_data_files.push(cur_file.remote_data_file.clone());
             delta_actions.push(cur_file.add_action);
+        }
+
+        // Reflect remove actions.
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as i64;
+        for cur_old_data_file in old_data_files.into_iter() {
+            let cur_remove_action = Remove {
+                path: cur_old_data_file.file_path().clone(),
+                data_change: false,
+                deletion_timestamp: Some(now_ms),
+                ..Default::default()
+            };
+            delta_actions.push(Action::Remove(cur_remove_action));
         }
 
         // Record remote filepath to delta table.
