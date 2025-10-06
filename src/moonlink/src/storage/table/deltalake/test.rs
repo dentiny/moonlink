@@ -91,6 +91,7 @@ async fn test_basic_store_and_load() {
     // ==============================
     //
     let flush_lsn = 20;
+    let data_file_to_remove = snapshot.disk_files.keys().next().cloned().unwrap();
     let persistence_payload = PersistenceSnapshotPayload {
         uuid: uuid::Uuid::new_v4(),
         flush_lsn,
@@ -100,10 +101,7 @@ async fn test_basic_store_and_load() {
         index_merge_payload: PersistenceSnapshotIndexMergePayload::default(),
         data_compaction_payload: PersistenceSnapshotDataCompactionPayload {
             new_data_files_to_import: Vec::new(),
-            old_data_files_to_remove: vec![create_data_file(
-                /*file_id=*/ 0,
-                filepath_1.clone(),
-            )],
+            old_data_files_to_remove: vec![data_file_to_remove],
             new_file_indices_to_import: Vec::new(),
             old_file_indices_to_remove: Vec::new(),
             data_file_records_remap: HashMap::new(),
