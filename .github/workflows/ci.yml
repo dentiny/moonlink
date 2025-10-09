@@ -833,6 +833,14 @@ jobs:
         run: |
           RUST_BACKTRACE=1 cargo test --package moonlink_backend --test '*'
 
+      - name: Run postgres bulk ingestion integration test
+        # TODO(hjiang): Update after we figure out the regression change.
+        timeout-minutes: 10
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: |
+          RUST_BACKTRACE=1 cargo test test_bulk_insert_multiple_iterations --features=bulk-ingestion-test -p moonlink_backend -- --nocapture
+
   # ───────────── 17 · Moonlink Service Integration Tests ─────────────
   moonlink_service_tests:
     name: Moonlink Service Integration Tests
