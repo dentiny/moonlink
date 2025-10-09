@@ -6,7 +6,6 @@ mod tests {
     use super::common::{current_wal_lsn, TestGuard, DATABASE, TABLE};
     use crate::common::ids_from_state;
 
-    use rand::prelude::*;
     use rand::rngs::StdRng;
     use rand::{Rng, SeedableRng};
     use serial_test::serial;
@@ -22,7 +21,7 @@ mod tests {
             .unwrap()
             .as_nanos() as u64;
         println!("Random seed is {rand_seed}");
-        let rng = StdRng::seed_from_u64(rand_seed);
+        let mut rng = StdRng::seed_from_u64(rand_seed);
 
         const NUM_ITERATIONS: usize = 200;
         const MAX_BATCH_SIZE: i64 = 50_000;
