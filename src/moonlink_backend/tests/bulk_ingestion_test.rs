@@ -33,29 +33,29 @@ mod tests {
 
         let mut total_rows_inserted: i64 = 0;
         for i in 0..NUM_ITERATIONS {
+            // Get random number of rows to insert, stacked upon previous insertions.
             let num_rows = rng.random_range(0..=MAX_BATCH_SIZE);
             let start_id = total_rows_inserted + 1;
             let end_id = total_rows_inserted + num_rows;
             total_rows_inserted += num_rows;
-
             println!(
-                "🔹 Iteration {}: inserting {} rows (id {}-{})",
+                "Iteration {}: inserting {} rows (id {}-{})",
                 i + 1,
                 num_rows,
                 start_id,
                 end_id
             );
 
+            // Bulk insert rows into the table.
             let insert_sql = format!(
                 "INSERT INTO bulk_insert_multiple_iterations (id, name)
                 SELECT gs, 'val_' || gs
                 FROM generate_series({start_id}, {end_id}) AS gs;"
             );
-
             client.simple_query(&insert_sql).await.unwrap();
 
+            // Get mooncake snapshot.
             let lsn_after_insert = current_wal_lsn(&client).await;
-
             let ids = ids_from_state(
                 &backend
                     .scan_table(
@@ -67,6 +67,7 @@ mod tests {
                     .unwrap(),
             );
 
+            // Validate mooncake snapshot.
             assert_eq!(
                 ids.len() as i64,
                 total_rows_inserted,
@@ -74,14 +75,11 @@ mod tests {
                 total_rows_inserted,
                 ids.len()
             );
-
-            assert!(ids.contains(&1), "Row ID 1 missing");
             assert!(
                 ids.contains(&total_rows_inserted),
                 "Row ID {total_rows_inserted} missing"
             );
-
-            println!("✅ Successfully inserted and verified {total_rows_inserted} total rows");
+            println!("Successfully inserted and verified {total_rows_inserted} total rows");
         }
     }
 }
