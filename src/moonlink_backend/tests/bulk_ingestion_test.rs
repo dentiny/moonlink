@@ -1,10 +1,10 @@
 mod common;
 
 #[cfg(test)]
+#[cfg(feature = "bulk-ingestion-test")]
 mod tests {
-    use crate::common::ids_from_state;
-
     use super::common::{current_wal_lsn, TestGuard, DATABASE, TABLE};
+    use crate::common::ids_from_state;
 
     use rand::prelude::*;
     use rand::rngs::StdRng;
@@ -14,7 +14,6 @@ mod tests {
     use std::time::UNIX_EPOCH;
 
     /// End-to-end: multiple randomized bulk inserts (up to 50K rows each)
-    #[cfg(feature = "bulk-ingestion-test")]
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     #[serial]
     async fn test_bulk_insert_multiple_iterations() {
