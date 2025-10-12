@@ -44,11 +44,11 @@ deltalake = "0.28"
 fastbloom = "0.12"
 futures = { version = "0.3", default-features = false }
 hashbrown = "0.15"
-iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "dc349284a4204c1a56af47fb3177ace6f9e899a0", default-features = false, features = [
+iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea877e3a8b570e328d26f8362ad2035", default-features = false, features = [
   "storage-fs",
 ] }
-iceberg-catalog-glue = { git = "https://github.com/apache/iceberg-rust", rev = "dc349284a4204c1a56af47fb3177ace6f9e899a0" }
-iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "dc349284a4204c1a56af47fb3177ace6f9e899a0" }
+iceberg-catalog-glue = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea877e3a8b570e328d26f8362ad2035" }
+iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea877e3a8b570e328d26f8362ad2035" }
 itertools = "0.14"
 lru = "0.14"
 moka = { version = "0.12", features = ["future"] }
