@@ -2,8 +2,10 @@
 use crate::storage::table::iceberg::cloud_security_config::CloudSecurityConfig;
 use crate::{storage::filesystem::accessor_config::AccessorConfig, StorageConfig};
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "catalog-rest")]
 use std::collections::HashMap;
 
+#[cfg(feature = "catalog-rest")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RestCatalogConfig {
     #[serde(rename = "name")]

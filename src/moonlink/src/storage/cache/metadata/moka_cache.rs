@@ -22,6 +22,7 @@ use moka::future::Cache;
 /// - **Max size**: limits the number of entries (or total weight if using a custom weigher).
 /// - **Asynchronous operations**: all API methods are `async`.
 ///
+#[allow(unused)]
 pub struct MokaCache<K, V> {
     pub(crate) cache: Cache<K, V>,
 }
