@@ -969,7 +969,7 @@ impl TestEnvironment {
             file.write_all(b"\n").await.unwrap();
 
             written_events_count += 1;
-            if written_events_count % WRITREN_EVENT_FLUSH_INTERVAL == 0 {
+            if written_events_count.is_multiple_of(WRITREN_EVENT_FLUSH_INTERVAL) {
                 file.flush().await.unwrap();
             }
         }

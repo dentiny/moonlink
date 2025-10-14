@@ -1066,7 +1066,7 @@ async fn stress_test_kafka_avro_stress_ingest() {
                 }
                 let current_progress =
                     progress_counter_clone.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                if current_progress % 10000 == 0 {
+                if current_progress.is_multiple_of(10000) {
                     println!(
                         "Overall progress: {}/{} rows ({:.1}%)",
                         current_progress + 1,

@@ -242,9 +242,9 @@ pub fn convert_decimal_to_row_value(
     if scale < 0 {
         handle_negative_scale(decimal, scale, precision)
     } else if scale > precision as i8 {
-        return handle_fractional_only(decimal, scale, precision);
+        handle_fractional_only(decimal, scale, precision)
     } else {
-        return handle_standard(decimal, scale, precision);
+        handle_standard(decimal, scale, precision)
     }
 }
 

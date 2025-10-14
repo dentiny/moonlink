@@ -1587,10 +1587,10 @@ impl MooncakeTable {
             .await;
 
         // Notify on event error.
-        if iceberg_persistence_res.is_err() {
+        if let Err(err) = iceberg_persistence_res {
             table_notify
                 .send(TableEvent::PersistenceSnapshotResult {
-                    persistence_snapshot_result: Err(iceberg_persistence_res.unwrap_err()),
+                    persistence_snapshot_result: Err(err),
                 })
                 .await
                 .unwrap();

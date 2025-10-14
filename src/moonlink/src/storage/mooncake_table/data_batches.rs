@@ -314,11 +314,11 @@ impl ColumnStoreBuffer {
 
     #[must_use]
     pub(super) fn try_delete_at_pos(&mut self, pos: (u64, usize)) -> bool {
-        let idx = self
+        if let Ok(idx) = self
             .in_memory_batches
-            .binary_search_by_key(&pos.0, |x| x.id);
-        if idx.is_ok() {
-            let res = self.in_memory_batches[idx.unwrap()]
+            .binary_search_by_key(&pos.0, |x| x.id)
+        {
+            let res = self.in_memory_batches[idx]
                 .batch
                 .deletions
                 .delete_row(pos.1);
