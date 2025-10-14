@@ -22,7 +22,6 @@ use iceberg_catalog_glue::{
 };
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug)]
 pub struct GlueCatalog {
     pub(crate) catalog: IcebergGlueCatalog,
     /// Similar to opendal operator, which also provides an abstraction above different storage backends.
@@ -33,6 +32,15 @@ pub struct GlueCatalog {
     iceberg_schema: Option<IcebergSchema>,
     /// Buffered table updates, which will be reflect to iceberg snapshot at transaction commit.
     table_update_proxy: TableUpdateProxy,
+}
+
+impl std::fmt::Debug for GlueCatalog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GlueCatalog")
+            .field("warehouse_location", &self.warehouse_location)
+            .field("iceberg_schema", &self.iceberg_schema)
+            .finish()
+    }
 }
 
 /// Util function to get config properties from iceberg table config.

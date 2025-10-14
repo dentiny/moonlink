@@ -19,7 +19,6 @@ use iceberg_catalog_rest::{
 };
 use std::collections::{HashMap, HashSet};
 
-#[derive(Debug)]
 pub struct RestCatalog {
     pub(crate) catalog: IcebergRestCatalog,
     /// Similar to opendal operator, which also provides an abstraction above different storage backends.
@@ -30,6 +29,15 @@ pub struct RestCatalog {
     iceberg_schema: Option<IcebergSchema>,
     /// Buffered table updates, which will be reflect to iceberg snapshot at transaction commit.
     table_update_proxy: TableUpdateProxy,
+}
+
+impl std::fmt::Debug for RestCatalog {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RestCatalog")
+            .field("warehouse_location", &self.warehouse_location)
+            .field("iceberg_schema", &self.iceberg_schema)
+            .finish()
+    }
 }
 
 impl RestCatalog {

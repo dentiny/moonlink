@@ -1,7 +1,7 @@
 #[cfg(test)]
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::table::iceberg::file_catalog::FileCatalog;
-#[cfg(feature = "catalog-glue")]
+#[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
 use crate::storage::table::iceberg::glue_catalog::GlueCatalog;
 use crate::storage::table::iceberg::iceberg_table_config::IcebergCatalogConfig;
 use crate::storage::table::iceberg::iceberg_table_config::IcebergTableConfig;
@@ -45,7 +45,7 @@ pub async fn create_catalog(
             )
             .await?,
         )),
-        #[cfg(feature = "catalog-glue")]
+        #[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
         IcebergCatalogConfig::Glue {
             glue_catalog_config,
         } => Ok(Box::new(
@@ -74,7 +74,7 @@ pub async fn create_catalog_without_schema(
             RestCatalog::new_without_schema(rest_catalog_config, config.data_accessor_config)
                 .await?,
         )),
-        #[cfg(feature = "catalog-glue")]
+        #[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
         IcebergCatalogConfig::Glue {
             glue_catalog_config,
         } => Ok(Box::new(

@@ -23,7 +23,7 @@ pub(crate) mod puffin_utils;
 pub(crate) mod puffin_writer_proxy;
 mod table_update_proxy;
 
-#[cfg(feature = "catalog-glue")]
+#[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
 pub(crate) mod glue_catalog;
 
 #[cfg(feature = "catalog-rest")]
@@ -90,14 +90,14 @@ mod catalog_test_impl;
 #[cfg(test)]
 mod iceberg_rest_catalog_test;
 
-#[cfg(feature = "catalog-glue")]
+#[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
 #[cfg(test)]
 mod glue_catalog_test_utils;
 
-#[cfg(feature = "catalog-glue")]
+#[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
 #[cfg(test)]
 mod glue_catalog_test;
 
-#[cfg(feature = "catalog-glue")]
+#[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
 #[cfg(test)]
 mod iceberg_glue_catalog_test;

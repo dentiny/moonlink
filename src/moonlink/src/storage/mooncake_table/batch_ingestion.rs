@@ -303,8 +303,8 @@ mod tests {
         let file2 = data_dir.join("file2.parquet");
         let b1 = batch_with_rows(&[10, 11, 12]);
         let b2 = batch_with_rows(&[20, 21, 22]);
-        write_parquet_file(&file1, &[b1.clone()]).await;
-        write_parquet_file(&file2, &[b2.clone()]).await;
+        write_parquet_file(&file1, std::slice::from_ref(&b1)).await;
+        write_parquet_file(&file2, std::slice::from_ref(&b2)).await;
 
         let lsn = 200u64;
         let storage_config = crate::StorageConfig::FileSystem {
@@ -365,8 +365,8 @@ mod tests {
         let file2 = data_dir.join("file2.parquet");
         let b1 = batch_with_rows(&[101, 102]);
         let b2 = batch_with_rows(&[201, 202]);
-        write_parquet_file(&file1, &[b1.clone()]).await;
-        write_parquet_file(&file2, &[b2.clone()]).await;
+        write_parquet_file(&file1, std::slice::from_ref(&b1)).await;
+        write_parquet_file(&file2, std::slice::from_ref(&b2)).await;
 
         let storage_config = crate::StorageConfig::FileSystem {
             root_directory: context.path().to_str().unwrap().to_string(),
@@ -421,7 +421,7 @@ mod tests {
 
         let file1 = data_dir.join("file1.parquet");
         let b1 = batch_with_rows(&[301, 302, 303]);
-        write_parquet_file(&file1, &[b1.clone()]).await;
+        write_parquet_file(&file1, std::slice::from_ref(&b1)).await;
 
         let storage_config = crate::StorageConfig::FileSystem {
             root_directory: context.path().to_str().unwrap().to_string(),

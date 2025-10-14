@@ -45,7 +45,7 @@ pub use table::iceberg::base_iceberg_snapshot_fetcher::BaseIcebergSnapshotFetche
 pub use table::iceberg::cloud_security_config::{AwsSecurityConfig, CloudSecurityConfig};
 pub use table::iceberg::iceberg_snapshot_fetcher::IcebergSnapshotFetcher;
 pub use table::iceberg::iceberg_table_config::FileCatalogConfig as IcebergFileCatalogConfig;
-#[cfg(feature = "catalog-glue")]
+#[cfg(all(feature = "catalog-glue", feature = "storage-s3"))]
 pub use table::iceberg::iceberg_table_config::GlueCatalogConfig as IcebergGlueCatalogConfig;
 #[cfg(feature = "catalog-rest")]
 pub use table::iceberg::iceberg_table_config::RestCatalogConfig as IcebergRestCatalogConfig;
