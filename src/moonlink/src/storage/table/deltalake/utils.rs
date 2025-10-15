@@ -1,12 +1,66 @@
 use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
+use deltalake::logstore::StorageConfig as DeltaStorageConfig;
+use deltalake::open_table_with_storage_options;
 use deltalake::{open_table, operations::create::CreateBuilder, DeltaTable};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
 use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConfig;
+use crate::storage::StorageConfig as MoonlinkStorgaeConfig;
 use crate::CacheTrait;
 use crate::Result;
+
+/// Get storage option to access deltalake table.
+fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String, String> {
+    let mut storage_options = HashMap::new();
+
+    match storage_config {
+        #[cfg(feature = "storage-s3")]
+        StorageConfig::S3 {
+            access_key_id,
+            secret_access_key,
+            region,
+            bucket: _,
+            endpoint,
+        } => {
+            storage_options.insert("AWS_ACCESS_KEY_ID".into(), access_key_id.clone());
+            storage_options.insert("AWS_SECRET_ACCESS_KEY".into(), secret_access_key.clone());
+            storage_options.insert("AWS_REGION".into(), region.clone());
+
+            if let Some(endpoint) = endpoint {
+                storage_options.insert("AWS_ENDPOINT_URL".into(), endpoint.clone());
+            }
+        }
+        #[cfg(feature = "storage-gcs")]
+        StorageConfig::Gcs {
+            project,
+            region,
+            bucket: _,
+            access_key_id,
+            secret_access_key,
+            endpoint,
+            disable_auth,
+            write_option: _,
+        } => {
+            storage_options.insert("GOOGLE_SERVICE_ACCOUNT".into(), project.clone());
+            storage_options.insert("GOOGLE_REGION".into(), region.clone());
+            storage_options.insert("GOOGLE_ACCESS_KEY_ID".into(), access_key_id.clone());
+            storage_options.insert("GOOGLE_SECRET_ACCESS_KEY".into(), secret_access_key.clone());
+
+            if let Some(endpoint) = endpoint {
+                storage_options.insert("GOOGLE_ENDPOINT_URL".into(), endpoint.clone());
+            }
+            if *disable_auth {
+                storage_options.insert("GOOGLE_DISABLE_AUTH".into(), "true".into());
+            }
+        }
+        _ => {}
+    }
+
+    storage_options
+}
 
 /// Get or create a Delta table at the given location.
 ///
@@ -20,7 +74,8 @@ pub(crate) async fn get_or_create_deltalake_table(
     _filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     config: DeltalakeTableConfig,
 ) -> Result<DeltaTable> {
-    match open_table(config.location.clone()).await {
+    let storage_options = get_storage_option(&config.data_accessor_config.storage_config);
+    match open_table_with_storage_options(config.location.clone(), storage_options).await {
         Ok(existing_table) => Ok(existing_table),
         Err(_) => {
             let arrow_schema = mooncake_table_metadata.schema.as_ref();
