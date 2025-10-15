@@ -2,8 +2,10 @@ use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
 use deltalake::logstore::StorageConfig as DeltaStorageConfig;
 use deltalake::open_table_with_storage_options;
 use deltalake::{open_table, operations::create::CreateBuilder, DeltaTable};
+use deltalake::arrow::datatypes::{DataType, Field, Schema as DeltaSchema};
 use std::collections::HashMap;
 use std::sync::Arc;
+use url::Url;
 
 use crate::storage::filesystem::accessor::base_filesystem_accessor::BaseFileSystemAccess;
 use crate::storage::mooncake_table::TableMetadata as MooncakeTableMetadata;
@@ -18,7 +20,7 @@ fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String,
 
     match storage_config {
         #[cfg(feature = "storage-s3")]
-        StorageConfig::S3 {
+        MoonlinkStorgaeConfig::S3 {
             access_key_id,
             secret_access_key,
             region,
@@ -34,7 +36,7 @@ fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String,
             }
         }
         #[cfg(feature = "storage-gcs")]
-        StorageConfig::Gcs {
+        MoonlinkStorgaeConfig::Gcs {
             project,
             region,
             bucket: _,
@@ -62,6 +64,21 @@ fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String,
     storage_options
 }
 
+/// Util function to convert arrow schema to delta schema.
+fn to_deltalake_arrow_schema(schema: &arrow_schema::Schema) -> DeltaSchema {
+    DeltaSchema::new(
+        schema
+            .fields()
+            .iter()
+            .map(|f| {
+                // Clone the name, datatype, and nullability.
+                // You can extend this later for metadata or dict ids if needed.
+                Field::new(f.name(), f.data_type().clone(), f.is_nullable())
+            })
+            .collect::<Vec<_>>(),
+    )
+}
+
 /// Get or create a Delta table at the given location.
 ///
 /// - If the table doesn't exist → create a new one using the Arrow schema.
@@ -75,11 +92,16 @@ pub(crate) async fn get_or_create_deltalake_table(
     config: DeltalakeTableConfig,
 ) -> Result<DeltaTable> {
     let storage_options = get_storage_option(&config.data_accessor_config.storage_config);
-    match open_table_with_storage_options(config.location.clone(), storage_options).await {
+
+    println!("storage option = {:?}", storage_options);
+    println!("location = {:?}", config.location);
+
+    let table_uri = Url::parse(&config.location).unwrap();
+    match open_table_with_storage_options(table_uri.clone(), storage_options).await {
         Ok(existing_table) => Ok(existing_table),
         Err(_) => {
             let arrow_schema = mooncake_table_metadata.schema.as_ref();
-            let delta_schema_struct = deltalake::kernel::Schema::try_from_arrow(arrow_schema)?;
+            let delta_schema_struct = deltalake::kernel::Schema::try_from_arrow(arrow_schema).unwrap();
             let delta_schema_fields = delta_schema_struct
                 .fields
                 .iter()
@@ -87,7 +109,7 @@ pub(crate) async fn get_or_create_deltalake_table(
                 .collect::<Vec<_>>();
 
             let table = CreateBuilder::new()
-                .with_location(config.location.clone())
+                .with_location(table_uri)
                 .with_columns(delta_schema_fields)
                 .with_save_mode(deltalake::protocol::SaveMode::ErrorIfExists)
                 .await?;
