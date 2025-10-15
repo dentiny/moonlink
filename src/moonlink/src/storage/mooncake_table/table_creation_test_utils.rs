@@ -168,6 +168,41 @@ pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTable
     }
 }
 
+/// Test util function to create delta table config.
+pub(crate) fn create_delta_table_config(warehouse_uri: String) -> DeltalakeTableConfig {
+    let accessor_config = if warehouse_uri.starts_with("s3://") {
+        #[cfg(feature = "storage-s3")]
+        {
+            s3_test_utils::create_s3_storage_config(&warehouse_uri)
+        }
+        #[cfg(not(feature = "storage-s3"))]
+        {
+            panic!("S3 support not enabled. Enable `storage-s3` feature.");
+        }
+    } else if warehouse_uri.starts_with("gs://") {
+        #[cfg(feature = "storage-gcs")]
+        {
+            gcs_test_utils::create_gcs_storage_config(&warehouse_uri)
+        }
+        #[cfg(not(feature = "storage-gcs"))]
+        {
+            panic!("GCS support not enabled. Enable `storage-gcs` feature.");
+        }
+    } else {
+        let storage_config = StorageConfig::FileSystem {
+            root_directory: warehouse_uri.clone(),
+            atomic_write_dir: None,
+        };
+        AccessorConfig::new_with_storage_config(storage_config)
+    };
+
+    DeltalakeTableConfig {
+        table_name: DELTA_TEST_TABLE.to_string(),
+        location: warehouse_uri,
+        data_accessor_config: accessor_config,
+    }
+}
+
 /// Test util function to create arrow schema.
 pub(crate) fn create_test_arrow_schema() -> Arc<ArrowSchema> {
     Arc::new(ArrowSchema::new(vec![
