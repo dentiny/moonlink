@@ -1,5 +1,5 @@
-use crate::pg_replicate::table::SrcTableId;
 use crate::lsn_state::ReplicationState;
+use crate::pg_replicate::table::SrcTableId;
 use crate::{Error, Result};
 use arrow_schema::Schema as ArrowSchema;
 use moonlink::event_sync::create_table_event_syncer;

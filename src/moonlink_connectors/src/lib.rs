@@ -1,8 +1,8 @@
 pub mod error;
+pub mod lsn_state;
 pub mod pg_replicate;
 mod replication_connection;
 mod replication_manager;
-pub mod lsn_state;
 pub mod rest_ingest;
 
 pub use error::*;
