@@ -8,7 +8,7 @@ pub mod rest_event;
 pub mod rest_source;
 pub mod schema_util;
 
-use crate::replication_state::ReplicationState;
+use crate::lsn_state::ReplicationState;
 use crate::rest_ingest::event_request::EventRequest;
 use crate::rest_ingest::moonlink_rest_sink::RestSink;
 use crate::rest_ingest::moonlink_rest_sink::TableStatus;

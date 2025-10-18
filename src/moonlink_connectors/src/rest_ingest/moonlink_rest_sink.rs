@@ -1,4 +1,4 @@
-use crate::replication_state::ReplicationState;
+use crate::lsn_state::ReplicationState;
 use crate::rest_ingest::event_request::RowEventOperation;
 use crate::rest_ingest::rest_event::RestEvent;
 use crate::rest_ingest::rest_source::SrcTableId;

@@ -10,6 +10,7 @@ pub mod table;
 pub mod table_init;
 pub mod util;
 
+use crate::lsn_state::ReplicationState;
 use crate::pg_replicate::clients::postgres::{build_tls_connector, ReplicationClient};
 use crate::pg_replicate::conversions::cdc_event::{CdcEvent, CdcEventConversionError};
 use crate::pg_replicate::initial_copy::copy_table_stream;
@@ -20,7 +21,6 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::pg_replicate::table::{SrcTableId, TableName, TableSchema};
 use crate::pg_replicate::table_init::{build_table_components, TableComponents};
-use crate::replication_state::ReplicationState;
 use crate::Result;
 use futures::StreamExt;
 use moonlink::{

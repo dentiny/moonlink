@@ -1,9 +1,9 @@
+use crate::lsn_state::ReplicationState;
 use crate::pg_replicate::util::PostgresTableRow;
 use crate::pg_replicate::{
     conversions::{cdc_event::CdcEvent, table_row::TableRow},
     table::{SrcTableId, TableSchema},
 };
-use crate::replication_state::ReplicationState;
 use moonlink::TableEvent;
 use more_asserts as ma;
 use postgres_replication::protocol::Column as ReplicationColumn;
