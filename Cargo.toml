@@ -30,7 +30,7 @@ arrow-ipc = "55"
 arrow-schema = { version = "55", features = ["serde"] }
 async-stream = "0.3"
 async-trait = "0.1"
-backon = "1.5"
+backon = "1.6"
 bincode = { version = "2", features = ["serde"] }
 bitstream-io = "4.9"
 bytes = "1.0"
