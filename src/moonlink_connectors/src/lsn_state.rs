@@ -7,20 +7,20 @@ use tracing::warn;
 
 /// Tracks replication progress and notifies listeners when the replicated
 /// LSN advances.
-pub struct ReplicationState {
+pub struct LsnState {
     current: AtomicU64,
     tx: watch::Sender<u64>,
 }
 
-impl std::fmt::Debug for ReplicationState {
+impl std::fmt::Debug for LsnState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ReplicationState")
+        f.debug_struct("LsnState")
             .field("current", &self.current.load(Ordering::SeqCst))
             .finish()
     }
 }
 
-impl ReplicationState {
+impl LsnState {
     /// Create a new state initialised to LSN 0.
     pub fn new() -> Arc<Self> {
         let (tx, _rx) = watch::channel(0);
@@ -53,13 +53,16 @@ impl ReplicationState {
     }
 }
 
+pub type ReplicationState = LsnState;
+pub type CommitStatus = LsnState;
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn mark_without_subscribers_does_not_panic_and_updates_state() {
-        let state = ReplicationState::new();
+        let state = LsnState::new();
         assert_eq!(state.now(), 0);
         // No subscribers have been created; this will panic without the fix.
         state.mark(42);
@@ -68,7 +71,7 @@ mod tests {
 
     #[test]
     fn mark_after_last_subscriber_dropped_does_not_panic() {
-        let state = ReplicationState::new();
+        let state = LsnState::new();
         // Create a subscriber and then drop it to simulate shutdown.
         let rx = state.subscribe();
         drop(rx);

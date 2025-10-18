@@ -20,7 +20,7 @@ use crate::pg_replicate::postgres_source::{
 };
 use crate::pg_replicate::table::{SrcTableId, TableName, TableSchema};
 use crate::pg_replicate::table_init::{build_table_components, TableComponents};
-use crate::replication_state::ReplicationState;
+use crate::lsn_state::ReplicationState;
 use crate::Result;
 use futures::StreamExt;
 use moonlink::{
@@ -84,7 +84,7 @@ pub struct PostgresConnection {
     pub slot_name: String,
     pub cmd_tx: mpsc::Sender<PostgresReplicationCommand>,
     pub cmd_rx: Option<mpsc::Receiver<PostgresReplicationCommand>>,
-    pub replication_state: Arc<ReplicationState>,
+    pub lsn_state: Arc<ReplicationState>,
     pub retry_handles: Vec<JoinHandle<Result<()>>>,
 }
 
@@ -154,7 +154,7 @@ impl PostgresConnection {
             slot_name,
             cmd_tx,
             cmd_rx: Some(cmd_rx),
-            replication_state: ReplicationState::new(),
+            lsn_state: ReplicationState::new(),
             retry_handles: Vec::new(),
         })
     }
@@ -299,7 +299,7 @@ impl PostgresConnection {
             if let Err(e) = commit_lsn_tx.send(progress.boundary_lsn.into()) {
                 warn!(error = ?e, table_id = src_table_id, "failed to send initial copy commit lsn");
             }
-            self.replication_state.mark(progress.boundary_lsn.into());
+            self.lsn_state.mark(progress.boundary_lsn.into());
 
             Ok(true)
         } else {
@@ -388,8 +388,8 @@ impl PostgresConnection {
     }
 
     /// Get a clone of the replication state
-    pub fn get_replication_state(&self) -> Arc<ReplicationState> {
-        self.replication_state.clone()
+    pub fn get_lsn_state(&self) -> Arc<ReplicationState> {
+        self.lsn_state.clone()
     }
 
     /// Add table to PostgreSQL replication
@@ -514,7 +514,7 @@ impl PostgresConnection {
             table_name.to_string(),
             table_schema.src_table_id,
             &table_base_path.to_string(),
-            &self.replication_state,
+            &self.lsn_state,
             table_components,
             is_recovery,
         )
@@ -632,7 +632,7 @@ impl PostgresConnection {
 
     /// Spawn replication task
     pub async fn spawn_replication_task(&mut self) -> JoinHandle<Result<()>> {
-        let sink = Sink::new(self.replication_state.clone());
+        let sink = Sink::new(self.lsn_state.clone());
         let receiver = self.cmd_rx.take().unwrap();
 
         let uri = self.uri.clone();
