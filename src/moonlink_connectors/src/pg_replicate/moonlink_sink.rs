@@ -38,7 +38,7 @@ pub struct Sink {
     commit_lsn_txs: HashMap<SrcTableId, watch::Sender<u64>>,
     streaming_transactions_state: HashMap<u32, TransactionState>,
     transaction_state: TransactionState,
-    lsn_state: Arc<ReplicationState>,
+    replication_state: Arc<ReplicationState>,
     relation_cache: HashMap<SrcTableId, Vec<ColumnInfo>>,
     /// Cached sender for the last table used on the hot path.
     /// Avoids a HashMap lookup when consecutive rows target the same table.
@@ -67,7 +67,7 @@ impl Sink {
             Err(TrySendError::Closed(event)) => Err(tokio::sync::mpsc::error::SendError(event)),
         }
     }
-    pub fn new(lsn_state: Arc<ReplicationState>) -> Self {
+    pub fn new(replication_state: Arc<ReplicationState>) -> Self {
         Self {
             event_senders: HashMap::new(),
             commit_lsn_txs: HashMap::new(),
@@ -77,7 +77,7 @@ impl Sink {
                 touched_tables: Vec::new(),
                 last_touched_table: None,
             },
-            lsn_state,
+            replication_state,
             relation_cache: HashMap::new(),
             cached_event_sender: None,
             streaming_last_key: None,
@@ -239,7 +239,7 @@ impl Sink {
                 self.transaction_state.last_touched_table = None;
                 self.streaming_last_key = None;
                 let pg_lsn = PgLsn::from(commit_body.end_lsn());
-                self.lsn_state.mark(pg_lsn.into());
+                self.replication_state.mark(pg_lsn.into());
             }
             CdcEvent::StreamCommit(stream_commit_body) => {
                 let xact_id = stream_commit_body.xid();
@@ -276,7 +276,7 @@ impl Sink {
                 }
                 self.streaming_last_key = None;
                 let pg_lsn = PgLsn::from(stream_commit_body.end_lsn());
-                self.lsn_state.mark(pg_lsn.into());
+                self.replication_state.mark(pg_lsn.into());
             }
             CdcEvent::Insert((table_id, table_row, xact_id)) => {
                 let final_lsn = self.get_final_lsn(table_id, xact_id);
@@ -376,7 +376,7 @@ impl Sink {
                 if wal_end > self.max_keepalive_lsn_seen {
                     self.max_keepalive_lsn_seen = wal_end;
                 }
-                self.lsn_state.mark(pg_lsn.into());
+                self.replication_state.mark(pg_lsn.into());
             }
             CdcEvent::StreamStop(_stream_stop_body) => {
                 debug!("Stream stop");
@@ -437,8 +437,8 @@ mod tests {
 
     #[tokio::test]
     async fn hot_path_streaming_caches_and_dedupes() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         // Setup one table with event sender and commit lsn channel
         let table_id: SrcTableId = 1;
@@ -485,8 +485,8 @@ mod tests {
 
     #[tokio::test]
     async fn hot_path_non_streaming_vec_dedupe_across_tables() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         // Two tables
         let a: SrcTableId = 11;
@@ -527,8 +527,8 @@ mod tests {
 
     #[tokio::test]
     async fn cached_sender_cleared_on_drop_table() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         let table_id: SrcTableId = 21;
         let (tx, _rx) = mpsc::channel::<TableEvent>(4);
@@ -546,8 +546,8 @@ mod tests {
 
     #[tokio::test]
     async fn interleaved_streams_do_not_use_stale_cache() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         let table_id: SrcTableId = 31;
         let (tx, mut rx) = mpsc::channel::<TableEvent>(16);
@@ -610,8 +610,8 @@ mod tests {
 
     #[tokio::test]
     async fn cache_updates_on_table_change_same_xid() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         let a: SrcTableId = 41;
         let b: SrcTableId = 42;
@@ -650,8 +650,8 @@ mod tests {
 
     #[tokio::test]
     async fn sender_cache_persists_across_xid_and_stream_like_boundaries() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         let table_id: SrcTableId = 51;
         let (tx, mut rx) = mpsc::channel::<TableEvent>(8);
@@ -691,8 +691,8 @@ mod tests {
 
     #[tokio::test]
     async fn non_streaming_state_resets_between_transactions() {
-        let lsn_state = ReplicationState::new();
-        let mut sink = Sink::new(lsn_state);
+        let replication_state = ReplicationState::new();
+        let mut sink = Sink::new(replication_state);
 
         let table_id: SrcTableId = 61;
         let (tx, mut rx) = mpsc::channel::<TableEvent>(8);

@@ -77,7 +77,7 @@ pub async fn build_table_components(
     src_table_name: String,
     src_table_id: SrcTableId,
     base_path: &str,
-    lsn_state: &ReplicationState,
+    replication_state: &ReplicationState,
     table_components: TableComponents,
     is_recovery: bool,
 ) -> Result<TableResources> {
@@ -158,10 +158,10 @@ pub async fn build_table_components(
 
     let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
     // Make a receiver first before possible mark operation, otherwise all receiver initializes with 0.
-    let replication_lsn_tx = lsn_state.subscribe();
+    let replication_lsn_tx = replication_state.subscribe();
     if let Some(persistence_snapshot_lsn) = last_persistence_snapshot_lsn {
         commit_lsn_tx.send(persistence_snapshot_lsn).unwrap();
-        lsn_state.mark(persistence_snapshot_lsn);
+        replication_state.mark(persistence_snapshot_lsn);
     }
 
     let read_state_manager = ReadStateManager::new(
@@ -180,7 +180,7 @@ pub async fn build_table_components(
         table,
         event_sync_sender,
         table_handler_timers,
-        lsn_state.subscribe(),
+        replication_state.subscribe(),
         /*event_replay_tx=*/ None,
         /*table_event_replay_tx=*/ None,
     )
