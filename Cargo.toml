@@ -43,7 +43,7 @@ datafusion-cli = "49"
 deltalake = "0.28"
 fastbloom = "0.12"
 futures = { version = "0.3", default-features = false }
-hashbrown = "0.15"
+hashbrown = "0.16"
 iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea877e3a8b570e328d26f8362ad2035", default-features = false, features = [
   "storage-fs",
 ] }
