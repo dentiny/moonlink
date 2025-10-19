@@ -50,7 +50,7 @@ iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea87
 iceberg-catalog-glue = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea877e3a8b570e328d26f8362ad2035" }
 iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "1de331593ea877e3a8b570e328d26f8362ad2035" }
 itertools = "0.14"
-lru = "0.14"
+lru = "0.16"
 moka = { version = "0.12", features = ["future"] }
 moonlink = { path = "src/moonlink" }
 moonlink_backend = { path = "src/moonlink_backend" }
