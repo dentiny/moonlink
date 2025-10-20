@@ -482,7 +482,6 @@ mod tests {
     #[tokio::test]
     async fn hot_path_non_streaming_vec_dedupe_across_tables() {
         let replication_state = ReplicationState::new();
-        let commit_state = CommitState::new();
         let mut sink = Sink::new(replication_state);
 
         // Two tables
@@ -490,8 +489,10 @@ mod tests {
         let b: SrcTableId = 12;
         let (tx_a, mut rx_a) = mpsc::channel::<TableEvent>(8);
         let (tx_b, mut rx_b) = mpsc::channel::<TableEvent>(8);
-        sink.add_table(a, tx_a, commit_state.clone(), &make_table_schema(a));
-        sink.add_table(b, tx_b, commit_state.clone(), &make_table_schema(b));
+        let commit_state_a = CommitState::new();
+        let commit_state_b = CommitState::new();
+        sink.add_table(a, tx_a, commit_state_a.clone(), &make_table_schema(a));
+        sink.add_table(b, tx_b, commit_state_b.clone(), &make_table_schema(b));
 
         // Many inserts into A then into B within the same non-streaming transaction
         for _ in 0..5 {
@@ -624,8 +625,10 @@ mod tests {
         let b: SrcTableId = 42;
         let (tx_a, mut rx_a) = mpsc::channel::<TableEvent>(8);
         let (tx_b, mut rx_b) = mpsc::channel::<TableEvent>(8);
-        sink.add_table(a, tx_a, commit_state.clone(), &make_table_schema(a));
-        sink.add_table(b, tx_b, commit_state.clone(), &make_table_schema(b));
+        let commit_state_a = CommitState::new();
+        let commit_state_b = CommitState::new();
+        sink.add_table(a, tx_a, commit_state_a.clone(), &make_table_schema(a));
+        sink.add_table(b, tx_b, commit_state_b.clone(), &make_table_schema(b));
 
         let xid = Some(777u32);
         // A then B under same xid
