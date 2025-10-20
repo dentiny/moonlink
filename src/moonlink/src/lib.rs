@@ -1,5 +1,6 @@
 pub mod error;
 pub mod event_sync;
+pub mod lsn_state;
 pub mod mooncake_table_id;
 mod observability;
 pub mod row;
@@ -11,6 +12,7 @@ mod union_read;
 
 pub use error::*;
 pub use event_sync::EventSyncSender;
+pub use lsn_state::{CommitState, ReplicationState};
 pub use mooncake_table_id::MooncakeTableId;
 pub use storage::mooncake_table::batch_id_counter::BatchIdCounter;
 pub use storage::mooncake_table::data_batches::ColumnStoreBuffer;

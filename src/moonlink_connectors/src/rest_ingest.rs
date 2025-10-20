@@ -8,7 +8,6 @@ pub mod rest_event;
 pub mod rest_source;
 pub mod schema_util;
 
-use crate::lsn_state::ReplicationState;
 use crate::rest_ingest::event_request::EventRequest;
 use crate::rest_ingest::moonlink_rest_sink::RestSink;
 use crate::rest_ingest::moonlink_rest_sink::TableStatus;
@@ -17,6 +16,8 @@ use crate::Result;
 use apache_avro::schema::Schema as AvroSchema;
 use arrow_schema::Schema;
 use futures::StreamExt;
+use moonlink::CommitState;
+use moonlink::ReplicationState;
 use moonlink::TableEvent;
 use more_asserts as ma;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -35,7 +36,7 @@ pub enum RestCommand {
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
         event_sender: mpsc::Sender<TableEvent>,
-        commit_lsn_tx: watch::Sender<u64>,
+        commit_lsn_tx: Arc<CommitState>,
         flush_lsn_rx: watch::Receiver<u64>,
         wal_flush_lsn_rx: watch::Receiver<u64>,
         /// Persist LSN, only assigned for tables to recovery; used to indicate and update replication LSN.
@@ -102,7 +103,7 @@ impl RestApiConnection {
         src_table_id: SrcTableId,
         schema: Arc<Schema>,
         event_sender: mpsc::Sender<TableEvent>,
-        commit_lsn_tx: watch::Sender<u64>,
+        commit_lsn_tx: Arc<CommitState>,
         flush_lsn_rx: watch::Receiver<u64>,
         wal_flush_lsn_rx: watch::Receiver<u64>,
         persist_lsn: Option<u64>,

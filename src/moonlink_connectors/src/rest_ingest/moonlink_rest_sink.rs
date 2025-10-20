@@ -1,8 +1,8 @@
-use crate::lsn_state::ReplicationState;
 use crate::rest_ingest::event_request::RowEventOperation;
 use crate::rest_ingest::rest_event::RestEvent;
 use crate::rest_ingest::rest_source::SrcTableId;
 use crate::{Error, Result};
+use moonlink::{CommitState, ReplicationState};
 use moonlink::{StorageConfig, TableEvent};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -15,7 +15,7 @@ pub struct TableStatus {
     pub(crate) _wal_flush_lsn_rx: watch::Receiver<u64>,
     pub(crate) _flush_lsn_rx: watch::Receiver<u64>,
     pub(crate) event_sender: mpsc::Sender<TableEvent>,
-    pub(crate) commit_lsn_tx: watch::Sender<u64>,
+    pub(crate) commit_lsn_tx: Arc<CommitState>,
 }
 
 /// REST-specific sink for handling REST API table events
@@ -47,7 +47,7 @@ impl RestSink {
     ) -> Result<()> {
         // Update per-table commit LSN.
         if let Some(persist_lsn) = persist_lsn {
-            table_status.commit_lsn_tx.send(persist_lsn).unwrap();
+            table_status.commit_lsn_tx.mark(persist_lsn);
         }
 
         if self
@@ -81,7 +81,7 @@ impl RestSink {
     /// - Replication LSN is used per-database
     fn mark_commit(&self, src_table_id: SrcTableId, lsn: u64) -> Result<()> {
         if let Some(table_status) = self.table_status.get(&src_table_id) {
-            table_status.commit_lsn_tx.send(lsn).unwrap();
+            table_status.commit_lsn_tx.mark(lsn);
         } else {
             return Err(crate::Error::rest_api(
                 format!("No table status found for src_table_id: {src_table_id}"),
@@ -334,14 +334,14 @@ mod tests {
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
-        let (_commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
+        let commit_state = CommitState::new();
         let (_wal_flush_lsn_tx, _wal_flush_lsn_rx) = watch::channel(0u64);
         let (_flush_lsn_tx, _flush_lsn_rx) = watch::channel(0u64);
         let table_status = TableStatus {
             _wal_flush_lsn_rx,
             _flush_lsn_rx,
             event_sender: event_tx,
-            commit_lsn_tx: _commit_lsn_tx,
+            commit_lsn_tx: commit_state,
         };
 
         // Add table to sink
@@ -430,14 +430,14 @@ mod tests {
 
         // Create channels for testing
         let (event_tx, mut event_rx) = mpsc::channel::<TableEvent>(10);
-        let (_commit_lsn_tx, _commit_lsn_rx) = watch::channel(0u64);
+        let commit_state = CommitState::new();
         let (_wal_flush_lsn_tx, _wal_flush_lsn_rx) = watch::channel(0u64);
         let (_flush_lsn_tx, _flush_lsn_rx) = watch::channel(0u64);
         let table_status = TableStatus {
             _wal_flush_lsn_rx,
             _flush_lsn_rx,
             event_sender: event_tx,
-            commit_lsn_tx: _commit_lsn_tx,
+            commit_lsn_tx: commit_state,
         };
 
         let src_table_id = 1;
@@ -507,25 +507,25 @@ mod tests {
 
         // Create channels for testing
         let (event_tx_1, mut event_rx_1) = mpsc::channel::<TableEvent>(10);
-        let (_commit_lsn_tx_1, _commit_lsn_rx_1) = watch::channel(0u64);
+        let commit_state = CommitState::new();
         let (_wal_flush_lsn_tx_1, _wal_flush_lsn_rx_1) = watch::channel(0u64);
         let (_flush_lsn_tx_1, _flush_lsn_rx_1) = watch::channel(0u64);
         let table_status_1 = TableStatus {
             _wal_flush_lsn_rx: _wal_flush_lsn_rx_1,
             _flush_lsn_rx: _flush_lsn_rx_1,
             event_sender: event_tx_1,
-            commit_lsn_tx: _commit_lsn_tx_1,
+            commit_lsn_tx: commit_state,
         };
 
         let (event_tx_2, mut event_rx_2) = mpsc::channel::<TableEvent>(10);
-        let (_commit_lsn_tx_2, _commit_lsn_rx_2) = watch::channel(0u64);
+        let commit_state = CommitState::new();
         let (_wal_flush_lsn_tx_2, _wal_flush_lsn_rx_2) = watch::channel(0u64);
         let (_flush_lsn_tx_2, _flush_lsn_rx_2) = watch::channel(0u64);
         let table_status_2 = TableStatus {
             _wal_flush_lsn_rx: _wal_flush_lsn_rx_2,
             _flush_lsn_rx: _flush_lsn_rx_2,
             event_sender: event_tx_2,
-            commit_lsn_tx: _commit_lsn_tx_2,
+            commit_lsn_tx: commit_state,
         };
 
         // Add two tables

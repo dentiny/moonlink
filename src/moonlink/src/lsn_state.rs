@@ -54,7 +54,7 @@ impl LsnState {
 }
 
 pub type ReplicationState = LsnState;
-pub type CommitStatus = LsnState;
+pub type CommitState = LsnState;
 
 #[cfg(test)]
 mod tests {

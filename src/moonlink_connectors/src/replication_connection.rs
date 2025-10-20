@@ -287,7 +287,7 @@ impl ReplicationConnection {
                     std::sync::Arc::new(arrow_schema),
                     table_resources.event_sender.clone(),
                     table_resources
-                        .commit_lsn_tx
+                        .commit_state
                         .take()
                         .expect("commit_lsn_tx not set"),
                     table_resources

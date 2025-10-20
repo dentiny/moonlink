@@ -1,4 +1,3 @@
-use crate::lsn_state::ReplicationState;
 use crate::pg_replicate::table::SrcTableId;
 use crate::{Error, Result};
 use arrow_schema::Schema as ArrowSchema;
@@ -12,6 +11,7 @@ use moonlink::{
     MoonlinkTableConfig, MoonlinkTableSecret, ObjectStorageCache, ReadStateManager, StorageConfig,
     TableEvent, TableEventManager, TableHandler, TableStatusReader, WalConfig, WalManager,
 };
+use moonlink::{CommitState, ReplicationState};
 
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -44,7 +44,7 @@ pub struct TableResources {
     pub read_state_manager: ReadStateManager,
     pub table_event_manager: TableEventManager,
     pub table_status_reader: TableStatusReader,
-    pub commit_lsn_tx: Option<watch::Sender<u64>>,
+    pub commit_state: Option<Arc<CommitState>>,
     pub flush_lsn_rx: Option<watch::Receiver<u64>>,
     pub wal_flush_lsn_rx: Option<watch::Receiver<u64>>,
     pub wal_file_accessor: Arc<dyn BaseFileSystemAccess>,
@@ -156,17 +156,18 @@ pub async fn build_table_components(
 
     let last_persistence_snapshot_lsn = table.get_persistence_snapshot_lsn();
 
-    let (commit_lsn_tx, commit_lsn_rx) = watch::channel(0u64);
+    let commit_state = CommitState::new();
     // Make a receiver first before possible mark operation, otherwise all receiver initializes with 0.
-    let replication_lsn_tx = replication_state.subscribe();
+    let replication_lsn_rx = replication_state.subscribe();
+    let commit_lsn_rx = commit_state.subscribe();
     if let Some(persistence_snapshot_lsn) = last_persistence_snapshot_lsn {
-        commit_lsn_tx.send(persistence_snapshot_lsn).unwrap();
+        commit_state.mark(persistence_snapshot_lsn);
         replication_state.mark(persistence_snapshot_lsn);
     }
 
     let read_state_manager = ReadStateManager::new(
         &table,
-        replication_lsn_tx,
+        replication_lsn_rx,
         commit_lsn_rx,
         table_components.read_state_filepath_remap,
     );
@@ -196,7 +197,7 @@ pub async fn build_table_components(
         read_state_manager,
         table_status_reader,
         table_event_manager,
-        commit_lsn_tx: Some(commit_lsn_tx),
+        commit_state: Some(commit_state),
         flush_lsn_rx: Some(flush_lsn_rx),
         wal_flush_lsn_rx: Some(wal_flush_lsn_rx),
         wal_file_accessor,
