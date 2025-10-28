@@ -21,13 +21,13 @@ license = "LicenseRef-BSL-1.1"
 [workspace.dependencies]
 anyhow = "1.0"
 apache-avro = "0.20"
-arrow = { version = "55", default-features = false, features = [
+arrow = { version = "56", default-features = false, features = [
   "canonical_extension_types",
 ] }
-arrow-array = "55"
-arrow-buffer = "55"
-arrow-ipc = "55"
-arrow-schema = { version = "55", features = ["serde"] }
+arrow-array = "56"
+arrow-buffer = "56"
+arrow-ipc = "56"
+arrow-schema = { version = "56", features = ["serde"] }
 async-stream = "0.3"
 async-trait = "0.1"
 backon = "1.6"
@@ -38,17 +38,17 @@ chrono = { version = "0.4", default-features = false }
 clap = { version = "4", features = ["derive"] }
 const_format = "0.2"
 crc32fast = "1"
-datafusion = "49"
-datafusion-cli = "49"
-deltalake = "0.28"
+datafusion = "50"
+datafusion-cli = "50"
+deltalake = "0.29"
 fastbloom = "0.14"
 futures = { version = "0.3", default-features = false }
 hashbrown = "0.16"
-iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "ddbcae46d4b6739b0d21fbf44de85b140b3d272a", default-features = false, features = [
+iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "4a6ea15a7dd73e7c68b0a24441820b13bdd22a92", default-features = false, features = [
   "storage-fs",
 ] }
-iceberg-catalog-glue = { git = "https://github.com/apache/iceberg-rust", rev = "ddbcae46d4b6739b0d21fbf44de85b140b3d272a" }
-iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "ddbcae46d4b6739b0d21fbf44de85b140b3d272a" }
+iceberg-catalog-glue = { git = "https://github.com/apache/iceberg-rust", rev = "4a6ea15a7dd73e7c68b0a24441820b13bdd22a92" }
+iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "4a6ea15a7dd73e7c68b0a24441820b13bdd22a92" }
 itertools = "0.14"
 lru = "0.16"
 moka = { version = "0.12", features = ["future"] }
@@ -88,7 +88,7 @@ opentelemetry_sdk = { version = "0.31", default-features = false, features = [
   "trace",
   "metrics",
 ] }
-parquet = { version = "55", default-features = false, features = [
+parquet = { version = "56", default-features = false, features = [
   "arrow",
   "async",
   "arrow_canonical_extension_types",

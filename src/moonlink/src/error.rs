@@ -203,6 +203,15 @@ impl From<std::string::FromUtf8Error> for Error {
     }
 }
 
+impl From<url::ParseError> for Error {
+    #[track_caller]
+    fn from(source: url::ParseError) -> Self {
+        let status = ErrorStatus::Permanent;
+
+        Error::Json(ErrorStruct::new("URL parse error".to_string(), status).with_source(source))
+    }
+}
+
 impl Error {
     pub fn get_status(&self) -> ErrorStatus {
         match self {
