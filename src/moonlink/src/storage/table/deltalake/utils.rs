@@ -9,6 +9,23 @@ use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConf
 use crate::CacheTrait;
 use crate::Result;
 
+/// Sanitize deltalake table location, to ensure it conforms URL style.
+#[allow(unused)]
+fn sanitize_deltalake_table_location(location: &str) -> String {
+    const KNOWN_SCHEME_PREFIXS: &[&str] = &[
+        "file://", "http://", "https://", "s3://", "gs://",
+    ];
+    if KNOWN_SCHEME_PREFIXS
+        .iter()
+        .any(|prefix| location.starts_with(prefix))
+    {
+        location.to_string()
+    } else {
+        // By default assumes local table.
+        format!("file://{}", location)
+    }
+}
+
 /// Get or create a Delta table at the given location.
 ///
 /// - If the table doesn't exist → create a new one using the Arrow schema.
@@ -21,7 +38,8 @@ pub(crate) async fn get_or_create_deltalake_table(
     _filesystem_accessor: Arc<dyn BaseFileSystemAccess>,
     config: DeltalakeTableConfig,
 ) -> Result<DeltaTable> {
-    match open_table(Url::parse(&config.location)?).await {
+    let table_location = sanitize_deltalake_table_location(&config.location);
+    match open_table(Url::parse(&table_location)?).await {
         Ok(existing_table) => Ok(existing_table),
         Err(_) => {
             let arrow_schema = mooncake_table_metadata.schema.as_ref();
