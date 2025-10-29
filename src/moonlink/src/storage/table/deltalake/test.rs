@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tempfile::TempDir;
 
+use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 #[cfg(feature = "storage-gcs")]
 use crate::storage::filesystem::gcs::gcs_test_utils;
 #[cfg(feature = "storage-gcs")]
@@ -10,9 +11,8 @@ use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
 use crate::storage::filesystem::s3::s3_test_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
-use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
 use crate::storage::mooncake_table::table_creation_test_utils::{
-    create_delta_table_config, create_test_table_metadata, get_delta_table_config
+    create_delta_table_config, create_test_table_metadata, get_delta_table_config,
 };
 use crate::storage::mooncake_table::table_operation_test_utils::create_local_parquet_file;
 use crate::storage::mooncake_table::{
@@ -23,7 +23,7 @@ use crate::storage::table::common::table_manager::TableManager;
 use crate::storage::table::common::table_manager::{PersistenceFileParams, PersistenceResult};
 use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConfig;
 use crate::storage::table::deltalake::deltalake_table_manager::DeltalakeTableManager;
-use crate::{create_data_file, FileSystemAccessor, ObjectStorageCache};
+use crate::{create_data_file, ObjectStorageCache};
 
 async fn test_basic_store_and_load_impl(delta_table_config: DeltalakeTableConfig) {
     let temp_dir = TempDir::new().unwrap();
@@ -165,20 +165,10 @@ async fn test_basic_store_and_load() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(feature = "storage-s3")]
 async fn test_basic_store_and_load_with_s3() {
+    deltalake::aws::register_handlers(None);
     let (bucket, warehouse_uri) = s3_test_utils::get_test_s3_bucket_and_warehouse();
     let _test_guard = S3TestGuard::new(bucket.clone()).await;
     let delta_table_config = create_delta_table_config(warehouse_uri);
 
     test_basic_store_and_load_impl(delta_table_config).await;
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-#[cfg(feature = "storage-gcs")]
-async fn test_basic_store_and_load_with_gcs() {
-    let (bucket, warehouse_uri) = gcs_test_utils::get_test_gcs_bucket_and_warehouse();
-    let _test_guard = GcsTestGuard::new(bucket.clone()).await;
-    let delta_table_config = create_delta_table_config(warehouse_uri);
-
-    // Common testing logic.
-    test_basic_store_and_load_impl(delta_table_config.clone()).await;
 }

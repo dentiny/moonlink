@@ -1,7 +1,6 @@
 use deltalake::kernel::engine::arrow_conversion::TryFromArrow;
-use deltalake::logstore::StorageConfig as DeltaStorageConfig;
 use deltalake::open_table_with_storage_options;
-use deltalake::{open_table, operations::create::CreateBuilder, DeltaTable};
+use deltalake::{operations::create::CreateBuilder, DeltaTable};
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::Url;
@@ -50,29 +49,9 @@ fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String,
 
             if let Some(endpoint) = endpoint {
                 storage_options.insert("AWS_ENDPOINT_URL".into(), endpoint.clone());
-            }
-        }
-        #[cfg(feature = "storage-gcs")]
-        MoonlinkStorgaeConfig::Gcs {
-            project,
-            region,
-            bucket: _,
-            access_key_id,
-            secret_access_key,
-            endpoint,
-            disable_auth,
-            write_option: _,
-        } => {
-            storage_options.insert("GOOGLE_SERVICE_ACCOUNT".into(), project.clone());
-            storage_options.insert("GOOGLE_REGION".into(), region.clone());
-            storage_options.insert("GOOGLE_ACCESS_KEY_ID".into(), access_key_id.clone());
-            storage_options.insert("GOOGLE_SECRET_ACCESS_KEY".into(), secret_access_key.clone());
-
-            if let Some(endpoint) = endpoint {
-                storage_options.insert("GOOGLE_ENDPOINT_URL".into(), endpoint.clone());
-            }
-            if *disable_auth {
-                storage_options.insert("GOOGLE_DISABLE_AUTH".into(), "true".into());
+                // Used for MinIO/S3-compatible storage.
+                storage_options.insert("AWS_ALLOW_HTTP".into(), "true".into());
+                storage_options.insert("AWS_S3_ALLOW_UNSAFE_RENAME".into(), "true".into());
             }
         }
         _ => {}
@@ -96,7 +75,7 @@ pub(crate) async fn get_or_create_deltalake_table(
     let storage_options = get_storage_option(&config.data_accessor_config.storage_config);
     let table_location = sanitize_deltalake_table_location(&config.location);
     let table_url = Url::parse(&table_location)?;
-    match open_table_with_storage_options(table_url, storage_options).await {
+    match open_table_with_storage_options(table_url, storage_options.clone()).await {
         Ok(existing_table) => Ok(existing_table),
         Err(_) => {
             let arrow_schema = mooncake_table_metadata.schema.as_ref();
@@ -108,6 +87,7 @@ pub(crate) async fn get_or_create_deltalake_table(
                 .with_location(config.location.clone())
                 .with_columns(delta_schema_fields)
                 .with_save_mode(deltalake::protocol::SaveMode::ErrorIfExists)
+                .with_storage_options(storage_options)
                 .await?;
             Ok(table)
         }
@@ -132,7 +112,8 @@ pub(crate) async fn get_deltalake_table_if_exists(
     config: &DeltalakeTableConfig,
 ) -> Result<Option<DeltaTable>> {
     let table_url = get_deltalake_table_url(&config.location)?;
-    match open_table(table_url).await {
+    let storage_options = get_storage_option(&config.data_accessor_config.storage_config);
+    match open_table_with_storage_options(table_url, storage_options).await {
         Ok(table) => Ok(Some(table)),
         Err(_) => Ok(None),
     }

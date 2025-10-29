@@ -18,6 +18,7 @@ storage-fs = ["opendal/services-fs", "iceberg/storage-fs"]
 storage-s3 = [
     "opendal/services-s3",
     "iceberg/storage-s3",
+    "deltalake/s3",
     "base64",
     "hmac",
     "sha1",
@@ -29,6 +30,7 @@ storage-gcs = [
     "opendal/services-s3",
     "iceberg/storage-gcs",
     "iceberg/storage-s3",
+    "deltalake/gcs",
     "base64",
     "hmac",
     "sha1",
