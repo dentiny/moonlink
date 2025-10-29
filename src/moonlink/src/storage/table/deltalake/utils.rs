@@ -9,10 +9,12 @@ use crate::storage::table::deltalake::deltalake_table_config::DeltalakeTableConf
 use crate::CacheTrait;
 use crate::Result;
 
+/// Known schema prefix for deltalake location.
+const KNOWN_SCHEME_PREFIXS: &[&str] = &["file://", "http://", "https://", "s3://", "gs://"];
+
 /// Sanitize deltalake table location, to ensure it conforms URL style.
 #[allow(unused)]
 fn sanitize_deltalake_table_location(location: &str) -> String {
-    const KNOWN_SCHEME_PREFIXS: &[&str] = &["file://", "http://", "https://", "s3://", "gs://"];
     if KNOWN_SCHEME_PREFIXS
         .iter()
         .any(|prefix| location.starts_with(prefix))
@@ -56,19 +58,23 @@ pub(crate) async fn get_or_create_deltalake_table(
 }
 
 #[allow(unused)]
+fn get_deltalake_table_url(location: &str) -> Result<Url> {
+    if KNOWN_SCHEME_PREFIXS
+        .iter()
+        .any(|prefix| location.starts_with(prefix))
+    {
+        let url = Url::parse(location)?;
+        return Ok(url);
+    }
+    let url = Url::from_file_path(location).map_err(|_| url::ParseError::RelativeUrlWithoutBase)?;
+    Ok(url)
+}
+
+#[allow(unused)]
 pub(crate) async fn get_deltalake_table_if_exists(
     config: &DeltalakeTableConfig,
 ) -> Result<Option<DeltaTable>> {
-    let table_url = if config.location.starts_with("file://")
-        || config.location.starts_with("s3://")
-        || config.location.starts_with("gs://")
-    {
-        Url::parse(&config.location)?
-    } else {
-        // Convert filesystem path to file:// URL
-        Url::from_file_path(&config.location)
-            .map_err(|_| url::ParseError::RelativeUrlWithoutBase)?
-    };
+    let table_url = get_deltalake_table_url(&config.location)?;
     match open_table(table_url).await {
         Ok(table) => Ok(Some(table)),
         Err(_) => Ok(None),
