@@ -169,6 +169,7 @@ pub(crate) fn create_iceberg_table_config(warehouse_uri: String) -> IcebergTable
 }
 
 /// Test util function to create delta table config.
+#[allow(unused)]
 pub(crate) fn create_delta_table_config(warehouse_uri: String) -> DeltalakeTableConfig {
     let accessor_config = if warehouse_uri.starts_with("s3://") {
         #[cfg(feature = "storage-s3")]
