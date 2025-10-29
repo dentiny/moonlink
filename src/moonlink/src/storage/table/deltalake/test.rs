@@ -3,16 +3,14 @@ use std::sync::Arc;
 use tempfile::TempDir;
 
 use crate::storage::filesystem::accessor::factory::create_filesystem_accessor;
-#[cfg(feature = "storage-gcs")]
-use crate::storage::filesystem::gcs::gcs_test_utils;
-#[cfg(feature = "storage-gcs")]
-use crate::storage::filesystem::gcs::test_guard::TestGuard as GcsTestGuard;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::s3_test_utils;
 #[cfg(feature = "storage-s3")]
 use crate::storage::filesystem::s3::test_guard::TestGuard as S3TestGuard;
+#[cfg(feature = "storage-s3")]
+use crate::storage::mooncake_table::table_creation_test_utils::create_delta_table_config;
 use crate::storage::mooncake_table::table_creation_test_utils::{
-    create_delta_table_config, create_test_table_metadata, get_delta_table_config,
+    create_test_table_metadata, get_delta_table_config,
 };
 use crate::storage::mooncake_table::table_operation_test_utils::create_local_parquet_file;
 use crate::storage::mooncake_table::{
