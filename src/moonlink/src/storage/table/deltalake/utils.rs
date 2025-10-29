@@ -31,7 +31,7 @@ fn sanitize_deltalake_table_location(location: &str) -> String {
 
 /// Get storage option to access deltalake table.
 fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String, String> {
-    #[warn(unused_mut)]
+    #[allow(unused_mut)]
     let mut storage_options = HashMap::new();
 
     match storage_config {
