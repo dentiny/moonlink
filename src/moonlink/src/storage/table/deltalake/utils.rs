@@ -43,8 +43,7 @@ pub(crate) async fn get_or_create_deltalake_table(
             let arrow_schema = mooncake_table_metadata.schema.as_ref();
             let delta_schema_struct = deltalake::kernel::Schema::try_from_arrow(arrow_schema)?;
             let delta_schema_fields: Vec<deltalake::kernel::StructField> = delta_schema_struct
-                .fields()
-                .map(|field| field.clone())
+                .fields().cloned()
                 .collect();
 
             let table = CreateBuilder::new()
