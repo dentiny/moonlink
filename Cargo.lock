@@ -625,6 +625,28 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-dynamodb"
+version = "1.95.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "699bab2e1f9da570071889b674a43df1184b6ec42bf4770ef8758a8f3e02f38f"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand",
+ "http 0.2.12",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-glue"
 version = "1.125.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2738,7 +2760,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1bd4a6c5d1d85a24214ab8e245f97425b1adc330bbaba2b866d093190aee6f9"
 dependencies = [
  "delta_kernel",
+ "deltalake-aws",
  "deltalake-core",
+ "deltalake-gcp",
+]
+
+[[package]]
+name = "deltalake-aws"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8bb6fa32f92bd7393a67f45a27b61c1a6eb90c184e22771f87ee2186d33fc101"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-credential-types",
+ "aws-sdk-dynamodb",
+ "aws-sdk-sts",
+ "aws-smithy-runtime-api",
+ "backon",
+ "bytes",
+ "chrono",
+ "deltalake-core",
+ "futures",
+ "object_store",
+ "regex",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
+ "uuid",
 ]
 
 [[package]]
@@ -2768,6 +2818,7 @@ dependencies = [
  "dirs",
  "either",
  "futures",
+ "humantime",
  "indexmap 2.12.0",
  "itertools 0.14.0",
  "num_cpus",
@@ -2802,6 +2853,23 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.108",
+]
+
+[[package]]
+name = "deltalake-gcp"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8df2708856cfa92e8309141fda1ee8d41e174b0868f26e557d0b2ea8d30fb92e"
+dependencies = [
+ "async-trait",
+ "bytes",
+ "deltalake-core",
+ "futures",
+ "object_store",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url",
 ]
 
 [[package]]

@@ -37,7 +37,7 @@ fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String,
 
     match storage_config {
         #[cfg(feature = "storage-s3")]
-        StorageConfig::S3 {
+        MoonlinkStorgaeConfig::S3 {
             access_key_id,
             secret_access_key,
             region,
@@ -53,7 +53,7 @@ fn get_storage_option(storage_config: &MoonlinkStorgaeConfig) -> HashMap<String,
             }
         }
         #[cfg(feature = "storage-gcs")]
-        StorageConfig::Gcs {
+        MoonlinkStorgaeConfig::Gcs {
             project,
             region,
             bucket: _,
