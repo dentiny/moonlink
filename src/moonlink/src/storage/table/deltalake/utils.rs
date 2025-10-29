@@ -12,9 +12,7 @@ use crate::Result;
 /// Sanitize deltalake table location, to ensure it conforms URL style.
 #[allow(unused)]
 fn sanitize_deltalake_table_location(location: &str) -> String {
-    const KNOWN_SCHEME_PREFIXS: &[&str] = &[
-        "file://", "http://", "https://", "s3://", "gs://",
-    ];
+    const KNOWN_SCHEME_PREFIXS: &[&str] = &["file://", "http://", "https://", "s3://", "gs://"];
     if KNOWN_SCHEME_PREFIXS
         .iter()
         .any(|prefix| location.starts_with(prefix))
@@ -44,9 +42,10 @@ pub(crate) async fn get_or_create_deltalake_table(
         Err(_) => {
             let arrow_schema = mooncake_table_metadata.schema.as_ref();
             let delta_schema_struct = deltalake::kernel::Schema::try_from_arrow(arrow_schema)?;
-            // For now, let's create an empty vector since the deltalake API has changed
-            // TODO: Update this to work with the new deltalake 0.29 API
-            let delta_schema_fields: Vec<deltalake::kernel::StructField> = Vec::new();
+            let delta_schema_fields: Vec<deltalake::kernel::StructField> = delta_schema_struct
+                .fields()
+                .map(|field| field.clone())
+                .collect();
 
             let table = CreateBuilder::new()
                 .with_location(config.location.clone())
@@ -62,7 +61,17 @@ pub(crate) async fn get_or_create_deltalake_table(
 pub(crate) async fn get_deltalake_table_if_exists(
     config: &DeltalakeTableConfig,
 ) -> Result<Option<DeltaTable>> {
-    match open_table(Url::parse(&config.location)?).await {
+    let table_url = if config.location.starts_with("file://")
+        || config.location.starts_with("s3://")
+        || config.location.starts_with("gs://")
+    {
+        Url::parse(&config.location)?
+    } else {
+        // Convert filesystem path to file:// URL
+        Url::from_file_path(&config.location)
+            .map_err(|_| url::ParseError::RelativeUrlWithoutBase)?
+    };
+    match open_table(table_url).await {
         Ok(table) => Ok(Some(table)),
         Err(_) => Ok(None),
     }

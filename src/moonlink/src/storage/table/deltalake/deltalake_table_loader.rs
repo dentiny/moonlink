@@ -1,7 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use deltalake::kernel::Add;
+use deltalake::kernel::LogicalFileView;
 use deltalake::DeltaTable;
+use futures::TryStreamExt;
 
 use crate::storage::index::MooncakeIndex;
 use crate::storage::mooncake_table::delete_vector::BatchDeletionVector;
@@ -14,18 +15,18 @@ use crate::{create_data_file, Result};
 impl DeltalakeTableManager {
     #[allow(unused)]
     fn load_data_files(
-        adds: Vec<Add>,
+        adds: Vec<LogicalFileView>,
         next_file_id: &mut i32,
     ) -> HashMap<MooncakeDataFileRef, DiskFileEntry> {
         let mut disk_files = HashMap::with_capacity(adds.len());
         for cur_add in adds.into_iter() {
             let cur_file_id = *next_file_id;
             *next_file_id += 1;
-            let data_file = create_data_file(cur_file_id as u64, cur_add.path.clone());
+            let data_file = create_data_file(cur_file_id as u64, cur_add.path().to_string());
             let disk_file_entry = DiskFileEntry {
                 cache_handle: None,
                 num_rows: 0, // TODO(hjiang): Record and recover.
-                file_size: cur_add.size as usize,
+                file_size: cur_add.size() as usize,
                 committed_deletion_vector: BatchDeletionVector::new(/*max_rows=*/ 0),
                 puffin_deletion_blob: None,
             };
@@ -74,10 +75,12 @@ impl DeltalakeTableManager {
         let snapshot = snapshot.unwrap();
         let flush_lsn = Self::get_flush_lsn(table).await?;
 
+        // Get deltalake file view.
         let log_store = table.log_store();
-        // For now, let's use an empty vector since the API has changed significantly
-        // TODO: Update this to work with the new deltalake 0.29 API
-        let adds: Vec<Add> = Vec::new();
+        let mut stream = snapshot
+            .snapshot()
+            .file_views(&*log_store, /*predicate=*/ None);
+        let adds = stream.try_collect::<Vec<LogicalFileView>>().await?;
         let disk_files = Self::load_data_files(adds, &mut next_file_id);
 
         let mooncake_snapshot = MooncakeSnapshot {
