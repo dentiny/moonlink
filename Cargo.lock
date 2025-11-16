@@ -193,6 +193,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "apache-avro"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36fa98bc79671c7981272d91a8753a928ff6a1cd8e4f20a44c45bd5d313840bf"
+dependencies = [
+ "bigdecimal",
+ "bon",
+ "digest",
+ "log",
+ "miniz_oxide",
+ "num-bigint",
+ "quad-rand",
+ "rand 0.9.2",
+ "regex-lite",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "strum 0.27.2",
+ "strum_macros 0.27.2",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
 name = "ar_archive_writer"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2142,7 +2166,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a83760d9a13122d025fbdb1d5d5aaf93dd9ada5e90ea229add92aa30898b2d1"
 dependencies = [
  "ahash 0.8.12",
- "apache-avro",
+ "apache-avro 0.20.0",
  "arrow",
  "arrow-ipc",
  "base64 0.22.1",
@@ -2216,7 +2240,7 @@ version = "50.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "10d40b6953ebc9099b37adfd12fde97eb73ff0cee44355c6dea64b8a4537d561"
 dependencies = [
- "apache-avro",
+ "apache-avro 0.20.0",
  "arrow",
  "async-trait",
  "bytes",
@@ -3922,7 +3946,7 @@ version = "0.7.0"
 source = "git+https://github.com/apache/iceberg-rust?rev=76d8e2d31e36d4c5013f24f8bac51eaab1d9c1db#76d8e2d31e36d4c5013f24f8bac51eaab1d9c1db"
 dependencies = [
  "anyhow",
- "apache-avro",
+ "apache-avro 0.20.0",
  "array-init",
  "arrow-arith",
  "arrow-array",
@@ -4747,7 +4771,7 @@ dependencies = [
 name = "moonlink_backend"
 version = "0.0.1"
 dependencies = [
- "apache-avro",
+ "apache-avro 0.21.0",
  "arrow",
  "arrow-array",
  "arrow-schema",
@@ -4782,7 +4806,7 @@ name = "moonlink_connectors"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "apache-avro",
+ "apache-avro 0.21.0",
  "arrow",
  "arrow-array",
  "arrow-schema",
@@ -4901,7 +4925,7 @@ name = "moonlink_service"
 version = "0.0.1"
 dependencies = [
  "anyhow",
- "apache-avro",
+ "apache-avro 0.21.0",
  "arrow",
  "arrow-array",
  "arrow-buffer",
