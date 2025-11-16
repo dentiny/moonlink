@@ -33,7 +33,7 @@ async-trait = "0.1"
 backon = "1.6"
 bincode = { version = "2", features = ["serde"] }
 bitstream-io = "4.9"
-bytes = "1.0"
+bytes = "1.11"
 chrono = { version = "0.4", default-features = false }
 clap = { version = "4", features = ["derive"] }
 const_format = "0.2"
