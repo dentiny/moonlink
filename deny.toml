@@ -38,6 +38,7 @@ ignore = [
 # TODO(hjiang): Resolve all duplicate dependencies.
 [bans]
 skip = [
+    { name = "apache-avro" },
     { name = "axum" },
     { name = "axum-core" },
     { name = "base64" },
@@ -60,6 +61,7 @@ skip = [
     { name = "matchit" },
     { name = "nix" },
     { name = "object" },
+    { name = "opendal" },
     { name = "ordered-float" },
     { name = "petgraph" },
     { name = "phf" },
