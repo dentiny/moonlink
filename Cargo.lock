@@ -214,6 +214,7 @@ dependencies = [
  "strum_macros 0.27.2",
  "thiserror",
  "uuid",
+ "zstd",
 ]
 
 [[package]]
@@ -3943,10 +3944,10 @@ dependencies = [
 [[package]]
 name = "iceberg"
 version = "0.7.0"
-source = "git+https://github.com/apache/iceberg-rust?rev=3fe5030948796196e97786f87a97e46eab1b5cbf#3fe5030948796196e97786f87a97e46eab1b5cbf"
+source = "git+https://github.com/apache/iceberg-rust?rev=bf984c754630cd4b536853c81528b9b69a3dab4d#bf984c754630cd4b536853c81528b9b69a3dab4d"
 dependencies = [
  "anyhow",
- "apache-avro 0.20.0",
+ "apache-avro 0.21.0",
  "array-init",
  "arrow-arith",
  "arrow-array",
@@ -3999,7 +4000,7 @@ dependencies = [
 [[package]]
 name = "iceberg-catalog-glue"
 version = "0.7.0"
-source = "git+https://github.com/apache/iceberg-rust?rev=3fe5030948796196e97786f87a97e46eab1b5cbf#3fe5030948796196e97786f87a97e46eab1b5cbf"
+source = "git+https://github.com/apache/iceberg-rust?rev=bf984c754630cd4b536853c81528b9b69a3dab4d#bf984c754630cd4b536853c81528b9b69a3dab4d"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -4014,7 +4015,7 @@ dependencies = [
 [[package]]
 name = "iceberg-catalog-rest"
 version = "0.7.0"
-source = "git+https://github.com/apache/iceberg-rust?rev=3fe5030948796196e97786f87a97e46eab1b5cbf#3fe5030948796196e97786f87a97e46eab1b5cbf"
+source = "git+https://github.com/apache/iceberg-rust?rev=bf984c754630cd4b536853c81528b9b69a3dab4d#bf984c754630cd4b536853c81528b9b69a3dab4d"
 dependencies = [
  "async-trait",
  "chrono",
