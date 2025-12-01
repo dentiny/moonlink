@@ -38,7 +38,7 @@ chrono = { version = "0.4", default-features = false }
 clap = { version = "4", features = ["derive"] }
 const_format = "0.2"
 crc32fast = "1"
-datafusion = "50"
+datafusion = "51"
 datafusion-cli = "50"
 deltalake = { version = "0.29", features = ["deltalake-aws", "deltalake-gcp"] }
 fastbloom = "0.14"
