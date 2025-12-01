@@ -48,7 +48,7 @@ iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "2871b4760a42e
   "storage-fs",
 ] }
 iceberg-catalog-glue = { git = "https://github.com/apache/iceberg-rust", rev = "2871b4760a42e5d8d4261c025793f6cf02bd1628" }
-iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "2871b4760a42e5d8d4261c025793f6cf02bd1628c" }
+iceberg-catalog-rest = { git = "https://github.com/apache/iceberg-rust", rev = "2871b4760a42e5d8d4261c025793f6cf02bd1628" }
 itertools = "0.14"
 lru = "0.16"
 moka = { version = "0.12", features = ["future"] }
