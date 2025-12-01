@@ -61,7 +61,6 @@ skip = [
     { name = "matchit" },
     { name = "nix" },
     { name = "object" },
-    { name = "opendal" },
     { name = "ordered-float" },
     { name = "petgraph" },
     { name = "phf" },
