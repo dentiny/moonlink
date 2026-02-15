@@ -41,7 +41,7 @@ crc32fast = "1"
 datafusion = "50"
 datafusion-cli = "50"
 deltalake = { version = "0.29", features = ["deltalake-aws", "deltalake-gcp"] }
-fastbloom = "0.14"
+fastbloom = "0.15"
 futures = { version = "0.3", default-features = false }
 hashbrown = "0.16"
 iceberg = { git = "https://github.com/apache/iceberg-rust", rev = "5c3c5a2800f2c1f61b6a306b66b32be35e96dd11", default-features = false, features = [
